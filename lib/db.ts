@@ -11,9 +11,7 @@ function createPool(): Pool {
   }
   return new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL.includes("localhost")
-      ? false
-      : { rejectUnauthorized: false },
+    ssl: { rejectUnauthorized: false },
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
@@ -25,7 +23,6 @@ if (process.env.NODE_ENV !== "production") global._pgPool = pool;
 
 export default pool;
 
-/** Type-safe parameterised query helper */
 export async function query<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params?: unknown[]
@@ -34,28 +31,6 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   try {
     const res = await client.query<T>(text, params);
     return res.rows;
-  } finally {
-    client.release();
-  }
-}
-
-/** Run multiple statements in a single transaction */
-export async function transaction<T>(
-  fn: (q: typeof query) => Promise<T>
-): Promise<T> {
-  const client = await pool.connect();
-  const boundQuery = async <R extends QueryResultRow>(text: string, params?: unknown[]) => {
-    const res = await client.query<R>(text, params);
-    return res.rows;
-  };
-  try {
-    await client.query("BEGIN");
-    const result = await fn(boundQuery as typeof query);
-    await client.query("COMMIT");
-    return result;
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
   } finally {
     client.release();
   }
