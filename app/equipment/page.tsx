@@ -28,10 +28,15 @@ export default function EquipmentPage() {
     setLoading(true); setError("");
     try {
       const [eqRes, typesRes] = await Promise.all([
-        fetch("/api/equipment"),
-        fetch("/api/equipment-types"),
-      ]);
-      setUnits(await eqRes.json());
+  fetch("/api/equipment"),
+  fetch("/api/equipment-types"),
+]);
+const eqData = await eqRes.json();
+setUnits(Array.isArray(eqData) ? eqData : []);
+if (typesRes.ok) {
+  const typesData = await typesRes.json();
+  setTypes(Array.isArray(typesData) ? typesData : []);
+}
       if (typesRes.ok) setTypes(await typesRes.json());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
