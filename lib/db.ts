@@ -1,7 +1,6 @@
 import { Pool, QueryResultRow } from "pg";
 
 declare global {
-  // eslint-disable-next-line no-var
   var _pgPool: Pool | undefined;
 }
 
@@ -12,9 +11,9 @@ function createPool(): Pool {
   return new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    max: 3,                    // ← lowered from 10
-    idleTimeoutMillis: 10_000, // ← release idle connections faster
-    connectionTimeoutMillis: 5_000,
+    max: 3,
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 5000,
   });
 }
 
@@ -35,10 +34,3 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
     client.release();
   }
 }
-```
-
-Then also go to **Supabase → Connect → Transaction pooler** and switch your `DATABASE_URL` in Vercel to the **Transaction pooler** URL instead of Session pooler. Transaction pooler handles many connections far better for serverless apps.
-
-The Transaction pooler URL looks like:
-```
-postgresql://postgres.gznslxgixbtkuwhbczje:[PASSWORD]@aws-0-us-west-2.pooler.supabase.com:6543/postgres
