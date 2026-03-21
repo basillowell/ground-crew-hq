@@ -11,11 +11,9 @@ function createPool(): Pool {
   }
   return new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL.includes("localhost")
-      ? false
-      : { rejectUnauthorized: false },
-    max: 10,
-    idleTimeoutMillis: 30_000,
+    ssl: { rejectUnauthorized: false },
+    max: 3,                    // ← lowered from 10
+    idleTimeoutMillis: 10_000, // ← release idle connections faster
     connectionTimeoutMillis: 5_000,
   });
 }
@@ -25,7 +23,6 @@ if (process.env.NODE_ENV !== "production") global._pgPool = pool;
 
 export default pool;
 
-/** Type-safe parameterised query helper */
 export async function query<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params?: unknown[]
@@ -38,25 +35,10 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
     client.release();
   }
 }
+```
 
-/** Run multiple statements in a single transaction */
-export async function transaction<T>(
-  fn: (q: typeof query) => Promise<T>
-): Promise<T> {
-  const client = await pool.connect();
-  const boundQuery = async <R extends QueryResultRow>(text: string, params?: unknown[]) => {
-    const res = await client.query<R>(text, params);
-    return res.rows;
-  };
-  try {
-    await client.query("BEGIN");
-    const result = await fn(boundQuery as typeof query);
-    await client.query("COMMIT");
-    return result;
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-}
+Then also go to **Supabase → Connect → Transaction pooler** and switch your `DATABASE_URL` in Vercel to the **Transaction pooler** URL instead of Session pooler. Transaction pooler handles many connections far better for serverless apps.
+
+The Transaction pooler URL looks like:
+```
+postgresql://postgres.gznslxgixbtkuwhbczje:[PASSWORD]@aws-0-us-west-2.pooler.supabase.com:6543/postgres
