@@ -120,6 +120,16 @@ export default function WorkboardPage() {
     [employeeList],
   );
 
+  const allRosterEmployees = useMemo(
+    () => [...employeeList].sort((left, right) => {
+      if (left.status !== right.status) {
+        return left.status === 'active' ? -1 : 1;
+      }
+      return `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`);
+    }),
+    [employeeList],
+  );
+
   const activeDepartmentEmployees = useMemo(
     () =>
       allActiveEmployees.filter(
@@ -149,7 +159,7 @@ export default function WorkboardPage() {
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
   const assignmentEligibleEmployees = useMemo(() => {
-    const prioritized = [...scheduledEmployees, ...activeDepartmentEmployees, ...allActiveEmployees];
+    const prioritized = [...scheduledEmployees, ...activeDepartmentEmployees, ...allActiveEmployees, ...allRosterEmployees];
     const seen = new Set<string>();
     return prioritized.filter((employee) => {
       if (seen.has(employee.id)) return false;
@@ -313,7 +323,7 @@ export default function WorkboardPage() {
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm font-medium">Crew filter</div>
-            <p className="text-xs text-muted-foreground mt-1">The board view follows the top-bar department and date. Assignment dialogs still allow the full active roster so a crew filter never blocks dispatching work.</p>
+            <p className="text-xs text-muted-foreground mt-1">The board view follows the top-bar department and date. Assignment dialogs now allow the full roster so a crew filter or status mismatch never blocks dispatching work.</p>
             <div className="mt-3">
               <label className="text-xs text-muted-foreground">Group</label>
               <select
@@ -512,12 +522,12 @@ export default function WorkboardPage() {
                 {assignmentEligibleEmployees.length === 0 && <option value="">No active employees available</option>}
                 {assignmentEligibleEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName} · {employee.department} · {employee.group}
+                    {employee.firstName} {employee.lastName} · {employee.department} · {employee.group}{employee.status !== 'active' ? ' · inactive' : ''}
                   </option>
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Scheduled crew is listed first, then the rest of the active roster.
+                Scheduled crew is listed first, then the rest of the roster.
               </p>
             </div>
             <div className="col-span-2">
