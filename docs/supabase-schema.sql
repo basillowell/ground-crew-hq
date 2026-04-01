@@ -78,7 +78,11 @@ create table if not exists public.weather_stations (
   "locationId" text not null,
   name text not null,
   provider text not null,
+  "providerType" text not null default 'manual',
   "stationCode" text not null,
+  latitude numeric,
+  longitude numeric,
+  "timeZone" text not null default '',
   "isPrimary" boolean not null default false,
   status text not null
 );
@@ -305,3 +309,7 @@ create policy "public full access work_locations" on public.work_locations for a
 
 drop policy if exists "public full access shift_templates" on public.shift_templates;
 create policy "public full access shift_templates" on public.shift_templates for all using (true) with check (true);
+alter table public.weather_stations add column if not exists "providerType" text not null default 'manual';
+alter table public.weather_stations add column if not exists latitude numeric;
+alter table public.weather_stations add column if not exists longitude numeric;
+alter table public.weather_stations add column if not exists "timeZone" text not null default '';

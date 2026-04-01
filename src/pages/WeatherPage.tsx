@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CloudSun, Droplets, MapPin, PencilLine, Radar } from 'lucide-react';
+import { CloudSun, Droplets, MapPin, PencilLine, Plus, Radar, Save, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,18 +10,26 @@ import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import {
   type ManualRainfallEntry,
+  type ProgramSettings,
   type WeatherDailyLog,
   type WeatherLocation,
   type WeatherStation,
+  type WorkLocation,
 } from '@/data/seedData';
 import {
-  loadWeatherLocations,
   loadManualRainfallEntries,
+  loadProgramSettings,
   loadWeatherDailyLogs,
+  loadWeatherLocations,
   loadWeatherStations,
+  loadWorkLocations,
   saveManualRainfallEntries,
   saveWeatherDailyLogs,
+  saveWeatherLocations,
+  saveWeatherStations,
 } from '@/lib/dataStore';
+import { toast } from '@/components/ui/sonner';
+import { fetchPrimaryStationSnapshot } from '@/lib/weatherProviders';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -39,35 +47,58 @@ const emptyEntry = {
   et: '0.18',
 };
 
+function makeId(prefix: string) {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? `${prefix}-${crypto.randomUUID()}`
+    : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export default function WeatherPage() {
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [weatherStations, setWeatherStations] = useState<WeatherStation[]>([]);
+  const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
+  const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState('');
+  const [selectedWorkLocationId, setSelectedWorkLocationId] = useState('');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
   const [rainEntries, setRainEntries] = useState<ManualRainfallEntry[]>([]);
+  const [liveLog, setLiveLog] = useState<WeatherDailyLog | null>(null);
+  const [liveStatus, setLiveStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [dialogMode, setDialogMode] = useState<EntryMode>('rainfall');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState(emptyEntry);
+  const [customAreaName, setCustomAreaName] = useState('');
 
   useEffect(() => {
     const locations = loadWeatherLocations();
     const stations = loadWeatherStations();
+    const opsLocations = loadWorkLocations();
     setWeatherLocations(locations);
     setWeatherStations(stations);
+    setWorkLocations(opsLocations);
+    setProgramSetting(loadProgramSettings()[0] ?? null);
     setSelectedLocationId((current) => current || locations[0]?.id || '');
+    setSelectedWorkLocationId(opsLocations[0]?.id ?? '');
     setWeatherLogs(loadWeatherDailyLogs());
     setRainEntries(loadManualRainfallEntries());
   }, []);
 
   const selectedLocation = weatherLocations.find((location) => location.id === selectedLocationId) ?? weatherLocations[0];
-  const locationStations = weatherStations.filter((station) => station.locationId === selectedLocationId);
+  const locationStations = weatherStations
+    .filter((station) => station.locationId === selectedLocationId)
+    .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary));
+  const primaryStation = locationStations.find((station) => station.isPrimary);
   const locationLogs = weatherLogs
     .filter((log) => log.locationId === selectedLocationId)
     .sort((left, right) => left.date.localeCompare(right.date));
-  const latestLog = [...locationLogs].sort((left, right) => right.date.localeCompare(left.date))[0];
+  const latestStoredLog = [...locationLogs].sort((left, right) => right.date.localeCompare(left.date))[0];
+  const latestLog = liveLog ?? latestStoredLog;
   const locationRain = rainEntries
     .filter((entry) => entry.locationId === selectedLocationId)
     .sort((left, right) => right.date.localeCompare(left.date));
+  const availableWorkLocations = workLocations.filter(
+    (location) => !weatherLocations.some((weatherLocation) => weatherLocation.area === location.name),
+  );
 
   const historyData = locationLogs.map((log) => ({
     date: log.date.slice(5),
@@ -79,10 +110,152 @@ export default function WeatherPage() {
   const stationsOnline = locationStations.filter((station) => station.status === 'online').length;
   const manualOverrideCount = locationLogs.filter((log) => log.source === 'manual-override').length;
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateLiveWeather() {
+      if (!selectedLocation || !primaryStation || primaryStation.status !== 'online') {
+        setLiveLog(null);
+        setLiveStatus('idle');
+        return;
+      }
+
+      if (primaryStation.providerType !== 'open-meteo') {
+        setLiveLog(null);
+        setLiveStatus('idle');
+        return;
+      }
+
+      setLiveStatus('loading');
+      try {
+        const snapshot = await fetchPrimaryStationSnapshot(selectedLocation.id, primaryStation);
+        if (cancelled) return;
+        setLiveLog(snapshot);
+        setLiveStatus(snapshot ? 'ready' : 'idle');
+      } catch {
+        if (cancelled) return;
+        setLiveLog(null);
+        setLiveStatus('error');
+      }
+    }
+
+    void hydrateLiveWeather();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryStation, selectedLocation]);
+
   function openDialog(mode: EntryMode) {
     setDialogMode(mode);
     setDraft({ ...emptyEntry, locationId: selectedLocationId });
     setDialogOpen(true);
+  }
+
+  function persistWeatherSetup(nextLocations: WeatherLocation[], nextStations: WeatherStation[]) {
+    setWeatherLocations(nextLocations);
+    setWeatherStations(nextStations);
+    saveWeatherLocations(nextLocations);
+    saveWeatherStations(nextStations);
+  }
+
+  function addWeatherAreaFromLocation() {
+    const source = workLocations.find((location) => location.id === selectedWorkLocationId);
+    if (!source) return;
+
+    const nextLocation: WeatherLocation = {
+      id: makeId('wl'),
+      name: source.name,
+      property: programSetting?.organizationName ?? 'Club Property',
+      area: source.name,
+    };
+
+    const nextLocations = [...weatherLocations, nextLocation];
+    persistWeatherSetup(nextLocations, weatherStations);
+    setSelectedLocationId(nextLocation.id);
+    toast('Weather area added', { description: `${source.name} is now available for station setup.` });
+  }
+
+  function addCustomWeatherArea() {
+    const trimmed = customAreaName.trim();
+    if (!trimmed) return;
+
+    const nextLocation: WeatherLocation = {
+      id: makeId('wl'),
+      name: trimmed,
+      property: programSetting?.organizationName ?? 'Club Property',
+      area: trimmed,
+    };
+
+    const nextLocations = [...weatherLocations, nextLocation];
+    persistWeatherSetup(nextLocations, weatherStations);
+    setSelectedLocationId(nextLocation.id);
+    setCustomAreaName('');
+    toast('Custom weather area added', { description: `${trimmed} is ready for live weather station selection.` });
+  }
+
+  function updateSelectedLocation(patch: Partial<WeatherLocation>) {
+    if (!selectedLocation) return;
+    setWeatherLocations((current) =>
+      current.map((location) => (location.id === selectedLocation.id ? { ...location, ...patch } : location)),
+    );
+  }
+
+  function saveSelectedLocation() {
+    saveWeatherLocations(weatherLocations);
+    toast('Weather area saved', { description: 'Area naming and property details have been updated.' });
+  }
+
+  function addStation() {
+    if (!selectedLocation) return;
+
+    const nextStation: WeatherStation = {
+      id: makeId('ws'),
+      locationId: selectedLocation.id,
+      name: `${selectedLocation.name} Station`,
+      provider: 'Open-Meteo',
+      providerType: 'open-meteo',
+      stationCode: `${selectedLocation.id.toUpperCase()}-${locationStations.length + 1}`,
+      latitude: 35.78,
+      longitude: -78.64,
+      timeZone: 'America/New_York',
+      isPrimary: locationStations.length === 0,
+      status: 'online',
+    };
+
+    const nextStations = [...weatherStations, nextStation];
+    persistWeatherSetup(weatherLocations, nextStations);
+    toast('Station added', { description: 'Set the coordinates and provider, then save stations.' });
+  }
+
+  function updateStation(stationId: string, patch: Partial<WeatherStation>) {
+    setWeatherStations((current) =>
+      current.map((station) => (station.id === stationId ? { ...station, ...patch } : station)),
+    );
+  }
+
+  function setPrimaryStation(stationId: string) {
+    const nextStations = weatherStations.map((station) =>
+      station.locationId === selectedLocationId ? { ...station, isPrimary: station.id === stationId } : station,
+    );
+    persistWeatherSetup(weatherLocations, nextStations);
+    toast('Primary station updated', { description: 'This station now drives the live weather snapshot.' });
+  }
+
+  function removeStation(stationId: string) {
+    const removed = weatherStations.find((station) => station.id === stationId);
+    const filteredStations = weatherStations.filter((station) => station.id !== stationId);
+    const nextStations = removed?.isPrimary
+      ? filteredStations.map((station, index) =>
+          station.locationId === selectedLocationId ? { ...station, isPrimary: index === 0 } : station,
+        )
+      : filteredStations;
+    persistWeatherSetup(weatherLocations, nextStations);
+    toast('Station removed', { description: 'Station setup has been updated for this weather area.' });
+  }
+
+  function saveStations() {
+    saveWeatherStations(weatherStations);
+    toast('Stations saved', { description: 'Provider configuration and live-station selection are stored.' });
   }
 
   function saveEntry() {
@@ -142,6 +315,48 @@ export default function WeatherPage() {
 
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="space-y-3">
+          <Card className="p-4 space-y-3">
+            <div>
+              <p className="text-sm font-semibold">Build Weather Areas</p>
+              <p className="text-xs text-muted-foreground">
+                Define weather areas from Program Setup locations or add a custom area for a property or zone.
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Use Program Setup Location</label>
+              <div className="mt-1 flex gap-2">
+                <select
+                  className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+                  value={selectedWorkLocationId}
+                  onChange={(event) => setSelectedWorkLocationId(event.target.value)}
+                >
+                  {availableWorkLocations.length === 0 ? (
+                    <option value="">All locations already linked</option>
+                  ) : (
+                    availableWorkLocations.map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))
+                  )}
+                </select>
+                <Button size="sm" className="gap-1" onClick={addWeatherAreaFromLocation} disabled={availableWorkLocations.length === 0}>
+                  <Plus className="h-3.5 w-3.5" /> Add
+                </Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Create Custom Weather Area</label>
+              <div className="mt-1 flex gap-2">
+                <Input
+                  value={customAreaName}
+                  onChange={(event) => setCustomAreaName(event.target.value)}
+                  placeholder="Back Nine, Practice Center"
+                />
+                <Button size="sm" variant="outline" className="gap-1" onClick={addCustomWeatherArea}>
+                  <Plus className="h-3.5 w-3.5" /> Create
+                </Button>
+              </div>
+            </div>
+          </Card>
           {weatherLocations.map((location) => {
             const primaryStation = weatherStations.find((station) => station.locationId === location.id && station.isPrimary);
             return (
@@ -179,6 +394,154 @@ export default function WeatherPage() {
               </Card>
             ))}
           </div>
+
+          {selectedLocation && (
+            <Card className="p-5">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold">Area + Station Setup</p>
+                  <p className="text-xs text-muted-foreground">
+                    Choose the station that should provide live weather for this area and keep manual fallback available.
+                  </p>
+                </div>
+                <Button size="sm" className="gap-1" onClick={saveSelectedLocation}>
+                  <Save className="h-3.5 w-3.5" /> Save Area
+                </Button>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Area Name</label>
+                      <Input className="mt-1" value={selectedLocation.name} onChange={(event) => updateSelectedLocation({ name: event.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Property</label>
+                      <Input className="mt-1" value={selectedLocation.property} onChange={(event) => updateSelectedLocation({ property: event.target.value })} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Coverage Zone</label>
+                    <Input className="mt-1" value={selectedLocation.area} onChange={(event) => updateSelectedLocation({ area: event.target.value })} />
+                  </div>
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Live Source</p>
+                    <p className="mt-2 text-sm font-medium">
+                      {primaryStation ? `${primaryStation.name} · ${primaryStation.provider}` : 'No primary station selected'}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {liveStatus === 'loading' && 'Fetching live station conditions now.'}
+                      {liveStatus === 'ready' && 'Live station data is active for this weather area.'}
+                      {liveStatus === 'error' && 'Live fetch failed, so the page is falling back to stored history or manual override.'}
+                      {liveStatus === 'idle' && 'Use an online Open-Meteo station with coordinates for live data.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">Station Manager</p>
+                      <p className="text-xs text-muted-foreground">Add stations, set provider coordinates, and mark one as the live primary feed.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="gap-1" onClick={addStation}>
+                        <Plus className="h-3.5 w-3.5" /> Add Station
+                      </Button>
+                      <Button size="sm" className="gap-1" onClick={saveStations}>
+                        <Save className="h-3.5 w-3.5" /> Save Stations
+                      </Button>
+                    </div>
+                  </div>
+
+                  {locationStations.length === 0 ? (
+                    <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                      No stations are configured for this area yet.
+                    </div>
+                  ) : (
+                    locationStations.map((station) => (
+                      <div key={station.id} className="rounded-xl border bg-background/70 p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            {station.isPrimary && <Badge>Live Primary</Badge>}
+                            <Badge variant={station.status === 'online' ? 'secondary' : 'outline'}>{station.status}</Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            {!station.isPrimary && (
+                              <Button size="sm" variant="outline" onClick={() => setPrimaryStation(station.id)}>
+                                Use For Live Data
+                              </Button>
+                            )}
+                            <Button size="icon" variant="ghost" onClick={() => removeStation(station.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Station Name</label>
+                            <Input className="mt-1" value={station.name} onChange={(event) => updateStation(station.id, { name: event.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Provider Label</label>
+                            <Input className="mt-1" value={station.provider} onChange={(event) => updateStation(station.id, { provider: event.target.value })} />
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Provider Type</label>
+                            <select
+                              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                              value={station.providerType ?? 'manual'}
+                              onChange={(event) => updateStation(station.id, { providerType: event.target.value as WeatherStation['providerType'] })}
+                            >
+                              <option value="manual">manual</option>
+                              <option value="open-meteo">open-meteo</option>
+                              <option value="davis">davis</option>
+                              <option value="noaa">noaa</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Station Code</label>
+                            <Input className="mt-1" value={station.stationCode} onChange={(event) => updateStation(station.id, { stationCode: event.target.value })} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Status</label>
+                            <select
+                              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                              value={station.status}
+                              onChange={(event) => updateStation(station.id, { status: event.target.value as WeatherStation['status'] })}
+                            >
+                              <option value="online">online</option>
+                              <option value="offline">offline</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Latitude</label>
+                            <Input className="mt-1" type="number" step="0.0001" value={station.latitude ?? ''} onChange={(event) => updateStation(station.id, { latitude: event.target.value ? Number(event.target.value) : undefined })} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Longitude</label>
+                            <Input className="mt-1" type="number" step="0.0001" value={station.longitude ?? ''} onChange={(event) => updateStation(station.id, { longitude: event.target.value ? Number(event.target.value) : undefined })} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Time Zone</label>
+                            <Input className="mt-1" value={station.timeZone ?? ''} onChange={(event) => updateStation(station.id, { timeZone: event.target.value })} />
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
 
           {selectedLocation && <WeatherSnapshotCard location={selectedLocation} log={latestLog} />}
 

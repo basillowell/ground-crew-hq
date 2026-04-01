@@ -91,7 +91,7 @@ export default function SettingsPage() {
     <div className="p-4 max-w-5xl mx-auto">
       <PageHeader
         title="Program Setup"
-        subtitle="Customize the club profile, workforce structure, locations, and reusable shift plans for each property."
+        subtitle="Customize the club profile, workforce structure, operational locations, and reusable shift plans for each property."
         badge={<Badge variant="secondary">{programSetting?.organizationName ?? 'Club profile'}</Badge>}
       />
 
@@ -312,7 +312,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm font-medium">Work Locations</p>
-                <p className="text-xs text-muted-foreground">Define the operational places this club needs for routing, notes, and assignment context.</p>
+                <p className="text-xs text-muted-foreground">Define the operational places this club needs for routing, notes, weather area setup, and application context.</p>
               </div>
               <Button
                 size="sm"
