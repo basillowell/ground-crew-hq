@@ -18,10 +18,10 @@ export async function GET(req: NextRequest) {
       return ok(rows);
     }
 
-    if (start && end) {
+    if (start) {
       const rows = await query<Note>(
         "SELECT id, date::text AS date, type, content FROM notes WHERE date BETWEEN $1 AND $2 ORDER BY date DESC, type NULLS LAST, id DESC",
-        [start, end]
+        [start, end ?? start]
       );
       return ok(rows);
     }
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       `INSERT INTO notes (date, type, content)
        VALUES ($1, $2, $3)
        RETURNING id, date::text AS date, type, content`,
-      [date, type ?? null, content.trim()]
+      [date, type?.trim() ?? null, content.trim()]
     );
 
     return ok(note, 201);

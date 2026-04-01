@@ -211,7 +211,7 @@ export default function BreakroomPage() {
                             {card.employee.first_name} {card.employee.last_name}
                           </p>
                           <p className="mt-1 text-sm text-slate-600">
-                            {formatTime(card.shift.start_time)} - {formatTime(card.shift.end_time)} Â· {shiftHours.toFixed(1)}h shift
+                            {formatTime(card.shift.start_time)} - {formatTime(card.shift.end_time)} · {shiftHours.toFixed(1)}h shift
                           </p>
                         </div>
                         <div className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white">
@@ -226,7 +226,7 @@ export default function BreakroomPage() {
                           <p className="mt-1 text-xl font-semibold tracking-tight text-slate-900">{topTask.task_name}</p>
                           <p className="mt-1 text-sm text-slate-600">
                             {Number(topTask.duration).toFixed(1)}h
-                            {topTask.equipment_unit_name ? ` Â· ${topTask.equipment_unit_name}` : ""}
+                            {topTask.equipment_unit_name ? ` · ${topTask.equipment_unit_name}` : ""}
                           </p>
                         </div>
                       ) : (

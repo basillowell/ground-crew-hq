@@ -110,3 +110,38 @@ INSERT INTO task_groups (name) VALUES ('Installation'), ('Maintenance'), ('Inspe
 INSERT INTO equipment_types (name, short_name) VALUES
   ('Boom Lift', 'BL'), ('Scissor Lift', 'SL'), ('Forklift', 'FL'), ('Truck', 'TR')
   ON CONFLICT DO NOTHING;
+
+-- ================================================================
+-- Work Orders v2 (run this migration on your existing database)
+-- ================================================================
+
+-- Drop and recreate work_orders with full structure
+CREATE TABLE IF NOT EXISTS work_orders_v2 (
+  id                SERIAL PRIMARY KEY,
+  equipment_unit_id INT REFERENCES equipment_units(id) ON DELETE CASCADE,
+  title             TEXT NOT NULL,
+  description       TEXT,
+  status            TEXT NOT NULL DEFAULT 'not_started'
+    CHECK (status IN ('not_started','in_progress','completed','skipped')),
+  priority          TEXT NOT NULL DEFAULT 'scheduled'
+    CHECK (priority IN ('current','upcoming','scheduled')),
+  service_hours     DECIMAL(8,2),   -- trigger interval in hours
+  estimated_hours   DECIMAL(8,2),
+  actual_hours      DECIMAL(8,2),
+  due_date          DATE,
+  completed_at      TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Work order jobs (line items inside a work order)
+CREATE TABLE IF NOT EXISTS work_order_jobs (
+  id            SERIAL PRIMARY KEY,
+  work_order_id INT NOT NULL REFERENCES work_orders_v2(id) ON DELETE CASCADE,
+  description   TEXT NOT NULL,
+  completed     BOOLEAN DEFAULT false,
+  position      INT DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_work_orders_unit ON work_orders_v2(equipment_unit_id);
+CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders_v2(status);
+CREATE INDEX IF NOT EXISTS idx_work_order_jobs_wo ON work_order_jobs(work_order_id);
