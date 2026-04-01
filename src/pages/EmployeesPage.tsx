@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { employees } from '@/data/mockData';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusChip } from '@/components/StatusChip';
@@ -9,10 +8,19 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader, SearchFilter, DataTable, AvatarInitials, EmptyState } from '@/components/shared';
 import type { Column } from '@/components/shared';
-import { Phone, Mail, Plus, Shield, Smartphone, Monitor } from 'lucide-react';
-import type { Employee } from '@/data/mockData';
+import { Phone, Mail, Plus, Shield, Smartphone, Monitor, Users, UserPlus } from 'lucide-react';
+import type { Employee } from '@/data/seedData';
+import { loadEmployees, saveEmployees } from '@/lib/dataStore';
 
-function EmployeeDetail({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+function EmployeeDetail({
+  employee,
+  onClose,
+  onStatusToggle,
+}: {
+  employee: Employee;
+  onClose: () => void;
+  onStatusToggle: (employeeId: string) => void;
+}) {
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-auto">
@@ -58,7 +66,7 @@ function EmployeeDetail({ employee, onClose }: { employee: Employee; onClose: ()
               <StatusChip variant={employee.status === 'active' ? 'success' : 'danger'}>
                 {employee.status}
               </StatusChip>
-              <Button variant="outline" size="sm" className="text-xs">
+              <Button variant="outline" size="sm" className="text-xs" onClick={() => onStatusToggle(employee.id)}>
                 {employee.status === 'active' ? 'Deactivate' : 'Activate'}
               </Button>
             </div>
@@ -208,16 +216,123 @@ const columns: Column<Employee>[] = [
 ];
 
 export default function EmployeesPage() {
+  const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Employee | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [draft, setDraft] = useState({
+    firstName: '',
+    lastName: '',
+    group: 'Greens',
+    role: 'Operator',
+    wage: '18',
+    phone: '',
+    email: '',
+    language: 'English',
+    workerType: 'full-time' as Employee['workerType'],
+    department: 'Maintenance',
+  });
 
-  const filtered = employees.filter(e =>
-    `${e.firstName} ${e.lastName} ${e.group} ${e.role}`.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    setEmployeeList(loadEmployees());
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      employeeList.filter((employee) =>
+        `${employee.firstName} ${employee.lastName} ${employee.group} ${employee.role} ${employee.department}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      ),
+    [employeeList, search],
   );
+
+  const stats = {
+    total: employeeList.length,
+    active: employeeList.filter((employee) => employee.status === 'active').length,
+    departments: new Set(employeeList.map((employee) => employee.department)).size,
+  };
+
+  function persist(nextEmployees: Employee[]) {
+    setEmployeeList(nextEmployees);
+    saveEmployees(nextEmployees);
+  }
+
+  function handleAddEmployee() {
+    if (!draft.firstName.trim() || !draft.lastName.trim()) return;
+
+    const nextEmployee: Employee = {
+      id: `e${Date.now()}`,
+      firstName: draft.firstName.trim(),
+      lastName: draft.lastName.trim(),
+      group: draft.group.trim(),
+      role: draft.role.trim(),
+      wage: Number(draft.wage || 0),
+      phone: draft.phone.trim() || 'Pending',
+      email: draft.email.trim() || `${draft.firstName.toLowerCase()}.${draft.lastName.toLowerCase()}@groundcrew.local`,
+      photo: '',
+      status: 'active',
+      department: draft.department.trim(),
+      language: draft.language.trim(),
+      workerType: draft.workerType,
+      hireDate: new Date().toISOString().slice(0, 10),
+    };
+
+    persist([nextEmployee, ...employeeList]);
+    setDialogOpen(false);
+    setDraft({
+      firstName: '',
+      lastName: '',
+      group: 'Greens',
+      role: 'Operator',
+      wage: '18',
+      phone: '',
+      email: '',
+      language: 'English',
+      workerType: 'full-time',
+      department: 'Maintenance',
+    });
+  }
+
+  function handleStatusToggle(employeeId: string) {
+    const nextEmployees = employeeList.map((employee) =>
+      employee.id === employeeId
+        ? { ...employee, status: employee.status === 'active' ? 'inactive' : 'active' }
+        : employee,
+    );
+    persist(nextEmployees);
+    setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
+  }
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
-      <PageHeader title="Employee Management" action={{ label: 'Add Employee' }} />
+      <PageHeader title="Employee Management" action={{ label: 'Add Employee', onClick: () => setDialogOpen(true) }} />
+      <div className="grid gap-4 md:grid-cols-3 mb-4">
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-muted-foreground">Total crew</span>
+            <Users className="h-4 w-4 text-primary" />
+          </div>
+          <div className="text-3xl font-semibold">{stats.total}</div>
+          <p className="text-xs text-muted-foreground mt-1">All employee records in the workforce roster.</p>
+        </div>
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-muted-foreground">Active now</span>
+            <UserPlus className="h-4 w-4 text-chart-blue" />
+          </div>
+          <div className="text-3xl font-semibold">{stats.active}</div>
+          <p className="text-xs text-muted-foreground mt-1">Employees available to schedule and assign work.</p>
+        </div>
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-muted-foreground">Departments</span>
+            <Badge variant="secondary" className="rounded-full px-3 py-1">Dynamic</Badge>
+          </div>
+          <div className="text-3xl font-semibold">{stats.departments}</div>
+          <p className="text-xs text-muted-foreground mt-1">Use this roster as the source for Scheduler and Workboard.</p>
+        </div>
+      </div>
       <SearchFilter value={search} onChange={setSearch} placeholder="Search employees..." className="mb-4" />
       <DataTable<Employee>
         columns={columns}
@@ -226,7 +341,75 @@ export default function EmployeesPage() {
         onRowClick={(e) => setSelected(e)}
         emptyMessage="No employees found"
       />
-      {selected && <EmployeeDetail employee={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <EmployeeDetail
+          employee={selected}
+          onClose={() => setSelected(null)}
+          onStatusToggle={handleStatusToggle}
+        />
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Add Employee</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground">First Name</label>
+              <Input value={draft.firstName} onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Last Name</label>
+              <Input value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Group</label>
+              <Input value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Role</label>
+              <Input value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Hourly Wage</label>
+              <Input value={draft.wage} onChange={(event) => setDraft({ ...draft, wage: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Department</label>
+              <Input value={draft.department} onChange={(event) => setDraft({ ...draft, department: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Phone</label>
+              <Input value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Email</label>
+              <Input value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Language</label>
+              <Input value={draft.language} onChange={(event) => setDraft({ ...draft, language: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Worker Type</label>
+              <select
+                value={draft.workerType}
+                onChange={(event) => setDraft({ ...draft, workerType: event.target.value as Employee['workerType'] })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="full-time">Full-time</option>
+                <option value="part-time">Part-time</option>
+                <option value="seasonal">Seasonal</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddEmployee}>Save Employee</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

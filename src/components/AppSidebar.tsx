@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Clock, Users, ListChecks, Wrench, Shield,
-  BarChart3, Settings, MessageSquare, Leaf
+  BarChart3, Settings, MessageSquare, Leaf, CloudSun, FlaskConical
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -16,6 +16,8 @@ const navItems = [
   { title: 'Employee Management', url: '/app/employees', icon: Users },
   { title: 'Task Management', url: '/app/tasks', icon: ListChecks },
   { title: 'Equipment Management', url: '/app/equipment', icon: Wrench },
+  { title: 'Weather', url: '/app/weather', icon: CloudSun },
+  { title: 'Applications', url: '/app/applications', icon: FlaskConical },
   { title: 'Safety Management', url: '/app/safety', icon: Shield },
   { title: 'Report Tracking', url: '/app/reports', icon: BarChart3 },
   { title: 'Messaging', url: '/app/messaging', icon: MessageSquare },

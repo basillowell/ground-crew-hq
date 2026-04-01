@@ -2,13 +2,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { EmptyState } from '@/components/shared';
-import type { Note } from '@/data/mockData';
+import type { Note } from '@/data/seedData';
 
 interface NotesPanelProps {
   notes: Note[];
+  onAddNote?: () => void;
 }
 
-export function NotesPanel({ notes }: NotesPanelProps) {
+export function NotesPanel({ notes, onAddNote }: NotesPanelProps) {
   return (
     <Tabs defaultValue="daily" className="w-full">
       <TabsList className="w-full grid grid-cols-4 h-8">
@@ -31,7 +32,7 @@ export function NotesPanel({ notes }: NotesPanelProps) {
                 </div>
               </div>
             ))}
-          <Button variant="ghost" size="sm" className="w-full text-xs border border-dashed">
+          <Button variant="ghost" size="sm" className="w-full text-xs border border-dashed" onClick={onAddNote}>
             <Plus className="h-3 w-3 mr-1" /> Add Note
           </Button>
         </TabsContent>

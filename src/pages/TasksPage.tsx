@@ -1,18 +1,60 @@
-import { tasks } from '@/data/mockData';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { PageHeader, SearchFilter } from '@/components/shared';
 import { GripVertical } from 'lucide-react';
-import { useState } from 'react';
+import { loadTasks, saveTasks } from '@/lib/dataStore';
+import type { Task } from '@/data/seedData';
 
 export default function TasksPage() {
+  const [taskList, setTaskList] = useState<Task[]>([]);
   const [search, setSearch] = useState('');
-  const categories = [...new Set(tasks.map(t => t.category))];
-  const filtered = tasks.filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [draft, setDraft] = useState({
+    name: '',
+    category: 'Mowing',
+    duration: '60',
+    color: '#3f8f63',
+    icon: '🛠️',
+  });
+
+  useEffect(() => {
+    setTaskList(loadTasks());
+  }, []);
+
+  const categories = useMemo(() => [...new Set(taskList.map((task) => task.category))], [taskList]);
+  const filtered = useMemo(
+    () => taskList.filter((task) => task.name.toLowerCase().includes(search.toLowerCase())),
+    [search, taskList],
+  );
+
+  function handleAddTask() {
+    if (!draft.name.trim()) return;
+
+    const nextTasks = [
+      ...taskList,
+      {
+        id: `t${Date.now()}`,
+        name: draft.name.trim(),
+        category: draft.category.trim(),
+        duration: Number(draft.duration || 0),
+        color: draft.color,
+        icon: draft.icon,
+      },
+    ];
+
+    setTaskList(nextTasks);
+    saveTasks(nextTasks);
+    setDialogOpen(false);
+    setDraft({ name: '', category: 'Mowing', duration: '60', color: '#3f8f63', icon: '🛠️' });
+  }
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <PageHeader title="Task Management" action={{ label: 'Add Task' }} />
+      <PageHeader title="Task Management" action={{ label: 'Add Task', onClick: () => setDialogOpen(true) }} />
       <SearchFilter value={search} onChange={setSearch} placeholder="Search tasks..." className="mb-4" />
 
       {categories.map(cat => {
@@ -37,6 +79,40 @@ export default function TasksPage() {
           </div>
         );
       })}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Task</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Task Name</label>
+              <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Category</label>
+              <Input value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Duration</label>
+              <Input value={draft.duration} onChange={(event) => setDraft({ ...draft, duration: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Color</label>
+              <input type="color" value={draft.color} onChange={(event) => setDraft({ ...draft, color: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Icon</label>
+              <Input value={draft.icon} onChange={(event) => setDraft({ ...draft, icon: event.target.value })} className="mt-1" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddTask}>Save Task</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
