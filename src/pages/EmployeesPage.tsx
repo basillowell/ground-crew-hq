@@ -219,11 +219,11 @@ export default function EmployeesPage() {
     <div className="p-4 max-w-6xl mx-auto">
       <PageHeader title="Employee Management" action={{ label: 'Add Employee' }} />
       <SearchFilter value={search} onChange={setSearch} placeholder="Search employees..." className="mb-4" />
-      <DataTable
+      <DataTable<Employee>
         columns={columns}
         data={filtered}
         keyExtractor={(e) => e.id}
-        onRowClick={setSelected}
+        onRowClick={(e) => setSelected(e)}
         emptyMessage="No employees found"
       />
       {selected && <EmployeeDetail employee={selected} onClose={() => setSelected(null)} />}
