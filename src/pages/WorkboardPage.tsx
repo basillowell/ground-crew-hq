@@ -115,15 +115,19 @@ export default function WorkboardPage() {
     [employeeList],
   );
 
+  const allActiveEmployees = useMemo(
+    () => employeeList.filter((employee) => employee.status === 'active'),
+    [employeeList],
+  );
+
   const activeDepartmentEmployees = useMemo(
     () =>
-      employeeList.filter(
+      allActiveEmployees.filter(
         (employee) =>
-          employee.status === 'active' &&
           (!department || department === 'All Departments' || employee.department === department) &&
           (groupFilter === 'all' || employee.group === groupFilter),
       ),
-    [department, employeeList, groupFilter],
+    [allActiveEmployees, department, groupFilter],
   );
 
   const scheduledEmployees = useMemo(() => {
@@ -144,7 +148,15 @@ export default function WorkboardPage() {
     return activeDepartmentEmployees.filter((employee) => !scheduledIds.has(employee.id));
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
-  const assignmentEligibleEmployees = scheduledEmployees.length > 0 ? scheduledEmployees : activeDepartmentEmployees;
+  const assignmentEligibleEmployees = useMemo(() => {
+    const prioritized = [...scheduledEmployees, ...activeDepartmentEmployees, ...allActiveEmployees];
+    const seen = new Set<string>();
+    return prioritized.filter((employee) => {
+      if (seen.has(employee.id)) return false;
+      seen.add(employee.id);
+      return true;
+    });
+  }, [activeDepartmentEmployees, allActiveEmployees, scheduledEmployees]);
 
   const dayAssignments = useMemo(
     () => assignmentList.filter((assignment) => assignment.date === boardDate),
@@ -301,7 +313,7 @@ export default function WorkboardPage() {
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm font-medium">Crew filter</div>
-            <p className="text-xs text-muted-foreground mt-1">The workboard now follows the top-bar department and date. Use a crew group to tighten the board further.</p>
+            <p className="text-xs text-muted-foreground mt-1">The board view follows the top-bar department and date. Assignment dialogs still allow the full active roster so a crew filter never blocks dispatching work.</p>
             <div className="mt-3">
               <label className="text-xs text-muted-foreground">Group</label>
               <select
@@ -497,12 +509,16 @@ export default function WorkboardPage() {
                 onChange={(event) => setAssignmentDraft({ ...assignmentDraft, employeeId: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
+                {assignmentEligibleEmployees.length === 0 && <option value="">No active employees available</option>}
                 {assignmentEligibleEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName}
+                    {employee.firstName} {employee.lastName} · {employee.department} · {employee.group}
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Scheduled crew is listed first, then the rest of the active roster.
+              </p>
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Task</label>
