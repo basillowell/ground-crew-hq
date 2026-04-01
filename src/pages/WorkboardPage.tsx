@@ -146,7 +146,14 @@ export default function WorkboardPage() {
         .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
         .map((entry) => entry.employeeId),
     );
-    return activeDepartmentEmployees.filter((employee) => scheduledIds.has(employee.id));
+    return activeDepartmentEmployees
+      .filter((employee) => scheduledIds.has(employee.id))
+      .sort((left, right) => {
+        const leftShift = getShiftForEmployee(scheduleList, left.id, boardDate)?.shiftStart ?? '99:99';
+        const rightShift = getShiftForEmployee(scheduleList, right.id, boardDate)?.shiftStart ?? '99:99';
+        if (leftShift !== rightShift) return leftShift.localeCompare(rightShift);
+        return `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`);
+      });
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
   const unscheduledEmployees = useMemo(() => {
@@ -173,11 +180,18 @@ export default function WorkboardPage() {
     [assignmentList, boardDate],
   );
 
+  const assignedEmployeeIds = useMemo(
+    () => new Set(dayAssignments.map((assignment) => assignment.employeeId)),
+    [dayAssignments],
+  );
+
   const taskView = useMemo(() => {
     return taskList
       .map((task) => ({
         task,
-        assignees: dayAssignments.filter((assignment) => assignment.taskId === task.id),
+        assignees: dayAssignments
+          .filter((assignment) => assignment.taskId === task.id)
+          .sort((left, right) => left.startTime.localeCompare(right.startTime)),
       }))
       .filter((entry) => entry.assignees.length > 0);
   }, [dayAssignments, taskList]);
@@ -364,6 +378,21 @@ export default function WorkboardPage() {
             <div className="text-sm text-muted-foreground mb-1">Assignments</div>
             <div className="text-3xl font-semibold">{dayAssignments.length}</div>
             <p className="text-xs text-muted-foreground mt-1">Persistent task rows that feed breakroom and reporting.</p>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Daily Crew Board</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Every scheduled crew member should read as one clear lane with all assigned work visible in sequence.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">{assignedEmployeeIds.size} crew with tasks</Badge>
+              <Badge variant="outline">{Math.max(scheduledEmployees.length - assignedEmployeeIds.size, 0)} waiting assignment</Badge>
+            </div>
           </div>
         </div>
 
