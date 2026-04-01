@@ -8,18 +8,39 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader, SearchFilter, DataTable, AvatarInitials, EmptyState } from '@/components/shared';
 import type { Column } from '@/components/shared';
-import { Phone, Mail, Plus, Shield, Smartphone, Monitor, Users, UserPlus } from 'lucide-react';
+import { Phone, Mail, Plus, Shield, Smartphone, Monitor, Users, UserPlus, Trash2 } from 'lucide-react';
+import { toast } from '@/components/ui/sonner';
 import type { Employee } from '@/data/seedData';
-import { loadEmployees, saveEmployees } from '@/lib/dataStore';
+import {
+  loadAssignments,
+  loadChemicalApplicationLogs,
+  loadEmployees,
+  loadEquipmentUnits,
+  loadScheduleEntries,
+  saveAssignments,
+  saveChemicalApplicationLogs,
+  saveEmployees,
+  saveEquipmentUnits,
+  saveScheduleEntries,
+} from '@/lib/dataStore';
 
 function EmployeeDetail({
   employee,
   onClose,
   onStatusToggle,
+  onDelete,
+  dependencySummary,
 }: {
   employee: Employee;
   onClose: () => void;
   onStatusToggle: (employeeId: string) => void;
+  onDelete: (employeeId: string) => void;
+  dependencySummary: {
+    schedules: number;
+    assignments: number;
+    equipment: number;
+    applications: number;
+  };
 }) {
   return (
     <Dialog open onOpenChange={onClose}>
@@ -69,6 +90,19 @@ function EmployeeDetail({
               <Button variant="outline" size="sm" className="text-xs" onClick={() => onStatusToggle(employee.id)}>
                 {employee.status === 'active' ? 'Deactivate' : 'Activate'}
               </Button>
+              <Button variant="ghost" size="sm" className="text-xs text-destructive hover:text-destructive" onClick={() => onDelete(employee.id)}>
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                Remove Employee
+              </Button>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-3">
+              <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Linked records</div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                <div><span className="font-semibold">{dependencySummary.schedules}</span> schedules</div>
+                <div><span className="font-semibold">{dependencySummary.assignments}</span> tasks</div>
+                <div><span className="font-semibold">{dependencySummary.equipment}</span> units</div>
+                <div><span className="font-semibold">{dependencySummary.applications}</span> application logs</div>
+              </div>
             </div>
           </TabsContent>
 
@@ -218,6 +252,9 @@ const columns: Column<Employee>[] = [
 export default function EmployeesPage() {
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | Employee['status']>('all');
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+  const [groupFilter, setGroupFilter] = useState('all');
   const [selected, setSelected] = useState<Employee | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState({
@@ -237,14 +274,27 @@ export default function EmployeesPage() {
     setEmployeeList(loadEmployees());
   }, []);
 
+  const departments = useMemo(
+    () => [...new Set(employeeList.map((employee) => employee.department))].sort((left, right) => left.localeCompare(right)),
+    [employeeList],
+  );
+
+  const groups = useMemo(
+    () => [...new Set(employeeList.map((employee) => employee.group))].sort((left, right) => left.localeCompare(right)),
+    [employeeList],
+  );
+
   const filtered = useMemo(
     () =>
       employeeList.filter((employee) =>
         `${employee.firstName} ${employee.lastName} ${employee.group} ${employee.role} ${employee.department}`
           .toLowerCase()
-          .includes(search.toLowerCase()),
+          .includes(search.toLowerCase()) &&
+        (statusFilter === 'all' || employee.status === statusFilter) &&
+        (departmentFilter === 'all' || employee.department === departmentFilter) &&
+        (groupFilter === 'all' || employee.group === groupFilter),
       ),
-    [employeeList, search],
+    [departmentFilter, employeeList, groupFilter, search, statusFilter],
   );
 
   const stats = {
@@ -252,6 +302,19 @@ export default function EmployeesPage() {
     active: employeeList.filter((employee) => employee.status === 'active').length,
     departments: new Set(employeeList.map((employee) => employee.department)).size,
   };
+
+  const selectedDependencySummary = useMemo(() => {
+    if (!selected) {
+      return { schedules: 0, assignments: 0, equipment: 0, applications: 0 };
+    }
+
+    return {
+      schedules: loadScheduleEntries().filter((entry) => entry.employeeId === selected.id).length,
+      assignments: loadAssignments().filter((assignment) => assignment.employeeId === selected.id).length,
+      equipment: loadEquipmentUnits().filter((unit) => unit.assignedTo === selected.id).length,
+      applications: loadChemicalApplicationLogs().filter((log) => log.applicatorId === selected.id).length,
+    };
+  }, [selected, employeeList]);
 
   function persist(nextEmployees: Employee[]) {
     setEmployeeList(nextEmployees);
@@ -304,6 +367,77 @@ export default function EmployeesPage() {
     setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
   }
 
+  function handleDeleteEmployee(employeeId: string) {
+    const employee = employeeList.find((entry) => entry.id === employeeId);
+    if (!employee) return;
+
+    const schedules = loadScheduleEntries();
+    const assignments = loadAssignments();
+    const equipmentUnits = loadEquipmentUnits();
+    const applicationLogs = loadChemicalApplicationLogs();
+
+    const scheduleCount = schedules.filter((entry) => entry.employeeId === employeeId).length;
+    const assignmentCount = assignments.filter((entry) => entry.employeeId === employeeId).length;
+    const equipmentCount = equipmentUnits.filter((entry) => entry.assignedTo === employeeId).length;
+    const applicationCount = applicationLogs.filter((entry) => entry.applicatorId === employeeId).length;
+
+    const confirmed = window.confirm(
+      `Remove ${employee.firstName} ${employee.lastName} from the roster? This also removes ${scheduleCount} schedules, ${assignmentCount} assignments, unassigns ${equipmentCount} equipment records, and deletes ${applicationCount} application logs tied to this employee.`,
+    );
+    if (!confirmed) return;
+
+    const nextEmployees = employeeList.filter((entry) => entry.id !== employeeId);
+    persist(nextEmployees);
+    saveScheduleEntries(schedules.filter((entry) => entry.employeeId !== employeeId));
+    saveAssignments(assignments.filter((entry) => entry.employeeId !== employeeId));
+    saveEquipmentUnits(
+      equipmentUnits.map((unit) => (unit.assignedTo === employeeId ? { ...unit, assignedTo: undefined, status: unit.status === 'in-use' ? 'available' : unit.status } : unit)),
+    );
+    saveChemicalApplicationLogs(applicationLogs.filter((entry) => entry.applicatorId !== employeeId));
+    setSelected((current) => (current?.id === employeeId ? null : current));
+
+    toast('Employee removed', {
+      description: `${employee.firstName} ${employee.lastName} and linked operational records were removed from the system.`,
+    });
+  }
+
+  const tableColumns = useMemo<Column<Employee>[]>(
+    () => [
+      ...columns,
+      {
+        key: 'actions',
+        header: 'Actions',
+        className: 'w-[170px]',
+        render: (employee) => (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelected(employee);
+              }}
+            >
+              Review
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleDeleteEmployee(employee.id);
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [employeeList],
+  );
+
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <PageHeader title="Employee Management" action={{ label: 'Add Employee', onClick: () => setDialogOpen(true) }} />
@@ -333,9 +467,42 @@ export default function EmployeesPage() {
           <p className="text-xs text-muted-foreground mt-1">Use this roster as the source for Scheduler and Workboard.</p>
         </div>
       </div>
-      <SearchFilter value={search} onChange={setSearch} placeholder="Search employees..." className="mb-4" />
+      <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
+        <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr]">
+          <SearchFilter value={search} onChange={setSearch} placeholder="Search employees..." />
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as 'all' | Employee['status'])}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <select
+            value={departmentFilter}
+            onChange={(event) => setDepartmentFilter(event.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="all">All departments</option>
+            {departments.map((department) => (
+              <option key={department} value={department}>{department}</option>
+            ))}
+          </select>
+          <select
+            value={groupFilter}
+            onChange={(event) => setGroupFilter(event.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="all">All groups</option>
+            {groups.map((group) => (
+              <option key={group} value={group}>{group}</option>
+            ))}
+          </select>
+        </div>
+      </div>
       <DataTable<Employee>
-        columns={columns}
+        columns={tableColumns}
         data={filtered}
         keyExtractor={(e) => e.id}
         onRowClick={(e) => setSelected(e)}
@@ -346,6 +513,8 @@ export default function EmployeesPage() {
           employee={selected}
           onClose={() => setSelected(null)}
           onStatusToggle={handleStatusToggle}
+          onDelete={handleDeleteEmployee}
+          dependencySummary={selectedDependencySummary}
         />
       )}
 
