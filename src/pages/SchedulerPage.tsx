@@ -7,8 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Plus, Copy, Download, Search, Filter, CalendarDays, CloudSun, FlaskConical } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
-import { applicationAreas, weatherLocations, type ChemicalApplicationLog, type WeatherDailyLog } from '@/data/seedData';
-import { loadChemicalApplicationLogs, loadEmployees, loadScheduleEntries, loadWeatherDailyLogs, saveScheduleEntries } from '@/lib/dataStore';
+import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
+import { loadApplicationAreas, loadChemicalApplicationLogs, loadEmployees, loadScheduleEntries, loadWeatherDailyLogs, loadWeatherLocations, saveScheduleEntries } from '@/lib/dataStore';
 
 const days = ['Mon 3/25', 'Tue 3/26', 'Wed 3/27', 'Thu 3/28', 'Fri 3/29', 'Sat 3/30', 'Sun 3/31'];
 const dayDates = ['2024-03-25', '2024-03-26', '2024-03-27', '2024-03-28', '2024-03-29', '2024-03-30', '2024-03-31'];
@@ -23,8 +23,10 @@ const statusColors: Record<string, string> = {
 export default function SchedulerPage() {
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
+  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
   const [search, setSearch] = useState('');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
+  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [applicationLogs, setApplicationLogs] = useState<ChemicalApplicationLog[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
@@ -39,8 +41,10 @@ export default function SchedulerPage() {
   useEffect(() => {
     const storedEmployees = loadEmployees();
     setEmployeeList(storedEmployees);
+    setApplicationAreas(loadApplicationAreas());
     setScheduleList(loadScheduleEntries());
     setWeatherLogs(loadWeatherDailyLogs());
+    setWeatherLocations(loadWeatherLocations());
     setApplicationLogs(loadChemicalApplicationLogs());
     setSelectedEmployeeId(storedEmployees.find((employee) => employee.status === 'active')?.id ?? '');
     setDraft((current) => ({

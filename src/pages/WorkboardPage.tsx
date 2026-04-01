@@ -9,9 +9,10 @@ import { EmployeeRow } from '@/components/workboard/EmployeeRow';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
-import { applicationAreas, weatherLocations, turfData, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog } from '@/data/seedData';
+import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
 import { StickyNote, Droplets, ClipboardList, CloudSun } from 'lucide-react';
 import {
+  loadApplicationAreas,
   loadAssignments,
   loadChemicalApplicationLogs,
   loadEmployees,
@@ -20,6 +21,7 @@ import {
   loadScheduleEntries,
   loadTasks,
   loadWeatherDailyLogs,
+  loadWeatherLocations,
   saveAssignments,
   saveNotes,
 } from '@/lib/dataStore';
@@ -29,10 +31,12 @@ export default function WorkboardPage() {
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [taskList, setTaskList] = useState<Task[]>([]);
   const [assignmentList, setAssignmentList] = useState<Assignment[]>([]);
+  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
   const [noteList, setNoteList] = useState<Note[]>([]);
   const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
   const [equipmentList, setEquipmentList] = useState<EquipmentUnit[]>([]);
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
+  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [applicationLogs, setApplicationLogs] = useState(loadChemicalApplicationLogs());
   const [view, setView] = useState<'employee' | 'task'>('employee');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
@@ -60,10 +64,12 @@ export default function WorkboardPage() {
     setEmployeeList(storedEmployees);
     setTaskList(loadTasks());
     setAssignmentList(loadAssignments());
+    setApplicationAreas(loadApplicationAreas());
     setNoteList(loadNotes());
     setScheduleList(storedSchedules);
     setEquipmentList(loadEquipmentUnits());
     setWeatherLogs(loadWeatherDailyLogs());
+    setWeatherLocations(loadWeatherLocations());
     setApplicationLogs(loadChemicalApplicationLogs());
     const firstScheduled =
       storedSchedules.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??

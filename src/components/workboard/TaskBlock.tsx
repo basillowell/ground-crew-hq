@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatusChip } from '@/components/StatusChip';
 import type { Task, Assignment } from '@/data/seedData';
-import { equipmentUnits } from '@/data/seedData';
+import { loadEquipmentUnits } from '@/lib/dataStore';
 import { X } from 'lucide-react';
 
 interface TaskBlockProps {
@@ -12,6 +12,7 @@ interface TaskBlockProps {
 }
 
 export function TaskBlock({ task, assignment, onRemove }: TaskBlockProps) {
+  const equipmentUnits = loadEquipmentUnits();
   const equipment = assignment.equipmentId
     ? equipmentUnits.find(u => u.id === assignment.equipmentId)
     : null;

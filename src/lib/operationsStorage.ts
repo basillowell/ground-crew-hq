@@ -1,7 +1,9 @@
 import {
   assignments,
+  applicationAreas,
   chemicalApplicationLogs,
   chemicalApplicationTankMixItems,
+  chemicalProducts,
   equipmentUnits,
   employees,
   manualRainfallEntries,
@@ -9,9 +11,13 @@ import {
   scheduleEntries,
   tasks,
   weatherDailyLogs,
+  weatherLocations,
+  weatherStations,
   type Assignment,
+  type ApplicationArea,
   type ChemicalApplicationLog,
   type ChemicalApplicationTankMixItem,
+  type ChemicalProduct,
   type EquipmentUnit,
   type Employee,
   type ManualRainfallEntry,
@@ -19,6 +25,8 @@ import {
   type ScheduleEntry,
   type Task,
   type WeatherDailyLog,
+  type WeatherLocation,
+  type WeatherStation,
 } from '@/data/seedData';
 
 // Legacy compatibility layer: this file now backs the clearer `dataStore` module.
@@ -33,6 +41,10 @@ const WEATHER_LOGS_KEY = 'gchq-weather-daily-logs';
 const MANUAL_RAIN_KEY = 'gchq-manual-rainfall';
 const APPLICATION_LOGS_KEY = 'gchq-application-logs';
 const TANK_MIX_ITEMS_KEY = 'gchq-application-tank-mix';
+const WEATHER_LOCATIONS_KEY = 'gchq-weather-locations';
+const WEATHER_STATIONS_KEY = 'gchq-weather-stations';
+const CHEMICAL_PRODUCTS_KEY = 'gchq-chemical-products';
+const APPLICATION_AREAS_KEY = 'gchq-application-areas';
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -133,4 +145,36 @@ export function loadChemicalApplicationTankMixItems() {
 
 export function saveChemicalApplicationTankMixItems(value: ChemicalApplicationTankMixItem[]) {
   writeList(TANK_MIX_ITEMS_KEY, value);
+}
+
+export function loadWeatherLocations() {
+  return readList<WeatherLocation>(WEATHER_LOCATIONS_KEY, weatherLocations);
+}
+
+export function saveWeatherLocations(value: WeatherLocation[]) {
+  writeList(WEATHER_LOCATIONS_KEY, value);
+}
+
+export function loadWeatherStations() {
+  return readList<WeatherStation>(WEATHER_STATIONS_KEY, weatherStations);
+}
+
+export function saveWeatherStations(value: WeatherStation[]) {
+  writeList(WEATHER_STATIONS_KEY, value);
+}
+
+export function loadChemicalProducts() {
+  return readList<ChemicalProduct>(CHEMICAL_PRODUCTS_KEY, chemicalProducts);
+}
+
+export function saveChemicalProducts(value: ChemicalProduct[]) {
+  writeList(CHEMICAL_PRODUCTS_KEY, value);
+}
+
+export function loadApplicationAreas() {
+  return readList<ApplicationArea>(APPLICATION_AREAS_KEY, applicationAreas);
+}
+
+export function saveApplicationAreas(value: ApplicationArea[]) {
+  writeList(APPLICATION_AREAS_KEY, value);
 }

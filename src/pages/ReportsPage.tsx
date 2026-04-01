@@ -21,26 +21,29 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
-  applicationAreas,
-  chemicalProducts,
   reportCategories,
-  weatherLocations,
+  type ApplicationArea,
   type Assignment,
   type ChemicalApplicationLog,
   type ChemicalApplicationTankMixItem,
+  type ChemicalProduct,
   type Employee,
   type ScheduleEntry,
   type Task,
   type WeatherDailyLog,
+  type WeatherLocation,
 } from '@/data/seedData';
 import {
+  loadApplicationAreas,
   loadAssignments,
   loadChemicalApplicationLogs,
   loadChemicalApplicationTankMixItems,
+  loadChemicalProducts,
   loadEmployees,
   loadScheduleEntries,
   loadTasks,
   loadWeatherDailyLogs,
+  loadWeatherLocations,
 } from '@/lib/dataStore';
 
 const COLORS = ['hsl(152,55%,38%)', 'hsl(210,80%,52%)', 'hsl(38,92%,50%)', 'hsl(270,60%,55%)', 'hsl(0,0%,55%)'];
@@ -65,7 +68,10 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState('2024-03-20');
   const [endDate, setEndDate] = useState('2024-03-31');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
+  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [applicationLogs, setApplicationLogs] = useState<ChemicalApplicationLog[]>([]);
+  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
+  const [chemicalProducts, setChemicalProducts] = useState<ChemicalProduct[]>([]);
   const [tankMixItems, setTankMixItems] = useState<ChemicalApplicationTankMixItem[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
@@ -74,7 +80,10 @@ export default function ReportsPage() {
 
   useEffect(() => {
     setWeatherLogs(loadWeatherDailyLogs());
+    setWeatherLocations(loadWeatherLocations());
     setApplicationLogs(loadChemicalApplicationLogs());
+    setApplicationAreas(loadApplicationAreas());
+    setChemicalProducts(loadChemicalProducts());
     setTankMixItems(loadChemicalApplicationTankMixItems());
     setEmployees(loadEmployees());
     setScheduleEntries(loadScheduleEntries());

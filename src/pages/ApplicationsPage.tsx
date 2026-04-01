@@ -9,18 +9,23 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import {
-  applicationAreas,
-  chemicalProducts,
-  employees,
-  equipmentUnits,
-  weatherLocations,
+  type ApplicationArea,
   type ChemicalApplicationLog,
   type ChemicalApplicationTankMixItem,
+  type ChemicalProduct,
+  type Employee,
+  type EquipmentUnit,
+  type WeatherLocation,
 } from '@/data/seedData';
 import {
+  loadApplicationAreas,
   loadChemicalApplicationLogs,
   loadChemicalApplicationTankMixItems,
+  loadChemicalProducts,
+  loadEmployees,
+  loadEquipmentUnits,
   loadWeatherDailyLogs,
+  loadWeatherLocations,
   saveChemicalApplicationLogs,
   saveChemicalApplicationTankMixItems,
 } from '@/lib/dataStore';
@@ -52,22 +57,22 @@ const emptyDraft: ApplicationDraft = {
   applicationDate: '2024-03-26',
   startTime: '05:30',
   endTime: '07:00',
-  areaId: applicationAreas[0]?.id ?? '',
+  areaId: '',
   targetPest: '',
   agronomicPurpose: '',
   carrierVolume: '120',
   areaTreated: '3.5',
   areaUnit: 'acres',
-  applicatorId: employees[0]?.id ?? '',
-  equipmentUsedId: equipmentUnits[0]?.id ?? '',
+  applicatorId: '',
+  equipmentUsedId: '',
   weatherLogId: '',
   notes: '',
 };
 
 const emptyMixItem: DraftMixItem = {
-  productId: chemicalProducts[0]?.id ?? '',
+  productId: '',
   rateApplied: '0',
-  rateUnit: chemicalProducts[0]?.rateUnit ?? 'oz/acre',
+  rateUnit: 'oz/acre',
   totalQuantityUsed: '0',
 };
 
@@ -80,6 +85,11 @@ function downloadCsv(filename: string, lines: string[]) {
 }
 
 export default function ApplicationsPage() {
+  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
+  const [chemicalProducts, setChemicalProducts] = useState<ChemicalProduct[]>([]);
+  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [equipmentUnits, setEquipmentUnits] = useState<EquipmentUnit[]>([]);
   const [logs, setLogs] = useState<ChemicalApplicationLog[]>([]);
   const [mixItems, setMixItems] = useState<ChemicalApplicationTankMixItem[]>([]);
   const [weatherLogs, setWeatherLogs] = useState(loadWeatherDailyLogs());
@@ -92,9 +102,32 @@ export default function ApplicationsPage() {
   const [draftMixItems, setDraftMixItems] = useState<DraftMixItem[]>([{ ...emptyMixItem }]);
 
   useEffect(() => {
+    const loadedAreas = loadApplicationAreas();
+    const loadedProducts = loadChemicalProducts();
+    const loadedLocations = loadWeatherLocations();
+    const loadedEmployees = loadEmployees();
+    const loadedEquipment = loadEquipmentUnits();
+    setApplicationAreas(loadedAreas);
+    setChemicalProducts(loadedProducts);
+    setWeatherLocations(loadedLocations);
+    setEmployees(loadedEmployees);
+    setEquipmentUnits(loadedEquipment);
     setLogs(loadChemicalApplicationLogs());
     setMixItems(loadChemicalApplicationTankMixItems());
     setWeatherLogs(loadWeatherDailyLogs());
+    setDraft((current) => ({
+      ...current,
+      areaId: loadedAreas[0]?.id ?? current.areaId,
+      applicatorId: loadedEmployees[0]?.id ?? current.applicatorId,
+      equipmentUsedId: loadedEquipment[0]?.id ?? current.equipmentUsedId,
+    }));
+    setDraftMixItems((current) =>
+      current.map((item) => ({
+        ...item,
+        productId: item.productId || loadedProducts[0]?.id || '',
+        rateUnit: loadedProducts.find((product) => product.id === item.productId)?.rateUnit ?? loadedProducts[0]?.rateUnit ?? item.rateUnit,
+      }))
+    );
   }, []);
 
   const filteredLogs = useMemo(() => {
@@ -173,8 +206,17 @@ export default function ApplicationsPage() {
     saveChemicalApplicationLogs(nextLogs);
     saveChemicalApplicationTankMixItems(nextMix);
     setDialogOpen(false);
-    setDraft(emptyDraft);
-    setDraftMixItems([{ ...emptyMixItem }]);
+    setDraft({
+      ...emptyDraft,
+      areaId: applicationAreas[0]?.id ?? '',
+      applicatorId: employees[0]?.id ?? '',
+      equipmentUsedId: equipmentUnits[0]?.id ?? '',
+    });
+    setDraftMixItems([{
+      ...emptyMixItem,
+      productId: chemicalProducts[0]?.id ?? '',
+      rateUnit: chemicalProducts[0]?.rateUnit ?? emptyMixItem.rateUnit,
+    }]);
   }
 
   function exportLogs() {

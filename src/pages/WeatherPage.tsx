@@ -9,14 +9,16 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import {
-  weatherLocations,
-  weatherStations,
   type ManualRainfallEntry,
   type WeatherDailyLog,
+  type WeatherLocation,
+  type WeatherStation,
 } from '@/data/seedData';
 import {
+  loadWeatherLocations,
   loadManualRainfallEntries,
   loadWeatherDailyLogs,
+  loadWeatherStations,
   saveManualRainfallEntries,
   saveWeatherDailyLogs,
 } from '@/lib/dataStore';
@@ -24,7 +26,7 @@ import {
 type EntryMode = 'rainfall' | 'override';
 
 const emptyEntry = {
-  locationId: weatherLocations[0]?.id ?? '',
+  locationId: '',
   date: '2024-03-26',
   rainfallAmount: '0.00',
   enteredBy: 'Operations Admin',
@@ -38,7 +40,9 @@ const emptyEntry = {
 };
 
 export default function WeatherPage() {
-  const [selectedLocationId, setSelectedLocationId] = useState(weatherLocations[0]?.id ?? '');
+  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
+  const [weatherStations, setWeatherStations] = useState<WeatherStation[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
   const [rainEntries, setRainEntries] = useState<ManualRainfallEntry[]>([]);
   const [dialogMode, setDialogMode] = useState<EntryMode>('rainfall');
@@ -46,6 +50,11 @@ export default function WeatherPage() {
   const [draft, setDraft] = useState(emptyEntry);
 
   useEffect(() => {
+    const locations = loadWeatherLocations();
+    const stations = loadWeatherStations();
+    setWeatherLocations(locations);
+    setWeatherStations(stations);
+    setSelectedLocationId((current) => current || locations[0]?.id || '');
     setWeatherLogs(loadWeatherDailyLogs());
     setRainEntries(loadManualRainfallEntries());
   }, []);
