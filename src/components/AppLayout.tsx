@@ -27,6 +27,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     return () => window.removeEventListener('program-setup-updated', refreshProgramSetup);
   }, []);
 
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('operations-context-updated', {
+        detail: {
+          department,
+          date: currentDate.toISOString().slice(0, 10),
+        },
+      }),
+    );
+  }, [currentDate, department]);
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">

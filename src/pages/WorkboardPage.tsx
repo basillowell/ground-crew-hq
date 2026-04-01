@@ -9,7 +9,7 @@ import { EmployeeRow } from '@/components/workboard/EmployeeRow';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
-import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
+import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
 import { StickyNote, Droplets, ClipboardList, CloudSun } from 'lucide-react';
 import {
   loadApplicationAreas,
@@ -22,12 +22,23 @@ import {
   loadTasks,
   loadWeatherDailyLogs,
   loadWeatherLocations,
+  loadWorkLocations,
   saveAssignments,
   saveNotes,
 } from '@/lib/dataStore';
 
+function defaultBoardDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
+  return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
+}
+
 export default function WorkboardPage() {
-  const boardDate = '2024-03-25';
+  const [boardDate, setBoardDate] = useState(defaultBoardDate());
+  const [department, setDepartment] = useState('Maintenance');
+  const [groupFilter, setGroupFilter] = useState('all');
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [taskList, setTaskList] = useState<Task[]>([]);
   const [assignmentList, setAssignmentList] = useState<Assignment[]>([]);
@@ -37,6 +48,7 @@ export default function WorkboardPage() {
   const [equipmentList, setEquipmentList] = useState<EquipmentUnit[]>([]);
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
+  const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [applicationLogs, setApplicationLogs] = useState(loadChemicalApplicationLogs());
   const [view, setView] = useState<'employee' | 'task'>('employee');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
@@ -59,6 +71,12 @@ export default function WorkboardPage() {
   });
 
   useEffect(() => {
+    const handleOperationsContext = (event: Event) => {
+      const detail = (event as CustomEvent<{ department?: string; date?: string }>).detail;
+      if (detail?.department) setDepartment(detail.department);
+      if (detail?.date) setBoardDate(detail.date);
+    };
+
     const storedEmployees = loadEmployees();
     const storedSchedules = loadScheduleEntries();
     const storedTasks = loadTasks()
@@ -73,6 +91,7 @@ export default function WorkboardPage() {
     setEquipmentList(loadEquipmentUnits());
     setWeatherLogs(loadWeatherDailyLogs());
     setWeatherLocations(loadWeatherLocations());
+    setWorkLocations(loadWorkLocations());
     setApplicationLogs(loadChemicalApplicationLogs());
     const firstScheduled =
       storedSchedules.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??
@@ -80,7 +99,25 @@ export default function WorkboardPage() {
       '';
     setSelectedEmployeeId(firstScheduled);
     setAssignmentDraft((current) => ({ ...current, employeeId: firstScheduled, taskId: storedTasks[0]?.id ?? '' }));
+    window.addEventListener('operations-context-updated', handleOperationsContext as EventListener);
+    return () => window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
   }, [boardDate]);
+
+  const groups = useMemo(
+    () => [...new Set(employeeList.filter((employee) => employee.status === 'active').map((employee) => employee.group))].sort((left, right) => left.localeCompare(right)),
+    [employeeList],
+  );
+
+  const activeDepartmentEmployees = useMemo(
+    () =>
+      employeeList.filter(
+        (employee) =>
+          employee.status === 'active' &&
+          (!department || department === 'All Departments' || employee.department === department) &&
+          (groupFilter === 'all' || employee.group === groupFilter),
+      ),
+    [department, employeeList, groupFilter],
+  );
 
   const scheduledEmployees = useMemo(() => {
     const scheduledIds = new Set(
@@ -88,8 +125,17 @@ export default function WorkboardPage() {
         .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
         .map((entry) => entry.employeeId),
     );
-    return employeeList.filter((employee) => employee.status === 'active' && scheduledIds.has(employee.id));
-  }, [boardDate, employeeList, scheduleList]);
+    return activeDepartmentEmployees.filter((employee) => scheduledIds.has(employee.id));
+  }, [activeDepartmentEmployees, boardDate, scheduleList]);
+
+  const unscheduledEmployees = useMemo(() => {
+    const scheduledIds = new Set(
+      scheduleList
+        .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
+        .map((entry) => entry.employeeId),
+    );
+    return activeDepartmentEmployees.filter((employee) => !scheduledIds.has(employee.id));
+  }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
   const dayAssignments = useMemo(
     () => assignmentList.filter((assignment) => assignment.date === boardDate),
@@ -135,12 +181,13 @@ export default function WorkboardPage() {
   }
 
   function openAssignmentDialog(employeeId: string) {
+    const defaultLocation = workLocations[0]?.name ?? 'Primary zone';
     setSelectedEmployeeId(employeeId);
     setAssignmentDraft({
       employeeId,
       taskId: taskList[0]?.id ?? '',
       equipmentId: '',
-      area: 'Primary zone',
+      area: defaultLocation,
       startTime: '05:30',
       duration: '60',
     });
@@ -202,7 +249,8 @@ export default function WorkboardPage() {
       <div className="flex-1 p-4 overflow-auto">
         <PageHeader
           title="Workboard"
-          badge={<Badge variant="secondary">{scheduledEmployees.length} scheduled on {boardDate}</Badge>}
+          subtitle="Build the daily labor board from the selected top-bar date, department, employee roster, active tasks, and program locations."
+          badge={<Badge variant="secondary">{department} · {boardDate}</Badge>}
           action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || scheduledEmployees[0]?.id || '') }}
         >
           <Button
@@ -223,21 +271,50 @@ export default function WorkboardPage() {
           </Button>
         </PageHeader>
 
+        <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="text-sm font-medium">Crew filter</div>
+            <p className="text-xs text-muted-foreground mt-1">The workboard now follows the top-bar department and date. Use a crew group to tighten the board further.</p>
+            <div className="mt-3">
+              <label className="text-xs text-muted-foreground">Group</label>
+              <select
+                value={groupFilter}
+                onChange={(event) => setGroupFilter(event.target.value)}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="all">All groups</option>
+                {groups.map((group) => (
+                  <option key={group} value={group}>{group}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="text-sm font-medium">Program setup tie-in</div>
+            <p className="text-xs text-muted-foreground mt-1">Assignments use active tasks and program locations, while scheduled employees inherit role, department, group, and worker type from Employee Management.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Badge variant="outline">{taskList.length} active tasks</Badge>
+              <Badge variant="outline">{workLocations.length} locations</Badge>
+              <Badge variant="outline">{activeDepartmentEmployees.length} active employees</Badge>
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3 mb-4">
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="text-sm text-muted-foreground mb-1">Scheduled crew</div>
+            <div className="text-3xl font-semibold">{scheduledEmployees.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">Employees on the board for this date and department.</p>
+          </div>
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="text-sm text-muted-foreground mb-1">Needs scheduling</div>
+            <div className="text-3xl font-semibold">{unscheduledEmployees.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">Active employees in this filter with no shift for the selected day.</p>
+          </div>
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm text-muted-foreground mb-1">Assignments</div>
             <div className="text-3xl font-semibold">{dayAssignments.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Persistent task rows tied to scheduled employees.</p>
-          </div>
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="text-sm text-muted-foreground mb-1">Task catalog</div>
-            <div className="text-3xl font-semibold">{taskList.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Workboard pulls from the same task source used across operations.</p>
-          </div>
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="text-sm text-muted-foreground mb-1">Notes in play</div>
-            <div className="text-3xl font-semibold">{noteList.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Daily, general, geo, and alert notes stay available on the rail.</p>
+            <p className="text-xs text-muted-foreground mt-1">Persistent task rows that feed breakroom and reporting.</p>
           </div>
         </div>
 
@@ -279,6 +356,32 @@ export default function WorkboardPage() {
           </div>
         </div>
 
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-sm font-semibold">Crew Needing Setup Attention</h3>
+              <p className="text-xs text-muted-foreground">These employees are active in the selected department but do not have a scheduled shift for this operating date.</p>
+            </div>
+            <Badge variant="outline">{unscheduledEmployees.length} unscheduled</Badge>
+          </div>
+          {unscheduledEmployees.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Everyone in this filtered department has a scheduled shift for {boardDate}.</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {unscheduledEmployees.map((employee) => (
+                <div key={employee.id} className="rounded-2xl border bg-muted/30 p-4">
+                  <div className="font-medium">{employee.firstName} {employee.lastName}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{employee.role} · {employee.group} · {employee.workerType}</div>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <Badge variant="outline">{employee.department}</Badge>
+                    <Badge variant="secondary">{employee.language}</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {view === 'employee' ? (
           <div className="space-y-2">
             {scheduledEmployees.map((employee) => (
@@ -287,6 +390,10 @@ export default function WorkboardPage() {
                 employee={employee}
                 assignments={dayAssignments.filter((assignment) => assignment.employeeId === employee.id)}
                 tasks={taskList}
+                shiftLabel={(() => {
+                  const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
+                  return shift ? `${shift.shiftStart}-${shift.shiftEnd}` : undefined;
+                })()}
                 onAddTask={openAssignmentDialog}
                 onRemoveAssignment={(assignmentIndex) => removeAssignment(employee.id, assignmentIndex)}
               />
@@ -333,7 +440,7 @@ export default function WorkboardPage() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="notes">
-            <NotesPanel notes={noteList} onAddNote={() => setNoteDialogOpen(true)} />
+            <NotesPanel notes={noteList.filter((note) => note.date === boardDate || note.type === 'general')} onAddNote={() => setNoteDialogOpen(true)} />
           </TabsContent>
           <TabsContent value="turf">
             <TurfPanel data={turfData} />
@@ -400,7 +507,21 @@ export default function WorkboardPage() {
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Area</label>
-              <Input value={assignmentDraft.area} onChange={(event) => setAssignmentDraft({ ...assignmentDraft, area: event.target.value })} className="mt-1" />
+              {workLocations.length > 0 ? (
+                <select
+                  value={assignmentDraft.area}
+                  onChange={(event) => setAssignmentDraft({ ...assignmentDraft, area: event.target.value })}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {workLocations.map((location) => (
+                    <option key={location.id} value={location.name}>
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={assignmentDraft.area} onChange={(event) => setAssignmentDraft({ ...assignmentDraft, area: event.target.value })} className="mt-1" />
+              )}
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
@@ -439,7 +560,22 @@ export default function WorkboardPage() {
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Location</label>
-              <Input value={noteDraft.location} onChange={(event) => setNoteDraft({ ...noteDraft, location: event.target.value })} className="mt-1" />
+              {workLocations.length > 0 ? (
+                <select
+                  value={noteDraft.location}
+                  onChange={(event) => setNoteDraft({ ...noteDraft, location: event.target.value })}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">General board note</option>
+                  {workLocations.map((location) => (
+                    <option key={location.id} value={location.name}>
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={noteDraft.location} onChange={(event) => setNoteDraft({ ...noteDraft, location: event.target.value })} className="mt-1" />
+              )}
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Content</label>
