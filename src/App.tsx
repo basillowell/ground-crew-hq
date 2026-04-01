@@ -14,7 +14,7 @@ const SchedulerPage = lazy(() => import("./pages/SchedulerPage"));
 const EquipmentPage = lazy(() => import("./pages/EquipmentPage"));
 const MessagingPage = lazy(() => import("./pages/MessagingPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
-const TasksPage = lazy(() => import("./pages/TasksManagementPage"));
+const TasksPage = lazy(() => import("./pages/TasksCatalogPage"));
 const SafetyPage = lazy(() => import("./pages/SafetyPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));

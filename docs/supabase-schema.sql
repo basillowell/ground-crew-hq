@@ -21,7 +21,12 @@ create table if not exists public.tasks (
   category text not null,
   duration integer not null default 0,
   color text not null,
-  icon text not null
+  icon text not null,
+  status text not null default 'active',
+  priority integer not null default 0,
+  "skillTags" text[] not null default '{}',
+  "equipmentTags" text[] not null default '{}',
+  notes text not null default ''
 );
 
 create table if not exists public.equipment_units (
@@ -126,6 +131,12 @@ create table if not exists public.chemical_products (
   "preHarvestIntervalHours" numeric not null default 0,
   "defaultApplicationMethod" text not null default ''
 );
+
+alter table public.tasks add column if not exists status text not null default 'active';
+alter table public.tasks add column if not exists priority integer not null default 0;
+alter table public.tasks add column if not exists "skillTags" text[] not null default '{}';
+alter table public.tasks add column if not exists "equipmentTags" text[] not null default '{}';
+alter table public.tasks add column if not exists notes text not null default '';
 
 create table if not exists public.application_areas (
   id text primary key,

@@ -24,6 +24,11 @@ export interface Task {
   duration: number; // minutes
   color: string;
   icon: string;
+  status?: 'active' | 'inactive' | 'archived';
+  priority?: number;
+  skillTags?: string[];
+  equipmentTags?: string[];
+  notes?: string;
 }
 
 export interface EquipmentType {

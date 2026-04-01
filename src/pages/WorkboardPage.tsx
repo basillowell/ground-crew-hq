@@ -61,8 +61,11 @@ export default function WorkboardPage() {
   useEffect(() => {
     const storedEmployees = loadEmployees();
     const storedSchedules = loadScheduleEntries();
+    const storedTasks = loadTasks()
+      .filter((task) => task.status === 'active')
+      .sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999) || left.name.localeCompare(right.name));
     setEmployeeList(storedEmployees);
-    setTaskList(loadTasks());
+    setTaskList(storedTasks);
     setAssignmentList(loadAssignments());
     setApplicationAreas(loadApplicationAreas());
     setNoteList(loadNotes());
@@ -76,7 +79,6 @@ export default function WorkboardPage() {
       storedEmployees.find((employee) => employee.status === 'active')?.id ??
       '';
     setSelectedEmployeeId(firstScheduled);
-    const storedTasks = loadTasks();
     setAssignmentDraft((current) => ({ ...current, employeeId: firstScheduled, taskId: storedTasks[0]?.id ?? '' }));
   }, [boardDate]);
 

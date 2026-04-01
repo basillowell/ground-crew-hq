@@ -206,6 +206,17 @@ const collections = {
 
 let initialized = false;
 
+function normalizeTask(task: Task, index = 0): Task {
+  return {
+    ...task,
+    status: task.status ?? 'active',
+    priority: task.priority ?? index + 1,
+    skillTags: Array.isArray(task.skillTags) ? task.skillTags : [],
+    equipmentTags: Array.isArray(task.equipmentTags) ? task.equipmentTags : [],
+    notes: task.notes ?? '',
+  };
+}
+
 async function replaceRemoteRows<T extends { id?: string }>(table: string, rows: T[]) {
   if (!supabase) return;
   const { error: deleteError } = await supabase.from(table).delete().not('id', 'is', null);
@@ -287,11 +298,11 @@ export function saveEmployees(value: Employee[]) {
 }
 
 export function loadTasks() {
-  return collections.tasks.loadLocal();
+  return collections.tasks.loadLocal().map((task, index) => normalizeTask(task, index));
 }
 
 export function saveTasks(value: Task[]) {
-  syncCollection(collections.tasks, value);
+  syncCollection(collections.tasks, value.map((task, index) => normalizeTask(task, index)));
 }
 
 export function loadScheduleEntries() {
