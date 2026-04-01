@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CloudSun, Droplets, MapPin, PencilLine, Plus, Radar, Save, Trash2 } from 'lucide-react';
+import { CloudSun, Crosshair, Droplets, MapPin, PencilLine, Plus, Radar, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -33,9 +33,13 @@ import { fetchPrimaryStationSnapshot } from '@/lib/weatherProviders';
 
 type EntryMode = 'rainfall' | 'override';
 
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 const emptyEntry = {
   locationId: '',
-  date: '2024-03-26',
+  date: todayIsoDate(),
   rainfallAmount: '0.00',
   enteredBy: 'Operations Admin',
   notes: '',
@@ -68,6 +72,8 @@ export default function WeatherPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState(emptyEntry);
   const [customAreaName, setCustomAreaName] = useState('');
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [geoLoadingStationId, setGeoLoadingStationId] = useState<string | null>(null);
 
   useEffect(() => {
     const locations = loadWeatherLocations();
@@ -143,12 +149,57 @@ export default function WeatherPage() {
     return () => {
       cancelled = true;
     };
-  }, [primaryStation, selectedLocation]);
+  }, [primaryStation, refreshTick, selectedLocation]);
 
   function openDialog(mode: EntryMode) {
     setDialogMode(mode);
-    setDraft({ ...emptyEntry, locationId: selectedLocationId });
+    setDraft({ ...emptyEntry, locationId: selectedLocationId, date: todayIsoDate() });
     setDialogOpen(true);
+  }
+
+  function refreshLiveWeather() {
+    setRefreshTick((current) => current + 1);
+  }
+
+  async function useCurrentLocationForStation(stationId: string) {
+    if (!navigator.geolocation) {
+      toast('Location unavailable', {
+        description: 'This browser does not support device geolocation.',
+      });
+      return;
+    }
+
+    setGeoLoadingStationId(stationId);
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000,
+        });
+      });
+
+      const nextStations = weatherStations.map((station) =>
+        station.id === stationId
+          ? {
+              ...station,
+              latitude: Number(position.coords.latitude.toFixed(4)),
+              longitude: Number(position.coords.longitude.toFixed(4)),
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            }
+          : station,
+      );
+      persistWeatherSetup(weatherLocations, nextStations);
+      toast('Station coordinates updated', {
+        description: 'This station is now pointed at your current device location for live weather.',
+      });
+    } catch {
+      toast('Location permission needed', {
+        description: 'Allow location access in the browser to use current device coordinates.',
+      });
+    } finally {
+      setGeoLoadingStationId(null);
+    }
   }
 
   function persistWeatherSetup(nextLocations: WeatherLocation[], nextStations: WeatherStation[]) {
@@ -404,9 +455,14 @@ export default function WeatherPage() {
                     Choose the station that should provide live weather for this area and keep manual fallback available.
                   </p>
                 </div>
-                <Button size="sm" className="gap-1" onClick={saveSelectedLocation}>
-                  <Save className="h-3.5 w-3.5" /> Save Area
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="gap-1" onClick={refreshLiveWeather}>
+                    <RefreshCcw className="h-3.5 w-3.5" /> Refresh Live Weather
+                  </Button>
+                  <Button size="sm" className="gap-1" onClick={saveSelectedLocation}>
+                    <Save className="h-3.5 w-3.5" /> Save Area
+                  </Button>
+                </div>
               </div>
 
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
@@ -534,6 +590,23 @@ export default function WeatherPage() {
                             <label className="text-xs font-medium text-muted-foreground">Time Zone</label>
                             <Input className="mt-1" value={station.timeZone ?? ''} onChange={(event) => updateStation(station.id, { timeZone: event.target.value })} />
                           </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => void useCurrentLocationForStation(station.id)}
+                            disabled={geoLoadingStationId === station.id}
+                          >
+                            <Crosshair className="h-3.5 w-3.5" />
+                            {geoLoadingStationId === station.id ? 'Locating…' : 'Use Current Device Location'}
+                          </Button>
+                          {station.providerType === 'open-meteo' && station.latitude && station.longitude && (
+                            <span className="self-center text-[11px] text-muted-foreground">
+                              Live weather uses {station.latitude}, {station.longitude}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))

@@ -17,6 +17,7 @@ const formatDate = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'long',
 export function TopBar({ department, setDepartment, departments, currentDate, setCurrentDate }: TopBarProps) {
   const prevDay = () => setCurrentDate(new Date(currentDate.getTime() - 86400000));
   const nextDay = () => setCurrentDate(new Date(currentDate.getTime() + 86400000));
+  const today = () => setCurrentDate(new Date());
 
   return (
     <header className="h-14 border-b bg-card flex items-center px-3 gap-3 shrink-0">
@@ -40,6 +41,9 @@ export function TopBar({ department, setDepartment, departments, currentDate, se
         <span className="text-sm font-medium min-w-[220px] text-center">{formatDate(currentDate)}</span>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={nextDay}>
           <ChevronRight className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={today}>
+          Today
         </Button>
       </div>
 

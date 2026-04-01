@@ -11,7 +11,7 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [departmentOptions, setDepartmentOptions] = useState<string[]>(['Maintenance']);
   const [department, setDepartment] = useState('Maintenance');
-  const [currentDate, setCurrentDate] = useState(new Date(2024, 2, 25));
+  const [currentDate, setCurrentDate] = useState(() => new Date());
 
   useEffect(() => {
     const refreshProgramSetup = () => {
