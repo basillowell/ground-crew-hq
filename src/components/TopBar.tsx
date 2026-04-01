@@ -2,19 +2,19 @@ import { Bell, ChevronLeft, ChevronRight, Save, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { departments } from '@/data/seedData';
 import { Badge } from '@/components/ui/badge';
 
 interface TopBarProps {
   department: string;
   setDepartment: (d: string) => void;
+  departments: string[];
   currentDate: Date;
   setCurrentDate: (d: Date) => void;
 }
 
 const formatDate = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-export function TopBar({ department, setDepartment, currentDate, setCurrentDate }: TopBarProps) {
+export function TopBar({ department, setDepartment, departments, currentDate, setCurrentDate }: TopBarProps) {
   const prevDay = () => setCurrentDate(new Date(currentDate.getTime() - 86400000));
   const nextDay = () => setCurrentDate(new Date(currentDate.getTime() + 86400000));
 

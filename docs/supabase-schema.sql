@@ -149,6 +149,41 @@ create table if not exists public.chemical_application_tank_mix_items (
   "totalQuantityUsed" numeric not null default 0
 );
 
+create table if not exists public.program_settings (
+  id text primary key,
+  "organizationName" text not null,
+  "defaultDepartment" text not null,
+  "timeZone" text not null,
+  "fiscalYearStart" text not null,
+  "enableMobileApp" boolean not null default true,
+  "overtimeTracking" boolean not null default true,
+  "equipmentQrCodes" boolean not null default true
+);
+
+create table if not exists public.department_options (
+  id text primary key,
+  name text not null
+);
+
+create table if not exists public.group_options (
+  id text primary key,
+  name text not null,
+  color text not null
+);
+
+create table if not exists public.work_locations (
+  id text primary key,
+  name text not null
+);
+
+create table if not exists public.shift_templates (
+  id text primary key,
+  name text not null,
+  start text not null,
+  "end" text not null,
+  days text[] not null default '{}'
+);
+
 alter table public.employees enable row level security;
 alter table public.tasks enable row level security;
 alter table public.equipment_units enable row level security;
@@ -163,6 +198,11 @@ alter table public.chemical_products enable row level security;
 alter table public.application_areas enable row level security;
 alter table public.chemical_application_logs enable row level security;
 alter table public.chemical_application_tank_mix_items enable row level security;
+alter table public.program_settings enable row level security;
+alter table public.department_options enable row level security;
+alter table public.group_options enable row level security;
+alter table public.work_locations enable row level security;
+alter table public.shift_templates enable row level security;
 
 drop policy if exists "public full access employees" on public.employees;
 create policy "public full access employees" on public.employees for all using (true) with check (true);
@@ -205,3 +245,18 @@ create policy "public full access chemical_application_logs" on public.chemical_
 
 drop policy if exists "public full access chemical_application_tank_mix_items" on public.chemical_application_tank_mix_items;
 create policy "public full access chemical_application_tank_mix_items" on public.chemical_application_tank_mix_items for all using (true) with check (true);
+
+drop policy if exists "public full access program_settings" on public.program_settings;
+create policy "public full access program_settings" on public.program_settings for all using (true) with check (true);
+
+drop policy if exists "public full access department_options" on public.department_options;
+create policy "public full access department_options" on public.department_options for all using (true) with check (true);
+
+drop policy if exists "public full access group_options" on public.group_options;
+create policy "public full access group_options" on public.group_options for all using (true) with check (true);
+
+drop policy if exists "public full access work_locations" on public.work_locations;
+create policy "public full access work_locations" on public.work_locations for all using (true) with check (true);
+
+drop policy if exists "public full access shift_templates" on public.shift_templates;
+create policy "public full access shift_templates" on public.shift_templates for all using (true) with check (true);

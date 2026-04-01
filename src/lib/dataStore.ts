@@ -3,30 +3,40 @@ import {
   chemicalApplicationLogs,
   chemicalApplicationTankMixItems,
   chemicalProducts,
+  departmentOptions,
   assignments,
   employees,
   equipmentUnits,
+  groupOptions,
   manualRainfallEntries,
   notes,
+  programSettings,
   scheduleEntries,
+  shiftTemplates,
   tasks,
   weatherDailyLogs,
   weatherLocations,
   weatherStations,
+  workLocations,
   type ApplicationArea,
   type Assignment,
   type ChemicalApplicationLog,
   type ChemicalApplicationTankMixItem,
   type ChemicalProduct,
+  type DepartmentOption,
   type EquipmentUnit,
   type Employee,
+  type GroupOption,
   type ManualRainfallEntry,
   type Note,
+  type ProgramSettings,
   type ScheduleEntry,
+  type ShiftTemplate,
   type Task,
   type WeatherDailyLog,
   type WeatherLocation,
   type WeatherStation,
+  type WorkLocation,
 } from '@/data/seedData';
 import {
   loadApplicationAreas as loadApplicationAreasLocal,
@@ -34,29 +44,39 @@ import {
   loadChemicalApplicationLogs as loadChemicalApplicationLogsLocal,
   loadChemicalApplicationTankMixItems as loadChemicalApplicationTankMixItemsLocal,
   loadChemicalProducts as loadChemicalProductsLocal,
+  loadDepartmentOptions as loadDepartmentOptionsLocal,
   loadEmployees as loadEmployeesLocal,
   loadEquipmentUnits as loadEquipmentUnitsLocal,
+  loadGroupOptions as loadGroupOptionsLocal,
   loadManualRainfallEntries as loadManualRainfallEntriesLocal,
   loadNotes as loadNotesLocal,
+  loadProgramSettings as loadProgramSettingsLocal,
   loadScheduleEntries as loadScheduleEntriesLocal,
+  loadShiftTemplates as loadShiftTemplatesLocal,
   loadTasks as loadTasksLocal,
   loadWeatherDailyLogs as loadWeatherDailyLogsLocal,
   loadWeatherLocations as loadWeatherLocationsLocal,
   loadWeatherStations as loadWeatherStationsLocal,
+  loadWorkLocations as loadWorkLocationsLocal,
   saveApplicationAreas as saveApplicationAreasLocal,
   saveAssignments as saveAssignmentsLocal,
   saveChemicalApplicationLogs as saveChemicalApplicationLogsLocal,
   saveChemicalApplicationTankMixItems as saveChemicalApplicationTankMixItemsLocal,
   saveChemicalProducts as saveChemicalProductsLocal,
+  saveDepartmentOptions as saveDepartmentOptionsLocal,
   saveEmployees as saveEmployeesLocal,
   saveEquipmentUnits as saveEquipmentUnitsLocal,
+  saveGroupOptions as saveGroupOptionsLocal,
   saveManualRainfallEntries as saveManualRainfallEntriesLocal,
   saveNotes as saveNotesLocal,
+  saveProgramSettings as saveProgramSettingsLocal,
   saveScheduleEntries as saveScheduleEntriesLocal,
+  saveShiftTemplates as saveShiftTemplatesLocal,
   saveTasks as saveTasksLocal,
   saveWeatherDailyLogs as saveWeatherDailyLogsLocal,
   saveWeatherLocations as saveWeatherLocationsLocal,
   saveWeatherStations as saveWeatherStationsLocal,
+  saveWorkLocations as saveWorkLocationsLocal,
 } from './operationsStorage';
 import { hasSupabaseConfig, supabase } from './supabase';
 
@@ -152,6 +172,36 @@ const collections = {
     loadLocal: loadApplicationAreasLocal,
     saveLocal: saveApplicationAreasLocal,
   } satisfies CollectionConfig<ApplicationArea>,
+  programSettings: {
+    table: 'program_settings',
+    seed: programSettings,
+    loadLocal: loadProgramSettingsLocal,
+    saveLocal: saveProgramSettingsLocal,
+  } satisfies CollectionConfig<ProgramSettings>,
+  departmentOptions: {
+    table: 'department_options',
+    seed: departmentOptions,
+    loadLocal: loadDepartmentOptionsLocal,
+    saveLocal: saveDepartmentOptionsLocal,
+  } satisfies CollectionConfig<DepartmentOption>,
+  groupOptions: {
+    table: 'group_options',
+    seed: groupOptions,
+    loadLocal: loadGroupOptionsLocal,
+    saveLocal: saveGroupOptionsLocal,
+  } satisfies CollectionConfig<GroupOption>,
+  workLocations: {
+    table: 'work_locations',
+    seed: workLocations,
+    loadLocal: loadWorkLocationsLocal,
+    saveLocal: saveWorkLocationsLocal,
+  } satisfies CollectionConfig<WorkLocation>,
+  shiftTemplates: {
+    table: 'shift_templates',
+    seed: shiftTemplates,
+    loadLocal: loadShiftTemplatesLocal,
+    saveLocal: saveShiftTemplatesLocal,
+  } satisfies CollectionConfig<ShiftTemplate>,
 } as const;
 
 let initialized = false;
@@ -220,6 +270,11 @@ export async function initializeDataStore() {
     hydrateCollection(collections.weatherStations),
     hydrateCollection(collections.chemicalProducts),
     hydrateCollection(collections.applicationAreas),
+    hydrateCollection(collections.programSettings),
+    hydrateCollection(collections.departmentOptions),
+    hydrateCollection(collections.groupOptions),
+    hydrateCollection(collections.workLocations),
+    hydrateCollection(collections.shiftTemplates),
   ]);
 }
 
@@ -333,4 +388,44 @@ export function loadApplicationAreas() {
 
 export function saveApplicationAreas(value: ApplicationArea[]) {
   syncCollection(collections.applicationAreas, value);
+}
+
+export function loadProgramSettings() {
+  return collections.programSettings.loadLocal();
+}
+
+export function saveProgramSettings(value: ProgramSettings[]) {
+  syncCollection(collections.programSettings, value);
+}
+
+export function loadDepartmentOptions() {
+  return collections.departmentOptions.loadLocal();
+}
+
+export function saveDepartmentOptions(value: DepartmentOption[]) {
+  syncCollection(collections.departmentOptions, value);
+}
+
+export function loadGroupOptions() {
+  return collections.groupOptions.loadLocal();
+}
+
+export function saveGroupOptions(value: GroupOption[]) {
+  syncCollection(collections.groupOptions, value);
+}
+
+export function loadWorkLocations() {
+  return collections.workLocations.loadLocal();
+}
+
+export function saveWorkLocations(value: WorkLocation[]) {
+  syncCollection(collections.workLocations, value);
+}
+
+export function loadShiftTemplates() {
+  return collections.shiftTemplates.loadLocal();
+}
+
+export function saveShiftTemplates(value: ShiftTemplate[]) {
+  syncCollection(collections.shiftTemplates, value);
 }

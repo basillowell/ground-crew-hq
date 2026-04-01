@@ -4,29 +4,39 @@ import {
   chemicalApplicationLogs,
   chemicalApplicationTankMixItems,
   chemicalProducts,
+  departmentOptions,
   equipmentUnits,
   employees,
+  groupOptions,
   manualRainfallEntries,
   notes,
+  programSettings,
   scheduleEntries,
+  shiftTemplates,
   tasks,
   weatherDailyLogs,
   weatherLocations,
   weatherStations,
-  type Assignment,
   type ApplicationArea,
+  type Assignment,
   type ChemicalApplicationLog,
   type ChemicalApplicationTankMixItem,
   type ChemicalProduct,
+  type DepartmentOption,
   type EquipmentUnit,
   type Employee,
+  type GroupOption,
   type ManualRainfallEntry,
   type Note,
+  type ProgramSettings,
   type ScheduleEntry,
+  type ShiftTemplate,
   type Task,
   type WeatherDailyLog,
   type WeatherLocation,
   type WeatherStation,
+  type WorkLocation,
+  workLocations,
 } from '@/data/seedData';
 
 // Legacy compatibility layer: this file now backs the clearer `dataStore` module.
@@ -45,6 +55,11 @@ const WEATHER_LOCATIONS_KEY = 'gchq-weather-locations';
 const WEATHER_STATIONS_KEY = 'gchq-weather-stations';
 const CHEMICAL_PRODUCTS_KEY = 'gchq-chemical-products';
 const APPLICATION_AREAS_KEY = 'gchq-application-areas';
+const PROGRAM_SETTINGS_KEY = 'gchq-program-settings';
+const DEPARTMENTS_KEY = 'gchq-departments';
+const GROUPS_KEY = 'gchq-groups';
+const WORK_LOCATIONS_KEY = 'gchq-work-locations';
+const SHIFT_TEMPLATES_KEY = 'gchq-shift-templates';
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -177,4 +192,44 @@ export function loadApplicationAreas() {
 
 export function saveApplicationAreas(value: ApplicationArea[]) {
   writeList(APPLICATION_AREAS_KEY, value);
+}
+
+export function loadProgramSettings() {
+  return readList<ProgramSettings>(PROGRAM_SETTINGS_KEY, programSettings);
+}
+
+export function saveProgramSettings(value: ProgramSettings[]) {
+  writeList(PROGRAM_SETTINGS_KEY, value);
+}
+
+export function loadDepartmentOptions() {
+  return readList<DepartmentOption>(DEPARTMENTS_KEY, departmentOptions);
+}
+
+export function saveDepartmentOptions(value: DepartmentOption[]) {
+  writeList(DEPARTMENTS_KEY, value);
+}
+
+export function loadGroupOptions() {
+  return readList<GroupOption>(GROUPS_KEY, groupOptions);
+}
+
+export function saveGroupOptions(value: GroupOption[]) {
+  writeList(GROUPS_KEY, value);
+}
+
+export function loadWorkLocations() {
+  return readList<WorkLocation>(WORK_LOCATIONS_KEY, workLocations);
+}
+
+export function saveWorkLocations(value: WorkLocation[]) {
+  writeList(WORK_LOCATIONS_KEY, value);
+}
+
+export function loadShiftTemplates() {
+  return readList<ShiftTemplate>(SHIFT_TEMPLATES_KEY, shiftTemplates);
+}
+
+export function saveShiftTemplates(value: ShiftTemplate[]) {
+  writeList(SHIFT_TEMPLATES_KEY, value);
 }

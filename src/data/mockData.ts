@@ -172,6 +172,41 @@ export interface ChemicalApplicationTankMixItem {
   totalQuantityUsed: number;
 }
 
+export interface ProgramSettings {
+  id: string;
+  organizationName: string;
+  defaultDepartment: string;
+  timeZone: string;
+  fiscalYearStart: string;
+  enableMobileApp: boolean;
+  overtimeTracking: boolean;
+  equipmentQrCodes: boolean;
+}
+
+export interface DepartmentOption {
+  id: string;
+  name: string;
+}
+
+export interface GroupOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface WorkLocation {
+  id: string;
+  name: string;
+}
+
+export interface ShiftTemplate {
+  id: string;
+  name: string;
+  start: string;
+  end: string;
+  days: string[];
+}
+
 export const employees: Employee[] = [
   { id: 'e1', firstName: 'Mike', lastName: 'Johnson', group: 'Greens', role: 'Lead', wage: 22, phone: '555-0101', email: 'mike.j@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2019-03-15' },
   { id: 'e2', firstName: 'Carlos', lastName: 'Rivera', group: 'Fairways', role: 'Operator', wage: 18, phone: '555-0102', email: 'carlos.r@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'full-time', hireDate: '2020-06-01' },
@@ -261,8 +296,57 @@ export const assignments: Assignment[] = [
   { id: 'a9', employeeId: 'e7', taskId: 't10', date: '2024-03-25', startTime: '06:30', duration: 120, area: 'Shop' },
 ];
 
-export const departments = ['Maintenance', 'Equipment', 'Landscape', 'Irrigation'];
-export const groups = ['Greens', 'Fairways', 'Bunkers', 'Landscape', 'Irrigation', 'Mechanic', 'Range'];
+export const programSettings: ProgramSettings[] = [
+  {
+    id: 'ps1',
+    organizationName: 'Ground Crew HQ',
+    defaultDepartment: 'Maintenance',
+    timeZone: 'Eastern Time (ET)',
+    fiscalYearStart: 'January',
+    enableMobileApp: true,
+    overtimeTracking: true,
+    equipmentQrCodes: true,
+  },
+];
+
+export const departmentOptions: DepartmentOption[] = [
+  { id: 'dep1', name: 'Maintenance' },
+  { id: 'dep2', name: 'Equipment' },
+  { id: 'dep3', name: 'Landscape' },
+  { id: 'dep4', name: 'Irrigation' },
+];
+
+export const groupOptions: GroupOption[] = [
+  { id: 'grp1', name: 'Greens', color: 'hsl(152,55%,38%)' },
+  { id: 'grp2', name: 'Fairways', color: 'hsl(152,40%,50%)' },
+  { id: 'grp3', name: 'Bunkers', color: 'hsl(38,70%,55%)' },
+  { id: 'grp4', name: 'Landscape', color: 'hsl(80,50%,45%)' },
+  { id: 'grp5', name: 'Irrigation', color: 'hsl(200,70%,50%)' },
+  { id: 'grp6', name: 'Mechanic', color: 'hsl(210,60%,50%)' },
+  { id: 'grp7', name: 'Range', color: 'hsl(45,70%,50%)' },
+];
+
+export const workLocations: WorkLocation[] = [
+  { id: 'loc1', name: 'Greens 1-9' },
+  { id: 'loc2', name: 'Greens 10-18' },
+  { id: 'loc3', name: 'Fairways 1-9' },
+  { id: 'loc4', name: 'Fairways 10-18' },
+  { id: 'loc5', name: 'Practice Range' },
+  { id: 'loc6', name: 'Clubhouse' },
+  { id: 'loc7', name: 'Cart Paths' },
+  { id: 'loc8', name: 'Bunkers' },
+  { id: 'loc9', name: 'Irrigation Pump House' },
+];
+
+export const shiftTemplates: ShiftTemplate[] = [
+  { id: 'st1', name: 'Morning Crew', start: '05:00', end: '13:30', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
+  { id: 'st2', name: 'Day Crew', start: '06:00', end: '14:30', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
+  { id: 'st3', name: 'Weekend Crew', start: '06:00', end: '12:00', days: ['Sat', 'Sun'] },
+  { id: 'st4', name: 'Late Shift', start: '10:00', end: '18:00', days: ['Mon', 'Wed', 'Fri'] },
+];
+
+export const departments = departmentOptions.map((department) => department.name);
+export const groups = groupOptions.map((group) => group.name);
 
 export const turfData = {
   mowPatterns: ['Single Cut', 'Double Cut', 'Cross Cut', 'Diagonal', 'Straight'],

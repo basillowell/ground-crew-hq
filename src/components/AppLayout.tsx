@@ -1,15 +1,31 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { AppSidebar } from './AppSidebar';
 import { TopBar } from './TopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { loadDepartmentOptions, loadProgramSettings } from '@/lib/dataStore';
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>(['Maintenance']);
   const [department, setDepartment] = useState('Maintenance');
   const [currentDate, setCurrentDate] = useState(new Date(2024, 2, 25));
+
+  useEffect(() => {
+    const refreshProgramSetup = () => {
+      const nextDepartments = loadDepartmentOptions().map((entry) => entry.name);
+      const settings = loadProgramSettings()[0];
+      const fallbackDepartment = nextDepartments[0] ?? 'Maintenance';
+      setDepartmentOptions(nextDepartments.length > 0 ? nextDepartments : ['Maintenance']);
+      setDepartment(settings?.defaultDepartment || fallbackDepartment);
+    };
+
+    refreshProgramSetup();
+    window.addEventListener('program-setup-updated', refreshProgramSetup);
+    return () => window.removeEventListener('program-setup-updated', refreshProgramSetup);
+  }, []);
 
   return (
     <SidebarProvider>
@@ -19,6 +35,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <TopBar
             department={department}
             setDepartment={setDepartment}
+            departments={departmentOptions}
             currentDate={currentDate}
             setCurrentDate={setCurrentDate}
           />
