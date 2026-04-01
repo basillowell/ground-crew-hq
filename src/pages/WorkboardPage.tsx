@@ -144,6 +144,8 @@ export default function WorkboardPage() {
     return activeDepartmentEmployees.filter((employee) => !scheduledIds.has(employee.id));
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
+  const assignmentEligibleEmployees = scheduledEmployees.length > 0 ? scheduledEmployees : activeDepartmentEmployees;
+
   const dayAssignments = useMemo(
     () => assignmentList.filter((assignment) => assignment.date === boardDate),
     [assignmentList, boardDate],
@@ -189,10 +191,11 @@ export default function WorkboardPage() {
 
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = workLocations[0]?.name ?? 'Primary zone';
+    const targetEmployeeId = employeeId || assignmentEligibleEmployees[0]?.id || '';
     setEditingAssignmentId(null);
-    setSelectedEmployeeId(employeeId);
+    setSelectedEmployeeId(targetEmployeeId);
     setAssignmentDraft({
-      employeeId,
+      employeeId: targetEmployeeId,
       taskId: taskList[0]?.id ?? '',
       equipmentId: '',
       area: defaultLocation,
@@ -275,7 +278,7 @@ export default function WorkboardPage() {
           title="Workboard"
           subtitle="Build the daily labor board from the selected top-bar date, department, employee roster, active tasks, and program locations."
           badge={<Badge variant="secondary">{department} · {boardDate}</Badge>}
-          action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || scheduledEmployees[0]?.id || '') }}
+          action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || assignmentEligibleEmployees[0]?.id || '') }}
         >
           <Button
             variant={view === 'employee' ? 'default' : 'outline'}
@@ -484,7 +487,7 @@ export default function WorkboardPage() {
       <Dialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Workboard Assignment</DialogTitle>
+            <DialogTitle>{editingAssignmentId ? 'Edit Workboard Assignment' : 'Add Workboard Assignment'}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -494,7 +497,7 @@ export default function WorkboardPage() {
                 onChange={(event) => setAssignmentDraft({ ...assignmentDraft, employeeId: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {scheduledEmployees.map((employee) => (
+                {assignmentEligibleEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
                     {employee.firstName} {employee.lastName}
                   </option>
@@ -559,7 +562,7 @@ export default function WorkboardPage() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setAssignmentDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveAssignment}>Save Assignment</Button>
+            <Button onClick={saveAssignment}>{editingAssignmentId ? 'Save Changes' : 'Save Assignment'}</Button>
           </div>
         </DialogContent>
       </Dialog>
