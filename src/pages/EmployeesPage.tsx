@@ -14,9 +14,15 @@ import type { Employee } from '@/data/seedData';
 import {
   loadAssignments,
   loadChemicalApplicationLogs,
+  loadDepartmentOptions,
   loadEmployees,
   loadEquipmentUnits,
+  loadGroupOptions,
+  loadLanguageOptions,
+  loadRoleOptions,
   loadScheduleEntries,
+  loadShiftTemplates,
+  loadWorkLocations,
   saveAssignments,
   saveChemicalApplicationLogs,
   saveEmployees,
@@ -251,6 +257,12 @@ const columns: Column<Employee>[] = [
 
 export default function EmployeesPage() {
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<{ id: string; name: string }[]>([]);
+  const [groupOptions, setGroupOptions] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
+  const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
+  const [workLocations, setWorkLocations] = useState<{ id: string; name: string }[]>([]);
+  const [shiftTemplates, setShiftTemplates] = useState<{ id: string; name: string; start: string; end: string; days: string[] }[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Employee['status']>('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -268,26 +280,57 @@ export default function EmployeesPage() {
     language: 'English',
     workerType: 'full-time' as Employee['workerType'],
     department: 'Maintenance',
+    defaultLocationId: '',
+    shiftTemplateId: '',
   });
 
   useEffect(() => {
     setEmployeeList(loadEmployees());
+    const nextDepartments = loadDepartmentOptions();
+    const nextGroups = loadGroupOptions();
+    const nextRoles = loadRoleOptions();
+    const nextLanguages = loadLanguageOptions();
+    const nextLocations = loadWorkLocations();
+    const nextShiftTemplates = loadShiftTemplates();
+    setDepartmentOptions(nextDepartments);
+    setGroupOptions(nextGroups);
+    setRoleOptions(nextRoles);
+    setLanguageOptions(nextLanguages);
+    setWorkLocations(nextLocations);
+    setShiftTemplates(nextShiftTemplates);
+    setDraft((current) => ({
+      ...current,
+      department: current.department || nextDepartments[0]?.name || '',
+      group: current.group || nextGroups[0]?.name || '',
+      role: current.role || nextRoles[0]?.name || '',
+      language: current.language || nextLanguages[0]?.name || '',
+      defaultLocationId: current.defaultLocationId || nextLocations[0]?.id || '',
+      shiftTemplateId: current.shiftTemplateId || nextShiftTemplates[0]?.id || '',
+    }));
   }, []);
 
   const departments = useMemo(
-    () => [...new Set(employeeList.map((employee) => employee.department))].sort((left, right) => left.localeCompare(right)),
-    [employeeList],
+    () => {
+      const optionNames = departmentOptions.map((department) => department.name);
+      const employeeNames = employeeList.map((employee) => employee.department);
+      return [...new Set([...optionNames, ...employeeNames])].sort((left, right) => left.localeCompare(right));
+    },
+    [departmentOptions, employeeList],
   );
 
   const groups = useMemo(
-    () => [...new Set(employeeList.map((employee) => employee.group))].sort((left, right) => left.localeCompare(right)),
-    [employeeList],
+    () => {
+      const optionNames = groupOptions.map((group) => group.name);
+      const employeeNames = employeeList.map((employee) => employee.group);
+      return [...new Set([...optionNames, ...employeeNames])].sort((left, right) => left.localeCompare(right));
+    },
+    [employeeList, groupOptions],
   );
 
   const filtered = useMemo(
     () =>
       employeeList.filter((employee) =>
-        `${employee.firstName} ${employee.lastName} ${employee.group} ${employee.role} ${employee.department}`
+        `${employee.firstName} ${employee.lastName} ${employee.group} ${employee.role} ${employee.department} ${employee.language}`
           .toLowerCase()
           .includes(search.toLowerCase()) &&
         (statusFilter === 'all' || employee.status === statusFilter) &&
@@ -321,6 +364,28 @@ export default function EmployeesPage() {
     saveEmployees(nextEmployees);
   }
 
+  function buildDefaultDraft() {
+    return {
+      firstName: '',
+      lastName: '',
+      group: groupOptions[0]?.name ?? '',
+      role: roleOptions[0]?.name ?? '',
+      wage: '18',
+      phone: '',
+      email: '',
+      language: languageOptions[0]?.name ?? '',
+      workerType: 'full-time' as Employee['workerType'],
+      department: departmentOptions[0]?.name ?? '',
+      defaultLocationId: workLocations[0]?.id ?? '',
+      shiftTemplateId: shiftTemplates[0]?.id ?? '',
+    };
+  }
+
+  function openAddEmployeeDialog() {
+    setDraft(buildDefaultDraft());
+    setDialogOpen(true);
+  }
+
   function handleAddEmployee() {
     if (!draft.firstName.trim() || !draft.lastName.trim()) return;
 
@@ -339,22 +404,13 @@ export default function EmployeesPage() {
       language: draft.language.trim(),
       workerType: draft.workerType,
       hireDate: new Date().toISOString().slice(0, 10),
+      defaultLocationId: draft.defaultLocationId || undefined,
+      shiftTemplateId: draft.shiftTemplateId || undefined,
     };
 
     persist([nextEmployee, ...employeeList]);
     setDialogOpen(false);
-    setDraft({
-      firstName: '',
-      lastName: '',
-      group: 'Greens',
-      role: 'Operator',
-      wage: '18',
-      phone: '',
-      email: '',
-      language: 'English',
-      workerType: 'full-time',
-      department: 'Maintenance',
-    });
+    setDraft(buildDefaultDraft());
   }
 
   function handleStatusToggle(employeeId: string) {
@@ -440,7 +496,7 @@ export default function EmployeesPage() {
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
-      <PageHeader title="Employee Management" action={{ label: 'Add Employee', onClick: () => setDialogOpen(true) }} />
+      <PageHeader title="Employee Management" action={{ label: 'Add Employee', onClick: openAddEmployeeDialog }} />
       <div className="grid gap-4 md:grid-cols-3 mb-4">
         <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
@@ -534,11 +590,27 @@ export default function EmployeesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Group</label>
-              <Input value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })} className="mt-1" />
+              <select
+                value={draft.group}
+                onChange={(event) => setDraft({ ...draft, group: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {groupOptions.map((group) => (
+                  <option key={group.id} value={group.name}>{group.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Role</label>
-              <Input value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value })} className="mt-1" />
+              <select
+                value={draft.role}
+                onChange={(event) => setDraft({ ...draft, role: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {roleOptions.map((role) => (
+                  <option key={role.id} value={role.name}>{role.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Hourly Wage</label>
@@ -546,7 +618,15 @@ export default function EmployeesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Department</label>
-              <Input value={draft.department} onChange={(event) => setDraft({ ...draft, department: event.target.value })} className="mt-1" />
+              <select
+                value={draft.department}
+                onChange={(event) => setDraft({ ...draft, department: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {departmentOptions.map((department) => (
+                  <option key={department.id} value={department.name}>{department.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Phone</label>
@@ -558,7 +638,15 @@ export default function EmployeesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Language</label>
-              <Input value={draft.language} onChange={(event) => setDraft({ ...draft, language: event.target.value })} className="mt-1" />
+              <select
+                value={draft.language}
+                onChange={(event) => setDraft({ ...draft, language: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {languageOptions.map((language) => (
+                  <option key={language.id} value={language.name}>{language.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Worker Type</label>
@@ -570,6 +658,32 @@ export default function EmployeesPage() {
                 <option value="full-time">Full-time</option>
                 <option value="part-time">Part-time</option>
                 <option value="seasonal">Seasonal</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Default Location</label>
+              <select
+                value={draft.defaultLocationId}
+                onChange={(event) => setDraft({ ...draft, defaultLocationId: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No default location</option>
+                {workLocations.map((location) => (
+                  <option key={location.id} value={location.id}>{location.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Preferred Shift Template</label>
+              <select
+                value={draft.shiftTemplateId}
+                onChange={(event) => setDraft({ ...draft, shiftTemplateId: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No preferred shift</option>
+                {shiftTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>{template.name}</option>
+                ))}
               </select>
             </div>
           </div>

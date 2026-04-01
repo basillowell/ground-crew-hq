@@ -22,20 +22,24 @@ import {
 import { toast } from '@/components/ui/sonner';
 import type { DepartmentOption, GroupOption, ProgramSettings, ShiftTemplate, WorkLocation } from '@/data/seedData';
 import {
+  loadLanguageOptions,
   loadApplicationAreas,
   loadAssignments,
   loadDepartmentOptions,
   loadEmployees,
   loadGroupOptions,
   loadProgramSettings,
+  loadRoleOptions,
   loadScheduleEntries,
   loadShiftTemplates,
   loadTasks,
   loadWeatherLocations,
   loadWorkLocations,
+  saveLanguageOptions,
   saveDepartmentOptions,
   saveGroupOptions,
   saveProgramSettings,
+  saveRoleOptions,
   saveShiftTemplates,
   saveWorkLocations,
 } from '@/lib/dataStore';
@@ -106,6 +110,8 @@ export default function ProgramSetupHubPage() {
   const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
   const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
   const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
+  const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
+  const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
 
@@ -113,6 +119,8 @@ export default function ProgramSetupHubPage() {
     setProgramSetting(loadProgramSettings()[0] ?? null);
     setDepartmentOptions(loadDepartmentOptions());
     setGroupOptions(loadGroupOptions());
+    setRoleOptions(loadRoleOptions());
+    setLanguageOptions(loadLanguageOptions());
     setWorkLocations(loadWorkLocations());
     setShiftTemplates(loadShiftTemplates());
   }, []);
@@ -149,9 +157,11 @@ export default function ProgramSetupHubPage() {
   function saveStructures() {
     saveDepartmentOptions(departmentOptions);
     saveGroupOptions(groupOptions);
+    saveRoleOptions(roleOptions);
+    saveLanguageOptions(languageOptions);
     announceProgramSetupUpdate();
     toast('Workforce structure saved', {
-      description: 'Departments and crew groups are now aligned across the app.',
+      description: 'Departments, crew groups, roles, and languages are now aligned across the app.',
     });
   }
 
@@ -218,8 +228,8 @@ export default function ProgramSetupHubPage() {
           />
           <FlowCard
             title="Employees + Groups"
-            description="Crew groups and departments shape the employee roster, reporting, and assignment context."
-            metric={`${groupOptions.length} crew groups`}
+            description="Crew groups, roles, and languages shape the employee roster, reporting, and assignment context."
+            metric={`${groupOptions.length} groups • ${roleOptions.length} roles`}
             accent="linear-gradient(90deg, rgba(59,130,246,0.65), rgba(59,130,246,0.15))"
           />
           <FlowCard
@@ -427,6 +437,69 @@ export default function ProgramSetupHubPage() {
                       className="h-8 flex-1"
                     />
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setGroupOptions((current) => current.filter((entry) => entry.id !== group.id))}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">Role Options</div>
+                  <p className="text-xs text-muted-foreground">Employee roles should be selected from setup instead of typed differently across the roster.</p>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() => setRoleOptions((current) => [...current, { id: makeId('role'), name: `Role ${current.length + 1}` }])}
+                >
+                  <Plus className="h-3 w-3" /> Add Role
+                </Button>
+              </div>
+              <div className="mt-4 space-y-2">
+                {roleOptions.map((role) => (
+                  <div key={role.id} className="flex items-center gap-3 rounded-xl border p-3">
+                    <GripVertical className="h-4 w-4 text-muted-foreground/40" />
+                    <Input
+                      value={role.name}
+                      onChange={(event) => setRoleOptions((current) => current.map((entry) => entry.id === role.id ? { ...entry, name: event.target.value } : entry))}
+                      className="h-8 flex-1"
+                    />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setRoleOptions((current) => current.filter((entry) => entry.id !== role.id))}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">Language Options</div>
+                  <p className="text-xs text-muted-foreground">Use shared language choices so employee communication settings stay consistent in scheduling and breakroom views.</p>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() => setLanguageOptions((current) => [...current, { id: makeId('lang'), name: `Language ${current.length + 1}` }])}
+                >
+                  <Plus className="h-3 w-3" /> Add Language
+                </Button>
+              </div>
+              <div className="mt-4 space-y-2">
+                {languageOptions.map((language) => (
+                  <div key={language.id} className="flex items-center gap-3 rounded-xl border p-3">
+                    <GripVertical className="h-4 w-4 text-muted-foreground/40" />
+                    <Input
+                      value={language.name}
+                      onChange={(event) => setLanguageOptions((current) => current.map((entry) => entry.id === language.id ? { ...entry, name: event.target.value } : entry))}
+                      className="h-8 flex-1"
+                    />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setLanguageOptions((current) => current.filter((entry) => entry.id !== language.id))}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>

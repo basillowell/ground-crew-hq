@@ -12,7 +12,9 @@ create table if not exists public.employees (
   department text not null,
   language text not null default 'English',
   "workerType" text not null default 'full-time',
-  "hireDate" date not null
+  "hireDate" date not null,
+  "defaultLocationId" text,
+  "shiftTemplateId" text
 );
 
 create table if not exists public.tasks (
@@ -231,6 +233,16 @@ create table if not exists public.group_options (
   color text not null
 );
 
+create table if not exists public.role_options (
+  id text primary key,
+  name text not null
+);
+
+create table if not exists public.language_options (
+  id text primary key,
+  name text not null
+);
+
 create table if not exists public.work_locations (
   id text primary key,
   name text not null
@@ -263,6 +275,8 @@ alter table public.department_options enable row level security;
 alter table public.group_options enable row level security;
 alter table public.work_locations enable row level security;
 alter table public.shift_templates enable row level security;
+alter table public.role_options enable row level security;
+alter table public.language_options enable row level security;
 
 drop policy if exists "public full access employees" on public.employees;
 create policy "public full access employees" on public.employees for all using (true) with check (true);
@@ -320,7 +334,13 @@ create policy "public full access work_locations" on public.work_locations for a
 
 drop policy if exists "public full access shift_templates" on public.shift_templates;
 create policy "public full access shift_templates" on public.shift_templates for all using (true) with check (true);
+drop policy if exists "public full access role_options" on public.role_options;
+create policy "public full access role_options" on public.role_options for all using (true) with check (true);
+drop policy if exists "public full access language_options" on public.language_options;
+create policy "public full access language_options" on public.language_options for all using (true) with check (true);
 alter table public.weather_stations add column if not exists "providerType" text not null default 'manual';
 alter table public.weather_stations add column if not exists latitude numeric;
 alter table public.weather_stations add column if not exists longitude numeric;
 alter table public.weather_stations add column if not exists "timeZone" text not null default '';
+alter table public.employees add column if not exists "defaultLocationId" text;
+alter table public.employees add column if not exists "shiftTemplateId" text;

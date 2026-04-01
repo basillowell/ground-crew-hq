@@ -8,9 +8,11 @@ import {
   employees,
   equipmentUnits,
   groupOptions,
+  languageOptions,
   manualRainfallEntries,
   notes,
   programSettings,
+  roleOptions,
   scheduleEntries,
   shiftTemplates,
   tasks,
@@ -27,9 +29,11 @@ import {
   type EquipmentUnit,
   type Employee,
   type GroupOption,
+  type LanguageOption,
   type ManualRainfallEntry,
   type Note,
   type ProgramSettings,
+  type RoleOption,
   type ScheduleEntry,
   type ShiftTemplate,
   type Task,
@@ -48,9 +52,11 @@ import {
   loadEmployees as loadEmployeesLocal,
   loadEquipmentUnits as loadEquipmentUnitsLocal,
   loadGroupOptions as loadGroupOptionsLocal,
+  loadLanguageOptions as loadLanguageOptionsLocal,
   loadManualRainfallEntries as loadManualRainfallEntriesLocal,
   loadNotes as loadNotesLocal,
   loadProgramSettings as loadProgramSettingsLocal,
+  loadRoleOptions as loadRoleOptionsLocal,
   loadScheduleEntries as loadScheduleEntriesLocal,
   loadShiftTemplates as loadShiftTemplatesLocal,
   loadTasks as loadTasksLocal,
@@ -67,9 +73,11 @@ import {
   saveEmployees as saveEmployeesLocal,
   saveEquipmentUnits as saveEquipmentUnitsLocal,
   saveGroupOptions as saveGroupOptionsLocal,
+  saveLanguageOptions as saveLanguageOptionsLocal,
   saveManualRainfallEntries as saveManualRainfallEntriesLocal,
   saveNotes as saveNotesLocal,
   saveProgramSettings as saveProgramSettingsLocal,
+  saveRoleOptions as saveRoleOptionsLocal,
   saveScheduleEntries as saveScheduleEntriesLocal,
   saveShiftTemplates as saveShiftTemplatesLocal,
   saveTasks as saveTasksLocal,
@@ -190,6 +198,18 @@ const collections = {
     loadLocal: loadGroupOptionsLocal,
     saveLocal: saveGroupOptionsLocal,
   } satisfies CollectionConfig<GroupOption>,
+  roleOptions: {
+    table: 'role_options',
+    seed: roleOptions,
+    loadLocal: loadRoleOptionsLocal,
+    saveLocal: saveRoleOptionsLocal,
+  } satisfies CollectionConfig<RoleOption>,
+  languageOptions: {
+    table: 'language_options',
+    seed: languageOptions,
+    loadLocal: loadLanguageOptionsLocal,
+    saveLocal: saveLanguageOptionsLocal,
+  } satisfies CollectionConfig<LanguageOption>,
   workLocations: {
     table: 'work_locations',
     seed: workLocations,
@@ -284,6 +304,8 @@ export async function initializeDataStore() {
     hydrateCollection(collections.programSettings),
     hydrateCollection(collections.departmentOptions),
     hydrateCollection(collections.groupOptions),
+    hydrateCollection(collections.roleOptions),
+    hydrateCollection(collections.languageOptions),
     hydrateCollection(collections.workLocations),
     hydrateCollection(collections.shiftTemplates),
   ]);
@@ -423,6 +445,22 @@ export function loadGroupOptions() {
 
 export function saveGroupOptions(value: GroupOption[]) {
   syncCollection(collections.groupOptions, value);
+}
+
+export function loadRoleOptions() {
+  return collections.roleOptions.loadLocal();
+}
+
+export function saveRoleOptions(value: RoleOption[]) {
+  syncCollection(collections.roleOptions, value);
+}
+
+export function loadLanguageOptions() {
+  return collections.languageOptions.loadLocal();
+}
+
+export function saveLanguageOptions(value: LanguageOption[]) {
+  syncCollection(collections.languageOptions, value);
 }
 
 export function loadWorkLocations() {

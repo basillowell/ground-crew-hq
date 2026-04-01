@@ -15,6 +15,8 @@ export interface Employee {
   language: string;
   workerType: 'full-time' | 'part-time' | 'seasonal';
   hireDate: string;
+  defaultLocationId?: string;
+  shiftTemplateId?: string;
 }
 
 export interface Task {
@@ -224,6 +226,16 @@ export interface GroupOption {
   color: string;
 }
 
+export interface RoleOption {
+  id: string;
+  name: string;
+}
+
+export interface LanguageOption {
+  id: string;
+  name: string;
+}
+
 export interface WorkLocation {
   id: string;
   name: string;
@@ -238,14 +250,14 @@ export interface ShiftTemplate {
 }
 
 export const employees: Employee[] = [
-  { id: 'e1', firstName: 'Mike', lastName: 'Johnson', group: 'Greens', role: 'Lead', wage: 22, phone: '555-0101', email: 'mike.j@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2019-03-15' },
-  { id: 'e2', firstName: 'Carlos', lastName: 'Rivera', group: 'Fairways', role: 'Operator', wage: 18, phone: '555-0102', email: 'carlos.r@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'full-time', hireDate: '2020-06-01' },
-  { id: 'e3', firstName: 'Sarah', lastName: 'Chen', group: 'Landscape', role: 'Specialist', wage: 20, phone: '555-0103', email: 'sarah.c@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2021-01-10' },
-  { id: 'e4', firstName: 'James', lastName: 'Wilson', group: 'Irrigation', role: 'Technician', wage: 24, phone: '555-0104', email: 'james.w@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2018-08-20' },
-  { id: 'e5', firstName: 'David', lastName: 'Park', group: 'Greens', role: 'Operator', wage: 17, phone: '555-0105', email: 'david.p@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'part-time', hireDate: '2022-04-01' },
-  { id: 'e6', firstName: 'Maria', lastName: 'Santos', group: 'Bunkers', role: 'Operator', wage: 16, phone: '555-0106', email: 'maria.s@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'seasonal', hireDate: '2023-05-15' },
-  { id: 'e7', firstName: 'Tom', lastName: 'Bradley', group: 'Mechanic', role: 'Lead Mechanic', wage: 28, phone: '555-0107', email: 'tom.b@course.com', photo: '', status: 'active', department: 'Equipment', language: 'English', workerType: 'full-time', hireDate: '2017-02-01' },
-  { id: 'e8', firstName: 'Alex', lastName: 'Kim', group: 'Fairways', role: 'Operator', wage: 17, phone: '555-0108', email: 'alex.k@course.com', photo: '', status: 'inactive', department: 'Maintenance', language: 'English', workerType: 'seasonal', hireDate: '2023-06-01' },
+  { id: 'e1', firstName: 'Mike', lastName: 'Johnson', group: 'Greens', role: 'Lead', wage: 22, phone: '555-0101', email: 'mike.j@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2019-03-15', defaultLocationId: 'loc1', shiftTemplateId: 'st1' },
+  { id: 'e2', firstName: 'Carlos', lastName: 'Rivera', group: 'Fairways', role: 'Operator', wage: 18, phone: '555-0102', email: 'carlos.r@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'full-time', hireDate: '2020-06-01', defaultLocationId: 'loc3', shiftTemplateId: 'st1' },
+  { id: 'e3', firstName: 'Sarah', lastName: 'Chen', group: 'Landscape', role: 'Specialist', wage: 20, phone: '555-0103', email: 'sarah.c@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2021-01-10', defaultLocationId: 'loc6', shiftTemplateId: 'st2' },
+  { id: 'e4', firstName: 'James', lastName: 'Wilson', group: 'Irrigation', role: 'Technician', wage: 24, phone: '555-0104', email: 'james.w@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2018-08-20', defaultLocationId: 'loc9', shiftTemplateId: 'st1' },
+  { id: 'e5', firstName: 'David', lastName: 'Park', group: 'Greens', role: 'Operator', wage: 17, phone: '555-0105', email: 'david.p@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'part-time', hireDate: '2022-04-01', defaultLocationId: 'loc2', shiftTemplateId: 'st2' },
+  { id: 'e6', firstName: 'Maria', lastName: 'Santos', group: 'Bunkers', role: 'Operator', wage: 16, phone: '555-0106', email: 'maria.s@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'seasonal', hireDate: '2023-05-15', defaultLocationId: 'loc8', shiftTemplateId: 'st3' },
+  { id: 'e7', firstName: 'Tom', lastName: 'Bradley', group: 'Mechanic', role: 'Lead Mechanic', wage: 28, phone: '555-0107', email: 'tom.b@course.com', photo: '', status: 'active', department: 'Equipment', language: 'English', workerType: 'full-time', hireDate: '2017-02-01', defaultLocationId: 'loc6', shiftTemplateId: 'st2' },
+  { id: 'e8', firstName: 'Alex', lastName: 'Kim', group: 'Fairways', role: 'Operator', wage: 17, phone: '555-0108', email: 'alex.k@course.com', photo: '', status: 'inactive', department: 'Maintenance', language: 'English', workerType: 'seasonal', hireDate: '2023-06-01', defaultLocationId: 'loc4', shiftTemplateId: 'st3' },
 ];
 
 export const tasks: Task[] = [
@@ -354,6 +366,20 @@ export const groupOptions: GroupOption[] = [
   { id: 'grp5', name: 'Irrigation', color: 'hsl(200,70%,50%)' },
   { id: 'grp6', name: 'Mechanic', color: 'hsl(210,60%,50%)' },
   { id: 'grp7', name: 'Range', color: 'hsl(45,70%,50%)' },
+];
+
+export const roleOptions: RoleOption[] = [
+  { id: 'role1', name: 'Operator' },
+  { id: 'role2', name: 'Lead' },
+  { id: 'role3', name: 'Technician' },
+  { id: 'role4', name: 'Specialist' },
+  { id: 'role5', name: 'Lead Mechanic' },
+];
+
+export const languageOptions: LanguageOption[] = [
+  { id: 'lang1', name: 'English' },
+  { id: 'lang2', name: 'Spanish' },
+  { id: 'lang3', name: 'Bilingual' },
 ];
 
 export const workLocations: WorkLocation[] = [

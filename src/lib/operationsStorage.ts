@@ -8,9 +8,11 @@ import {
   equipmentUnits,
   employees,
   groupOptions,
+  languageOptions,
   manualRainfallEntries,
   notes,
   programSettings,
+  roleOptions,
   scheduleEntries,
   shiftTemplates,
   tasks,
@@ -26,9 +28,11 @@ import {
   type EquipmentUnit,
   type Employee,
   type GroupOption,
+  type LanguageOption,
   type ManualRainfallEntry,
   type Note,
   type ProgramSettings,
+  type RoleOption,
   type ScheduleEntry,
   type ShiftTemplate,
   type Task,
@@ -58,6 +62,8 @@ const APPLICATION_AREAS_KEY = 'gchq-application-areas';
 const PROGRAM_SETTINGS_KEY = 'gchq-program-settings';
 const DEPARTMENTS_KEY = 'gchq-departments';
 const GROUPS_KEY = 'gchq-groups';
+const ROLES_KEY = 'gchq-roles';
+const LANGUAGES_KEY = 'gchq-languages';
 const WORK_LOCATIONS_KEY = 'gchq-work-locations';
 const SHIFT_TEMPLATES_KEY = 'gchq-shift-templates';
 
@@ -216,6 +222,22 @@ export function loadGroupOptions() {
 
 export function saveGroupOptions(value: GroupOption[]) {
   writeList(GROUPS_KEY, value);
+}
+
+export function loadRoleOptions() {
+  return readList<RoleOption>(ROLES_KEY, roleOptions);
+}
+
+export function saveRoleOptions(value: RoleOption[]) {
+  writeList(ROLES_KEY, value);
+}
+
+export function loadLanguageOptions() {
+  return readList<LanguageOption>(LANGUAGES_KEY, languageOptions);
+}
+
+export function saveLanguageOptions(value: LanguageOption[]) {
+  writeList(LANGUAGES_KEY, value);
 }
 
 export function loadWorkLocations() {

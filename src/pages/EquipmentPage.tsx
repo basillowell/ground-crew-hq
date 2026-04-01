@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { ChevronRight, Plus, Tractor } from 'lucide-react';
-import { loadEmployees, loadEquipmentUnits, saveEquipmentUnits } from '@/lib/dataStore';
+import { loadEmployees, loadEquipmentUnits, loadWorkLocations, saveEquipmentUnits } from '@/lib/dataStore';
 
 const statusMap = { available: 'success', 'in-use': 'info', maintenance: 'warning', 'out-of-service': 'danger' } as const;
 const woStatusMap = { open: 'warning', 'in-progress': 'info', completed: 'success' } as const;
@@ -18,6 +18,7 @@ const prioMap = { low: 'neutral', medium: 'warning', high: 'danger' } as const;
 export default function EquipmentPage() {
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [unitList, setUnitList] = useState<EquipmentUnit[]>([]);
+  const [workLocations, setWorkLocations] = useState<{ id: string; name: string }[]>([]);
   const [selectedType, setSelectedType] = useState(equipmentTypes[0]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export default function EquipmentPage() {
   useEffect(() => {
     setEmployeeList(loadEmployees());
     setUnitList(loadEquipmentUnits());
+    setWorkLocations(loadWorkLocations());
   }, []);
 
   const typeUnits = useMemo(() => unitList.filter((unit) => unit.typeId === selectedType.id), [selectedType.id, unitList]);
@@ -54,7 +56,7 @@ export default function EquipmentPage() {
       unitNumber: '',
       status: 'available',
       assignedTo: '',
-      location: 'Shop',
+      location: loadWorkLocations()[0]?.name ?? 'Shop',
       hours: '0',
       lastService: '2024-03-01',
       nextService: '2024-04-01',
@@ -286,7 +288,19 @@ export default function EquipmentPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Location</label>
-              <Input value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} className="mt-1" />
+              {workLocations.length > 0 ? (
+                <select
+                  value={draft.location}
+                  onChange={(event) => setDraft({ ...draft, location: event.target.value })}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {workLocations.map((location) => (
+                    <option key={location.id} value={location.name}>{location.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} className="mt-1" />
+              )}
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Hours</label>
