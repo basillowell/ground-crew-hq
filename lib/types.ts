@@ -78,6 +78,18 @@ export interface Note {
   content: string;
 }
 
+export interface ScheduleTemplate {
+  id: number;
+  name: string;
+  week_data: Array<{
+    employee_id: number;
+    weekday: number;
+    start_time?: string | null;
+    end_time?: string | null;
+    is_day_off: boolean;
+  }>;
+}
+
 // ---- Derived / view types ----
 
 export interface ShiftWithAssignments extends Shift {

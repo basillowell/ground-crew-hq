@@ -8,6 +8,45 @@
   --radius: 0.625rem;
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / .07), 0 1px 2px -1px rgb(0 0 0 / .05);
   --shadow: 0 4px 16px -2px rgb(0 0 0 / .10), 0 2px 6px -2px rgb(0 0 0 / .06);
+  --brand-50: 236 253 245;
+  --brand-100: 209 250 229;
+  --brand-200: 167 243 208;
+  --brand-300: 110 231 183;
+  --brand-400: 52 211 153;
+  --brand-500: 16 185 129;
+  --brand-600: 5 150 105;
+  --brand-700: 4 120 87;
+  --accent-500: 14 165 233;
+  --surface-tint-a: 16 185 129;
+  --surface-tint-b: 14 165 233;
+}
+
+:root[data-theme="marine"] {
+  --brand-50: 239 246 255;
+  --brand-100: 219 234 254;
+  --brand-200: 191 219 254;
+  --brand-300: 125 211 252;
+  --brand-400: 56 189 248;
+  --brand-500: 14 165 233;
+  --brand-600: 2 132 199;
+  --brand-700: 3 105 161;
+  --accent-500: 20 184 166;
+  --surface-tint-a: 14 165 233;
+  --surface-tint-b: 20 184 166;
+}
+
+:root[data-theme="sunrise"] {
+  --brand-50: 255 247 237;
+  --brand-100: 255 237 213;
+  --brand-200: 254 215 170;
+  --brand-300: 253 186 116;
+  --brand-400: 251 146 60;
+  --brand-500: 249 115 22;
+  --brand-600: 234 88 12;
+  --brand-700: 194 65 12;
+  --accent-500: 244 114 182;
+  --surface-tint-a: 249 115 22;
+  --surface-tint-b: 244 114 182;
 }
 
 /* ─── Base ───────────────────────────────────────────── */
@@ -19,6 +58,17 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+.text-brand-400 { color: rgb(var(--brand-400)); }
+.text-brand-500 { color: rgb(var(--brand-500)); }
+.text-brand-600 { color: rgb(var(--brand-600)); }
+.text-brand-700 { color: rgb(var(--brand-700)); }
+.bg-brand-50 { background-color: rgb(var(--brand-50)); }
+.bg-brand-100 { background-color: rgb(var(--brand-100)); }
+.bg-brand-400 { background-color: rgb(var(--brand-400)); }
+.border-brand-200 { border-color: rgb(var(--brand-200)); }
+.border-brand-300 { border-color: rgb(var(--brand-300)); }
+.border-brand-400 { border-color: rgb(var(--brand-400)); }
 
 /* ─── Scrollbar ──────────────────────────────────────── */
 ::-webkit-scrollbar            { width: 4px; height: 4px; }
@@ -43,8 +93,14 @@ body {
            disabled:opacity-50 disabled:pointer-events-none select-none;
   }
   .btn-primary {
-    @apply btn bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800
-           shadow-sm px-4 py-2;
+    @apply btn text-white shadow-sm px-4 py-2;
+    background: rgb(var(--brand-600));
+  }
+  .btn-primary:hover {
+    background: rgb(var(--brand-700));
+  }
+  .btn-primary:active {
+    background: rgb(var(--brand-700));
   }
   .btn-secondary {
     @apply btn bg-white text-gray-700 border border-gray-200 hover:bg-gray-50
@@ -119,6 +175,49 @@ body {
   /* Skeleton loader */
   .skeleton {
     @apply animate-pulse bg-gray-200 rounded-md;
+  }
+
+  .workboard-stage {
+    background:
+      radial-gradient(circle at top left, rgb(var(--surface-tint-b) / 0.12), transparent 24rem),
+      radial-gradient(circle at top right, rgb(var(--surface-tint-a) / 0.12), transparent 28rem),
+      linear-gradient(180deg, #f8fbff 0%, #f3f5f9 100%);
+  }
+
+  .workboard-panel {
+    @apply rounded-[1.5rem] border border-white/70 bg-white/90 backdrop-blur;
+    box-shadow: 0 18px 50px -28px rgb(15 23 42 / 0.28);
+  }
+
+  .labor-card {
+    @apply overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-white;
+    box-shadow: 0 14px 34px -26px rgb(15 23 42 / 0.26);
+  }
+
+  .labor-card-header {
+    background: linear-gradient(90deg, rgb(248 250 252) 0%, rgb(255 255 255) 100%);
+  }
+
+  .task-row {
+    @apply rounded-xl border border-transparent bg-slate-50 px-3 py-2 transition;
+  }
+
+  .task-row-priority {
+    @apply border-emerald-200 bg-emerald-50/70;
+  }
+
+  .task-actions {
+    @apply flex flex-wrap items-center gap-2 rounded-full bg-white/90 px-2 py-1 shadow-sm;
+  }
+
+  .task-drop-indicator {
+    @apply mb-2 flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-brand-700;
+  }
+
+  .task-drop-indicator::before,
+  .task-drop-indicator::after {
+    content: "";
+    @apply h-px flex-1 bg-brand-200;
   }
 }
 

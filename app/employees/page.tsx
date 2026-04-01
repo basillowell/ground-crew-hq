@@ -81,6 +81,10 @@ export default function EmployeesPage() {
     filter === "all" ? true : filter === "active" ? e.active : !e.active
   );
   const activeCount = employees.filter(e => e.active).length;
+  const groupedCount = employees.filter(e => e.group_id).length;
+  const averageRate = employees.length
+    ? employees.reduce((sum, employee) => sum + Number(employee.hourly_rate ?? 0), 0) / employees.length
+    : 0;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -95,6 +99,31 @@ export default function EmployeesPage() {
       {error && (
         <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl">{error}</div>
       )}
+
+      <div className="mb-5 grid gap-4 lg:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))]">
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700">How To Use This Page</p>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-slate-900">Build the labor roster that powers scheduling.</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Add employees here first, then schedule them by week and assign work to their daily shifts from the workboard.
+          </p>
+        </div>
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Total Employees</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{employees.length}</p>
+          <p className="mt-1 text-sm text-slate-500">Rostered people in the system</p>
+        </div>
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Grouped Employees</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{groupedCount}</p>
+          <p className="mt-1 text-sm text-slate-500">Employees assigned to a crew group</p>
+        </div>
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Average Rate</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">${averageRate.toFixed(2)}</p>
+          <p className="mt-1 text-sm text-slate-500">Average hourly labor rate</p>
+        </div>
+      </div>
 
       {/* Filter tabs */}
       <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">

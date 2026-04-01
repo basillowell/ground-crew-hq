@@ -4,21 +4,22 @@ import { TaskAssignment } from "@/lib/types";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { task_id, duration, position, equipment_unit_id } = await req.json();
-    // Use explicit null to clear equipment_unit_id — don't use COALESCE for nullable clears
+    const { shift_id, task_id, duration, position, equipment_unit_id } = await req.json();
     const [row] = await query<TaskAssignment>(
       `UPDATE task_assignments SET
-         task_id           = COALESCE($1, task_id),
-         duration          = COALESCE($2, duration),
-         position          = COALESCE($3, position),
-         equipment_unit_id = CASE WHEN $4::boolean THEN $5 ELSE equipment_unit_id END
-       WHERE id=$6 RETURNING *`,
+         shift_id          = COALESCE($1, shift_id),
+         task_id           = COALESCE($2, task_id),
+         duration          = COALESCE($3, duration),
+         position          = COALESCE($4, position),
+         equipment_unit_id = CASE WHEN $5::boolean THEN $6 ELSE equipment_unit_id END
+       WHERE id=$7 RETURNING *`,
       [
+        shift_id ?? null,
         task_id ?? null,
         duration ?? null,
         position ?? null,
-        equipment_unit_id !== undefined,  // $4 — was it sent?
-        equipment_unit_id ?? null,        // $5 — the value (can be null to clear)
+        equipment_unit_id !== undefined,
+        equipment_unit_id ?? null,
         params.id,
       ]
     );
