@@ -12,12 +12,13 @@ interface EmployeeRowProps {
   assignments: Assignment[];
   tasks: Task[];
   shiftLabel?: string;
+  laneSummary?: string;
   onAddTask?: (employeeId: string) => void;
   onEditAssignment?: (assignment: Assignment) => void;
   onRemoveAssignment?: (assignmentId: string) => void;
 }
 
-export function EmployeeRow({ employee, assignments: empAssignments, tasks, shiftLabel, onAddTask, onEditAssignment, onRemoveAssignment }: EmployeeRowProps) {
+export function EmployeeRow({ employee, assignments: empAssignments, tasks, shiftLabel, laneSummary, onAddTask, onEditAssignment, onRemoveAssignment }: EmployeeRowProps) {
   const sortedAssignments = [...empAssignments].sort((left, right) => {
     if (left.startTime !== right.startTime) return left.startTime.localeCompare(right.startTime);
     return left.duration - right.duration;
@@ -47,6 +48,11 @@ export function EmployeeRow({ employee, assignments: empAssignments, tasks, shif
           <div className="text-xs text-muted-foreground mb-3">
             {employee.role} · {employee.workerType} · {employee.language} {shiftLabel ? `· Shift ${shiftLabel}` : ''}
           </div>
+          {laneSummary ? (
+            <div className="mb-3 rounded-xl border bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground">
+              {laneSummary}
+            </div>
+          ) : null}
           <div className="space-y-2">
             {sortedAssignments.length === 0 && (
               <div className="rounded-xl border border-dashed px-3 py-3 text-xs text-muted-foreground">

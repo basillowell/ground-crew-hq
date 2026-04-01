@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { PageHeader, AvatarInitials } from '@/components/shared';
-import { ClipboardList, CloudSun, MapPin, Users } from 'lucide-react';
+import { ClipboardList, CloudSun, MapPin, RefreshCcw, Users } from 'lucide-react';
 import type { Assignment, Employee, Note, ScheduleEntry, Task, WeatherDailyLog, WeatherLocation } from '@/data/seedData';
 import {
   loadAssignments,
@@ -48,8 +48,12 @@ export default function BreakroomPage() {
     };
 
     refresh();
+    const intervalId = window.setInterval(refresh, 30000);
     window.addEventListener('operations-context-updated', handleContext as EventListener);
-    return () => window.removeEventListener('operations-context-updated', handleContext as EventListener);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('operations-context-updated', handleContext as EventListener);
+    };
   }, []);
 
   const scheduledEmployees = useMemo(() => {
@@ -58,12 +62,14 @@ export default function BreakroomPage() {
         .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
         .map((entry) => entry.employeeId),
     );
-    return employees.filter(
-      (employee) =>
-        employee.status === 'active' &&
-        (!department || department === 'All Departments' || employee.department === department) &&
-        scheduledIds.has(employee.id),
-    );
+    return employees
+      .filter(
+        (employee) =>
+          employee.status === 'active' &&
+          (!department || department === 'All Departments' || employee.department === department) &&
+          scheduledIds.has(employee.id),
+      )
+      .sort((left, right) => `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`));
   }, [boardDate, department, employees, scheduleEntries]);
 
   const dayAssignments = useMemo(
@@ -109,9 +115,24 @@ export default function BreakroomPage() {
     <div className="p-4 max-w-7xl mx-auto space-y-4">
       <PageHeader
         title="Breakroom"
-        subtitle="Wallboard view of who is scheduled, what their top priority is, and which notes matter for the day."
+        subtitle="TV wallboard for scheduled crew, top-priority work, weather, and daily notes."
         badge={<Badge variant="secondary">{department} · {boardDate}</Badge>}
       />
+
+      <Card className="rounded-3xl border bg-card/95 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Cast View Status</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              This page refreshes from the shared board data every 30 seconds so it can stay on a TV without manual manager cleanup.
+            </p>
+          </div>
+          <Badge variant="outline" className="gap-1">
+            <RefreshCcw className="h-3 w-3" />
+            Auto refresh every 30s
+          </Badge>
+        </div>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="p-4">
@@ -146,12 +167,12 @@ export default function BreakroomPage() {
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-4">
           {priorityCards.map(({ employee, topAssignment, extraAssignments }) => (
-            <Card key={employee.id} className="p-5">
+            <Card key={employee.id} className="rounded-3xl border bg-card/95 p-5 shadow-sm">
               <div className="flex items-start gap-3">
                 <AvatarInitials firstName={employee.firstName} lastName={employee.lastName} size="lg" />
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-xl font-semibold">{employee.firstName} {employee.lastName}</div>
+                    <div className="text-2xl font-semibold">{employee.firstName} {employee.lastName}</div>
                     <Badge>{employee.group}</Badge>
                     <Badge variant="outline">{employee.role}</Badge>
                   </div>
@@ -163,13 +184,13 @@ export default function BreakroomPage() {
                 <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Top priority</div>
                 {topAssignment?.task ? (
                   <div className="mt-2">
-                    <div className="text-lg font-semibold">{topAssignment.task.name}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">
+                    <div className="text-2xl font-semibold leading-tight">{topAssignment.task.name}</div>
+                    <div className="mt-2 text-base text-muted-foreground">
                       {topAssignment.assignment.startTime} · {topAssignment.assignment.area} · {topAssignment.assignment.duration} minutes
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-2 text-sm text-muted-foreground">No workboard assignment yet.</div>
+                  <div className="mt-2 text-base text-muted-foreground">No workboard assignment yet.</div>
                 )}
               </div>
 

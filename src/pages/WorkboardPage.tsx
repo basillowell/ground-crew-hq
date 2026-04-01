@@ -10,7 +10,7 @@ import { NotesPanel } from '@/components/workboard/NotesPanel';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
-import { StickyNote, Droplets, ClipboardList, CloudSun, Pencil } from 'lucide-react';
+import { StickyNote, Droplets, ClipboardList, CloudSun, MonitorSmartphone, Users } from 'lucide-react';
 import {
   loadApplicationAreas,
   loadAssignments,
@@ -33,6 +33,13 @@ function defaultBoardDate() {
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
+}
+
+function timeToMinutes(value?: string) {
+  if (!value) return 0;
+  const [hours, minutes] = value.split(':').map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return 0;
+  return hours * 60 + minutes;
 }
 
 function makeId(prefix: string) {
@@ -185,6 +192,37 @@ export default function WorkboardPage() {
     [dayAssignments],
   );
 
+  const dispatchBoard = useMemo(
+    () =>
+      scheduledEmployees.map((employee) => {
+        const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
+        const employeeAssignments = dayAssignments
+          .filter((assignment) => assignment.employeeId === employee.id)
+          .sort((left, right) => left.startTime.localeCompare(right.startTime));
+        const assignedMinutes = employeeAssignments.reduce((total, assignment) => total + assignment.duration, 0);
+        const shiftMinutes = shift ? Math.max(timeToMinutes(shift.shiftEnd) - timeToMinutes(shift.shiftStart), 0) : 0;
+        return {
+          employee,
+          shift,
+          employeeAssignments,
+          assignedMinutes,
+          shiftMinutes,
+          openMinutes: Math.max(shiftMinutes - assignedMinutes, 0),
+        };
+      }),
+    [boardDate, dayAssignments, scheduleList, scheduledEmployees],
+  );
+
+  const readyForBreakroomCount = useMemo(
+    () => dispatchBoard.filter((lane) => lane.employeeAssignments.length > 0).length,
+    [dispatchBoard],
+  );
+
+  const totalOpenMinutes = useMemo(
+    () => dispatchBoard.reduce((total, lane) => total + lane.openMinutes, 0),
+    [dispatchBoard],
+  );
+
   const taskView = useMemo(() => {
     return taskList
       .map((task) => ({
@@ -312,8 +350,8 @@ export default function WorkboardPage() {
       <div className="flex-1 p-4 overflow-auto">
         <PageHeader
           title="Workboard"
-          subtitle="Build the daily labor board from the selected top-bar date, department, employee roster, active tasks, and program locations."
-          badge={<Badge variant="secondary">{department} · {boardDate}</Badge>}
+          subtitle="Dispatch scheduled crew, assign every lane cleanly, and hand the finished plan straight to the breakroom TV board."
+          badge={<Badge variant="secondary">{department} / {boardDate}</Badge>}
           action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || assignmentEligibleEmployees[0]?.id || '') }}
         >
           <Button
@@ -381,12 +419,47 @@ export default function WorkboardPage() {
           </div>
         </div>
 
+        <div className="grid gap-4 md:grid-cols-2 mb-4">
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold">Dispatch Status</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This board is for live dispatching. Every scheduled employee should either have a clear task lane or be obviously waiting for assignment.
+                </p>
+              </div>
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge variant="outline">{readyForBreakroomCount} lanes ready</Badge>
+              <Badge variant="outline">{Math.max(dispatchBoard.length - readyForBreakroomCount, 0)} lanes incomplete</Badge>
+              <Badge variant="outline">{totalOpenMinutes} open mins</Badge>
+            </div>
+          </div>
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold">Breakroom Handoff</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Breakroom should be the passive TV display. Once lanes are assigned here, the cast board should read cleanly without manager-only controls.
+                </p>
+              </div>
+              <MonitorSmartphone className="h-5 w-5 text-primary" />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge variant="outline">{dayAssignments.length} task rows prepared</Badge>
+              <Badge variant="outline">{boardDate}</Badge>
+              <Badge variant="outline">{department}</Badge>
+            </div>
+          </div>
+        </div>
+
         <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">Daily Crew Board</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                Every scheduled crew member should read as one clear lane with all assigned work visible in sequence.
+                Every scheduled crew member should read as one clean lane, with tasks visible in sequence and remaining open time easy to spot.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -479,6 +552,12 @@ export default function WorkboardPage() {
                 shiftLabel={(() => {
                   const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
                   return shift ? `${shift.shiftStart}-${shift.shiftEnd}` : undefined;
+                })()}
+                laneSummary={(() => {
+                  const lane = dispatchBoard.find((entry) => entry.employee.id === employee.id);
+                  if (!lane) return undefined;
+                  if (!lane.shift) return `${lane.employeeAssignments.length} tasks assigned`;
+                  return `${lane.assignedMinutes} assigned mins / ${lane.openMinutes} open mins`;
                 })()}
                 onAddTask={openAssignmentDialog}
                 onEditAssignment={openEditAssignmentDialog}
