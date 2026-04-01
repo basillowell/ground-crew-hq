@@ -113,7 +113,14 @@ create table if not exists public.chemical_products (
   name text not null,
   "productType" text not null,
   "targetUse" text not null,
-  "rateUnit" text not null
+  "rateUnit" text not null,
+  "epaRegistrationNumber" text not null default '',
+  formulation text not null default '',
+  "signalWord" text not null default '',
+  "restrictedUse" boolean not null default false,
+  "reentryIntervalHours" numeric not null default 0,
+  "preHarvestIntervalHours" numeric not null default 0,
+  "defaultApplicationMethod" text not null default ''
 );
 
 create table if not exists public.application_areas (
@@ -128,15 +135,28 @@ create table if not exists public.chemical_application_logs (
   "applicationDate" date not null,
   "startTime" text not null,
   "endTime" text not null,
+  "applicationTimestamp" text not null default '',
   "areaId" text not null,
   "targetPest" text not null,
   "agronomicPurpose" text not null,
+  "applicationMethod" text not null default '',
   "carrierVolume" numeric not null default 0,
+  "totalMixVolume" numeric not null default 0,
   "areaTreated" numeric not null default 0,
   "areaUnit" text not null,
   "applicatorId" text not null,
+  "applicatorLicenseNumber" text not null default '',
+  "supervisorName" text not null default '',
+  "supervisorLicenseNumber" text not null default '',
   "equipmentUsedId" text,
   "weatherLogId" text,
+  "weatherConditionsSummary" text not null default '',
+  "windDirection" text not null default '',
+  "windSpeedAtApplication" numeric not null default 0,
+  "temperatureAtApplication" numeric not null default 0,
+  "humidityAtApplication" numeric not null default 0,
+  "restrictedEntryUntil" text not null default '',
+  "siteConditions" text not null default '',
   notes text not null default ''
 );
 
@@ -146,8 +166,33 @@ create table if not exists public.chemical_application_tank_mix_items (
   "productId" text not null,
   "rateApplied" numeric not null default 0,
   "rateUnit" text not null,
-  "totalQuantityUsed" numeric not null default 0
+  "totalQuantityUsed" numeric not null default 0,
+  "mixOrder" integer not null default 1
 );
+
+alter table public.chemical_products add column if not exists "epaRegistrationNumber" text not null default '';
+alter table public.chemical_products add column if not exists formulation text not null default '';
+alter table public.chemical_products add column if not exists "signalWord" text not null default '';
+alter table public.chemical_products add column if not exists "restrictedUse" boolean not null default false;
+alter table public.chemical_products add column if not exists "reentryIntervalHours" numeric not null default 0;
+alter table public.chemical_products add column if not exists "preHarvestIntervalHours" numeric not null default 0;
+alter table public.chemical_products add column if not exists "defaultApplicationMethod" text not null default '';
+
+alter table public.chemical_application_logs add column if not exists "applicationTimestamp" text not null default '';
+alter table public.chemical_application_logs add column if not exists "applicationMethod" text not null default '';
+alter table public.chemical_application_logs add column if not exists "totalMixVolume" numeric not null default 0;
+alter table public.chemical_application_logs add column if not exists "applicatorLicenseNumber" text not null default '';
+alter table public.chemical_application_logs add column if not exists "supervisorName" text not null default '';
+alter table public.chemical_application_logs add column if not exists "supervisorLicenseNumber" text not null default '';
+alter table public.chemical_application_logs add column if not exists "weatherConditionsSummary" text not null default '';
+alter table public.chemical_application_logs add column if not exists "windDirection" text not null default '';
+alter table public.chemical_application_logs add column if not exists "windSpeedAtApplication" numeric not null default 0;
+alter table public.chemical_application_logs add column if not exists "temperatureAtApplication" numeric not null default 0;
+alter table public.chemical_application_logs add column if not exists "humidityAtApplication" numeric not null default 0;
+alter table public.chemical_application_logs add column if not exists "restrictedEntryUntil" text not null default '';
+alter table public.chemical_application_logs add column if not exists "siteConditions" text not null default '';
+
+alter table public.chemical_application_tank_mix_items add column if not exists "mixOrder" integer not null default 1;
 
 create table if not exists public.program_settings (
   id text primary key,

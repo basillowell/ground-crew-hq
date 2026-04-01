@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { format } from 'date-fns';
-import { Download, FileText, Filter, FlaskConical, Printer, Sprout, Wind } from 'lucide-react';
+import { addHours, format } from 'date-fns';
+import {
+  ClipboardList,
+  Download,
+  FileText,
+  Filter,
+  FlaskConical,
+  Printer,
+  ShieldCheck,
+  Sprout,
+  Wind,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -15,6 +25,7 @@ import {
   type ChemicalProduct,
   type Employee,
   type EquipmentUnit,
+  type WeatherDailyLog,
   type WeatherLocation,
 } from '@/data/seedData';
 import {
@@ -44,12 +55,24 @@ type ApplicationDraft = {
   areaId: string;
   targetPest: string;
   agronomicPurpose: string;
+  applicationMethod: string;
   carrierVolume: string;
+  totalMixVolume: string;
   areaTreated: string;
   areaUnit: string;
   applicatorId: string;
+  applicatorLicenseNumber: string;
+  supervisorName: string;
+  supervisorLicenseNumber: string;
   equipmentUsedId: string;
   weatherLogId: string;
+  weatherConditionsSummary: string;
+  windDirection: string;
+  windSpeedAtApplication: string;
+  temperatureAtApplication: string;
+  humidityAtApplication: string;
+  restrictedEntryUntil: string;
+  siteConditions: string;
   notes: string;
 };
 
@@ -60,12 +83,24 @@ const emptyDraft: ApplicationDraft = {
   areaId: '',
   targetPest: '',
   agronomicPurpose: '',
+  applicationMethod: 'Ground spray',
   carrierVolume: '120',
+  totalMixVolume: '120',
   areaTreated: '3.5',
   areaUnit: 'acres',
   applicatorId: '',
+  applicatorLicenseNumber: '',
+  supervisorName: '',
+  supervisorLicenseNumber: '',
   equipmentUsedId: '',
   weatherLogId: '',
+  weatherConditionsSummary: '',
+  windDirection: '',
+  windSpeedAtApplication: '',
+  temperatureAtApplication: '',
+  humidityAtApplication: '',
+  restrictedEntryUntil: '',
+  siteConditions: '',
   notes: '',
 };
 
@@ -84,6 +119,36 @@ function downloadCsv(filename: string, lines: string[]) {
   link.click();
 }
 
+function quoteCsv(value: string | number) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return 'Not recorded';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return format(parsed, 'MMM d, yyyy h:mm a');
+}
+
+function numberValue(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildRestrictedEntry(
+  draft: ApplicationDraft,
+  products: ChemicalProduct[],
+  draftMixItems: DraftMixItem[]
+) {
+  if (draft.restrictedEntryUntil) return draft.restrictedEntryUntil;
+  const maxReentry = Math.max(
+    0,
+    ...draftMixItems.map((item) => products.find((product) => product.id === item.productId)?.reentryIntervalHours ?? 0)
+  );
+  if (!draft.applicationDate || !draft.endTime || maxReentry <= 0) return '';
+  return addHours(new Date(`${draft.applicationDate}T${draft.endTime}:00`), maxReentry).toISOString();
+}
+
 export default function ApplicationsPage() {
   const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
   const [chemicalProducts, setChemicalProducts] = useState<ChemicalProduct[]>([]);
@@ -92,7 +157,7 @@ export default function ApplicationsPage() {
   const [equipmentUnits, setEquipmentUnits] = useState<EquipmentUnit[]>([]);
   const [logs, setLogs] = useState<ChemicalApplicationLog[]>([]);
   const [mixItems, setMixItems] = useState<ChemicalApplicationTankMixItem[]>([]);
-  const [weatherLogs, setWeatherLogs] = useState(loadWeatherDailyLogs());
+  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>(loadWeatherDailyLogs());
   const [filterDate, setFilterDate] = useState('');
   const [filterArea, setFilterArea] = useState('all');
   const [filterProduct, setFilterProduct] = useState('all');
@@ -115,11 +180,14 @@ export default function ApplicationsPage() {
     setLogs(loadChemicalApplicationLogs());
     setMixItems(loadChemicalApplicationTankMixItems());
     setWeatherLogs(loadWeatherDailyLogs());
+    const loadedWeatherLogs = loadWeatherDailyLogs();
+    setWeatherLogs(loadedWeatherLogs);
     setDraft((current) => ({
       ...current,
       areaId: loadedAreas[0]?.id ?? current.areaId,
       applicatorId: loadedEmployees[0]?.id ?? current.applicatorId,
       equipmentUsedId: loadedEquipment[0]?.id ?? current.equipmentUsedId,
+      weatherLogId: loadedWeatherLogs[0]?.id ?? current.weatherLogId,
     }));
     setDraftMixItems((current) =>
       current.map((item) => ({
@@ -142,18 +210,62 @@ export default function ApplicationsPage() {
     });
   }, [filterApplicator, filterArea, filterDate, filterProduct, logs, mixItems]);
 
-  const selectedArea = applicationAreas.find((area) => area.id === draft.areaId) ?? applicationAreas[0];
-  const snapshotLocation = weatherLocations.find((location) => location.id === selectedArea.weatherLocationId) ?? weatherLocations[0];
-  const snapshotLog = weatherLogs
-    .filter((log) => log.locationId === snapshotLocation.id)
-    .sort((left, right) => right.date.localeCompare(left.date))[0];
+  const selectedArea =
+    applicationAreas.find((area) => area.id === draft.areaId) ?? applicationAreas[0];
+  const snapshotLocation = selectedArea
+    ? weatherLocations.find((location) => location.id === selectedArea.weatherLocationId) ?? weatherLocations[0]
+    : weatherLocations[0];
+  const locationWeatherLogs = weatherLogs
+    .filter((log) => log.locationId === snapshotLocation?.id)
+    .sort((left, right) => right.date.localeCompare(left.date));
+  const snapshotLog =
+    locationWeatherLogs.find((log) => log.id === draft.weatherLogId) ?? locationWeatherLogs[0];
+
+  useEffect(() => {
+    if (!dialogOpen || !snapshotLog) return;
+    setDraft((current) => ({
+      ...current,
+      weatherLogId: current.weatherLogId || snapshotLog.id,
+      weatherConditionsSummary:
+        current.weatherConditionsSummary ||
+        `${snapshotLog.currentConditions}; forecast: ${snapshotLog.forecast}`,
+      temperatureAtApplication:
+        current.temperatureAtApplication || String(snapshotLog.temperature),
+      humidityAtApplication:
+        current.humidityAtApplication || String(snapshotLog.humidity),
+      windSpeedAtApplication:
+        current.windSpeedAtApplication || String(snapshotLog.wind),
+    }));
+  }, [dialogOpen, snapshotLog]);
 
   const totalApplications = filteredLogs.length;
-  const totalArea = filteredLogs.reduce((sum, log) => sum + log.areaTreated, 0);
-  const uniqueProducts = new Set(filteredLogs.flatMap((log) => mixItems.filter((item) => item.applicationLogId === log.id).map((item) => item.productId))).size;
+  const totalArea = filteredLogs.reduce((sum, log) => sum + (log.areaTreated ?? 0), 0);
+  const uniqueProducts = new Set(
+    filteredLogs.flatMap((log) =>
+      mixItems.filter((item) => item.applicationLogId === log.id).map((item) => item.productId)
+    )
+  ).size;
+  const restrictedUseLogs = filteredLogs.filter((log) =>
+    mixItems
+      .filter((item) => item.applicationLogId === log.id)
+      .some((item) => chemicalProducts.find((product) => product.id === item.productId)?.restrictedUse)
+  ).length;
 
   function addMixItem() {
-    setDraftMixItems((current) => [...current, { ...emptyMixItem }]);
+    setDraftMixItems((current) => [
+      ...current,
+      {
+        ...emptyMixItem,
+        productId: chemicalProducts[0]?.id ?? '',
+        rateUnit: chemicalProducts[0]?.rateUnit ?? emptyMixItem.rateUnit,
+      },
+    ]);
+  }
+
+  function removeMixItem(index: number) {
+    setDraftMixItems((current) =>
+      current.length === 1 ? current : current.filter((_, itemIndex) => itemIndex !== index)
+    );
   }
 
   function updateMixItem(index: number, next: Partial<DraftMixItem>) {
@@ -172,20 +284,45 @@ export default function ApplicationsPage() {
 
   function saveApplication() {
     const logId = `cal-${Date.now()}`;
+    const weatherSource = weatherLogs.find((log) => log.id === draft.weatherLogId) ?? snapshotLog;
+    const restrictedEntryUntil = buildRestrictedEntry(draft, chemicalProducts, draftMixItems);
     const nextLog: ChemicalApplicationLog = {
       id: logId,
       applicationDate: draft.applicationDate,
       startTime: draft.startTime,
       endTime: draft.endTime,
+      applicationTimestamp: `${draft.applicationDate}T${draft.startTime}:00`,
       areaId: draft.areaId,
       targetPest: draft.targetPest,
       agronomicPurpose: draft.agronomicPurpose,
-      carrierVolume: Number(draft.carrierVolume),
-      areaTreated: Number(draft.areaTreated),
+      applicationMethod: draft.applicationMethod,
+      carrierVolume: numberValue(draft.carrierVolume),
+      totalMixVolume: numberValue(draft.totalMixVolume),
+      areaTreated: numberValue(draft.areaTreated),
       areaUnit: draft.areaUnit,
       applicatorId: draft.applicatorId,
+      applicatorLicenseNumber: draft.applicatorLicenseNumber,
+      supervisorName: draft.supervisorName,
+      supervisorLicenseNumber: draft.supervisorLicenseNumber,
       equipmentUsedId: draft.equipmentUsedId || undefined,
-      weatherLogId: draft.weatherLogId || snapshotLog?.id,
+      weatherLogId: draft.weatherLogId || weatherSource?.id,
+      weatherConditionsSummary:
+        draft.weatherConditionsSummary ||
+        (weatherSource
+          ? `${weatherSource.currentConditions}; forecast: ${weatherSource.forecast}`
+          : ''),
+      windDirection: draft.windDirection,
+      windSpeedAtApplication: numberValue(
+        draft.windSpeedAtApplication || String(weatherSource?.wind ?? 0)
+      ),
+      temperatureAtApplication: numberValue(
+        draft.temperatureAtApplication || String(weatherSource?.temperature ?? 0)
+      ),
+      humidityAtApplication: numberValue(
+        draft.humidityAtApplication || String(weatherSource?.humidity ?? 0)
+      ),
+      restrictedEntryUntil,
+      siteConditions: draft.siteConditions,
       notes: draft.notes,
     };
     const nextLogs = [nextLog, ...logs];
@@ -194,9 +331,10 @@ export default function ApplicationsPage() {
         id: `mix-${Date.now()}-${index}`,
         applicationLogId: logId,
         productId: item.productId,
-        rateApplied: Number(item.rateApplied),
+        rateApplied: numberValue(item.rateApplied),
         rateUnit: item.rateUnit,
-        totalQuantityUsed: Number(item.totalQuantityUsed),
+        totalQuantityUsed: numberValue(item.totalQuantityUsed),
+        mixOrder: index + 1,
       })),
       ...mixItems,
     ];
@@ -211,35 +349,86 @@ export default function ApplicationsPage() {
       areaId: applicationAreas[0]?.id ?? '',
       applicatorId: employees[0]?.id ?? '',
       equipmentUsedId: equipmentUnits[0]?.id ?? '',
+      weatherLogId: locationWeatherLogs[0]?.id ?? '',
     });
-    setDraftMixItems([{
-      ...emptyMixItem,
-      productId: chemicalProducts[0]?.id ?? '',
-      rateUnit: chemicalProducts[0]?.rateUnit ?? emptyMixItem.rateUnit,
-    }]);
+    setDraftMixItems([
+      {
+        ...emptyMixItem,
+        productId: chemicalProducts[0]?.id ?? '',
+        rateUnit: chemicalProducts[0]?.rateUnit ?? emptyMixItem.rateUnit,
+      },
+    ]);
   }
 
   function exportLogs() {
-    const header = ['date', 'area', 'products', 'applicator', 'carrier_volume', 'area_treated', 'notes'];
+    const header = [
+      'application_date',
+      'application_timestamp',
+      'area',
+      'products',
+      'applicator',
+      'license_number',
+      'supervisor',
+      'method',
+      'carrier_volume_gal',
+      'total_mix_volume_gal',
+      'area_treated',
+      'weather',
+      'wind_direction',
+      'wind_speed_mph',
+      'temperature_f',
+      'humidity_percent',
+      'restricted_entry_until',
+      'notes',
+    ];
     const rows = filteredLogs.map((log) => {
       const area = applicationAreas.find((item) => item.id === log.areaId)?.name ?? log.areaId;
       const applicator = employees.find((employee) => employee.id === log.applicatorId);
       const productNames = mixItems
         .filter((item) => item.applicationLogId === log.id)
-        .map((item) => chemicalProducts.find((product) => product.id === item.productId)?.name ?? item.productId)
+        .sort((left, right) => (left.mixOrder ?? 0) - (right.mixOrder ?? 0))
+        .map((item) => {
+          const product = chemicalProducts.find((productEntry) => productEntry.id === item.productId);
+          return `${product?.name ?? item.productId} (${item.rateApplied} ${item.rateUnit}; ${item.totalQuantityUsed} total)`;
+        })
         .join(' | ');
-      return [log.applicationDate, area, productNames, applicator ? `${applicator.firstName} ${applicator.lastName}` : log.applicatorId, String(log.carrierVolume), `${log.areaTreated} ${log.areaUnit}`, `"${log.notes.replace(/"/g, '""')}"`].join(',');
+      return [
+        quoteCsv(log.applicationDate),
+        quoteCsv(log.applicationTimestamp ?? `${log.applicationDate}T${log.startTime}:00`),
+        quoteCsv(area),
+        quoteCsv(productNames),
+        quoteCsv(applicator ? `${applicator.firstName} ${applicator.lastName}` : log.applicatorId),
+        quoteCsv(log.applicatorLicenseNumber ?? ''),
+        quoteCsv([log.supervisorName, log.supervisorLicenseNumber].filter(Boolean).join(' / ')),
+        quoteCsv(log.applicationMethod ?? ''),
+        quoteCsv(log.carrierVolume),
+        quoteCsv(log.totalMixVolume ?? 0),
+        quoteCsv(`${log.areaTreated} ${log.areaUnit}`),
+        quoteCsv(log.weatherConditionsSummary ?? ''),
+        quoteCsv(log.windDirection ?? ''),
+        quoteCsv(log.windSpeedAtApplication ?? 0),
+        quoteCsv(log.temperatureAtApplication ?? 0),
+        quoteCsv(log.humidityAtApplication ?? 0),
+        quoteCsv(log.restrictedEntryUntil ?? ''),
+        quoteCsv(log.notes),
+      ].join(',');
     });
-    downloadCsv('chemical-application-logs.csv', [header.join(','), ...rows]);
+    downloadCsv('licensed-application-log.csv', [header.join(','), ...rows]);
   }
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-4">
+    <div className="mx-auto max-w-7xl space-y-4 p-4">
       <PageHeader
         title="Applications"
-        subtitle="Dedicated chemical application logging with weather context, tank mixes, exports, and report tie-in."
+        subtitle="Licensed applicator-ready chemical logging with tank mix detail, timestamped weather snapshots, and exportable records."
         badge={<Badge variant="secondary">{totalApplications} logs</Badge>}
-        action={{ label: 'New Application', onClick: () => setDialogOpen(true), icon: <FlaskConical className="h-3.5 w-3.5" /> }}
+        action={{
+          label: 'New Application',
+          onClick: () => {
+            setDialogOpen(true);
+          },
+          icon: <FlaskConical className="h-3.5 w-3.5" />,
+        }}
       >
         <Button variant="outline" size="sm" className="gap-1" onClick={exportLogs}>
           <Download className="h-3.5 w-3.5" /> Export CSV
@@ -264,8 +453,8 @@ export default function ApplicationsPage() {
           <p className="mt-2 text-3xl font-semibold">{uniqueProducts}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Weather Linked</p>
-          <p className="mt-2 text-3xl font-semibold">{filteredLogs.filter((log) => log.weatherLogId).length}</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Restricted Use Logs</p>
+          <p className="mt-2 text-3xl font-semibold">{restrictedUseLogs}</p>
         </Card>
       </div>
 
@@ -303,7 +492,12 @@ export default function ApplicationsPage() {
           const applicator = employees.find((employee) => employee.id === log.applicatorId);
           const equipment = equipmentUnits.find((unit) => unit.id === log.equipmentUsedId);
           const weather = weatherLogs.find((entry) => entry.id === log.weatherLogId);
-          const logMixItems = mixItems.filter((item) => item.applicationLogId === log.id);
+          const logMixItems = mixItems
+            .filter((item) => item.applicationLogId === log.id)
+            .sort((left, right) => (left.mixOrder ?? 0) - (right.mixOrder ?? 0));
+          const hasRestrictedUse = logMixItems.some(
+            (item) => chemicalProducts.find((product) => product.id === item.productId)?.restrictedUse
+          );
 
           return (
             <Card key={log.id} className="p-5">
@@ -313,16 +507,19 @@ export default function ApplicationsPage() {
                     <h3 className="text-base font-semibold">{area?.name ?? log.areaId}</h3>
                     <Badge variant="outline">{log.applicationDate}</Badge>
                     <Badge variant="secondary">{log.startTime} - {log.endTime}</Badge>
+                    {hasRestrictedUse && <Badge variant="destructive">Restricted Use</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground">{log.targetPest} - {log.agronomicPurpose}</p>
                   <div className="flex flex-wrap gap-5 text-sm">
                     <div><span className="text-muted-foreground">Applicator:</span> {applicator ? `${applicator.firstName} ${applicator.lastName}` : log.applicatorId}</div>
+                    <div><span className="text-muted-foreground">License:</span> {log.applicatorLicenseNumber ?? 'Not recorded'}</div>
+                    <div><span className="text-muted-foreground">Method:</span> {log.applicationMethod ?? 'Not recorded'}</div>
                     <div><span className="text-muted-foreground">Equipment:</span> {equipment?.unitNumber ?? 'Not recorded'}</div>
                     <div><span className="text-muted-foreground">Area:</span> {log.areaTreated} {log.areaUnit}</div>
                     <div><span className="text-muted-foreground">Carrier:</span> {log.carrierVolume} gal</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="space-y-2 text-xs text-muted-foreground xl:max-w-sm">
                   <Wind className="h-3.5 w-3.5" />
                   {weather ? `${weather.currentConditions} · ${weather.wind} mph wind · ${weather.rainfallTotal.toFixed(2)} in rain` : 'No linked weather snapshot'}
                 </div>
@@ -414,6 +611,10 @@ export default function ApplicationsPage() {
                   <Input className="mt-1" type="number" value={draft.carrierVolume} onChange={(e) => setDraft((current) => ({ ...current, carrierVolume: e.target.value }))} />
                 </div>
                 <div>
+                  <label className="text-xs font-medium text-muted-foreground">Total Mix Volume</label>
+                  <Input className="mt-1" type="number" value={draft.totalMixVolume} onChange={(e) => setDraft((current) => ({ ...current, totalMixVolume: e.target.value }))} />
+                </div>
+                <div>
                   <label className="text-xs font-medium text-muted-foreground">Area Treated</label>
                   <Input className="mt-1" type="number" value={draft.areaTreated} onChange={(e) => setDraft((current) => ({ ...current, areaTreated: e.target.value }))} />
                 </div>
@@ -431,24 +632,115 @@ export default function ApplicationsPage() {
               </div>
 
               <Card className="p-4">
+                <div className="mb-4 flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  <p className="text-sm font-semibold">Licensed Applicator Compliance</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Application Method</label>
+                    <Input className="mt-1" value={draft.applicationMethod} onChange={(e) => setDraft((current) => ({ ...current, applicationMethod: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Applicator License #</label>
+                    <Input className="mt-1" value={draft.applicatorLicenseNumber} onChange={(e) => setDraft((current) => ({ ...current, applicatorLicenseNumber: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Supervisor</label>
+                    <Input className="mt-1" value={draft.supervisorName} onChange={(e) => setDraft((current) => ({ ...current, supervisorName: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Supervisor License #</label>
+                    <Input className="mt-1" value={draft.supervisorLicenseNumber} onChange={(e) => setDraft((current) => ({ ...current, supervisorLicenseNumber: e.target.value }))} />
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold">Tank Mix</p>
-                    <p className="text-xs text-muted-foreground">Multiple products can be logged on the same application.</p>
+                    <p className="text-xs text-muted-foreground">Log each product in order with the actual rate and total quantity used.</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={addMixItem}>Add Product</Button>
                 </div>
                 <div className="space-y-3">
-                  {draftMixItems.map((item, index) => (
-                    <div key={`${item.productId}-${index}`} className="grid gap-3 md:grid-cols-4">
-                      <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={item.productId} onChange={(e) => updateMixItem(index, { productId: e.target.value })}>
-                        {chemicalProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
-                      </select>
-                      <Input type="number" placeholder="Rate applied" value={item.rateApplied} onChange={(e) => updateMixItem(index, { rateApplied: e.target.value })} />
-                      <Input placeholder="Rate unit" value={item.rateUnit} onChange={(e) => updateMixItem(index, { rateUnit: e.target.value })} />
-                      <Input type="number" placeholder="Total quantity used" value={item.totalQuantityUsed} onChange={(e) => updateMixItem(index, { totalQuantityUsed: e.target.value })} />
-                    </div>
-                  ))}
+                  {draftMixItems.map((item, index) => {
+                    const product = chemicalProducts.find((entry) => entry.id === item.productId);
+                    return (
+                      <div key={`${item.productId}-${index}`} className="rounded-xl border p-3">
+                        <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_auto]">
+                          <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={item.productId} onChange={(e) => updateMixItem(index, { productId: e.target.value })}>
+                            {chemicalProducts.map((productOption) => <option key={productOption.id} value={productOption.id}>{productOption.name}</option>)}
+                          </select>
+                          <Input type="number" placeholder="Rate applied" value={item.rateApplied} onChange={(e) => updateMixItem(index, { rateApplied: e.target.value })} />
+                          <Input placeholder="Rate unit" value={item.rateUnit} onChange={(e) => updateMixItem(index, { rateUnit: e.target.value })} />
+                          <Input type="number" placeholder="Total quantity used" value={item.totalQuantityUsed} onChange={(e) => updateMixItem(index, { totalQuantityUsed: e.target.value })} />
+                          <Button variant="ghost" size="sm" onClick={() => removeMixItem(index)}>Remove</Button>
+                        </div>
+                        {product && (
+                          <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-4">
+                            <p>EPA: {product.epaRegistrationNumber || 'Not recorded'}</p>
+                            <p>Formulation: {product.formulation || 'Not recorded'}</p>
+                            <p>Signal Word: {product.signalWord || 'Not recorded'}</p>
+                            <p>REI: {product.reentryIntervalHours ?? 0} hrs</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <div className="mb-4 flex items-center gap-2">
+                  <Wind className="h-4 w-4 text-primary" />
+                  <p className="text-sm font-semibold">Weather At Application</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Linked Weather Log</label>
+                    <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.weatherLogId} onChange={(e) => setDraft((current) => ({ ...current, weatherLogId: e.target.value }))}>
+                      {locationWeatherLogs.map((log) => (
+                        <option key={log.id} value={log.id}>
+                          {log.date} · {log.currentConditions}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Wind Direction</label>
+                    <Input className="mt-1" value={draft.windDirection} onChange={(e) => setDraft((current) => ({ ...current, windDirection: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Wind Speed (mph)</label>
+                    <Input className="mt-1" type="number" value={draft.windSpeedAtApplication} onChange={(e) => setDraft((current) => ({ ...current, windSpeedAtApplication: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Temperature (F)</label>
+                    <Input className="mt-1" type="number" value={draft.temperatureAtApplication} onChange={(e) => setDraft((current) => ({ ...current, temperatureAtApplication: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Humidity (%)</label>
+                    <Input className="mt-1" type="number" value={draft.humidityAtApplication} onChange={(e) => setDraft((current) => ({ ...current, humidityAtApplication: e.target.value }))} />
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="text-xs font-medium text-muted-foreground">Weather Conditions Summary</label>
+                    <Input className="mt-1" value={draft.weatherConditionsSummary} onChange={(e) => setDraft((current) => ({ ...current, weatherConditionsSummary: e.target.value }))} />
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Restricted Entry Until</label>
+                    <Input className="mt-1" type="datetime-local" value={draft.restrictedEntryUntil ? draft.restrictedEntryUntil.slice(0, 16) : ''} onChange={(e) => setDraft((current) => ({ ...current, restrictedEntryUntil: e.target.value ? new Date(e.target.value).toISOString() : '' }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Site Conditions</label>
+                    <Input className="mt-1" value={draft.siteConditions} onChange={(e) => setDraft((current) => ({ ...current, siteConditions: e.target.value }))} />
+                  </div>
                 </div>
               </Card>
 
@@ -461,11 +753,26 @@ export default function ApplicationsPage() {
             <div className="space-y-4">
               {selectedArea && snapshotLocation && <WeatherSnapshotCard location={snapshotLocation} log={snapshotLog} compact />}
               <Card className="p-4">
-                <p className="text-sm font-semibold">Workflow Checklist</p>
+                <p className="text-sm font-semibold">Compliance Checklist</p>
                 <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-                  <p className="rounded-lg bg-muted/40 px-3 py-3">1. Confirm application area and linked weather location.</p>
-                  <p className="rounded-lg bg-muted/40 px-3 py-3">2. Log every product in the tank mix with rate and quantity used.</p>
-                  <p className="rounded-lg bg-muted/40 px-3 py-3">3. Capture weather conditions so reports can compare rainfall and application timing together.</p>
+                  <p className="rounded-lg bg-muted/40 px-3 py-3">1. Record every product in tank mix order with the actual use rate and total quantity used.</p>
+                  <p className="rounded-lg bg-muted/40 px-3 py-3">2. Capture applicator and supervisor license details for the record.</p>
+                  <p className="rounded-lg bg-muted/40 px-3 py-3">3. Save a weather snapshot so rainfall, wind, and application timing can be analyzed together in reports.</p>
+                </div>
+              </Card>
+              <Card className="p-4">
+                <p className="text-sm font-semibold">Selected Mix Summary</p>
+                <div className="mt-3 space-y-3">
+                  {draftMixItems.map((item, index) => {
+                    const product = chemicalProducts.find((entry) => entry.id === item.productId);
+                    return (
+                      <div key={`${item.productId}-${index}-summary`} className="rounded-lg border px-3 py-3 text-sm">
+                        <p className="font-medium">{index + 1}. {product?.name ?? 'Product not selected'}</p>
+                        <p className="text-xs text-muted-foreground">{item.rateApplied} {item.rateUnit} · {item.totalQuantityUsed} total</p>
+                        <p className="mt-1 text-xs text-muted-foreground">EPA {product?.epaRegistrationNumber ?? 'n/a'} · {product?.signalWord ?? 'No signal word'} · {product?.restrictedUse ? 'Restricted use' : 'General use'}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </Card>
             </div>
@@ -480,3 +787,8 @@ export default function ApplicationsPage() {
     </div>
   );
 }
+
+
+
+
+

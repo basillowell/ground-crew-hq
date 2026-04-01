@@ -137,6 +137,13 @@ export interface ChemicalProduct {
   productType: string;
   targetUse: string;
   rateUnit: string;
+  epaRegistrationNumber?: string;
+  formulation?: string;
+  signalWord?: string;
+  restrictedUse?: boolean;
+  reentryIntervalHours?: number;
+  preHarvestIntervalHours?: number;
+  defaultApplicationMethod?: string;
 }
 
 export interface ApplicationArea {
@@ -151,15 +158,28 @@ export interface ChemicalApplicationLog {
   applicationDate: string;
   startTime: string;
   endTime: string;
+  applicationTimestamp?: string;
   areaId: string;
   targetPest: string;
   agronomicPurpose: string;
+  applicationMethod?: string;
   carrierVolume: number;
+  totalMixVolume?: number;
   areaTreated: number;
   areaUnit: string;
   applicatorId: string;
+  applicatorLicenseNumber?: string;
+  supervisorName?: string;
+  supervisorLicenseNumber?: string;
   equipmentUsedId?: string;
   weatherLogId?: string;
+  weatherConditionsSummary?: string;
+  windDirection?: string;
+  windSpeedAtApplication?: number;
+  temperatureAtApplication?: number;
+  humidityAtApplication?: number;
+  restrictedEntryUntil?: string;
+  siteConditions?: string;
   notes: string;
 }
 
@@ -170,6 +190,7 @@ export interface ChemicalApplicationTankMixItem {
   rateApplied: number;
   rateUnit: string;
   totalQuantityUsed: number;
+  mixOrder?: number;
 }
 
 export interface ProgramSettings {
@@ -398,10 +419,10 @@ export const manualRainfallEntries: ManualRainfallEntry[] = [
 ];
 
 export const chemicalProducts: ChemicalProduct[] = [
-  { id: 'cp1', name: 'Primo Maxx', productType: 'Growth Regulator', targetUse: 'Growth control', rateUnit: 'oz/1000 sq ft' },
-  { id: 'cp2', name: 'Banner Maxx', productType: 'Fungicide', targetUse: 'Disease pressure', rateUnit: 'oz/acre' },
-  { id: 'cp3', name: 'Revolver', productType: 'Herbicide', targetUse: 'Weed control', rateUnit: 'oz/acre' },
-  { id: 'cp4', name: 'Wetting Agent 90', productType: 'Soil Surfactant', targetUse: 'Moisture management', rateUnit: 'gal/acre' },
+  { id: 'cp1', name: 'Primo Maxx', productType: 'Growth Regulator', targetUse: 'Growth control', rateUnit: 'oz/1000 sq ft', epaRegistrationNumber: '100-1017', formulation: 'EC', signalWord: 'Caution', restrictedUse: false, reentryIntervalHours: 12, preHarvestIntervalHours: 0, defaultApplicationMethod: 'Ground boom spray' },
+  { id: 'cp2', name: 'Banner Maxx', productType: 'Fungicide', targetUse: 'Disease pressure', rateUnit: 'oz/acre', epaRegistrationNumber: '100-773', formulation: 'EC', signalWord: 'Warning', restrictedUse: false, reentryIntervalHours: 12, preHarvestIntervalHours: 0, defaultApplicationMethod: 'Ground spray' },
+  { id: 'cp3', name: 'Revolver', productType: 'Herbicide', targetUse: 'Weed control', rateUnit: 'oz/acre', epaRegistrationNumber: '264-829', formulation: 'SC', signalWord: 'Warning', restrictedUse: false, reentryIntervalHours: 12, preHarvestIntervalHours: 0, defaultApplicationMethod: 'Directed spray' },
+  { id: 'cp4', name: 'Wetting Agent 90', productType: 'Soil Surfactant', targetUse: 'Moisture management', rateUnit: 'gal/acre', epaRegistrationNumber: 'N/A', formulation: 'Liquid', signalWord: 'Caution', restrictedUse: false, reentryIntervalHours: 4, preHarvestIntervalHours: 0, defaultApplicationMethod: 'Spray rig' },
 ];
 
 export const applicationAreas: ApplicationArea[] = [
@@ -412,12 +433,12 @@ export const applicationAreas: ApplicationArea[] = [
 ];
 
 export const chemicalApplicationLogs: ChemicalApplicationLog[] = [
-  { id: 'cal1', applicationDate: '2024-03-25', startTime: '05:45', endTime: '07:10', areaId: 'aa1', targetPest: 'Dollar spot', agronomicPurpose: 'Preventive fungicide and growth regulation', carrierVolume: 180, areaTreated: 4.5, areaUnit: 'acres', applicatorId: 'e1', equipmentUsedId: 'u7', weatherLogId: 'wd1', notes: 'Completed before golfer play. Light wind, no drift concerns.' },
-  { id: 'cal2', applicationDate: '2024-03-25', startTime: '06:15', endTime: '07:05', areaId: 'aa3', targetPest: 'Localized dry spot', agronomicPurpose: 'Moisture management', carrierVolume: 90, areaTreated: 2.1, areaUnit: 'acres', applicatorId: 'e4', equipmentUsedId: 'u6', weatherLogId: 'wd3', notes: 'Manual weather entry used due to station outage.' },
+  { id: 'cal1', applicationDate: '2024-03-25', startTime: '05:45', endTime: '07:10', applicationTimestamp: '2024-03-25T05:45:00', areaId: 'aa1', targetPest: 'Dollar spot', agronomicPurpose: 'Preventive fungicide and growth regulation', applicationMethod: 'Ground boom spray', carrierVolume: 180, totalMixVolume: 180, areaTreated: 4.5, areaUnit: 'acres', applicatorId: 'e1', applicatorLicenseNumber: 'NC-45612', supervisorName: 'Mike Johnson', supervisorLicenseNumber: 'NC-45612', equipmentUsedId: 'u7', weatherLogId: 'wd1', weatherConditionsSummary: 'Partly cloudy, calm start, drying conditions after sunrise', windDirection: 'NE', windSpeedAtApplication: 4, temperatureAtApplication: 66, humidityAtApplication: 72, restrictedEntryUntil: '2024-03-25T19:10:00', siteConditions: 'Leaf surface slightly damp at first pass, no visible drift, greens closed until dry-down.', notes: 'Completed before golfer play. Light wind, no drift concerns.' },
+  { id: 'cal2', applicationDate: '2024-03-25', startTime: '06:15', endTime: '07:05', applicationTimestamp: '2024-03-25T06:15:00', areaId: 'aa3', targetPest: 'Localized dry spot', agronomicPurpose: 'Moisture management', applicationMethod: 'Boom spray', carrierVolume: 90, totalMixVolume: 90, areaTreated: 2.1, areaUnit: 'acres', applicatorId: 'e4', applicatorLicenseNumber: 'NC-33820', supervisorName: 'James Wilson', supervisorLicenseNumber: 'NC-33820', equipmentUsedId: 'u6', weatherLogId: 'wd3', weatherConditionsSummary: 'Manual weather entry used due to station outage', windDirection: 'S', windSpeedAtApplication: 5, temperatureAtApplication: 65, humidityAtApplication: 76, restrictedEntryUntil: '2024-03-25T11:05:00', siteConditions: 'Practice facility closed during application. Moisture stress visible in center section.', notes: 'Manual weather entry used due to station outage.' },
 ];
 
 export const chemicalApplicationTankMixItems: ChemicalApplicationTankMixItem[] = [
-  { id: 'cmi1', applicationLogId: 'cal1', productId: 'cp1', rateApplied: 0.2, rateUnit: 'oz/1000 sq ft', totalQuantityUsed: 38 },
-  { id: 'cmi2', applicationLogId: 'cal1', productId: 'cp2', rateApplied: 18, rateUnit: 'oz/acre', totalQuantityUsed: 5.1 },
-  { id: 'cmi3', applicationLogId: 'cal2', productId: 'cp4', rateApplied: 2.5, rateUnit: 'gal/acre', totalQuantityUsed: 5.25 },
+  { id: 'cmi1', applicationLogId: 'cal1', productId: 'cp1', rateApplied: 0.2, rateUnit: 'oz/1000 sq ft', totalQuantityUsed: 38, mixOrder: 1 },
+  { id: 'cmi2', applicationLogId: 'cal1', productId: 'cp2', rateApplied: 18, rateUnit: 'oz/acre', totalQuantityUsed: 5.1, mixOrder: 2 },
+  { id: 'cmi3', applicationLogId: 'cal2', productId: 'cp4', rateApplied: 2.5, rateUnit: 'gal/acre', totalQuantityUsed: 5.25, mixOrder: 1 },
 ];
