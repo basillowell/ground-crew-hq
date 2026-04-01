@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { employees } from '@/data/mockData';
+import { useEffect, useMemo, useState } from 'react';
+import type { Employee } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,16 +8,28 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Send, Mail, Phone, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { loadEmployees } from '@/lib/dataStore';
 
 export default function MessagingPage() {
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [search, setSearch] = useState('');
   const { toast } = useToast();
 
-  const filtered = employees.filter(e =>
-    `${e.firstName} ${e.lastName}`.toLowerCase().includes(search.toLowerCase()) && e.status === 'active'
+  useEffect(() => {
+    setEmployees(loadEmployees());
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      employees.filter(
+        (employee) =>
+          `${employee.firstName} ${employee.lastName}`.toLowerCase().includes(search.toLowerCase()) &&
+          employee.status === 'active',
+      ),
+    [employees, search],
   );
 
   const toggle = (id: string) => {

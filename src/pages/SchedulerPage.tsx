@@ -1,42 +1,17 @@
-import { employees } from '@/data/mockData';
+import { useEffect, useMemo, useState } from 'react';
+import type { Employee, ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StatusChip } from '@/components/StatusChip';
-import { Plus, Copy, Download, Search, AlertTriangle, Filter } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Plus, Copy, Download, Search, Filter, CalendarDays, CloudSun, FlaskConical } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
+import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
+import { loadApplicationAreas, loadChemicalApplicationLogs, loadEmployees, loadScheduleEntries, loadWeatherDailyLogs, loadWeatherLocations, saveScheduleEntries } from '@/lib/dataStore';
 
 const days = ['Mon 3/25', 'Tue 3/26', 'Wed 3/27', 'Thu 3/28', 'Fri 3/29', 'Sat 3/30', 'Sun 3/31'];
-
-const scheduleData: Record<string, Record<string, { start: string; end: string; status: string }>> = {
-  e1: {
-    'Mon 3/25': { start: '5:00', end: '1:30', status: 'scheduled' },
-    'Tue 3/26': { start: '5:00', end: '1:30', status: 'scheduled' },
-    'Wed 3/27': { start: '5:00', end: '1:30', status: 'scheduled' },
-    'Thu 3/28': { start: '5:00', end: '1:30', status: 'scheduled' },
-    'Fri 3/29': { start: '5:00', end: '1:30', status: 'scheduled' },
-    'Sat 3/30': { start: '', end: '', status: 'day-off' },
-    'Sun 3/31': { start: '', end: '', status: 'day-off' },
-  },
-  e2: {
-    'Mon 3/25': { start: '5:30', end: '2:00', status: 'scheduled' },
-    'Tue 3/26': { start: '', end: '', status: 'day-off' },
-    'Wed 3/27': { start: '5:30', end: '2:00', status: 'scheduled' },
-    'Thu 3/28': { start: '5:30', end: '2:00', status: 'scheduled' },
-    'Fri 3/29': { start: '5:30', end: '2:00', status: 'scheduled' },
-    'Sat 3/30': { start: '6:00', end: '12:00', status: 'scheduled' },
-    'Sun 3/31': { start: '', end: '', status: 'day-off' },
-  },
-  e3: {
-    'Mon 3/25': { start: '6:00', end: '2:30', status: 'scheduled' },
-    'Tue 3/26': { start: '6:00', end: '2:30', status: 'scheduled' },
-    'Wed 3/27': { start: '6:00', end: '2:30', status: 'scheduled' },
-    'Thu 3/28': { start: '', end: '', status: 'vacation' },
-    'Fri 3/29': { start: '', end: '', status: 'vacation' },
-    'Sat 3/30': { start: '', end: '', status: 'day-off' },
-    'Sun 3/31': { start: '', end: '', status: 'day-off' },
-  },
-};
+const dayDates = ['2024-03-25', '2024-03-26', '2024-03-27', '2024-03-28', '2024-03-29', '2024-03-30', '2024-03-31'];
 
 const statusColors: Record<string, string> = {
   scheduled: 'bg-primary/10 border-primary/30 text-primary',
@@ -46,20 +21,207 @@ const statusColors: Record<string, string> = {
 };
 
 export default function SchedulerPage() {
-  const activeEmployees = employees.filter(e => e.status === 'active');
+  const [employeeList, setEmployeeList] = useState<Employee[]>([]);
+  const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
+  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
+  const [search, setSearch] = useState('');
+  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
+  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
+  const [applicationLogs, setApplicationLogs] = useState<ChemicalApplicationLog[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [draft, setDraft] = useState({
+    employeeId: '',
+    date: dayDates[0],
+    shiftStart: '05:00',
+    shiftEnd: '13:30',
+    status: 'scheduled' as ScheduleEntry['status'],
+  });
+
+  useEffect(() => {
+    const storedEmployees = loadEmployees();
+    setEmployeeList(storedEmployees);
+    setApplicationAreas(loadApplicationAreas());
+    setScheduleList(loadScheduleEntries());
+    setWeatherLogs(loadWeatherDailyLogs());
+    setWeatherLocations(loadWeatherLocations());
+    setApplicationLogs(loadChemicalApplicationLogs());
+    setSelectedEmployeeId(storedEmployees.find((employee) => employee.status === 'active')?.id ?? '');
+    setDraft((current) => ({
+      ...current,
+      employeeId: storedEmployees.find((employee) => employee.status === 'active')?.id ?? current.employeeId,
+    }));
+  }, []);
+
+  const activeEmployees = useMemo(
+    () =>
+      employeeList.filter(
+        (employee) =>
+          employee.status === 'active' &&
+          `${employee.firstName} ${employee.lastName} ${employee.group}`.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [employeeList, search],
+  );
+
+  const summary = useMemo(
+    () => ({
+      scheduledShifts: scheduleList.filter((entry) => entry.status === 'scheduled').length,
+      dayOffs: scheduleList.filter((entry) => entry.status === 'day-off').length,
+      coverage: new Set(scheduleList.filter((entry) => entry.status === 'scheduled').map((entry) => entry.employeeId)).size,
+    }),
+    [scheduleList],
+  );
+
+  const latestWeatherLog = useMemo(
+    () => [...weatherLogs].sort((left, right) => right.date.localeCompare(left.date))[0],
+    [weatherLogs],
+  );
+
+  const weatherLocation = latestWeatherLog
+    ? weatherLocations.find((location) => location.id === latestWeatherLog.locationId) ?? weatherLocations[0]
+    : weatherLocations[0];
+
+  const weeklyApplications = useMemo(
+    () => applicationLogs.filter((log) => dayDates.includes(log.applicationDate)),
+    [applicationLogs],
+  );
+
+  function persist(nextEntries: ScheduleEntry[]) {
+    setScheduleList(nextEntries);
+    saveScheduleEntries(nextEntries);
+  }
+
+  function openAddShift(employeeId?: string, date?: string) {
+    const targetEmployeeId = employeeId ?? selectedEmployeeId ?? activeEmployees[0]?.id ?? '';
+    setDraft({
+      employeeId: targetEmployeeId,
+      date: date ?? dayDates[0],
+      shiftStart: '05:00',
+      shiftEnd: '13:30',
+      status: 'scheduled',
+    });
+    setDialogOpen(true);
+  }
+
+  function handleSaveShift() {
+    if (!draft.employeeId || !draft.date) return;
+
+    const existing = scheduleList.find((entry) => entry.employeeId === draft.employeeId && entry.date === draft.date);
+    let nextEntries: ScheduleEntry[];
+
+    if (existing) {
+      nextEntries = scheduleList.map((entry) =>
+        entry.id === existing.id ? { ...entry, ...draft } : entry,
+      );
+    } else {
+      nextEntries = [
+        ...scheduleList,
+        {
+          id: `s${Date.now()}`,
+          employeeId: draft.employeeId,
+          date: draft.date,
+          shiftStart: draft.shiftStart,
+          shiftEnd: draft.shiftEnd,
+          status: draft.status,
+        },
+      ];
+    }
+
+    persist(nextEntries);
+    setDialogOpen(false);
+  }
+
+  function copyWeek() {
+    const sourceDate = dayDates[0];
+    const nextEntries = [...scheduleList];
+
+    for (const employee of activeEmployees) {
+      const base = scheduleList.find((entry) => entry.employeeId === employee.id && entry.date === sourceDate);
+      if (!base) continue;
+
+      for (const date of dayDates.slice(1)) {
+        const exists = nextEntries.find((entry) => entry.employeeId === employee.id && entry.date === date);
+        if (!exists) {
+          nextEntries.push({ ...base, id: `s${Date.now()}-${employee.id}-${date}`, date });
+        }
+      }
+    }
+
+    persist(nextEntries);
+  }
 
   return (
     <div className="p-4">
+      <div className="grid gap-4 md:grid-cols-3 mb-4">
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+          <div className="text-sm text-muted-foreground mb-1">Scheduled shifts</div>
+          <div className="text-3xl font-semibold">{summary.scheduledShifts}</div>
+          <p className="text-xs text-muted-foreground mt-1">Persistent weekly coverage entries across your active roster.</p>
+        </div>
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+          <div className="text-sm text-muted-foreground mb-1">Crew covered</div>
+          <div className="text-3xl font-semibold">{summary.coverage}</div>
+          <p className="text-xs text-muted-foreground mt-1">Employees ready to flow into Workboard assignment.</p>
+        </div>
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+          <div className="text-sm text-muted-foreground mb-1">Day off entries</div>
+          <div className="text-3xl font-semibold">{summary.dayOffs}</div>
+          <p className="text-xs text-muted-foreground mt-1">Track off days, vacation, and exceptions in the same planner.</p>
+        </div>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] mb-4">
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <CloudSun className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Weather Planning Snapshot</h3>
+          </div>
+          {weatherLocation && latestWeatherLog ? (
+            <WeatherSnapshotCard location={weatherLocation} log={latestWeatherLog} compact />
+          ) : (
+            <p className="text-sm text-muted-foreground">No weather log is available for this planning window yet.</p>
+          )}
+        </div>
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <FlaskConical className="h-4 w-4 text-chart-orange" />
+            <h3 className="text-sm font-semibold">Application Conflicts and Cues</h3>
+          </div>
+          <div className="space-y-3">
+            <div className="rounded-2xl bg-muted/50 p-3">
+              <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Applications this week</div>
+              <div className="mt-1 text-2xl font-semibold">{weeklyApplications.length}</div>
+            </div>
+            {weeklyApplications.slice(0, 2).map((log) => {
+              const area = applicationAreas.find((entry) => entry.id === log.areaId);
+              return (
+                <div key={log.id} className="rounded-2xl border p-3">
+                  <div className="text-sm font-medium">{area?.name ?? 'Unknown area'}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {log.applicationDate} · {log.startTime} - {log.endTime}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">{log.agronomicPurpose}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Weekly Schedule</h2>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Plus className="h-3 w-3" /> Add Shift</Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Copy className="h-3 w-3" /> Copy Week</Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Download className="h-3 w-3" /> Export PDF</Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => openAddShift()}>
+            <Plus className="h-3 w-3" /> Add Shift
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={copyWeek}>
+            <Copy className="h-3 w-3" /> Copy Week
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => window.print()}>
+            <Download className="h-3 w-3" /> Export PDF
+          </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Filter className="h-3 w-3" /> Filter</Button>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Search..." className="h-7 pl-7 w-36 text-xs" />
+            <Input placeholder="Search..." value={search} onChange={(event) => setSearch(event.target.value)} className="h-7 pl-7 w-36 text-xs" />
           </div>
         </div>
       </div>
@@ -77,7 +239,6 @@ export default function SchedulerPage() {
           </thead>
           <tbody>
             {activeEmployees.map(emp => {
-              const schedule = scheduleData[emp.id] || {};
               let totalHours = 0;
               return (
                 <tr key={emp.id} className="border-b hover:bg-muted/20">
@@ -92,29 +253,124 @@ export default function SchedulerPage() {
                       </div>
                     </div>
                   </td>
-                  {days.map(d => {
-                    const entry = schedule[d];
-                    if (!entry) return <td key={d} className="p-2 text-center"><div className="h-10 rounded border border-dashed border-border" /></td>;
-                    if (entry.status === 'scheduled') totalHours += 8;
+                  {days.map((day, index) => {
+                    const entry = scheduleList.find((scheduleEntry) => scheduleEntry.employeeId === emp.id && scheduleEntry.date === dayDates[index]);
+                    if (!entry) {
+                      return (
+                        <td key={day} className="p-2 text-center">
+                          <button
+                            type="button"
+                            className="h-10 w-full rounded border border-dashed border-border text-[10px] text-muted-foreground"
+                            onClick={() => openAddShift(emp.id, dayDates[index])}
+                          >
+                            Add
+                          </button>
+                        </td>
+                      );
+                    }
+                    if (entry.status === 'scheduled') {
+                      const [startHour, startMinute] = entry.shiftStart.split(':').map(Number);
+                      const [endHour, endMinute] = entry.shiftEnd.split(':').map(Number);
+                      totalHours += (endHour * 60 + endMinute - (startHour * 60 + startMinute)) / 60;
+                    }
                     return (
-                      <td key={d} className="p-2">
-                        <div className={`rounded border px-2 py-1.5 text-center text-xs ${statusColors[entry.status] || statusColors.scheduled}`}>
+                      <td key={day} className="p-2">
+                        <button
+                          type="button"
+                          className={`w-full rounded border px-2 py-1.5 text-center text-xs ${statusColors[entry.status] || statusColors.scheduled}`}
+                          onClick={() => {
+                            setDraft({
+                              employeeId: emp.id,
+                              date: dayDates[index],
+                              shiftStart: entry.shiftStart,
+                              shiftEnd: entry.shiftEnd,
+                              status: entry.status,
+                            });
+                            setDialogOpen(true);
+                          }}
+                        >
                           {entry.status === 'scheduled' ? (
-                            <><div className="font-medium">{entry.start} - {entry.end}</div></>
+                            <div className="font-medium">{entry.shiftStart} - {entry.shiftEnd}</div>
                           ) : (
                             <div className="capitalize font-medium">{entry.status.replace('-', ' ')}</div>
                           )}
-                        </div>
+                        </button>
                       </td>
                     );
                   })}
-                  <td className="p-3 text-center font-mono text-xs font-medium">{totalHours}h</td>
+                  <td className="p-3 text-center font-mono text-xs font-medium">{totalHours.toFixed(1)}h</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </Card>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              Add or Edit Shift
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Employee</label>
+              <select
+                value={draft.employeeId}
+                onChange={(event) => setDraft({ ...draft, employeeId: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {activeEmployees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.firstName} {employee.lastName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Date</label>
+              <select
+                value={draft.date}
+                onChange={(event) => setDraft({ ...draft, date: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {dayDates.map((date, index) => (
+                  <option key={date} value={date}>
+                    {days[index]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Status</label>
+              <select
+                value={draft.status}
+                onChange={(event) => setDraft({ ...draft, status: event.target.value as ScheduleEntry['status'] })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="scheduled">Scheduled</option>
+                <option value="day-off">Day off</option>
+                <option value="vacation">Vacation</option>
+                <option value="sick">Sick</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Shift Start</label>
+              <Input type="time" value={draft.shiftStart} onChange={(event) => setDraft({ ...draft, shiftStart: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Shift End</label>
+              <Input type="time" value={draft.shiftEnd} onChange={(event) => setDraft({ ...draft, shiftEnd: event.target.value })} className="mt-1" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveShift}>Save Shift</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+// Legacy compatibility layer: app code should prefer importing seed values from `@/data/seedData`.
+
 export interface Employee {
   id: string;
   firstName: string;
@@ -77,12 +79,97 @@ export interface Note {
 }
 
 export interface Assignment {
+  id?: string;
   employeeId: string;
   taskId: string;
   equipmentId?: string;
+  date: string;
   startTime: string;
   duration: number;
   area: string;
+}
+
+export interface WeatherLocation {
+  id: string;
+  name: string;
+  property: string;
+  area: string;
+}
+
+export interface WeatherStation {
+  id: string;
+  locationId: string;
+  name: string;
+  provider: string;
+  stationCode: string;
+  isPrimary: boolean;
+  status: 'online' | 'offline';
+}
+
+export interface WeatherDailyLog {
+  id: string;
+  locationId: string;
+  stationId?: string;
+  date: string;
+  currentConditions: string;
+  forecast: string;
+  rainfallTotal: number;
+  temperature: number;
+  humidity: number;
+  wind: number;
+  et: number;
+  source: 'station' | 'manual-override';
+  notes?: string;
+}
+
+export interface ManualRainfallEntry {
+  id: string;
+  locationId: string;
+  date: string;
+  rainfallAmount: number;
+  enteredBy: string;
+  notes?: string;
+}
+
+export interface ChemicalProduct {
+  id: string;
+  name: string;
+  productType: string;
+  targetUse: string;
+  rateUnit: string;
+}
+
+export interface ApplicationArea {
+  id: string;
+  name: string;
+  property: string;
+  weatherLocationId: string;
+}
+
+export interface ChemicalApplicationLog {
+  id: string;
+  applicationDate: string;
+  startTime: string;
+  endTime: string;
+  areaId: string;
+  targetPest: string;
+  agronomicPurpose: string;
+  carrierVolume: number;
+  areaTreated: number;
+  areaUnit: string;
+  applicatorId: string;
+  equipmentUsedId?: string;
+  weatherLogId?: string;
+  notes: string;
+}
+
+export interface ChemicalApplicationTankMixItem {
+  id: string;
+  applicationLogId: string;
+  productId: string;
+  rateApplied: number;
+  rateUnit: string;
+  totalQuantityUsed: number;
 }
 
 export const employees: Employee[] = [
@@ -163,15 +250,15 @@ export const notes: Note[] = [
 ];
 
 export const assignments: Assignment[] = [
-  { employeeId: 'e1', taskId: 't1', equipmentId: 'u2', startTime: '05:00', duration: 120, area: 'Greens 1-9' },
-  { employeeId: 'e1', taskId: 't5', startTime: '07:00', duration: 45, area: 'All Greens' },
-  { employeeId: 'e2', taskId: 't2', equipmentId: 'u4', startTime: '05:30', duration: 180, area: 'Fairways 1-9' },
-  { employeeId: 'e3', taskId: 't7', startTime: '06:00', duration: 90, area: 'Clubhouse Landscape' },
-  { employeeId: 'e3', taskId: 't12', startTime: '07:30', duration: 60, area: 'Cart Paths' },
-  { employeeId: 'e4', taskId: 't6', startTime: '05:00', duration: 60, area: 'New Plantings' },
-  { employeeId: 'e5', taskId: 't3', startTime: '06:00', duration: 90, area: 'Tees 1-18' },
-  { employeeId: 'e6', taskId: 't4', startTime: '06:00', duration: 120, area: 'All Bunkers' },
-  { employeeId: 'e7', taskId: 't10', startTime: '06:30', duration: 120, area: 'Shop' },
+  { id: 'a1', employeeId: 'e1', taskId: 't1', equipmentId: 'u2', date: '2024-03-25', startTime: '05:00', duration: 120, area: 'Greens 1-9' },
+  { id: 'a2', employeeId: 'e1', taskId: 't5', date: '2024-03-25', startTime: '07:00', duration: 45, area: 'All Greens' },
+  { id: 'a3', employeeId: 'e2', taskId: 't2', equipmentId: 'u4', date: '2024-03-25', startTime: '05:30', duration: 180, area: 'Fairways 1-9' },
+  { id: 'a4', employeeId: 'e3', taskId: 't7', date: '2024-03-25', startTime: '06:00', duration: 90, area: 'Clubhouse Landscape' },
+  { id: 'a5', employeeId: 'e3', taskId: 't12', date: '2024-03-25', startTime: '07:30', duration: 60, area: 'Cart Paths' },
+  { id: 'a6', employeeId: 'e4', taskId: 't6', equipmentId: 'u6', date: '2024-03-25', startTime: '05:00', duration: 60, area: 'New Plantings' },
+  { id: 'a7', employeeId: 'e5', taskId: 't3', date: '2024-03-25', startTime: '06:00', duration: 90, area: 'Tees 1-18' },
+  { id: 'a8', employeeId: 'e6', taskId: 't4', date: '2024-03-25', equipmentId: 'u8', startTime: '06:00', duration: 120, area: 'All Bunkers' },
+  { id: 'a9', employeeId: 'e7', taskId: 't10', date: '2024-03-25', startTime: '06:30', duration: 120, area: 'Shop' },
 ];
 
 export const departments = ['Maintenance', 'Equipment', 'Landscape', 'Irrigation'];
@@ -197,4 +284,56 @@ export const reportCategories = [
   { id: 'r2', name: 'Equipment Reports', reports: ['Equipment Usage Summary', 'Repair Cost Analysis', 'Downtime Report', 'Maintenance Schedule'] },
   { id: 'r3', name: 'Task Reports', reports: ['Task Completion Rate', 'Task Distribution', 'Area Coverage', 'Chemical Application Log'] },
   { id: 'r4', name: 'Safety Reports', reports: ['Incident Log', 'Safety Training Status', 'Equipment Inspection', 'Chemical Exposure'] },
+  { id: 'r5', name: 'Weather Reports', reports: ['Rainfall History', 'Weather By Location', 'ET Trend Summary'] },
+  { id: 'r6', name: 'Applications', reports: ['Application Log Register', 'Product Usage Summary', 'Rainfall vs Application Window'] },
+];
+
+export const weatherLocations: WeatherLocation[] = [
+  { id: 'wl1', name: 'North Course', property: 'Ground Crew HQ', area: 'Greens + Fairways' },
+  { id: 'wl2', name: 'South Course', property: 'Ground Crew HQ', area: 'Practice + Tees' },
+  { id: 'wl3', name: 'Clubhouse Grounds', property: 'Ground Crew HQ', area: 'Landscape + Entry' },
+];
+
+export const weatherStations: WeatherStation[] = [
+  { id: 'ws1', locationId: 'wl1', name: 'North Primary', provider: 'On-site Davis', stationCode: 'NC-01', isPrimary: true, status: 'online' },
+  { id: 'ws2', locationId: 'wl1', name: 'North Backup', provider: 'PWS', stationCode: 'NC-ALT', isPrimary: false, status: 'online' },
+  { id: 'ws3', locationId: 'wl2', name: 'South Primary', provider: 'On-site Davis', stationCode: 'SC-01', isPrimary: true, status: 'offline' },
+  { id: 'ws4', locationId: 'wl3', name: 'Clubhouse Primary', provider: 'NOAA Feed', stationCode: 'CH-01', isPrimary: true, status: 'online' },
+];
+
+export const weatherDailyLogs: WeatherDailyLog[] = [
+  { id: 'wd1', locationId: 'wl1', stationId: 'ws1', date: '2024-03-25', currentConditions: 'Partly Cloudy', forecast: 'Warm afternoon with light wind', rainfallTotal: 0.08, temperature: 71, humidity: 64, wind: 7, et: 0.17, source: 'station' },
+  { id: 'wd2', locationId: 'wl1', stationId: 'ws1', date: '2024-03-26', currentConditions: 'Sunny', forecast: 'Dry and bright', rainfallTotal: 0.0, temperature: 76, humidity: 58, wind: 6, et: 0.19, source: 'station' },
+  { id: 'wd3', locationId: 'wl2', stationId: 'ws3', date: '2024-03-25', currentConditions: 'Manual Override', forecast: 'Station offline, conditions entered manually', rainfallTotal: 0.12, temperature: 69, humidity: 70, wind: 8, et: 0.14, source: 'manual-override', notes: 'South station offline at 5:40 AM' },
+  { id: 'wd4', locationId: 'wl3', stationId: 'ws4', date: '2024-03-25', currentConditions: 'Cloudy', forecast: 'Chance of passing shower after 4 PM', rainfallTotal: 0.04, temperature: 68, humidity: 73, wind: 9, et: 0.12, source: 'station' },
+];
+
+export const manualRainfallEntries: ManualRainfallEntry[] = [
+  { id: 'mr1', locationId: 'wl2', date: '2024-03-25', rainfallAmount: 0.12, enteredBy: 'James Wilson', notes: 'Measured at practice tee gauge due to station outage' },
+  { id: 'mr2', locationId: 'wl3', date: '2024-03-24', rainfallAmount: 0.09, enteredBy: 'Sarah Chen', notes: 'Clubhouse landscape manual reading' },
+];
+
+export const chemicalProducts: ChemicalProduct[] = [
+  { id: 'cp1', name: 'Primo Maxx', productType: 'Growth Regulator', targetUse: 'Growth control', rateUnit: 'oz/1000 sq ft' },
+  { id: 'cp2', name: 'Banner Maxx', productType: 'Fungicide', targetUse: 'Disease pressure', rateUnit: 'oz/acre' },
+  { id: 'cp3', name: 'Revolver', productType: 'Herbicide', targetUse: 'Weed control', rateUnit: 'oz/acre' },
+  { id: 'cp4', name: 'Wetting Agent 90', productType: 'Soil Surfactant', targetUse: 'Moisture management', rateUnit: 'gal/acre' },
+];
+
+export const applicationAreas: ApplicationArea[] = [
+  { id: 'aa1', name: 'Greens 1-9', property: 'Ground Crew HQ', weatherLocationId: 'wl1' },
+  { id: 'aa2', name: 'Fairways 1-9', property: 'Ground Crew HQ', weatherLocationId: 'wl1' },
+  { id: 'aa3', name: 'Practice Facility', property: 'Ground Crew HQ', weatherLocationId: 'wl2' },
+  { id: 'aa4', name: 'Clubhouse Landscape', property: 'Ground Crew HQ', weatherLocationId: 'wl3' },
+];
+
+export const chemicalApplicationLogs: ChemicalApplicationLog[] = [
+  { id: 'cal1', applicationDate: '2024-03-25', startTime: '05:45', endTime: '07:10', areaId: 'aa1', targetPest: 'Dollar spot', agronomicPurpose: 'Preventive fungicide and growth regulation', carrierVolume: 180, areaTreated: 4.5, areaUnit: 'acres', applicatorId: 'e1', equipmentUsedId: 'u7', weatherLogId: 'wd1', notes: 'Completed before golfer play. Light wind, no drift concerns.' },
+  { id: 'cal2', applicationDate: '2024-03-25', startTime: '06:15', endTime: '07:05', areaId: 'aa3', targetPest: 'Localized dry spot', agronomicPurpose: 'Moisture management', carrierVolume: 90, areaTreated: 2.1, areaUnit: 'acres', applicatorId: 'e4', equipmentUsedId: 'u6', weatherLogId: 'wd3', notes: 'Manual weather entry used due to station outage.' },
+];
+
+export const chemicalApplicationTankMixItems: ChemicalApplicationTankMixItem[] = [
+  { id: 'cmi1', applicationLogId: 'cal1', productId: 'cp1', rateApplied: 0.2, rateUnit: 'oz/1000 sq ft', totalQuantityUsed: 38 },
+  { id: 'cmi2', applicationLogId: 'cal1', productId: 'cp2', rateApplied: 18, rateUnit: 'oz/acre', totalQuantityUsed: 5.1 },
+  { id: 'cmi3', applicationLogId: 'cal2', productId: 'cp4', rateApplied: 2.5, rateUnit: 'gal/acre', totalQuantityUsed: 5.25 },
 ];

@@ -4,15 +4,17 @@ import { StatusChip } from '@/components/StatusChip';
 import { AvatarInitials } from '@/components/shared';
 import { TaskBlock } from './TaskBlock';
 import { GripVertical, Clock, Plus } from 'lucide-react';
-import type { Employee, Assignment, Task } from '@/data/mockData';
+import type { Employee, Assignment, Task } from '@/data/seedData';
 
 interface EmployeeRowProps {
   employee: Employee;
   assignments: Assignment[];
   tasks: Task[];
+  onAddTask?: (employeeId: string) => void;
+  onRemoveAssignment?: (assignmentIndex: number) => void;
 }
 
-export function EmployeeRow({ employee, assignments: empAssignments, tasks }: EmployeeRowProps) {
+export function EmployeeRow({ employee, assignments: empAssignments, tasks, onAddTask, onRemoveAssignment }: EmployeeRowProps) {
   const totalMinutes = empAssignments.reduce((s, a) => s + a.duration, 0);
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
@@ -36,12 +38,13 @@ export function EmployeeRow({ employee, assignments: empAssignments, tasks }: Em
           <div className="flex flex-wrap gap-1.5">
             {empAssignments.map((a, i) => {
               const task = tasks.find(t => t.id === a.taskId);
-              return task ? <TaskBlock key={i} task={task} assignment={a} /> : null;
+              return task ? <TaskBlock key={i} task={task} assignment={a} onRemove={onRemoveAssignment ? () => onRemoveAssignment(i) : undefined} /> : null;
             })}
             <Button
               variant="ghost"
               size="sm"
               className="h-7 text-xs text-muted-foreground border border-dashed border-border px-2"
+              onClick={() => onAddTask?.(employee.id)}
             >
               <Plus className="h-3 w-3 mr-1" /> Add Task
             </Button>

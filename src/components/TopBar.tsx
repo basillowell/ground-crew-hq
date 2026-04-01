@@ -2,7 +2,7 @@ import { Bell, ChevronLeft, ChevronRight, Save, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { departments } from '@/data/mockData';
+import { departments } from '@/data/seedData';
 import { Badge } from '@/components/ui/badge';
 
 interface TopBarProps {

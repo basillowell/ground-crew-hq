@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
 import { Settings, Users, ListChecks, MapPin, Clock, Plus, Trash2, GripVertical } from 'lucide-react';
-import { groups, departments } from '@/data/mockData';
+import { groups, departments } from '@/data/seedData';
 
 const locations = [
   'Greens 1-9', 'Greens 10-18', 'Fairways 1-9', 'Fairways 10-18',

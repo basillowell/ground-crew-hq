@@ -1,5 +1,11 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { initializeDataStore } from "./lib/dataStore";
 
-createRoot(document.getElementById("root")!).render(<App />);
+async function bootstrap() {
+  await initializeDataStore();
+  createRoot(document.getElementById("root")!).render(<App />);
+}
+
+void bootstrap();
