@@ -1,9 +1,8 @@
-import { tasks, groups } from '@/data/mockData';
+import { tasks } from '@/data/mockData';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Plus, Search, GripVertical } from 'lucide-react';
+import { PageHeader, SearchFilter } from '@/components/shared';
+import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 
 export default function TasksPage() {
@@ -13,15 +12,8 @@ export default function TasksPage() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Task Management</h2>
-        <Button size="sm" className="gap-1"><Plus className="h-3.5 w-3.5" /> Add Task</Button>
-      </div>
-
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search tasks..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
-      </div>
+      <PageHeader title="Task Management" action={{ label: 'Add Task' }} />
+      <SearchFilter value={search} onChange={setSearch} placeholder="Search tasks..." className="mb-4" />
 
       {categories.map(cat => {
         const catTasks = filtered.filter(t => t.category === cat);
