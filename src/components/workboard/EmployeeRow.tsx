@@ -12,10 +12,11 @@ interface EmployeeRowProps {
   tasks: Task[];
   shiftLabel?: string;
   onAddTask?: (employeeId: string) => void;
-  onRemoveAssignment?: (assignmentIndex: number) => void;
+  onEditAssignment?: (assignment: Assignment) => void;
+  onRemoveAssignment?: (assignmentId: string) => void;
 }
 
-export function EmployeeRow({ employee, assignments: empAssignments, tasks, shiftLabel, onAddTask, onRemoveAssignment }: EmployeeRowProps) {
+export function EmployeeRow({ employee, assignments: empAssignments, tasks, shiftLabel, onAddTask, onEditAssignment, onRemoveAssignment }: EmployeeRowProps) {
   const totalMinutes = empAssignments.reduce((s, a) => s + a.duration, 0);
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
@@ -41,9 +42,17 @@ export function EmployeeRow({ employee, assignments: empAssignments, tasks, shif
             {employee.role} · {employee.workerType} · {employee.language} {shiftLabel ? `· Shift ${shiftLabel}` : ''}
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {empAssignments.map((a, i) => {
+            {empAssignments.map((a) => {
               const task = tasks.find(t => t.id === a.taskId);
-              return task ? <TaskBlock key={i} task={task} assignment={a} onRemove={onRemoveAssignment ? () => onRemoveAssignment(i) : undefined} /> : null;
+              return task ? (
+                <TaskBlock
+                  key={a.id}
+                  task={task}
+                  assignment={a}
+                  onEdit={onEditAssignment ? () => onEditAssignment(a) : undefined}
+                  onRemove={onRemoveAssignment ? () => onRemoveAssignment(a.id) : undefined}
+                />
+              ) : null;
             })}
             <Button
               variant="ghost"

@@ -3,15 +3,16 @@ import { Button } from '@/components/ui/button';
 import { StatusChip } from '@/components/StatusChip';
 import type { Task, Assignment } from '@/data/seedData';
 import { loadEquipmentUnits } from '@/lib/dataStore';
-import { X } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 
 interface TaskBlockProps {
   task: Task;
   assignment: Assignment;
+  onEdit?: () => void;
   onRemove?: () => void;
 }
 
-export function TaskBlock({ task, assignment, onRemove }: TaskBlockProps) {
+export function TaskBlock({ task, assignment, onEdit, onRemove }: TaskBlockProps) {
   const equipmentUnits = loadEquipmentUnits();
   const equipment = assignment.equipmentId
     ? equipmentUnits.find(u => u.id === assignment.equipmentId)
@@ -34,6 +35,17 @@ export function TaskBlock({ task, assignment, onRemove }: TaskBlockProps) {
         <Badge variant="outline" className="text-[10px] px-1 py-0">
           {equipment.unitNumber}
         </Badge>
+      )}
+      {onEdit && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 shrink-0 rounded-full"
+          onClick={onEdit}
+        >
+          <Pencil className="h-3 w-3" />
+        </Button>
       )}
       {onRemove && (
         <Button

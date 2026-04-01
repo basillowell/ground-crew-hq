@@ -10,7 +10,7 @@ import { NotesPanel } from '@/components/workboard/NotesPanel';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
-import { StickyNote, Droplets, ClipboardList, CloudSun } from 'lucide-react';
+import { StickyNote, Droplets, ClipboardList, CloudSun, Pencil } from 'lucide-react';
 import {
   loadApplicationAreas,
   loadAssignments,
@@ -35,6 +35,12 @@ function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, 
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
 }
 
+function makeId(prefix: string) {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? `${prefix}-${crypto.randomUUID()}`
+    : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export default function WorkboardPage() {
   const [boardDate, setBoardDate] = useState(defaultBoardDate());
   const [department, setDepartment] = useState('Maintenance');
@@ -52,6 +58,7 @@ export default function WorkboardPage() {
   const [applicationLogs, setApplicationLogs] = useState(loadChemicalApplicationLogs());
   const [view, setView] = useState<'employee' | 'task'>('employee');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [assignmentDraft, setAssignmentDraft] = useState({
@@ -182,6 +189,7 @@ export default function WorkboardPage() {
 
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = workLocations[0]?.name ?? 'Primary zone';
+    setEditingAssignmentId(null);
     setSelectedEmployeeId(employeeId);
     setAssignmentDraft({
       employeeId,
@@ -194,33 +202,49 @@ export default function WorkboardPage() {
     setAssignmentDialogOpen(true);
   }
 
+  function openEditAssignmentDialog(assignment: Assignment) {
+    setEditingAssignmentId(assignment.id);
+    setSelectedEmployeeId(assignment.employeeId);
+    setAssignmentDraft({
+      employeeId: assignment.employeeId,
+      taskId: assignment.taskId,
+      equipmentId: assignment.equipmentId ?? '',
+      area: assignment.area,
+      startTime: assignment.startTime,
+      duration: String(assignment.duration),
+    });
+    setAssignmentDialogOpen(true);
+  }
+
   function saveAssignment() {
     if (!assignmentDraft.employeeId || !assignmentDraft.taskId) return;
 
-    const nextAssignments = [
-      ...assignmentList,
-      {
-        id: `a${Date.now()}`,
-        employeeId: assignmentDraft.employeeId,
-        taskId: assignmentDraft.taskId,
-        equipmentId: assignmentDraft.equipmentId || undefined,
-        date: boardDate,
-        area: assignmentDraft.area,
-        startTime: assignmentDraft.startTime,
-        duration: Number(assignmentDraft.duration || 0),
-      },
-    ];
+    const nextAssignment: Assignment = {
+      id: editingAssignmentId ?? makeId('assign'),
+      employeeId: assignmentDraft.employeeId,
+      taskId: assignmentDraft.taskId,
+      equipmentId: assignmentDraft.equipmentId || undefined,
+      date: boardDate,
+      area: assignmentDraft.area,
+      startTime: assignmentDraft.startTime,
+      duration: Number(assignmentDraft.duration || 0),
+    };
+
+    const nextAssignments = editingAssignmentId
+      ? assignmentList.map((assignment) => (assignment.id === editingAssignmentId ? nextAssignment : assignment))
+      : [...assignmentList, nextAssignment];
     persistAssignments(nextAssignments);
+    setEditingAssignmentId(null);
     setAssignmentDialogOpen(false);
+    toast(editingAssignmentId ? 'Assignment updated' : 'Assignment added', {
+      description: editingAssignmentId
+        ? 'The workboard, breakroom, and reports now reflect the updated task plan.'
+        : 'The workboard, breakroom, and reports now reflect this planned task.',
+    });
   }
 
-  function removeAssignment(employeeId: string, assignmentIndex: number) {
-    let seen = -1;
-    const nextAssignments = assignmentList.filter((assignment) => {
-      if (assignment.employeeId !== employeeId || assignment.date !== boardDate) return true;
-      seen += 1;
-      return seen !== assignmentIndex;
-    });
+  function removeAssignment(assignmentId: string) {
+    const nextAssignments = assignmentList.filter((assignment) => assignment.id !== assignmentId);
     persistAssignments(nextAssignments);
   }
 
@@ -233,7 +257,7 @@ export default function WorkboardPage() {
         title: noteDraft.title.trim(),
         content: noteDraft.content.trim(),
         author: noteDraft.author.trim() || 'Operations Admin',
-        date: new Date().toISOString().slice(0, 10),
+        date: boardDate,
         location: noteDraft.location.trim() || undefined,
       },
       ...noteList,
@@ -318,6 +342,14 @@ export default function WorkboardPage() {
           </div>
         </div>
 
+        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">1. Scheduler sets who is working on {boardDate}</Badge>
+            <Badge variant="outline">2. Workboard assigns tasks, equipment, and locations</Badge>
+            <Badge variant="outline">3. Breakroom displays the final crew plan for the day</Badge>
+          </div>
+        </div>
+
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
@@ -395,7 +427,8 @@ export default function WorkboardPage() {
                   return shift ? `${shift.shiftStart}-${shift.shiftEnd}` : undefined;
                 })()}
                 onAddTask={openAssignmentDialog}
-                onRemoveAssignment={(assignmentIndex) => removeAssignment(employee.id, assignmentIndex)}
+                onEditAssignment={openEditAssignmentDialog}
+                onRemoveAssignment={removeAssignment}
               />
             ))}
           </div>

@@ -12,6 +12,7 @@ const WorkboardPage = lazy(() => import("./pages/WorkboardPage"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
 const SchedulerPage = lazy(() => import("./pages/SchedulerPage"));
 const EquipmentPage = lazy(() => import("./pages/EquipmentPage"));
+const BreakroomPage = lazy(() => import("./pages/BreakroomPage"));
 const MessagingPage = lazy(() => import("./pages/MessagingPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const TasksPage = lazy(() => import("./pages/TasksCatalogPage"));
@@ -46,6 +47,7 @@ function AppRoutes() {
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="scheduler" element={<SchedulerPage />} />
           <Route path="equipment" element={<EquipmentPage />} />
+          <Route path="breakroom" element={<BreakroomPage />} />
           <Route path="weather" element={<WeatherPage />} />
           <Route path="applications" element={<ApplicationsPage />} />
           <Route path="messaging" element={<MessagingPage />} />
