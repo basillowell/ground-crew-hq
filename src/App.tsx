@@ -8,7 +8,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
 
 const LandingPage = lazy(() => import("./pages/LaunchpadPage"));
-const CommandCenterPage = lazy(() => import("./pages/CommandCenterPage"));
+const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
 const WorkboardPage = lazy(() => import("./pages/WorkboardPage"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
 const SchedulerPage = lazy(() => import("./pages/SchedulerPage"));

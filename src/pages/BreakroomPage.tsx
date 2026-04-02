@@ -23,6 +23,7 @@ function defaultBoardDate() {
 export default function BreakroomPage() {
   const [boardDate, setBoardDate] = useState(defaultBoardDate());
   const [department, setDepartment] = useState('Maintenance');
+  const [propertyId, setPropertyId] = useState('');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -43,9 +44,10 @@ export default function BreakroomPage() {
     };
 
     const handleContext = (event: Event) => {
-      const detail = (event as CustomEvent<{ department?: string; date?: string }>).detail;
+      const detail = (event as CustomEvent<{ department?: string; date?: string; propertyId?: string }>).detail;
       if (detail?.department) setDepartment(detail.department);
       if (detail?.date) setBoardDate(detail.date);
+      if (detail?.propertyId !== undefined) setPropertyId(detail.propertyId);
     };
 
     refresh();
@@ -69,11 +71,12 @@ export default function BreakroomPage() {
       .filter(
         (employee) =>
           employee.status === 'active' &&
+          (!propertyId || employee.propertyId === propertyId) &&
           (!department || department === 'All Departments' || employee.department === department) &&
           scheduledIds.has(employee.id),
       )
       .sort((left, right) => `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`));
-  }, [boardDate, department, employees, scheduleEntries]);
+  }, [boardDate, department, employees, propertyId, scheduleEntries]);
 
   const dayAssignments = useMemo(
     () => assignments.filter((assignment) => assignment.date === boardDate),

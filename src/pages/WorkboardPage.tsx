@@ -56,6 +56,7 @@ function makeId(prefix: string) {
 export default function WorkboardPage() {
   const [boardDate, setBoardDate] = useState(defaultBoardDate());
   const [department, setDepartment] = useState('Maintenance');
+  const [propertyId, setPropertyId] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [taskList, setTaskList] = useState<Task[]>([]);
@@ -127,9 +128,10 @@ export default function WorkboardPage() {
     };
 
     const handleOperationsContext = (event: Event) => {
-      const detail = (event as CustomEvent<{ department?: string; date?: string }>).detail;
+      const detail = (event as CustomEvent<{ department?: string; date?: string; propertyId?: string }>).detail;
       if (detail?.department) setDepartment(detail.department);
       if (detail?.date) setBoardDate(detail.date);
+      if (detail?.propertyId) setPropertyId(detail.propertyId);
     };
 
     refresh();
@@ -155,10 +157,16 @@ export default function WorkboardPage() {
     () =>
       allActiveEmployees.filter(
         (employee) =>
+          (!propertyId || employee.propertyId === propertyId) &&
           (!department || department === 'All Departments' || employee.department === department) &&
           (groupFilter === 'all' || employee.group === groupFilter),
       ),
-    [allActiveEmployees, department, groupFilter],
+    [allActiveEmployees, department, groupFilter, propertyId],
+  );
+
+  const propertyWorkLocations = useMemo(
+    () => workLocations.filter((location) => !propertyId || location.propertyId === propertyId),
+    [propertyId, workLocations],
   );
 
   const scheduledEmployees = useMemo(() => {
@@ -284,7 +292,7 @@ export default function WorkboardPage() {
   }
 
   function openAssignmentDialog(employeeId: string) {
-    const defaultLocation = workLocations[0]?.name ?? 'Primary zone';
+    const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
@@ -447,7 +455,7 @@ export default function WorkboardPage() {
             <p className="text-xs text-muted-foreground mt-1">Assignments pull from Task Management and Program Setup locations, while employee rows inherit role, department, group, and worker type from Employee Management.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge variant="outline">{taskList.length} active tasks</Badge>
-              <Badge variant="outline">{workLocations.length} locations</Badge>
+              <Badge variant="outline">{propertyWorkLocations.length} locations</Badge>
               <Badge variant="outline">{activeDepartmentEmployees.length} active employees</Badge>
             </div>
           </div>
@@ -707,13 +715,13 @@ export default function WorkboardPage() {
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Area</label>
-              {workLocations.length > 0 ? (
+              {propertyWorkLocations.length > 0 ? (
                 <select
                   value={assignmentDraft.area}
                   onChange={(event) => setAssignmentDraft({ ...assignmentDraft, area: event.target.value })}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  {workLocations.map((location) => (
+                  {propertyWorkLocations.map((location) => (
                     <option key={location.id} value={location.name}>
                       {location.name}
                     </option>
@@ -760,14 +768,14 @@ export default function WorkboardPage() {
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Location</label>
-              {workLocations.length > 0 ? (
+              {propertyWorkLocations.length > 0 ? (
                 <select
                   value={noteDraft.location}
                   onChange={(event) => setNoteDraft({ ...noteDraft, location: event.target.value })}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="">General board note</option>
-                  {workLocations.map((location) => (
+                  {propertyWorkLocations.map((location) => (
                     <option key={location.id} value={location.name}>
                       {location.name}
                     </option>

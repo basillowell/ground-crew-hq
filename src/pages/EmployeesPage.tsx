@@ -10,8 +10,9 @@ import { PageHeader, SearchFilter, DataTable, AvatarInitials, EmptyState } from 
 import type { Column } from '@/components/shared';
 import { Phone, Mail, Plus, Shield, Smartphone, Monitor, Users, UserPlus, Trash2 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
-import type { Employee } from '@/data/seedData';
+import type { AppUser, Employee, Property } from '@/data/seedData';
 import {
+  loadAppUsers,
   loadAssignments,
   loadChemicalApplicationLogs,
   loadDepartmentOptions,
@@ -19,10 +20,12 @@ import {
   loadEquipmentUnits,
   loadGroupOptions,
   loadLanguageOptions,
+  loadProperties,
   loadRoleOptions,
   loadScheduleEntries,
   loadShiftTemplates,
   loadWorkLocations,
+  saveAppUsers,
   saveAssignments,
   saveChemicalApplicationLogs,
   saveEmployees,
@@ -35,12 +38,16 @@ function EmployeeDetail({
   onClose,
   onStatusToggle,
   onDelete,
+  onSavePortalAccess,
+  properties,
   dependencySummary,
 }: {
   employee: Employee;
   onClose: () => void;
   onStatusToggle: (employeeId: string) => void;
   onDelete: (employeeId: string) => void;
+  onSavePortalAccess: (employeeId: string, updates: Partial<Employee>) => void;
+  properties: Property[];
   dependencySummary: {
     schedules: number;
     assignments: number;
@@ -48,6 +55,13 @@ function EmployeeDetail({
     applications: number;
   };
 }) {
+  const [portalDraft, setPortalDraft] = useState({
+    propertyId: employee.propertyId ?? '',
+    portalEnabled: employee.portalEnabled ?? false,
+    loginEmail: employee.loginEmail ?? employee.email,
+    loginPassword: employee.loginPassword ?? '',
+    appRole: employee.appRole ?? 'crew',
+  });
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-auto">
@@ -62,9 +76,10 @@ function EmployeeDetail({
         </DialogHeader>
 
         <Tabs defaultValue="profile" className="mt-2">
-          <TabsList className="grid grid-cols-6 h-8">
+          <TabsList className="grid grid-cols-7 h-8">
             <TabsTrigger value="profile" className="text-xs">Profile</TabsTrigger>
             <TabsTrigger value="contact" className="text-xs">Contact</TabsTrigger>
+            <TabsTrigger value="access" className="text-xs">Access</TabsTrigger>
             <TabsTrigger value="notes" className="text-xs">Notes</TabsTrigger>
             <TabsTrigger value="mobile" className="text-xs">Mobile</TabsTrigger>
             <TabsTrigger value="kiosk" className="text-xs">Kiosk</TabsTrigger>
@@ -126,6 +141,55 @@ function EmployeeDetail({
                 <div className="text-xs text-muted-foreground">Email</div>
                 <div className="text-sm font-medium">{employee.email}</div>
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="access" className="mt-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Property</label>
+                <select
+                  value={portalDraft.propertyId}
+                  onChange={(event) => setPortalDraft((current) => ({ ...current, propertyId: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">No property</option>
+                  {properties.map((property) => (
+                    <option key={property.id} value={property.id}>{property.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Portal Role</label>
+                <select
+                  value={portalDraft.appRole}
+                  onChange={(event) => setPortalDraft((current) => ({ ...current, appRole: event.target.value as AppUser['role'] }))}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="crew">Crew</option>
+                </select>
+              </div>
+              <div className="col-span-2 flex items-center justify-between rounded-lg bg-muted/50 p-3">
+                <div>
+                  <div className="text-sm font-medium">Portal Access</div>
+                  <div className="text-xs text-muted-foreground">Enable this employee to appear in launch/login profiles.</div>
+                </div>
+                <Switch checked={portalDraft.portalEnabled} onCheckedChange={(checked) => setPortalDraft((current) => ({ ...current, portalEnabled: checked }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Login Email</label>
+                <Input value={portalDraft.loginEmail} onChange={(event) => setPortalDraft((current) => ({ ...current, loginEmail: event.target.value }))} className="mt-1" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Password</label>
+                <Input type="password" value={portalDraft.loginPassword} onChange={(event) => setPortalDraft((current) => ({ ...current, loginPassword: event.target.value }))} className="mt-1" />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => onSavePortalAccess(employee.id, portalDraft)}>Save Portal Access</Button>
             </div>
           </TabsContent>
 
@@ -257,10 +321,12 @@ const columns: Column<Employee>[] = [
 
 export default function EmployeesPage() {
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
+  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [departmentOptions, setDepartmentOptions] = useState<{ id: string; name: string }[]>([]);
   const [groupOptions, setGroupOptions] = useState<{ id: string; name: string; color: string }[]>([]);
   const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
   const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [workLocations, setWorkLocations] = useState<{ id: string; name: string }[]>([]);
   const [shiftTemplates, setShiftTemplates] = useState<{ id: string; name: string; start: string; end: string; days: string[] }[]>([]);
   const [search, setSearch] = useState('');
@@ -272,6 +338,7 @@ export default function EmployeesPage() {
   const [draft, setDraft] = useState({
     firstName: '',
     lastName: '',
+    propertyId: '',
     group: 'Greens',
     role: 'Operator',
     wage: '18',
@@ -282,20 +349,27 @@ export default function EmployeesPage() {
     department: 'Maintenance',
     defaultLocationId: '',
     shiftTemplateId: '',
+    portalEnabled: false,
+    loginEmail: '',
+    loginPassword: '',
+    appRole: 'crew' as AppUser['role'],
   });
 
   useEffect(() => {
     setEmployeeList(loadEmployees());
+    setAppUsers(loadAppUsers());
     const nextDepartments = loadDepartmentOptions();
     const nextGroups = loadGroupOptions();
     const nextRoles = loadRoleOptions();
     const nextLanguages = loadLanguageOptions();
+    const nextProperties = loadProperties();
     const nextLocations = loadWorkLocations();
     const nextShiftTemplates = loadShiftTemplates();
     setDepartmentOptions(nextDepartments);
     setGroupOptions(nextGroups);
     setRoleOptions(nextRoles);
     setLanguageOptions(nextLanguages);
+    setProperties(nextProperties);
     setWorkLocations(nextLocations);
     setShiftTemplates(nextShiftTemplates);
     setDraft((current) => ({
@@ -304,6 +378,7 @@ export default function EmployeesPage() {
       group: current.group || nextGroups[0]?.name || '',
       role: current.role || nextRoles[0]?.name || '',
       language: current.language || nextLanguages[0]?.name || '',
+      propertyId: current.propertyId || nextProperties[0]?.id || '',
       defaultLocationId: current.defaultLocationId || nextLocations[0]?.id || '',
       shiftTemplateId: current.shiftTemplateId || nextShiftTemplates[0]?.id || '',
     }));
@@ -368,6 +443,7 @@ export default function EmployeesPage() {
     return {
       firstName: '',
       lastName: '',
+      propertyId: properties[0]?.id ?? '',
       group: groupOptions[0]?.name ?? '',
       role: roleOptions[0]?.name ?? '',
       wage: '18',
@@ -378,6 +454,10 @@ export default function EmployeesPage() {
       department: departmentOptions[0]?.name ?? '',
       defaultLocationId: workLocations[0]?.id ?? '',
       shiftTemplateId: shiftTemplates[0]?.id ?? '',
+      portalEnabled: false,
+      loginEmail: '',
+      loginPassword: '',
+      appRole: 'crew' as AppUser['role'],
     };
   }
 
@@ -393,6 +473,7 @@ export default function EmployeesPage() {
       id: `e${Date.now()}`,
       firstName: draft.firstName.trim(),
       lastName: draft.lastName.trim(),
+      propertyId: draft.propertyId || undefined,
       group: draft.group.trim(),
       role: draft.role.trim(),
       wage: Number(draft.wage || 0),
@@ -406,6 +487,10 @@ export default function EmployeesPage() {
       hireDate: new Date().toISOString().slice(0, 10),
       defaultLocationId: draft.defaultLocationId || undefined,
       shiftTemplateId: draft.shiftTemplateId || undefined,
+      portalEnabled: draft.portalEnabled,
+      loginEmail: draft.loginEmail || undefined,
+      loginPassword: draft.loginPassword || undefined,
+      appRole: draft.appRole,
     };
 
     persist([nextEmployee, ...employeeList]);
@@ -454,6 +539,44 @@ export default function EmployeesPage() {
 
     toast('Employee removed', {
       description: `${employee.firstName} ${employee.lastName} and linked operational records were removed from the system.`,
+    });
+  }
+
+  function handleSavePortalAccess(employeeId: string, updates: Partial<Employee>) {
+    const nextEmployees = employeeList.map((employee) => (employee.id === employeeId ? { ...employee, ...updates } : employee));
+    persist(nextEmployees);
+    setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
+
+    const employee = nextEmployees.find((entry) => entry.id === employeeId);
+    if (!employee) return;
+    const property = properties.find((entry) => entry.id === employee.propertyId);
+    const mappedUserId = `emp-${employee.id}`;
+    let nextAppUsers = [...appUsers];
+
+    if (employee.portalEnabled && employee.loginEmail) {
+      const mappedUser: AppUser = {
+        id: mappedUserId,
+        fullName: `${employee.firstName} ${employee.lastName}`,
+        email: employee.loginEmail,
+        role: employee.appRole ?? 'crew',
+        title: employee.role,
+        department: employee.department,
+        clubId: employee.propertyId || 'club-1',
+        clubLabel: property?.name || 'Client profile',
+        avatarInitials: `${employee.firstName[0] || ''}${employee.lastName[0] || ''}`.toUpperCase(),
+        status: employee.status,
+      };
+      const existingIndex = nextAppUsers.findIndex((entry) => entry.id === mappedUserId);
+      if (existingIndex >= 0) nextAppUsers[existingIndex] = mappedUser;
+      else nextAppUsers.push(mappedUser);
+    } else {
+      nextAppUsers = nextAppUsers.filter((entry) => entry.id !== mappedUserId);
+    }
+
+    setAppUsers(nextAppUsers);
+    saveAppUsers(nextAppUsers);
+    toast('Portal access saved', {
+      description: `${employee.firstName} ${employee.lastName} now has updated login and property access settings.`,
     });
   }
 
@@ -570,6 +693,8 @@ export default function EmployeesPage() {
           onClose={() => setSelected(null)}
           onStatusToggle={handleStatusToggle}
           onDelete={handleDeleteEmployee}
+          onSavePortalAccess={handleSavePortalAccess}
+          properties={properties}
           dependencySummary={selectedDependencySummary}
         />
       )}
@@ -587,6 +712,19 @@ export default function EmployeesPage() {
             <div>
               <label className="text-xs text-muted-foreground">Last Name</label>
               <Input value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Property</label>
+              <select
+                value={draft.propertyId}
+                onChange={(event) => setDraft({ ...draft, propertyId: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No property</option>
+                {properties.map((property) => (
+                  <option key={property.id} value={property.id}>{property.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Group</label>
@@ -685,6 +823,21 @@ export default function EmployeesPage() {
                   <option key={template.id} value={template.id}>{template.name}</option>
                 ))}
               </select>
+            </div>
+            <div className="col-span-2 rounded-xl border bg-muted/30 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium">Portal Login</div>
+                  <div className="text-xs text-muted-foreground">Enable this employee to log into the client workspace.</div>
+                </div>
+                <Switch checked={draft.portalEnabled} onCheckedChange={(checked) => setDraft({ ...draft, portalEnabled: checked })} />
+              </div>
+              {draft.portalEnabled ? (
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <Input placeholder="Login email" value={draft.loginEmail} onChange={(event) => setDraft({ ...draft, loginEmail: event.target.value })} />
+                  <Input type="password" placeholder="Password" value={draft.loginPassword} onChange={(event) => setDraft({ ...draft, loginPassword: event.target.value })} />
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">

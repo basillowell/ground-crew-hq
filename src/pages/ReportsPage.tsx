@@ -100,6 +100,7 @@ function reportDescription(report: string) {
 }
 
 export default function ReportsPage() {
+  const [propertyId, setPropertyId] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(reportCategories[4] ?? reportCategories[0]);
   const [selectedReport, setSelectedReport] = useState((reportCategories[4] ?? reportCategories[0]).reports[0]);
   const [endDate, setEndDate] = useState(currentDateIso());
@@ -136,10 +137,31 @@ export default function ReportsPage() {
       setTasks(loadTasks());
     };
 
+    const handleContext = (event: Event) => {
+      const detail = (event as CustomEvent<{ propertyId?: string }>).detail;
+      if (detail?.propertyId !== undefined) {
+        setPropertyId(detail.propertyId);
+      }
+    };
+
     refresh();
     window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-    return () => window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
+    window.addEventListener('operations-context-updated', handleContext as EventListener);
+    return () => {
+      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
+      window.removeEventListener('operations-context-updated', handleContext as EventListener);
+    };
   }, []);
+
+  const filteredEmployees = useMemo(
+    () => employees.filter((employee) => !propertyId || employee.propertyId === propertyId),
+    [employees, propertyId],
+  );
+
+  const filteredEmployeeIds = useMemo(
+    () => new Set(filteredEmployees.map((employee) => employee.id)),
+    [filteredEmployees],
+  );
 
   const filteredWeather = useMemo(
     () => weatherLogs.filter((log) => inRange(log.date, startDate, endDate)),
@@ -150,11 +172,12 @@ export default function ReportsPage() {
     () =>
       applicationLogs.filter((log) => {
         const matchesDate = inRange(log.applicationDate, startDate, endDate);
+        const matchesProperty = filteredEmployeeIds.has(log.applicatorId);
         const matchesEmployee = employeeFilter === 'all' || log.applicatorId === employeeFilter;
         const matchesArea = areaFilter === 'all' || areaFilter === `app:${log.areaId}`;
-        return matchesDate && matchesEmployee && matchesArea;
+        return matchesDate && matchesProperty && matchesEmployee && matchesArea;
       }),
-    [applicationLogs, areaFilter, employeeFilter, endDate, startDate],
+    [applicationLogs, areaFilter, employeeFilter, endDate, filteredEmployeeIds, startDate],
   );
 
   const weatherByLocation = useMemo(() => {
@@ -220,7 +243,7 @@ export default function ReportsPage() {
   const applicationRows = useMemo(() => {
     return filteredApplications.map((log) => {
       const area = applicationAreas.find((entry) => entry.id === log.areaId);
-      const applicator = employees.find((employee) => employee.id === log.applicatorId);
+      const applicator = filteredEmployees.find((employee) => employee.id === log.applicatorId);
       const relatedWeather = weatherLogs.find((entry) => entry.id === log.weatherLogId);
       const logMixItems = tankMixItems.filter((item) => item.applicationLogId === log.id);
 
@@ -236,7 +259,7 @@ export default function ReportsPage() {
         rainfall: relatedWeather?.rainfallTotal ?? 0,
       };
     });
-  }, [filteredApplications, tankMixItems, weatherLogs]);
+  }, [filteredApplications, filteredEmployees, tankMixItems, weatherLogs]);
 
   const totals = {
     rainfall: Number(filteredWeather.reduce((sum, log) => sum + log.rainfallTotal, 0).toFixed(2)),
@@ -251,22 +274,24 @@ export default function ReportsPage() {
     () =>
       scheduleEntries.filter(
         (entry) =>
+          filteredEmployeeIds.has(entry.employeeId) &&
           inRange(entry.date, startDate, endDate) &&
           (employeeFilter === 'all' || entry.employeeId === employeeFilter),
       ),
-    [employeeFilter, endDate, scheduleEntries, startDate],
+    [employeeFilter, endDate, filteredEmployeeIds, scheduleEntries, startDate],
   );
 
   const filteredAssignments = useMemo(
     () =>
       assignments.filter((assignment) => {
         const matchesDate = inRange(assignment.date, startDate, endDate);
+        const matchesProperty = filteredEmployeeIds.has(assignment.employeeId);
         const matchesEmployee = employeeFilter === 'all' || assignment.employeeId === employeeFilter;
         const matchesTask = taskFilter === 'all' || assignment.taskId === taskFilter;
         const matchesArea = areaFilter === 'all' || areaFilter === `work:${assignment.area}`;
-        return matchesDate && matchesEmployee && matchesTask && matchesArea;
+        return matchesDate && matchesProperty && matchesEmployee && matchesTask && matchesArea;
       }),
-    [areaFilter, assignments, employeeFilter, endDate, startDate, taskFilter],
+    [areaFilter, assignments, employeeFilter, endDate, filteredEmployeeIds, startDate, taskFilter],
   );
 
   const dailyLabor = useMemo(() => {
@@ -317,7 +342,7 @@ export default function ReportsPage() {
   }, [filteredAssignments, tasks]);
 
   const employeeHoursRows = useMemo(() => {
-    return employees
+    return filteredEmployees
       .map((employee) => {
         const shifts = filteredSchedules.filter((entry) => entry.employeeId === employee.id && entry.status === 'scheduled');
         const employeeAssignments = filteredAssignments.filter((assignment) => assignment.employeeId === employee.id);
@@ -343,12 +368,12 @@ export default function ReportsPage() {
       })
       .filter((entry) => entry.scheduledHours > 0 || entry.assignmentCount > 0 || entry.applicationCount > 0)
       .sort((left, right) => right.scheduledHours - left.scheduledHours);
-  }, [employees, filteredApplications, filteredAssignments, filteredSchedules]);
+  }, [filteredApplications, filteredAssignments, filteredEmployees, filteredSchedules]);
 
   const applicationsToHoursRows = useMemo(() => {
     return filteredApplications
       .map((log) => {
-        const applicator = employees.find((employee) => employee.id === log.applicatorId);
+        const applicator = filteredEmployees.find((employee) => employee.id === log.applicatorId);
         const area = applicationAreas.find((entry) => entry.id === log.areaId);
         const relatedAssignments = filteredAssignments.filter(
           (assignment) =>
@@ -380,7 +405,7 @@ export default function ReportsPage() {
         };
       })
       .sort((left, right) => `${right.date}${right.applicator}`.localeCompare(`${left.date}${left.applicator}`));
-  }, [applicationAreas, employees, filteredApplications, filteredAssignments, filteredSchedules, tankMixItems]);
+  }, [applicationAreas, filteredApplications, filteredAssignments, filteredEmployees, filteredSchedules, tankMixItems]);
 
   const taskDistribution = useMemo(() => {
     return tasks
@@ -395,7 +420,7 @@ export default function ReportsPage() {
   const workforceTotals = {
     scheduledCrew: new Set(filteredSchedules.filter((entry) => entry.status === 'scheduled').map((entry) => entry.employeeId)).size,
     assignments: filteredAssignments.length,
-    activeEmployees: employees.filter((employee) => employee.status === 'active').length,
+    activeEmployees: filteredEmployees.filter((employee) => employee.status === 'active').length,
   };
 
   const summaryMetrics = {
@@ -511,7 +536,7 @@ export default function ReportsPage() {
                 className="mt-2 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="all">All employees</option>
-                {employees.map((employee) => (
+                {filteredEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
                     {employee.firstName} {employee.lastName}
                   </option>

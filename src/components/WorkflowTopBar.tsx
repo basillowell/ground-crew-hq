@@ -15,7 +15,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { AppNotification } from './AppLayout';
-import type { AppUser, ProgramSettings } from '@/data/seedData';
+import type { AppUser, ProgramSettings, Property } from '@/data/seedData';
 
 interface WorkflowTopBarProps {
   department: string;
@@ -23,6 +23,9 @@ interface WorkflowTopBarProps {
   departments: string[];
   currentDate: Date;
   setCurrentDate: (d: Date) => void;
+  properties: Property[];
+  currentPropertyId: string;
+  onSelectProperty: (propertyId: string) => void;
   appUsers: AppUser[];
   currentUser?: AppUser;
   notifications: AppNotification[];
@@ -45,6 +48,9 @@ export function WorkflowTopBar({
   departments,
   currentDate,
   setCurrentDate,
+  properties,
+  currentPropertyId,
+  onSelectProperty,
   appUsers,
   currentUser,
   notifications,
@@ -69,6 +75,19 @@ export function WorkflowTopBar({
             {departments.map((entry) => (
               <SelectItem key={entry} value={entry}>
                 {entry}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={currentPropertyId} onValueChange={onSelectProperty}>
+          <SelectTrigger className="h-9 w-[190px] text-sm">
+            <SelectValue placeholder="Select property" />
+          </SelectTrigger>
+          <SelectContent>
+            {properties.map((entry) => (
+              <SelectItem key={entry.id} value={entry.id}>
+                {entry.name}
               </SelectItem>
             ))}
           </SelectContent>

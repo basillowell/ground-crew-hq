@@ -4,6 +4,7 @@ export interface Employee {
   id: string;
   firstName: string;
   lastName: string;
+  propertyId?: string;
   group: string;
   role: string;
   wage: number;
@@ -17,6 +18,10 @@ export interface Employee {
   hireDate: string;
   defaultLocationId?: string;
   shiftTemplateId?: string;
+  portalEnabled?: boolean;
+  loginEmail?: string;
+  loginPassword?: string;
+  appRole?: 'admin' | 'manager' | 'supervisor' | 'crew';
 }
 
 export interface Task {
@@ -252,6 +257,22 @@ export interface LanguageOption {
 export interface WorkLocation {
   id: string;
   name: string;
+  propertyId?: string;
+  propertyName?: string;
+}
+
+export interface Property {
+  id: string;
+  name: string;
+  shortName: string;
+  type: 'golf-course' | 'resort' | 'estate' | 'municipal';
+  address: string;
+  city: string;
+  state: string;
+  acreage: number;
+  logoInitials: string;
+  color: string;
+  status: 'active' | 'onboarding' | 'paused';
 }
 
 export interface ShiftTemplate {
@@ -276,14 +297,14 @@ export interface AppUser {
 }
 
 export const employees: Employee[] = [
-  { id: 'e1', firstName: 'Mike', lastName: 'Johnson', group: 'Greens', role: 'Lead', wage: 22, phone: '555-0101', email: 'mike.j@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2019-03-15', defaultLocationId: 'loc1', shiftTemplateId: 'st1' },
-  { id: 'e2', firstName: 'Carlos', lastName: 'Rivera', group: 'Fairways', role: 'Operator', wage: 18, phone: '555-0102', email: 'carlos.r@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'full-time', hireDate: '2020-06-01', defaultLocationId: 'loc3', shiftTemplateId: 'st1' },
-  { id: 'e3', firstName: 'Sarah', lastName: 'Chen', group: 'Landscape', role: 'Specialist', wage: 20, phone: '555-0103', email: 'sarah.c@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2021-01-10', defaultLocationId: 'loc6', shiftTemplateId: 'st2' },
-  { id: 'e4', firstName: 'James', lastName: 'Wilson', group: 'Irrigation', role: 'Technician', wage: 24, phone: '555-0104', email: 'james.w@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2018-08-20', defaultLocationId: 'loc9', shiftTemplateId: 'st1' },
-  { id: 'e5', firstName: 'David', lastName: 'Park', group: 'Greens', role: 'Operator', wage: 17, phone: '555-0105', email: 'david.p@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'part-time', hireDate: '2022-04-01', defaultLocationId: 'loc2', shiftTemplateId: 'st2' },
-  { id: 'e6', firstName: 'Maria', lastName: 'Santos', group: 'Bunkers', role: 'Operator', wage: 16, phone: '555-0106', email: 'maria.s@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'seasonal', hireDate: '2023-05-15', defaultLocationId: 'loc8', shiftTemplateId: 'st3' },
-  { id: 'e7', firstName: 'Tom', lastName: 'Bradley', group: 'Mechanic', role: 'Lead Mechanic', wage: 28, phone: '555-0107', email: 'tom.b@course.com', photo: '', status: 'active', department: 'Equipment', language: 'English', workerType: 'full-time', hireDate: '2017-02-01', defaultLocationId: 'loc6', shiftTemplateId: 'st2' },
-  { id: 'e8', firstName: 'Alex', lastName: 'Kim', group: 'Fairways', role: 'Operator', wage: 17, phone: '555-0108', email: 'alex.k@course.com', photo: '', status: 'inactive', department: 'Maintenance', language: 'English', workerType: 'seasonal', hireDate: '2023-06-01', defaultLocationId: 'loc4', shiftTemplateId: 'st3' },
+  { id: 'e1', firstName: 'Mike', lastName: 'Johnson', propertyId: 'prop-1', group: 'Greens', role: 'Lead', wage: 22, phone: '555-0101', email: 'mike.j@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2019-03-15', defaultLocationId: 'loc1', shiftTemplateId: 'st1', portalEnabled: true, loginEmail: 'mike.j@groundcrewhq.com', loginPassword: 'changeme', appRole: 'supervisor' },
+  { id: 'e2', firstName: 'Carlos', lastName: 'Rivera', propertyId: 'prop-1', group: 'Fairways', role: 'Operator', wage: 18, phone: '555-0102', email: 'carlos.r@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'full-time', hireDate: '2020-06-01', defaultLocationId: 'loc3', shiftTemplateId: 'st1', portalEnabled: false, appRole: 'crew' },
+  { id: 'e3', firstName: 'Sarah', lastName: 'Chen', propertyId: 'prop-2', group: 'Landscape', role: 'Specialist', wage: 20, phone: '555-0103', email: 'sarah.c@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2021-01-10', defaultLocationId: 'loc6', shiftTemplateId: 'st2', portalEnabled: true, loginEmail: 'sarah.chen@pinevalley.com', loginPassword: 'changeme', appRole: 'manager' },
+  { id: 'e4', firstName: 'James', lastName: 'Wilson', propertyId: 'prop-1', group: 'Irrigation', role: 'Technician', wage: 24, phone: '555-0104', email: 'james.w@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2018-08-20', defaultLocationId: 'loc9', shiftTemplateId: 'st1', portalEnabled: false, appRole: 'crew' },
+  { id: 'e5', firstName: 'David', lastName: 'Park', propertyId: 'prop-1', group: 'Greens', role: 'Operator', wage: 17, phone: '555-0105', email: 'david.p@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'part-time', hireDate: '2022-04-01', defaultLocationId: 'loc2', shiftTemplateId: 'st2', portalEnabled: false, appRole: 'crew' },
+  { id: 'e6', firstName: 'Maria', lastName: 'Santos', propertyId: 'prop-3', group: 'Bunkers', role: 'Operator', wage: 16, phone: '555-0106', email: 'maria.s@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'seasonal', hireDate: '2023-05-15', defaultLocationId: 'loc8', shiftTemplateId: 'st3', portalEnabled: false, appRole: 'crew' },
+  { id: 'e7', firstName: 'Tom', lastName: 'Bradley', propertyId: 'prop-1', group: 'Mechanic', role: 'Lead Mechanic', wage: 28, phone: '555-0107', email: 'tom.b@course.com', photo: '', status: 'active', department: 'Equipment', language: 'English', workerType: 'full-time', hireDate: '2017-02-01', defaultLocationId: 'loc6', shiftTemplateId: 'st2', portalEnabled: true, loginEmail: 'tom.bradley@groundcrewhq.com', loginPassword: 'changeme', appRole: 'supervisor' },
+  { id: 'e8', firstName: 'Alex', lastName: 'Kim', propertyId: 'prop-1', group: 'Fairways', role: 'Operator', wage: 17, phone: '555-0108', email: 'alex.k@course.com', photo: '', status: 'inactive', department: 'Maintenance', language: 'English', workerType: 'seasonal', hireDate: '2023-06-01', defaultLocationId: 'loc4', shiftTemplateId: 'st3', portalEnabled: false, appRole: 'crew' },
 ];
 
 export const tasks: Task[] = [
@@ -421,16 +442,22 @@ export const languageOptions: LanguageOption[] = [
   { id: 'lang3', name: 'Bilingual' },
 ];
 
+export const properties: Property[] = [
+  { id: 'prop-1', name: 'Ground Crew HQ', shortName: 'GC HQ', type: 'golf-course', address: '1200 Championship Dr', city: 'Scottsdale', state: 'AZ', acreage: 180, logoInitials: 'GC', color: 'hsl(152, 55%, 38%)', status: 'active' },
+  { id: 'prop-2', name: 'Pine Valley Club', shortName: 'PVC', type: 'golf-course', address: '450 Fairway Ln', city: 'Pine Valley', state: 'NJ', acreage: 220, logoInitials: 'PV', color: 'hsl(210, 80%, 52%)', status: 'active' },
+  { id: 'prop-3', name: 'Oceanview Resort & Spa', shortName: 'OVR', type: 'resort', address: '8900 Coastal Blvd', city: 'Carlsbad', state: 'CA', acreage: 95, logoInitials: 'OV', color: 'hsl(270, 60%, 55%)', status: 'active' },
+];
+
 export const workLocations: WorkLocation[] = [
-  { id: 'loc1', name: 'Greens 1-9' },
-  { id: 'loc2', name: 'Greens 10-18' },
-  { id: 'loc3', name: 'Fairways 1-9' },
-  { id: 'loc4', name: 'Fairways 10-18' },
-  { id: 'loc5', name: 'Practice Range' },
-  { id: 'loc6', name: 'Clubhouse' },
-  { id: 'loc7', name: 'Cart Paths' },
-  { id: 'loc8', name: 'Bunkers' },
-  { id: 'loc9', name: 'Irrigation Pump House' },
+  { id: 'loc1', name: 'Greens 1-9', propertyId: 'prop-1', propertyName: 'Ground Crew HQ' },
+  { id: 'loc2', name: 'Greens 10-18', propertyId: 'prop-1', propertyName: 'Ground Crew HQ' },
+  { id: 'loc3', name: 'Fairways 1-9', propertyId: 'prop-1', propertyName: 'Ground Crew HQ' },
+  { id: 'loc4', name: 'Fairways 10-18', propertyId: 'prop-1', propertyName: 'Ground Crew HQ' },
+  { id: 'loc5', name: 'Practice Range', propertyId: 'prop-2', propertyName: 'Pine Valley Club' },
+  { id: 'loc6', name: 'Clubhouse', propertyId: 'prop-2', propertyName: 'Pine Valley Club' },
+  { id: 'loc7', name: 'Cart Paths', propertyId: 'prop-3', propertyName: 'Oceanview Resort & Spa' },
+  { id: 'loc8', name: 'Bunkers', propertyId: 'prop-3', propertyName: 'Oceanview Resort & Spa' },
+  { id: 'loc9', name: 'Irrigation Pump House', propertyId: 'prop-1', propertyName: 'Ground Crew HQ' },
 ];
 
 export const shiftTemplates: ShiftTemplate[] = [

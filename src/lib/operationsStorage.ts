@@ -11,6 +11,7 @@ import {
   languageOptions,
   manualRainfallEntries,
   notes,
+  properties,
   programSettings,
   roleOptions,
   appUsers,
@@ -33,6 +34,7 @@ import {
   type LanguageOption,
   type ManualRainfallEntry,
   type Note,
+  type Property,
   type ProgramSettings,
   type RoleOption,
   type ScheduleEntry,
@@ -67,9 +69,11 @@ const GROUPS_KEY = 'gchq-groups';
 const ROLES_KEY = 'gchq-roles';
 const LANGUAGES_KEY = 'gchq-languages';
 const WORK_LOCATIONS_KEY = 'gchq-work-locations';
+const PROPERTIES_KEY = 'gchq-properties';
 const SHIFT_TEMPLATES_KEY = 'gchq-shift-templates';
 const APP_USERS_KEY = 'gchq-app-users';
 const CURRENT_APP_USER_KEY = 'gchq-current-app-user-id';
+const CURRENT_PROPERTY_KEY = 'gchq-current-property-id';
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -252,6 +256,14 @@ export function saveWorkLocations(value: WorkLocation[]) {
   writeList(WORK_LOCATIONS_KEY, value);
 }
 
+export function loadProperties() {
+  return readList<Property>(PROPERTIES_KEY, properties);
+}
+
+export function saveProperties(value: Property[]) {
+  writeList(PROPERTIES_KEY, value);
+}
+
 export function loadShiftTemplates() {
   return readList<ShiftTemplate>(SHIFT_TEMPLATES_KEY, shiftTemplates);
 }
@@ -276,4 +288,14 @@ export function loadCurrentAppUserId() {
 export function saveCurrentAppUserId(value: string) {
   if (!canUseStorage()) return;
   window.localStorage.setItem(CURRENT_APP_USER_KEY, value);
+}
+
+export function loadCurrentPropertyId() {
+  if (!canUseStorage()) return '';
+  return window.localStorage.getItem(CURRENT_PROPERTY_KEY) || '';
+}
+
+export function saveCurrentPropertyId(value: string) {
+  if (!canUseStorage()) return;
+  window.localStorage.setItem(CURRENT_PROPERTY_KEY, value);
 }

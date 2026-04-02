@@ -12,6 +12,7 @@ import {
   languageOptions,
   manualRainfallEntries,
   notes,
+  properties,
   programSettings,
   roleOptions,
   scheduleEntries,
@@ -34,6 +35,7 @@ import {
   type LanguageOption,
   type ManualRainfallEntry,
   type Note,
+  type Property,
   type ProgramSettings,
   type RoleOption,
   type ScheduleEntry,
@@ -59,6 +61,7 @@ import {
   loadManualRainfallEntries as loadManualRainfallEntriesLocal,
   loadNotes as loadNotesLocal,
   loadProgramSettings as loadProgramSettingsLocal,
+  loadProperties as loadPropertiesLocal,
   loadRoleOptions as loadRoleOptionsLocal,
   loadScheduleEntries as loadScheduleEntriesLocal,
   loadShiftTemplates as loadShiftTemplatesLocal,
@@ -68,6 +71,7 @@ import {
   loadWeatherStations as loadWeatherStationsLocal,
   loadWorkLocations as loadWorkLocationsLocal,
   loadCurrentAppUserId as loadCurrentAppUserIdLocal,
+  loadCurrentPropertyId as loadCurrentPropertyIdLocal,
   saveApplicationAreas as saveApplicationAreasLocal,
   saveAppUsers as saveAppUsersLocal,
   saveAssignments as saveAssignmentsLocal,
@@ -82,6 +86,7 @@ import {
   saveManualRainfallEntries as saveManualRainfallEntriesLocal,
   saveNotes as saveNotesLocal,
   saveProgramSettings as saveProgramSettingsLocal,
+  saveProperties as savePropertiesLocal,
   saveRoleOptions as saveRoleOptionsLocal,
   saveScheduleEntries as saveScheduleEntriesLocal,
   saveShiftTemplates as saveShiftTemplatesLocal,
@@ -91,6 +96,7 @@ import {
   saveWeatherStations as saveWeatherStationsLocal,
   saveWorkLocations as saveWorkLocationsLocal,
   saveCurrentAppUserId as saveCurrentAppUserIdLocal,
+  saveCurrentPropertyId as saveCurrentPropertyIdLocal,
 } from './operationsStorage';
 import { hasSupabaseConfig, supabase } from './supabase';
 
@@ -224,6 +230,12 @@ const collections = {
     loadLocal: loadWorkLocationsLocal,
     saveLocal: saveWorkLocationsLocal,
   } satisfies CollectionConfig<WorkLocation>,
+  properties: {
+    table: 'properties',
+    seed: properties,
+    loadLocal: loadPropertiesLocal,
+    saveLocal: savePropertiesLocal,
+  } satisfies CollectionConfig<Property>,
   shiftTemplates: {
     table: 'shift_templates',
     seed: shiftTemplates,
@@ -328,6 +340,7 @@ export async function initializeDataStore() {
     hydrateCollection(collections.roleOptions),
     hydrateCollection(collections.languageOptions),
     hydrateCollection(collections.workLocations),
+    hydrateCollection(collections.properties),
     hydrateCollection(collections.shiftTemplates),
     hydrateCollection(collections.appUsers),
   ]);
@@ -493,6 +506,14 @@ export function saveWorkLocations(value: WorkLocation[]) {
   syncCollection(collections.workLocations, value);
 }
 
+export function loadProperties() {
+  return collections.properties.loadLocal();
+}
+
+export function saveProperties(value: Property[]) {
+  syncCollection(collections.properties, value);
+}
+
 export function loadShiftTemplates() {
   return collections.shiftTemplates.loadLocal();
 }
@@ -515,4 +536,12 @@ export function loadCurrentAppUserId() {
 
 export function saveCurrentAppUserId(value: string) {
   saveCurrentAppUserIdLocal(value);
+}
+
+export function loadCurrentPropertyId() {
+  return loadCurrentPropertyIdLocal();
+}
+
+export function saveCurrentPropertyId(value: string) {
+  saveCurrentPropertyIdLocal(value);
 }

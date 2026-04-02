@@ -49,6 +49,7 @@ const statusColors: Record<string, string> = {
 
 export default function SchedulerPage() {
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [propertyId, setPropertyId] = useState('');
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
   const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
@@ -84,9 +85,12 @@ export default function SchedulerPage() {
     };
 
     const handleOperationsContext = (event: Event) => {
-      const detail = (event as CustomEvent<{ date?: string }>).detail;
+      const detail = (event as CustomEvent<{ date?: string; propertyId?: string }>).detail;
       if (detail?.date) {
         setCurrentDate(new Date(`${detail.date}T12:00:00`));
+      }
+      if (detail?.propertyId !== undefined) {
+        setPropertyId(detail.propertyId);
       }
     };
 
@@ -104,18 +108,25 @@ export default function SchedulerPage() {
       employeeList.filter(
         (employee) =>
           employee.status === 'active' &&
+          (!propertyId || employee.propertyId === propertyId) &&
           `${employee.firstName} ${employee.lastName} ${employee.group}`.toLowerCase().includes(search.toLowerCase()),
       ),
-    [employeeList, search],
+    [employeeList, propertyId, search],
   );
 
   const summary = useMemo(
-    () => ({
-      scheduledShifts: scheduleList.filter((entry) => entry.status === 'scheduled' && weekDays.some((day) => day.date === entry.date)).length,
-      dayOffs: scheduleList.filter((entry) => entry.status === 'day-off' && weekDays.some((day) => day.date === entry.date)).length,
-      coverage: new Set(scheduleList.filter((entry) => entry.status === 'scheduled' && weekDays.some((day) => day.date === entry.date)).map((entry) => entry.employeeId)).size,
-    }),
-    [scheduleList, weekDays],
+    () => {
+      const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
+      const weekEntries = scheduleList.filter(
+        (entry) => activeEmployeeIds.has(entry.employeeId) && weekDays.some((day) => day.date === entry.date),
+      );
+      return {
+        scheduledShifts: weekEntries.filter((entry) => entry.status === 'scheduled').length,
+        dayOffs: weekEntries.filter((entry) => entry.status === 'day-off').length,
+        coverage: new Set(weekEntries.filter((entry) => entry.status === 'scheduled').map((entry) => entry.employeeId)).size,
+      };
+    },
+    [activeEmployees, scheduleList, weekDays],
   );
 
   const latestWeatherLog = useMemo(

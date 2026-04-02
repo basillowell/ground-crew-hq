@@ -9,15 +9,18 @@ import {
   loadAssignments,
   loadChemicalApplicationLogs,
   loadCurrentAppUserId,
+  loadCurrentPropertyId,
   loadDepartmentOptions,
   loadEmployees,
   loadEquipmentUnits,
+  loadProperties,
   loadProgramSettings,
   loadScheduleEntries,
   loadWeatherStations,
   saveCurrentAppUserId,
+  saveCurrentPropertyId,
 } from '@/lib/dataStore';
-import type { AppUser, ProgramSettings } from '@/data/seedData';
+import type { AppUser, ProgramSettings, Property } from '@/data/seedData';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -116,6 +119,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [currentPropertyId, setCurrentPropertyId] = useState('');
   const [dataRefreshTick, setDataRefreshTick] = useState(0);
 
   useEffect(() => {
@@ -123,16 +128,25 @@ export function AppLayout({ children }: AppLayoutProps) {
       const nextDepartments = loadDepartmentOptions().map((entry) => entry.name);
       const settings = loadProgramSettings()[0];
       const nextUsers = loadAppUsers();
+      const nextProperties = loadProperties();
       const savedUserId = loadCurrentAppUserId();
+      const savedPropertyId = loadCurrentPropertyId();
       const fallbackUser = nextUsers.find((entry) => entry.status === 'active') || nextUsers[0] || null;
       const resolvedUser = nextUsers.find((entry) => entry.id === savedUserId) || fallbackUser || null;
+      const fallbackProperty = nextProperties.find((entry) => entry.status === 'active') || nextProperties[0] || null;
+      const resolvedProperty = nextProperties.find((entry) => entry.id === savedPropertyId) || fallbackProperty || null;
       const fallbackDepartment = nextDepartments[0] ?? 'Maintenance';
       setProgramSetting(settings ?? null);
       setDepartmentOptions(nextDepartments.length > 0 ? nextDepartments : ['Maintenance']);
       setAppUsers(nextUsers);
+      setProperties(nextProperties);
       setCurrentUser(resolvedUser);
+      setCurrentPropertyId(resolvedProperty?.id || '');
       if (resolvedUser && resolvedUser.id !== savedUserId) {
         saveCurrentAppUserId(resolvedUser.id);
+      }
+      if (resolvedProperty && resolvedProperty.id !== savedPropertyId) {
+        saveCurrentPropertyId(resolvedProperty.id);
       }
       setDepartment(resolvedUser?.department || settings?.defaultDepartment || fallbackDepartment);
     };
@@ -159,10 +173,11 @@ export function AppLayout({ children }: AppLayoutProps) {
           department,
           date: currentDate.toISOString().slice(0, 10),
           currentUserId: currentUser?.id || '',
+          propertyId: currentPropertyId,
         },
       }),
     );
-  }, [currentDate, currentUser?.id, department]);
+  }, [currentDate, currentPropertyId, currentUser?.id, department]);
 
   useEffect(() => {
     const handleDataUpdated = () => setDataRefreshTick((current) => current + 1);
@@ -272,6 +287,19 @@ export function AppLayout({ children }: AppLayoutProps) {
     window.dispatchEvent(new CustomEvent('user-session-updated'));
   };
 
+  const handleSelectProperty = (propertyId: string) => {
+    setCurrentPropertyId(propertyId);
+    saveCurrentPropertyId(propertyId);
+    window.dispatchEvent(new CustomEvent('operations-context-updated', {
+      detail: {
+        department,
+        date: currentDate.toISOString().slice(0, 10),
+        currentUserId: currentUser?.id || '',
+        propertyId,
+      },
+    }));
+  };
+
   const handleSignOut = () => {
     saveCurrentAppUserId('');
     window.dispatchEvent(new CustomEvent('user-session-updated'));
@@ -289,6 +317,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             departments={departmentOptions}
             currentDate={currentDate}
             setCurrentDate={setCurrentDate}
+            properties={properties}
+            currentPropertyId={currentPropertyId}
+            onSelectProperty={handleSelectProperty}
             appUsers={appUsers}
             currentUser={currentUser ?? undefined}
             notifications={notifications}

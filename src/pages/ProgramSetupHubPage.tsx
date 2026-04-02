@@ -21,7 +21,7 @@ import {
   Waves,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
-import type { AppUser, DepartmentOption, GroupOption, ProgramSettings, ShiftTemplate, WorkLocation } from '@/data/seedData';
+import type { AppUser, DepartmentOption, GroupOption, ProgramSettings, Property, ShiftTemplate, WorkLocation } from '@/data/seedData';
 import {
   loadLanguageOptions,
   loadApplicationAreas,
@@ -30,6 +30,7 @@ import {
   loadDepartmentOptions,
   loadEmployees,
   loadGroupOptions,
+  loadProperties,
   loadProgramSettings,
   loadRoleOptions,
   loadScheduleEntries,
@@ -41,6 +42,7 @@ import {
   saveLanguageOptions,
   saveDepartmentOptions,
   saveGroupOptions,
+  saveProperties,
   saveProgramSettings,
   saveRoleOptions,
   saveShiftTemplates,
@@ -167,6 +169,7 @@ export default function ProgramSetupHubPage() {
   const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
   const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
   const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
@@ -178,6 +181,7 @@ export default function ProgramSetupHubPage() {
     setGroupOptions(loadGroupOptions());
     setRoleOptions(loadRoleOptions());
     setLanguageOptions(loadLanguageOptions());
+    setProperties(loadProperties());
     setWorkLocations(loadWorkLocations());
     setShiftTemplates(loadShiftTemplates());
     setAppUsers(loadAppUsers());
@@ -202,8 +206,9 @@ export default function ProgramSetupHubPage() {
       assignments: assignments.length,
       weatherAreas: weatherAreas.length,
       applicationAreas: applicationAreas.length,
+      properties: properties.length,
     };
-  }, [appUsers, departmentOptions, groupOptions, shiftTemplates, workLocations, programSetting]);
+  }, [appUsers, departmentOptions, groupOptions, properties, shiftTemplates, workLocations, programSetting]);
 
   function saveGeneralSettings() {
     if (!programSetting) return;
@@ -240,6 +245,14 @@ export default function ProgramSetupHubPage() {
     saveWorkLocations(workLocations);
     toast('Locations saved', {
       description: `${workLocations.length} operational locations now feed routing, weather, and application setup.`,
+    });
+  }
+
+  function savePropertiesTab() {
+    saveProperties(properties);
+    announceProgramSetupUpdate();
+    toast('Properties saved', {
+      description: `${properties.length} properties now feed Command Center and property-specific workflow routing.`,
     });
   }
 
@@ -386,6 +399,7 @@ export default function ProgramSetupHubPage() {
           <TabsTrigger value="general" className="text-xs gap-1 border bg-card px-3 py-2"><Settings className="h-3 w-3" /> Brand + Club Profile</TabsTrigger>
           <TabsTrigger value="structure" className="text-xs gap-1 border bg-card px-3 py-2"><Users className="h-3 w-3" /> Workforce Structure</TabsTrigger>
           <TabsTrigger value="users" className="text-xs gap-1 border bg-card px-3 py-2"><ShieldCheck className="h-3 w-3" /> Users + Access</TabsTrigger>
+          <TabsTrigger value="properties" className="text-xs gap-1 border bg-card px-3 py-2"><Building2 className="h-3 w-3" /> Properties</TabsTrigger>
           <TabsTrigger value="locations" className="text-xs gap-1 border bg-card px-3 py-2"><MapPin className="h-3 w-3" /> Locations</TabsTrigger>
           <TabsTrigger value="shifts" className="text-xs gap-1 border bg-card px-3 py-2"><Clock className="h-3 w-3" /> Shift Templates</TabsTrigger>
         </TabsList>
@@ -1073,6 +1087,96 @@ export default function ProgramSetupHubPage() {
           </div>
         </TabsContent>
 
+        <TabsContent value="properties">
+          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">Managed Properties</div>
+                  <p className="text-xs text-muted-foreground">These are the properties shown in Command Center and used to scope Workflow routing.</p>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() =>
+                    setProperties((current) => [
+                      ...current,
+                      {
+                        id: makeId('prop'),
+                        name: `Property ${current.length + 1}`,
+                        shortName: `P${current.length + 1}`,
+                        type: 'golf-course',
+                        address: '',
+                        city: '',
+                        state: '',
+                        acreage: 18,
+                        logoInitials: 'PR',
+                        color: '#2f855a',
+                        status: 'active',
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="h-3 w-3" /> Add Property
+                </Button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {properties.map((property) => (
+                  <div key={property.id} className="rounded-2xl border p-4">
+                    <div className="grid gap-3 lg:grid-cols-[1.2fr_0.7fr_0.8fr_auto]">
+                      <Input value={property.name} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, name: event.target.value } : entry))} className="h-9" />
+                      <Input value={property.shortName} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, shortName: event.target.value } : entry))} className="h-9" />
+                      <select value={property.type} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, type: event.target.value as Property['type'] } : entry))} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="golf-course">Golf Course</option>
+                        <option value="resort">Resort</option>
+                        <option value="estate">Estate</option>
+                        <option value="municipal">Municipal</option>
+                      </select>
+                      <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => {
+                        const confirmed = window.confirm(`Delete ${property.name}? This only removes the property record. Reassign linked employees and locations first.`);
+                        if (!confirmed) return;
+                        setProperties((current) => current.filter((entry) => entry.id !== property.id));
+                      }}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_0.9fr_0.4fr_0.5fr_0.6fr_0.5fr]">
+                      <Input value={property.address} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, address: event.target.value } : entry))} placeholder="Address" className="h-9" />
+                      <Input value={property.city} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, city: event.target.value } : entry))} placeholder="City" className="h-9" />
+                      <Input value={property.state} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, state: event.target.value } : entry))} placeholder="ST" className="h-9" />
+                      <Input value={String(property.acreage)} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, acreage: Number(event.target.value || 0) } : entry))} placeholder="Acres" className="h-9" />
+                      <Input value={property.logoInitials} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, logoInitials: event.target.value.toUpperCase().slice(0, 3) } : entry))} placeholder="Logo" className="h-9" />
+                      <select value={property.status} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, status: event.target.value as Property['status'] } : entry))} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="active">Active</option>
+                        <option value="onboarding">Onboarding</option>
+                        <option value="paused">Paused</option>
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={savePropertiesTab}>Save Properties</Button>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="font-semibold">How Properties Flow Through the App</div>
+              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                <p>Command Center reads these saved properties, not a separate demo list.</p>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="font-medium text-foreground">Workflow Routing</div>
+                  <p className="mt-1 text-xs">Clicking a property in Command Center now sets the active property before routing into Workflow.</p>
+                </div>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="font-medium text-foreground">Employee Assignment</div>
+                  <p className="mt-1 text-xs">Employees and locations can now be tied to a property so task planning stays scoped correctly.</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="locations">
           <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
             <Card className="p-6">
@@ -1081,7 +1185,7 @@ export default function ProgramSetupHubPage() {
                   <div className="font-semibold">Operational Locations</div>
                   <p className="text-xs text-muted-foreground">These locations ripple into weather setup, application areas, notes, and planning views.</p>
                 </div>
-                <Button size="sm" className="gap-1 text-xs" onClick={() => setWorkLocations((current) => [...current, { id: makeId('loc'), name: `Location ${current.length + 1}` }])}>
+                <Button size="sm" className="gap-1 text-xs" onClick={() => setWorkLocations((current) => [...current, { id: makeId('loc'), name: `Location ${current.length + 1}`, propertyId: properties[0]?.id, propertyName: properties[0]?.name }])}>
                   <Plus className="h-3 w-3" /> Add Location
                 </Button>
               </div>
@@ -1095,6 +1199,19 @@ export default function ProgramSetupHubPage() {
                       onChange={(event) => setWorkLocations((current) => current.map((entry) => entry.id === location.id ? { ...entry, name: event.target.value } : entry))}
                       className="h-8 flex-1"
                     />
+                    <select
+                      value={location.propertyId || ''}
+                      onChange={(event) => {
+                        const property = properties.find((entry) => entry.id === event.target.value);
+                        setWorkLocations((current) => current.map((entry) => entry.id === location.id ? { ...entry, propertyId: event.target.value, propertyName: property?.name } : entry));
+                      }}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    >
+                      <option value="">No property</option>
+                      {properties.map((property) => (
+                        <option key={property.id} value={property.id}>{property.name}</option>
+                      ))}
+                    </select>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setWorkLocations((current) => current.filter((entry) => entry.id !== location.id))}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>

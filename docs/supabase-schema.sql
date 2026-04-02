@@ -13,8 +13,27 @@ create table if not exists public.employees (
   language text not null default 'English',
   "workerType" text not null default 'full-time',
   "hireDate" date not null,
+  "propertyId" text,
+  "portalEnabled" boolean not null default false,
+  "loginEmail" text not null default '',
+  "loginPassword" text not null default '',
+  "appRole" text not null default 'crew',
   "defaultLocationId" text,
   "shiftTemplateId" text
+);
+
+create table if not exists public.properties (
+  id text primary key,
+  name text not null,
+  "shortName" text not null,
+  type text not null,
+  address text not null default '',
+  city text not null default '',
+  state text not null default '',
+  acreage numeric not null default 0,
+  "logoInitials" text not null default 'WF',
+  color text not null default '#2f855a',
+  status text not null default 'active'
 );
 
 create table if not exists public.tasks (
@@ -258,7 +277,9 @@ create table if not exists public.language_options (
 
 create table if not exists public.work_locations (
   id text primary key,
-  name text not null
+  name text not null,
+  "propertyId" text,
+  "propertyName" text not null default ''
 );
 
 create table if not exists public.shift_templates (
@@ -286,6 +307,7 @@ alter table public.chemical_application_tank_mix_items enable row level security
 alter table public.program_settings enable row level security;
 alter table public.department_options enable row level security;
 alter table public.group_options enable row level security;
+alter table public.properties enable row level security;
 alter table public.work_locations enable row level security;
 alter table public.shift_templates enable row level security;
 alter table public.role_options enable row level security;
@@ -342,6 +364,9 @@ create policy "public full access department_options" on public.department_optio
 drop policy if exists "public full access group_options" on public.group_options;
 create policy "public full access group_options" on public.group_options for all using (true) with check (true);
 
+drop policy if exists "public full access properties" on public.properties;
+create policy "public full access properties" on public.properties for all using (true) with check (true);
+
 drop policy if exists "public full access work_locations" on public.work_locations;
 create policy "public full access work_locations" on public.work_locations for all using (true) with check (true);
 
@@ -383,8 +408,15 @@ alter table public.program_settings add column if not exists "shellImageUrl" tex
 alter table public.program_settings add column if not exists "primaryColor" text not null default '#2f855a';
 alter table public.program_settings add column if not exists "accentColor" text not null default '#d7f5e5';
 alter table public.program_settings add column if not exists "sidebarColor" text not null default '#203127';
+alter table public.employees add column if not exists "propertyId" text;
+alter table public.employees add column if not exists "portalEnabled" boolean not null default false;
+alter table public.employees add column if not exists "loginEmail" text not null default '';
+alter table public.employees add column if not exists "loginPassword" text not null default '';
+alter table public.employees add column if not exists "appRole" text not null default 'crew';
 alter table public.employees add column if not exists "defaultLocationId" text;
 alter table public.employees add column if not exists "shiftTemplateId" text;
+alter table public.work_locations add column if not exists "propertyId" text;
+alter table public.work_locations add column if not exists "propertyName" text not null default '';
 alter table public.app_users add column if not exists "fullName" text not null default '';
 alter table public.app_users add column if not exists email text not null default '';
 alter table public.app_users add column if not exists role text not null default 'manager';
