@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Copy, Download, Search, Filter, CalendarDays, CloudSun, FlaskConical } from 'lucide-react';
+import { ScheduleTemplates } from '@/components/scheduler/ScheduleTemplates';
 import { Input } from '@/components/ui/input';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
