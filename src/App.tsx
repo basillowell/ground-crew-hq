@@ -45,6 +45,7 @@ function AppRoutes() {
     <Suspense fallback={<RouteFallback />}>
       <AppLayout>
         <Routes>
+          <Route path="dashboard" element={<CommandCenterPage />} />
           <Route path="workboard" element={<WorkboardPage />} />
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="scheduler" element={<SchedulerPage />} />
@@ -57,6 +58,7 @@ function AppRoutes() {
           <Route path="tasks" element={<TasksPage />} />
           <Route path="safety" element={<SafetyPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="field" element={<MobileFieldPage />} />
         </Routes>
       </AppLayout>
     </Suspense>
