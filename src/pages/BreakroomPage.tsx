@@ -5,6 +5,7 @@ import { PageHeader, AvatarInitials } from '@/components/shared';
 import { ClipboardList, CloudSun, MapPin, RefreshCcw, Users } from 'lucide-react';
 import type { Assignment, Employee, Note, ScheduleEntry, Task, WeatherDailyLog, WeatherLocation } from '@/data/seedData';
 import {
+  DATA_STORE_UPDATED_EVENT,
   loadAssignments,
   loadEmployees,
   loadNotes,
@@ -49,9 +50,11 @@ export default function BreakroomPage() {
 
     refresh();
     const intervalId = window.setInterval(refresh, 30000);
+    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
     window.addEventListener('operations-context-updated', handleContext as EventListener);
     return () => {
       window.clearInterval(intervalId);
+      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
       window.removeEventListener('operations-context-updated', handleContext as EventListener);
     };
   }, []);

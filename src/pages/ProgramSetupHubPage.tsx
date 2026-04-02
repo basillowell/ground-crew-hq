@@ -15,15 +15,17 @@ import {
   MapPin,
   Plus,
   Settings,
+  ShieldCheck,
   Trash2,
   Users,
   Waves,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
-import type { DepartmentOption, GroupOption, ProgramSettings, ShiftTemplate, WorkLocation } from '@/data/seedData';
+import type { AppUser, DepartmentOption, GroupOption, ProgramSettings, ShiftTemplate, WorkLocation } from '@/data/seedData';
 import {
   loadLanguageOptions,
   loadApplicationAreas,
+  loadAppUsers,
   loadAssignments,
   loadDepartmentOptions,
   loadEmployees,
@@ -35,6 +37,7 @@ import {
   loadTasks,
   loadWeatherLocations,
   loadWorkLocations,
+  saveAppUsers,
   saveLanguageOptions,
   saveDepartmentOptions,
   saveGroupOptions,
@@ -66,6 +69,15 @@ function makeId(prefix: string) {
 
 function announceProgramSetupUpdate() {
   window.dispatchEvent(new CustomEvent('program-setup-updated'));
+}
+
+function slugifyClubId(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug ? `club-${slug}` : 'club-1';
 }
 
 function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
@@ -157,6 +169,7 @@ export default function ProgramSetupHubPage() {
   const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
+  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
 
   useEffect(() => {
     const loadedSettings = loadProgramSettings()[0];
@@ -167,6 +180,7 @@ export default function ProgramSetupHubPage() {
     setLanguageOptions(loadLanguageOptions());
     setWorkLocations(loadWorkLocations());
     setShiftTemplates(loadShiftTemplates());
+    setAppUsers(loadAppUsers());
   }, []);
 
   const liveCounts = useMemo(() => {
@@ -180,6 +194,8 @@ export default function ProgramSetupHubPage() {
     return {
       employees: employees.length,
       activeEmployees: employees.filter((employee) => employee.status === 'active').length,
+      appUsers: appUsers.length,
+      activeAppUsers: appUsers.filter((entry) => entry.status === 'active').length,
       tasks: tasks.length,
       activeTasks: tasks.filter((task) => (task.status ?? 'active') === 'active').length,
       schedules: schedules.length,
@@ -187,13 +203,22 @@ export default function ProgramSetupHubPage() {
       weatherAreas: weatherAreas.length,
       applicationAreas: applicationAreas.length,
     };
-  }, [departmentOptions, groupOptions, shiftTemplates, workLocations, programSetting]);
+  }, [appUsers, departmentOptions, groupOptions, shiftTemplates, workLocations, programSetting]);
 
   function saveGeneralSettings() {
     if (!programSetting) return;
     const nextSetting = withBrandDefaults(programSetting);
+    const nextClubLabel = nextSetting.clientLabel || nextSetting.organizationName || 'Client profile';
+    const nextClubId = slugifyClubId(nextClubLabel);
+    const nextUsers = appUsers.map((user) => ({
+      ...user,
+      clubId: nextClubId,
+      clubLabel: nextClubLabel,
+    }));
     setProgramSetting(nextSetting);
+    setAppUsers(nextUsers);
     saveProgramSettings([nextSetting]);
+    saveAppUsers(nextUsers);
     announceProgramSetupUpdate();
     toast('Program setup saved', {
       description: `${nextSetting.organizationName} now drives the active club and brand profile.`,
@@ -222,6 +247,36 @@ export default function ProgramSetupHubPage() {
     saveShiftTemplates(shiftTemplates);
     toast('Shift templates saved', {
       description: `${shiftTemplates.length} reusable shift plans are ready for scheduling.`,
+    });
+  }
+
+  function savePortalUsers() {
+    if (!programSetting) return;
+    const nextClubLabel = programSetting.clientLabel || programSetting.organizationName || 'Client profile';
+    const nextClubId = slugifyClubId(nextClubLabel);
+    const nextUsers = appUsers.map((user) => ({
+      ...user,
+      fullName: user.fullName.trim() || 'New User',
+      email: user.email.trim(),
+      title: user.title.trim() || 'Team Member',
+      department: user.department || programSetting.defaultDepartment || departmentOptions[0]?.name || 'Maintenance',
+      avatarInitials:
+        user.avatarInitials.trim().toUpperCase().slice(0, 3) ||
+        user.fullName
+          .split(' ')
+          .map((part) => part[0] || '')
+          .join('')
+          .slice(0, 2)
+          .toUpperCase() ||
+        'WF',
+      clubId: nextClubId,
+      clubLabel: nextClubLabel,
+    }));
+    setAppUsers(nextUsers);
+    saveAppUsers(nextUsers);
+    announceProgramSetupUpdate();
+    toast('Portal users saved', {
+      description: `${nextUsers.length} client portal profiles are now available from launch and the top bar.`,
     });
   }
 
@@ -284,6 +339,12 @@ export default function ProgramSetupHubPage() {
           helper="Reusable labor templates the scheduler can build from."
           icon={<Clock className="h-5 w-5" />}
         />
+        <StatCard
+          label="Portal Users"
+          value={liveCounts.activeAppUsers}
+          helper="Client admins, managers, and supervisors who can enter this workspace."
+          icon={<ShieldCheck className="h-5 w-5" />}
+        />
       </div>
 
       <Card className="p-5">
@@ -324,6 +385,7 @@ export default function ProgramSetupHubPage() {
           <TabsTrigger value="overview" className="text-xs gap-1 border bg-card px-3 py-2"><Building2 className="h-3 w-3" /> Overview</TabsTrigger>
           <TabsTrigger value="general" className="text-xs gap-1 border bg-card px-3 py-2"><Settings className="h-3 w-3" /> Brand + Club Profile</TabsTrigger>
           <TabsTrigger value="structure" className="text-xs gap-1 border bg-card px-3 py-2"><Users className="h-3 w-3" /> Workforce Structure</TabsTrigger>
+          <TabsTrigger value="users" className="text-xs gap-1 border bg-card px-3 py-2"><ShieldCheck className="h-3 w-3" /> Users + Access</TabsTrigger>
           <TabsTrigger value="locations" className="text-xs gap-1 border bg-card px-3 py-2"><MapPin className="h-3 w-3" /> Locations</TabsTrigger>
           <TabsTrigger value="shifts" className="text-xs gap-1 border bg-card px-3 py-2"><Clock className="h-3 w-3" /> Shift Templates</TabsTrigger>
         </TabsList>
@@ -366,6 +428,10 @@ export default function ProgramSetupHubPage() {
                 <div className="rounded-2xl border bg-muted/20 p-4">
                   <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Total Employees</div>
                   <div className="mt-2 text-3xl font-semibold">{liveCounts.employees}</div>
+                </div>
+                <div className="rounded-2xl border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Portal Users</div>
+                  <div className="mt-2 text-3xl font-semibold">{liveCounts.activeAppUsers}</div>
                 </div>
               </div>
             </Card>
@@ -833,6 +899,177 @@ export default function ProgramSetupHubPage() {
           </div>
           <div className="mt-4 flex justify-end">
             <Button onClick={saveStructures}>Save Workforce Structure</Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="users">
+          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">Client Portal Users</div>
+                  <p className="text-xs text-muted-foreground">These are the people who enter the app from the launch screen and appear in the top-right profile switcher.</p>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() =>
+                    setAppUsers((current) => [
+                      ...current,
+                      {
+                        id: makeId('user'),
+                        fullName: `New User ${current.length + 1}`,
+                        email: '',
+                        role: 'manager',
+                        title: 'Operations Manager',
+                        department: programSetting?.defaultDepartment || departmentOptions[0]?.name || 'Maintenance',
+                        clubId: slugifyClubId(programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'),
+                        clubLabel: programSetting?.clientLabel || programSetting?.organizationName || 'Client profile',
+                        avatarInitials: 'NU',
+                        status: 'active',
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="h-3 w-3" /> Add User
+                </Button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {appUsers.map((user) => (
+                  <div key={user.id} className="rounded-2xl border p-4">
+                    <div className="grid gap-3 lg:grid-cols-[1.2fr_1.2fr_0.8fr_0.8fr_0.9fr_auto]">
+                      <Input
+                        value={user.fullName}
+                        onChange={(event) =>
+                          setAppUsers((current) =>
+                            current.map((entry) => (entry.id === user.id ? { ...entry, fullName: event.target.value } : entry)),
+                          )
+                        }
+                        placeholder="Full name"
+                        className="h-9"
+                      />
+                      <Input
+                        value={user.email}
+                        onChange={(event) =>
+                          setAppUsers((current) =>
+                            current.map((entry) => (entry.id === user.id ? { ...entry, email: event.target.value } : entry)),
+                          )
+                        }
+                        placeholder="Email"
+                        className="h-9"
+                      />
+                      <select
+                        value={user.role}
+                        onChange={(event) =>
+                          setAppUsers((current) =>
+                            current.map((entry) =>
+                              entry.id === user.id
+                                ? { ...entry, role: event.target.value as AppUser['role'] }
+                                : entry,
+                            ),
+                          )
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="manager">Manager</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="crew">Crew</option>
+                      </select>
+                      <select
+                        value={user.department}
+                        onChange={(event) =>
+                          setAppUsers((current) =>
+                            current.map((entry) => (entry.id === user.id ? { ...entry, department: event.target.value } : entry)),
+                          )
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        {departmentOptions.map((department) => (
+                          <option key={department.id} value={department.name}>{department.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={user.status}
+                        onChange={(event) =>
+                          setAppUsers((current) =>
+                            current.map((entry) =>
+                              entry.id === user.id
+                                ? { ...entry, status: event.target.value as AppUser['status'] }
+                                : entry,
+                            ),
+                          )
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                        onClick={() => setAppUsers((current) => current.filter((entry) => entry.id !== user.id))}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_0.6fr_1fr]">
+                      <Input
+                        value={user.title}
+                        onChange={(event) =>
+                          setAppUsers((current) =>
+                            current.map((entry) => (entry.id === user.id ? { ...entry, title: event.target.value } : entry)),
+                          )
+                        }
+                        placeholder="Title"
+                        className="h-9"
+                      />
+                      <Input
+                        value={user.avatarInitials}
+                        onChange={(event) =>
+                          setAppUsers((current) =>
+                            current.map((entry) =>
+                              entry.id === user.id
+                                ? { ...entry, avatarInitials: event.target.value.toUpperCase().slice(0, 3) }
+                                : entry,
+                            ),
+                          )
+                        }
+                        placeholder="Initials"
+                        className="h-9"
+                      />
+                      <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                        <div className="font-medium text-foreground">{user.clubLabel || programSetting?.clientLabel || 'Client profile'}</div>
+                        <div className="mt-1">Launch, notifications, and top-bar switching all use this client user list.</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={savePortalUsers}>Save Portal Users</Button>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="font-semibold">How This Scales Per Client</div>
+              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                <p>Portal users are separate from employees. Employees do the work; portal users manage the work.</p>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="font-medium text-foreground">Launch Screen</div>
+                  <p className="mt-1 text-xs">Only active users appear when someone enters the client workspace.</p>
+                </div>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="font-medium text-foreground">Top-Right Profile Menu</div>
+                  <p className="mt-1 text-xs">Managers can switch between admin, manager, and supervisor views without changing the client brand profile.</p>
+                </div>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="font-medium text-foreground">Notifications</div>
+                  <p className="mt-1 text-xs">Role-aware alerts become more useful once each club maintains its real operational users here.</p>
+                </div>
+              </div>
+            </Card>
           </div>
         </TabsContent>
 

@@ -34,6 +34,7 @@ import {
   type WeatherLocation,
 } from '@/data/seedData';
 import {
+  DATA_STORE_UPDATED_EVENT,
   loadApplicationAreas,
   loadAssignments,
   loadChemicalApplicationLogs,
@@ -122,16 +123,22 @@ export default function ReportsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
-    setWeatherLogs(loadWeatherDailyLogs());
-    setWeatherLocations(loadWeatherLocations());
-    setApplicationLogs(loadChemicalApplicationLogs());
-    setApplicationAreas(loadApplicationAreas());
-    setChemicalProducts(loadChemicalProducts());
-    setTankMixItems(loadChemicalApplicationTankMixItems());
-    setEmployees(loadEmployees());
-    setScheduleEntries(loadScheduleEntries());
-    setAssignments(loadAssignments());
-    setTasks(loadTasks());
+    const refresh = () => {
+      setWeatherLogs(loadWeatherDailyLogs());
+      setWeatherLocations(loadWeatherLocations());
+      setApplicationLogs(loadChemicalApplicationLogs());
+      setApplicationAreas(loadApplicationAreas());
+      setChemicalProducts(loadChemicalProducts());
+      setTankMixItems(loadChemicalApplicationTankMixItems());
+      setEmployees(loadEmployees());
+      setScheduleEntries(loadScheduleEntries());
+      setAssignments(loadAssignments());
+      setTasks(loadTasks());
+    };
+
+    refresh();
+    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
+    return () => window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
   }, []);
 
   const filteredWeather = useMemo(

@@ -16,6 +16,7 @@ import { toast } from '@/components/ui/sonner';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
 import { StickyNote, Droplets, CloudSun, MonitorSmartphone, LayoutList, GanttChart } from 'lucide-react';
 import {
+  DATA_STORE_UPDATED_EVENT,
   loadApplicationAreas,
   loadAssignments,
   loadChemicalApplicationLogs,
@@ -96,36 +97,48 @@ export default function WorkboardPage() {
   });
 
   useEffect(() => {
+    const refresh = () => {
+      const storedEmployees = loadEmployees();
+      const storedSchedules = loadScheduleEntries();
+      const storedTasks = loadTasks()
+        .filter((task) => task.status === 'active')
+        .sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999) || left.name.localeCompare(right.name));
+      setEmployeeList(storedEmployees);
+      setTaskList(storedTasks);
+      setAssignmentList(loadAssignments());
+      setApplicationAreas(loadApplicationAreas());
+      setNoteList(loadNotes());
+      setScheduleList(storedSchedules);
+      setEquipmentList(loadEquipmentUnits());
+      setWeatherLogs(loadWeatherDailyLogs());
+      setWeatherLocations(loadWeatherLocations());
+      setWorkLocations(loadWorkLocations());
+      setApplicationLogs(loadChemicalApplicationLogs());
+      const firstScheduled =
+        storedSchedules.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??
+        storedEmployees.find((employee) => employee.status === 'active')?.id ??
+        '';
+      setSelectedEmployeeId(firstScheduled);
+      setAssignmentDraft((current) => ({
+        ...current,
+        employeeId: current.employeeId || firstScheduled,
+        taskId: current.taskId || storedTasks[0]?.id || '',
+      }));
+    };
+
     const handleOperationsContext = (event: Event) => {
       const detail = (event as CustomEvent<{ department?: string; date?: string }>).detail;
       if (detail?.department) setDepartment(detail.department);
       if (detail?.date) setBoardDate(detail.date);
     };
 
-    const storedEmployees = loadEmployees();
-    const storedSchedules = loadScheduleEntries();
-    const storedTasks = loadTasks()
-      .filter((task) => task.status === 'active')
-      .sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999) || left.name.localeCompare(right.name));
-    setEmployeeList(storedEmployees);
-    setTaskList(storedTasks);
-    setAssignmentList(loadAssignments());
-    setApplicationAreas(loadApplicationAreas());
-    setNoteList(loadNotes());
-    setScheduleList(storedSchedules);
-    setEquipmentList(loadEquipmentUnits());
-    setWeatherLogs(loadWeatherDailyLogs());
-    setWeatherLocations(loadWeatherLocations());
-    setWorkLocations(loadWorkLocations());
-    setApplicationLogs(loadChemicalApplicationLogs());
-    const firstScheduled =
-      storedSchedules.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??
-      storedEmployees.find((employee) => employee.status === 'active')?.id ??
-      '';
-    setSelectedEmployeeId(firstScheduled);
-    setAssignmentDraft((current) => ({ ...current, employeeId: firstScheduled, taskId: storedTasks[0]?.id ?? '' }));
+    refresh();
+    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
     window.addEventListener('operations-context-updated', handleOperationsContext as EventListener);
-    return () => window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
+    return () => {
+      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
+      window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
+    };
   }, [boardDate]);
 
   const groups = useMemo(

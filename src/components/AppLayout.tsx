@@ -4,6 +4,7 @@ import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import {
+  DATA_STORE_UPDATED_EVENT,
   loadAppUsers,
   loadAssignments,
   loadChemicalApplicationLogs,
@@ -115,6 +116,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [dataRefreshTick, setDataRefreshTick] = useState(0);
 
   useEffect(() => {
     const refreshProgramSetup = () => {
@@ -136,9 +138,11 @@ export function AppLayout({ children }: AppLayoutProps) {
     };
 
     refreshProgramSetup();
+    window.addEventListener(DATA_STORE_UPDATED_EVENT, refreshProgramSetup as EventListener);
     window.addEventListener('program-setup-updated', refreshProgramSetup);
     window.addEventListener('user-session-updated', refreshProgramSetup);
     return () => {
+      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refreshProgramSetup as EventListener);
       window.removeEventListener('program-setup-updated', refreshProgramSetup);
       window.removeEventListener('user-session-updated', refreshProgramSetup);
     };
@@ -159,6 +163,12 @@ export function AppLayout({ children }: AppLayoutProps) {
       }),
     );
   }, [currentDate, currentUser?.id, department]);
+
+  useEffect(() => {
+    const handleDataUpdated = () => setDataRefreshTick((current) => current + 1);
+    window.addEventListener(DATA_STORE_UPDATED_EVENT, handleDataUpdated as EventListener);
+    return () => window.removeEventListener(DATA_STORE_UPDATED_EVENT, handleDataUpdated as EventListener);
+  }, []);
 
   const notifications = useMemo(() => {
     const todayKey = currentDate.toISOString().slice(0, 10);
@@ -251,7 +261,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
 
     return nextNotifications;
-  }, [currentDate, currentUser?.role, department]);
+  }, [currentDate, currentUser?.role, dataRefreshTick, department]);
 
   const handleSelectUser = (userId: string) => {
     const selected = appUsers.find((entry) => entry.id === userId);

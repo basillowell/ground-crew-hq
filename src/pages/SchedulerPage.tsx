@@ -9,7 +9,7 @@ import { ScheduleTemplates } from '@/components/scheduler/ScheduleTemplates';
 import { Input } from '@/components/ui/input';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
-import { loadApplicationAreas, loadChemicalApplicationLogs, loadEmployees, loadScheduleEntries, loadWeatherDailyLogs, loadWeatherLocations, saveScheduleEntries } from '@/lib/dataStore';
+import { DATA_STORE_UPDATED_EVENT, loadApplicationAreas, loadChemicalApplicationLogs, loadEmployees, loadScheduleEntries, loadWeatherDailyLogs, loadWeatherLocations, saveScheduleEntries } from '@/lib/dataStore';
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -68,6 +68,21 @@ export default function SchedulerPage() {
   });
 
   useEffect(() => {
+    const refresh = () => {
+      const storedEmployees = loadEmployees();
+      setEmployeeList(storedEmployees);
+      setApplicationAreas(loadApplicationAreas());
+      setScheduleList(loadScheduleEntries());
+      setWeatherLogs(loadWeatherDailyLogs());
+      setWeatherLocations(loadWeatherLocations());
+      setApplicationLogs(loadChemicalApplicationLogs());
+      setSelectedEmployeeId(storedEmployees.find((employee) => employee.status === 'active')?.id ?? '');
+      setDraft((current) => ({
+        ...current,
+        employeeId: storedEmployees.find((employee) => employee.status === 'active')?.id ?? current.employeeId,
+      }));
+    };
+
     const handleOperationsContext = (event: Event) => {
       const detail = (event as CustomEvent<{ date?: string }>).detail;
       if (detail?.date) {
@@ -75,20 +90,13 @@ export default function SchedulerPage() {
       }
     };
 
-    const storedEmployees = loadEmployees();
-    setEmployeeList(storedEmployees);
-    setApplicationAreas(loadApplicationAreas());
-    setScheduleList(loadScheduleEntries());
-    setWeatherLogs(loadWeatherDailyLogs());
-    setWeatherLocations(loadWeatherLocations());
-    setApplicationLogs(loadChemicalApplicationLogs());
-    setSelectedEmployeeId(storedEmployees.find((employee) => employee.status === 'active')?.id ?? '');
-    setDraft((current) => ({
-      ...current,
-      employeeId: storedEmployees.find((employee) => employee.status === 'active')?.id ?? current.employeeId,
-    }));
+    refresh();
+    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
     window.addEventListener('operations-context-updated', handleOperationsContext as EventListener);
-    return () => window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
+    return () => {
+      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
+      window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
+    };
   }, []);
 
   const activeEmployees = useMemo(

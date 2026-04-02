@@ -18,7 +18,7 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { loadAppUsers, loadCurrentAppUserId, loadProgramSettings, saveCurrentAppUserId } from '@/lib/dataStore';
+import { DATA_STORE_UPDATED_EVENT, loadAppUsers, loadCurrentAppUserId, loadProgramSettings, saveCurrentAppUserId } from '@/lib/dataStore';
 import type { AppUser } from '@/data/seedData';
 
 const modules = [
@@ -50,15 +50,27 @@ export default function LaunchpadPage() {
   const [shellImageUrl, setShellImageUrl] = useState('');
 
   useEffect(() => {
-    const settings = loadProgramSettings()[0];
-    const users = loadAppUsers().filter((entry) => entry.status === 'active');
-    const savedUserId = loadCurrentAppUserId();
-    const defaultUser = users.find((entry) => entry.id === savedUserId) || users[0];
-    setAppUsers(users);
-    setSelectedUserId(defaultUser?.id || '');
-    setClientName(settings?.clientLabel || settings?.organizationName || 'Ground Crew HQ');
-    setAppName(settings?.appName || 'WorkForce App');
-    setShellImageUrl(settings?.shellImageUrl || settings?.logoUrl || '');
+    const refresh = () => {
+      const settings = loadProgramSettings()[0];
+      const users = loadAppUsers().filter((entry) => entry.status === 'active');
+      const savedUserId = loadCurrentAppUserId();
+      const defaultUser = users.find((entry) => entry.id === savedUserId) || users[0];
+      setAppUsers(users);
+      setSelectedUserId(defaultUser?.id || '');
+      setClientName(settings?.clientLabel || settings?.organizationName || 'Ground Crew HQ');
+      setAppName(settings?.appName || 'WorkForce App');
+      setShellImageUrl(settings?.shellImageUrl || settings?.logoUrl || '');
+    };
+
+    refresh();
+    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
+    window.addEventListener('program-setup-updated', refresh as EventListener);
+    window.addEventListener('user-session-updated', refresh as EventListener);
+    return () => {
+      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
+      window.removeEventListener('program-setup-updated', refresh as EventListener);
+      window.removeEventListener('user-session-updated', refresh as EventListener);
+    };
   }, []);
 
   const selectedUser = useMemo(

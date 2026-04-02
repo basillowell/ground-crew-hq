@@ -101,6 +101,8 @@ type CollectionConfig<T> = {
   saveLocal: (value: T[]) => void;
 };
 
+export const DATA_STORE_UPDATED_EVENT = 'data-store-updated';
+
 const collections = {
   employees: {
     table: 'employees',
@@ -288,6 +290,13 @@ async function hydrateCollection<T extends { id?: string }>(config: CollectionCo
 
 function syncCollection<T extends { id?: string }>(config: CollectionConfig<T>, rows: T[]) {
   config.saveLocal(rows);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(DATA_STORE_UPDATED_EVENT, {
+        detail: { table: config.table },
+      }),
+    );
+  }
   if (!supabase) return;
   void replaceRemoteRows(config.table, rows).catch(() => undefined);
 }
