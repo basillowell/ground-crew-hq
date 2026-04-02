@@ -54,6 +54,27 @@ function applyBranding(programSetting?: ProgramSettings) {
   root.style.setProperty('--accent', hexToHslValues(programSetting.accentColor, '152 30% 94%'));
   root.style.setProperty('--sidebar-background', hexToHslValues(programSetting.sidebarColor, '220 20% 14%'));
   root.style.setProperty('--sidebar-primary', hexToHslValues(programSetting.primaryColor, '152 55% 48%'));
+  const fontThemes: Record<string, { body: string; heading: string }> = {
+    'modern-sans': {
+      body: '"Inter", "Segoe UI", sans-serif',
+      heading: '"Inter", "Segoe UI", sans-serif',
+    },
+    'editorial-serif': {
+      body: '"Inter", "Segoe UI", sans-serif',
+      heading: '"Georgia", "Times New Roman", serif',
+    },
+    'classic-club': {
+      body: '"Trebuchet MS", "Segoe UI", sans-serif',
+      heading: '"Palatino Linotype", "Book Antiqua", serif',
+    },
+    'compact-ops': {
+      body: '"Segoe UI", "Arial", sans-serif',
+      heading: '"Segoe UI", "Arial", sans-serif',
+    },
+  };
+  const chosenFontTheme = fontThemes[programSetting.fontThemePreset || 'modern-sans'] || fontThemes['modern-sans'];
+  root.style.setProperty('--brand-body-font', chosenFontTheme.body);
+  root.style.setProperty('--brand-heading-font', chosenFontTheme.heading);
   if (programSetting.logoUrl) {
     let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!favicon) {
@@ -114,6 +135,48 @@ export function AppLayout({ children }: AppLayoutProps) {
             setCurrentDate={setCurrentDate}
             programSetting={programSetting ?? undefined}
           />
+          {programSetting ? (
+            <div
+              className="border-b px-4 py-3"
+              style={{
+                backgroundImage: programSetting.shellImageUrl
+                  ? `linear-gradient(90deg, rgba(15,23,42,0.82), rgba(15,23,42,0.58)), url(${programSetting.shellImageUrl})`
+                  : `linear-gradient(90deg, ${programSetting.sidebarColor || '#203127'}, ${programSetting.primaryColor || '#2f855a'})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-4 text-white">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/20 bg-white/10 backdrop-blur">
+                    {programSetting.logoUrl ? (
+                      <img
+                        src={programSetting.logoUrl}
+                        alt={`${programSetting.clientLabel || programSetting.organizationName || 'Client'} logo`}
+                        className="h-12 w-12 rounded-xl object-contain"
+                      />
+                    ) : (
+                      <span className="text-lg font-semibold">{(programSetting.logoInitials || 'WF').slice(0, 2)}</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">
+                      {programSetting.clientLabel || programSetting.organizationName || 'Client profile'}
+                    </div>
+                    <div className="brand-heading text-2xl font-semibold">
+                      {programSetting.appName || 'WorkForce App'}
+                    </div>
+                    <div className="text-sm text-white/80">
+                      {programSetting.navigationSubtitle || programSetting.organizationName || 'Operations platform'}
+                    </div>
+                  </div>
+                </div>
+                <div className="max-w-xl text-sm text-white/75">
+                  {programSetting.themeNotes || 'Client branding is now active across the shell, headers, and browser identity.'}
+                </div>
+              </div>
+            </div>
+          ) : null}
           <main className="flex-1 overflow-auto">
             {children}
           </main>

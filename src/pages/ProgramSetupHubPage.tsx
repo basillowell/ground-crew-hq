@@ -51,6 +51,12 @@ const themePresets = [
   { id: 'heritage-gold', name: 'Heritage Gold', primaryColor: '#b7791f', accentColor: '#fef3c7', sidebarColor: '#3b2f1a' },
   { id: 'fairway-slate', name: 'Fairway Slate', primaryColor: '#0f766e', accentColor: '#ccfbf1', sidebarColor: '#1f2937' },
 ];
+const typographyPresets = [
+  { id: 'modern-sans', name: 'Modern Sans' },
+  { id: 'editorial-serif', name: 'Editorial Serif' },
+  { id: 'classic-club', name: 'Classic Club' },
+  { id: 'compact-ops', name: 'Compact Ops' },
+];
 
 function makeId(prefix: string) {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -73,6 +79,8 @@ function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
     logoUrl: settings.logoUrl || '',
     uiThemePreset: settings.uiThemePreset || 'club-emerald',
     themeNotes: settings.themeNotes || '',
+    fontThemePreset: settings.fontThemePreset || 'modern-sans',
+    shellImageUrl: settings.shellImageUrl || '',
     primaryColor: settings.primaryColor || '#2f855a',
     accentColor: settings.accentColor || '#d7f5e5',
     sidebarColor: settings.sidebarColor || '#203127',
@@ -225,6 +233,19 @@ export default function ProgramSetupHubPage() {
       setProgramSetting((current) => (current ? { ...current, logoUrl: result } : current));
       toast('Logo uploaded', {
         description: 'The uploaded logo is now attached to this client profile and will save with Program Setup.',
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleShellImageUpload(file?: File | null) {
+    if (!file || !programSetting) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      setProgramSetting((current) => (current ? { ...current, shellImageUrl: result } : current));
+      toast('Shell image uploaded', {
+        description: 'The client shell background is now attached to this profile and will save with Program Setup.',
       });
     };
     reader.readAsDataURL(file);
@@ -423,6 +444,25 @@ export default function ProgramSetupHubPage() {
                 <p className="mt-1 text-xs text-muted-foreground">Choose a fast client theme, then fine-tune colors if needed.</p>
               </div>
               <div>
+                <label className="text-sm font-medium">Typography Scheme</label>
+                <select
+                  value={programSetting?.fontThemePreset ?? 'modern-sans'}
+                  onChange={(event) =>
+                    setProgramSetting((current) =>
+                      current ? { ...current, fontThemePreset: event.target.value } : current,
+                    )
+                  }
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {typographyPresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">Choose how headings and body text should feel across the app shell.</p>
+              </div>
+              <div>
                 <label className="text-sm font-medium">Logo Initials</label>
                 <Input
                   value={programSetting?.logoInitials ?? ''}
@@ -442,7 +482,7 @@ export default function ProgramSetupHubPage() {
                   Use a square PNG or SVG URL. If blank, the app falls back to logo initials.
                 </p>
               </div>
-              <div>
+              <div className="xl:col-span-2">
                 <label className="text-sm font-medium">Upload Logo File</label>
                 <Input
                   type="file"
@@ -459,6 +499,40 @@ export default function ProgramSetupHubPage() {
                     onClick={() => setProgramSetting((current) => current ? { ...current, logoUrl: '' } : current)}
                   >
                     Clear Logo
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="xl:col-span-2">
+                <label className="text-sm font-medium">Shell Background Image URL</label>
+                <Input
+                  value={programSetting?.shellImageUrl ?? ''}
+                  onChange={(event) => setProgramSetting((current) => current ? { ...current, shellImageUrl: event.target.value } : current)}
+                  placeholder="https://your-club.com/clubhouse-hero.jpg"
+                  className="mt-1"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This creates the branded hero ribbon across the app shell. Use a wide landscape image for best results.
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Upload Shell Image</label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  className="mt-1"
+                  onChange={(event) => handleShellImageUpload(event.target.files?.[0] ?? null)}
+                />
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setProgramSetting((current) => current ? { ...current, shellImageUrl: '' } : current)}
+                  >
+                    Clear Shell Image
                   </Button>
                 </div>
               </div>
@@ -572,6 +646,7 @@ export default function ProgramSetupHubPage() {
                   <p>App name updates the browser tab and top-level product identity.</p>
                   <p>Navigation title and subtitle control the sidebar shell seen by crews and managers every day.</p>
                   <p>Logo uploads are stored with the client profile so admins can switch brands without touching code or external assets.</p>
+                  <p>Typography and shell imagery help the product feel tailored to the club, not just recolored.</p>
                   <p>Theme presets give each club a fast, polished look before any manual color tuning.</p>
                   <p>Primary, accent, and sidebar colors set the tone for the interface so each club feels client-specific instead of generic.</p>
                 </div>

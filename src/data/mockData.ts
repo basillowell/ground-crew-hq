@@ -215,6 +215,8 @@ export interface ProgramSettings {
   logoUrl?: string;
   uiThemePreset?: string;
   themeNotes?: string;
+  fontThemePreset?: string;
+  shellImageUrl?: string;
   primaryColor: string;
   accentColor: string;
   sidebarColor: string;
@@ -361,6 +363,8 @@ export const programSettings: ProgramSettings[] = [
     logoUrl: '',
     uiThemePreset: 'club-emerald',
     themeNotes: '',
+    fontThemePreset: 'modern-sans',
+    shellImageUrl: '',
     primaryColor: '#2f855a',
     accentColor: '#d7f5e5',
     sidebarColor: '#203127',
