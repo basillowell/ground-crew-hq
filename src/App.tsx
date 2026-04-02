@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
 
 const LandingPage = lazy(() => import("./pages/LaunchpadPage"));
+const CommandCenterPage = lazy(() => import("./pages/CommandCenterPage"));
 const WorkboardPage = lazy(() => import("./pages/WorkboardPage"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
 const SchedulerPage = lazy(() => import("./pages/SchedulerPage"));
@@ -20,6 +21,7 @@ const SafetyPage = lazy(() => import("./pages/SafetyPage"));
 const SettingsPage = lazy(() => import("./pages/ProgramSetupHubPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const ApplicationsPage = lazy(() => import("./pages/ApplicationsPage"));
+const MobileFieldPage = lazy(() => import("./pages/MobileFieldPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
