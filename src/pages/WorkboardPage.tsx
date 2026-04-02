@@ -516,6 +516,21 @@ export default function WorkboardPage() {
           <div className="rounded-3xl border border-dashed bg-card/80 p-6 text-sm text-muted-foreground shadow-sm">
             No scheduled employees are available for {boardDate}. Build the day in Scheduler first, then return here to assign tasks from Task Management.
           </div>
+        ) : viewMode === 'timeline' ? (
+          <GanttTimeline
+            employees={orderedDispatchBoard.map((lane) => lane.employee)}
+            assignments={dayAssignments}
+            tasks={taskList}
+            equipment={equipmentList}
+            scheduleEntries={scheduleList}
+            date={boardDate}
+            onAssignmentClick={(a) => openEditAssignmentDialog(a)}
+            onDropTask={(employeeId, startMinute) => {
+              const hours = Math.floor(startMinute / 60);
+              const mins = startMinute % 60;
+              openAssignmentDialog(employeeId);
+            }}
+          />
         ) : (
           <div className="space-y-2">
             {orderedDispatchBoard.map((lane, index) => (
