@@ -283,6 +283,24 @@ function normalizeTask(task: Task, index = 0): Task {
   };
 }
 
+function normalizePropertyClassOption(propertyClass: PropertyClassOption): PropertyClassOption {
+  return {
+    ...propertyClass,
+    description: propertyClass.description ?? '',
+    enabledModules: Array.isArray(propertyClass.enabledModules) ? propertyClass.enabledModules : [],
+  };
+}
+
+function normalizeTaskRequest(request: TaskRequest): TaskRequest {
+  return {
+    ...request,
+    requestedByType: request.requestedByType ?? 'user',
+    priority: request.priority ?? 'medium',
+    status: request.status ?? 'new',
+    notes: request.notes ?? '',
+  };
+}
+
 async function replaceRemoteRows<T extends { id?: string }>(table: string, rows: T[]) {
   if (!supabase) return;
   const { error: deleteError } = await supabase.from(table).delete().not('id', 'is', null);
@@ -537,19 +555,19 @@ export function saveProperties(value: Property[]) {
 }
 
 export function loadPropertyClassOptions() {
-  return collections.propertyClassOptions.loadLocal();
+  return collections.propertyClassOptions.loadLocal().map(normalizePropertyClassOption);
 }
 
 export function savePropertyClassOptions(value: PropertyClassOption[]) {
-  syncCollection(collections.propertyClassOptions, value);
+  syncCollection(collections.propertyClassOptions, value.map(normalizePropertyClassOption));
 }
 
 export function loadTaskRequests() {
-  return collections.taskRequests.loadLocal();
+  return collections.taskRequests.loadLocal().map(normalizeTaskRequest);
 }
 
 export function saveTaskRequests(value: TaskRequest[]) {
-  syncCollection(collections.taskRequests, value);
+  syncCollection(collections.taskRequests, value.map(normalizeTaskRequest));
 }
 
 export function loadShiftTemplates() {

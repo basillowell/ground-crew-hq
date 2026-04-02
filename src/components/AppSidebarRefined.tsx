@@ -62,8 +62,9 @@ export function AppSidebarRefined() {
   const currentPropertyId = loadCurrentPropertyId();
   const currentProperty = properties.find((property) => property.id === currentPropertyId);
   const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentProperty?.propertyClassId);
+  const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];
   const visibleNavItems = activePropertyClass
-    ? navItems.filter((item) => item.title === 'Program Setup' || activePropertyClass.enabledModules.includes(item.moduleId))
+    ? navItems.filter((item) => item.title === 'Program Setup' || enabledModules.includes(item.moduleId))
     : navItems;
 
   return (
