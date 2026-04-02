@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -57,6 +58,7 @@ function makeId(prefix: string) {
 }
 
 export default function WorkboardPage() {
+  const location = useLocation();
   const [boardDate, setBoardDate] = useState(defaultBoardDate());
   const [department, setDepartment] = useState('Maintenance');
   const [propertyId, setPropertyId] = useState('');
@@ -113,6 +115,10 @@ export default function WorkboardPage() {
     notes: '',
   });
 
+  const workflowParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const focusedPropertyId = workflowParams.get('property') || '';
+  const focusMode = workflowParams.get('focus') || '';
+
   useEffect(() => {
     const refresh = () => {
       const storedEmployees = loadEmployees();
@@ -160,6 +166,12 @@ export default function WorkboardPage() {
       window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
     };
   }, [boardDate]);
+
+  useEffect(() => {
+    if (focusedPropertyId) {
+      setPropertyId(focusedPropertyId);
+    }
+  }, [focusedPropertyId]);
 
   const groups = useMemo(
     () => [...new Set(employeeList.filter((employee) => employee.status === 'active').map((employee) => employee.group))].sort((left, right) => left.localeCompare(right)),
@@ -507,10 +519,10 @@ export default function WorkboardPage() {
       {/* Main workflow board */}
       <div className="flex-1 p-4 overflow-auto">
         <PageHeader
-          title="Workflow"
+          title={activeProperty ? `${activeProperty.name} Workflow` : 'Workflow'}
           subtitle={activeProperty ? `Dispatch board for ${activeProperty.name}. Collect property work needs, match them to scheduled crew, and hand the finished plan off to Breakroom.` : 'Pull the scheduled crew for the selected day, assign tasks from Task Management, and send the finished plan straight to the breakroom screen.'}
           badge={<Badge variant="secondary">{activeProperty ? `${activeProperty.name} / ${department} / ${boardDate}` : `${department} / ${boardDate}`}</Badge>}
-          action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '') }}
+          action={{ label: activeProperty ? 'Add Property Need' : 'Add Assignment', onClick: () => (activeProperty ? openRequestDialog() : openAssignmentDialog(selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '')) }}
         >
            {activeProperty ? (
              <Badge variant="outline" className="h-7 px-3 text-xs" style={{ borderColor: activeProperty.color, color: activeProperty.color }}>
@@ -538,6 +550,78 @@ export default function WorkboardPage() {
            </Tooltip>
          </PageHeader>
 
+        {activeProperty ? (
+          <div
+            className="mb-4 overflow-hidden rounded-3xl border bg-card/95 shadow-sm"
+            style={{ borderColor: `${activeProperty.color}55` }}
+          >
+            <div className="h-1.5" style={{ background: activeProperty.color }} />
+            <div className="grid gap-4 p-5 lg:grid-cols-[1.15fr_0.85fr]">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" style={{ borderColor: activeProperty.color, color: activeProperty.color }}>
+                    {activeProperty.shortName}
+                  </Badge>
+                  <Badge variant="secondary">{activeProperty.city}, {activeProperty.state}</Badge>
+                  {activeProperty.propertyClassId ? <Badge variant="outline">Property class assigned</Badge> : null}
+                </div>
+                <h3 className="mt-3 text-lg font-semibold">Property Task Needs</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Start here for {activeProperty.name}. Collect what the property needs done on {boardDate}, then convert those needs into assignments for the scheduled crew.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Badge variant="outline">{propertyRequests.length} needs collected</Badge>
+                  <Badge variant="outline">{propertyWorkLocations.length} property locations</Badge>
+                  <Badge variant="outline">{fallbackEligibleEmployees.length} employees available to assign</Badge>
+                </div>
+              </div>
+              <div className="rounded-2xl border bg-muted/20 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold">Today&apos;s needs queue</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Client-submitted and admin-entered needs waiting to be assigned.
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={openRequestDialog}>Add Need</Button>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {propertyRequests.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed bg-background/70 p-4 text-sm text-muted-foreground">
+                      No task needs have been collected for this property yet.
+                    </div>
+                  ) : (
+                    propertyRequests.map((request) => (
+                      <div key={request.id} className="rounded-2xl border bg-background/80 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium">{request.title}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {request.requestedBy} · {request.requestedByType} · {request.preferredLocation || 'No location set'}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge variant={request.priority === 'high' ? 'destructive' : request.priority === 'medium' ? 'secondary' : 'outline'}>
+                              {request.priority}
+                            </Badge>
+                            <Badge variant="outline">{request.status}</Badge>
+                          </div>
+                        </div>
+                        {request.notes ? <div className="mt-2 text-xs text-muted-foreground">{request.notes}</div> : null}
+                        <div className="mt-3 flex justify-end">
+                          <Button size="sm" onClick={() => useRequestForAssignment(request)} disabled={request.status === 'assigned' || fallbackEligibleEmployees.length === 0}>
+                            Assign Need
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm font-medium">Crew filter</div>
@@ -564,6 +648,7 @@ export default function WorkboardPage() {
               <Badge variant="outline">{propertyWorkLocations.length} locations</Badge>
               <Badge variant="outline">{activeDepartmentEmployees.length} active employees</Badge>
               <Badge variant="outline">{propertyRequests.length} property requests</Badge>
+              {focusMode === 'requests' ? <Badge variant="secondary">Command Center drill-in</Badge> : null}
             </div>
           </div>
         </div>
@@ -693,46 +778,6 @@ export default function WorkboardPage() {
         <div className="space-y-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <EscalationCenter />
-          </div>
-
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold">Property Requests</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Client, user, and admin requests waiting to be turned into scheduled work for this property and day.</p>
-              </div>
-              <Button size="sm" variant="outline" onClick={openRequestDialog}>Add Request</Button>
-            </div>
-            <div className="space-y-3">
-              {propertyRequests.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No task requests have been collected for this property yet.</p>
-              ) : (
-                propertyRequests.map((request) => (
-                  <div key={request.id} className="rounded-2xl border p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium">{request.title}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {request.requestedBy} · {request.requestedByType} · {request.preferredLocation || 'No preferred location'}
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <Badge variant={request.priority === 'high' ? 'destructive' : request.priority === 'medium' ? 'secondary' : 'outline'}>
-                          {request.priority}
-                        </Badge>
-                        <Badge variant="outline">{request.status}</Badge>
-                      </div>
-                    </div>
-                    {request.notes ? <div className="mt-2 text-xs text-muted-foreground">{request.notes}</div> : null}
-                    <div className="mt-3 flex justify-end">
-                      <Button size="sm" onClick={() => useRequestForAssignment(request)} disabled={request.status === 'assigned' || fallbackEligibleEmployees.length === 0}>
-                        Use for Assignment
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
 
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">

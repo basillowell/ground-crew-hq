@@ -235,7 +235,7 @@ export default function CommandCenterOperationalPage() {
   const openPropertyWorkflow = (propertyId: string) => {
     saveCurrentPropertyId(propertyId);
     window.dispatchEvent(new CustomEvent('operations-context-updated', { detail: { propertyId } }));
-    navigate('/app/workboard');
+    navigate(`/app/workboard?property=${encodeURIComponent(propertyId)}&focus=requests`);
   };
 
   return (
