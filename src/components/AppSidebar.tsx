@@ -34,13 +34,20 @@ export function AppSidebar() {
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
+  const logoUrl = programSetting?.logoUrl;
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            {collapsed ? (
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={`${navigationTitle} logo`}
+                className="h-7 w-7 rounded-md object-contain"
+              />
+            ) : collapsed ? (
               <span className="text-xs font-bold text-sidebar-primary-foreground">{logoInitials.slice(0, 2)}</span>
             ) : (
               <Leaf className="w-5 h-5 text-sidebar-primary-foreground" />
@@ -86,7 +93,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         {!collapsed && (
           <div className="text-xs text-sidebar-foreground">
-            v2.4.1 â€¢ Demo Mode
+            {programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'} • v2.4.1
           </div>
         )}
       </SidebarFooter>

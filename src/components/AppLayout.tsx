@@ -54,6 +54,15 @@ function applyBranding(programSetting?: ProgramSettings) {
   root.style.setProperty('--accent', hexToHslValues(programSetting.accentColor, '152 30% 94%'));
   root.style.setProperty('--sidebar-background', hexToHslValues(programSetting.sidebarColor, '220 20% 14%'));
   root.style.setProperty('--sidebar-primary', hexToHslValues(programSetting.primaryColor, '152 55% 48%'));
+  if (programSetting.logoUrl) {
+    let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (!favicon) {
+      favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      document.head.appendChild(favicon);
+    }
+    favicon.href = programSetting.logoUrl;
+  }
 }
 
 export function AppLayout({ children }: AppLayoutProps) {

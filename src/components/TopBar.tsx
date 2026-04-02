@@ -52,6 +52,17 @@ export function TopBar({ department, setDepartment, departments, currentDate, se
       <div className="flex-1" />
 
       <div className="hidden xl:flex items-center gap-2 rounded-2xl border bg-background px-3 py-1.5">
+        {programSetting?.logoUrl ? (
+          <img
+            src={programSetting.logoUrl}
+            alt={`${programSetting.clientLabel || programSetting.organizationName || 'Client'} logo`}
+            className="h-8 w-8 rounded-lg object-contain"
+          />
+        ) : (
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+            {(programSetting?.logoInitials || 'WF').slice(0, 2)}
+          </div>
+        )}
         <div className="text-right">
           <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Client</div>
           <div className="text-xs font-semibold">{programSetting?.clientLabel || programSetting?.organizationName || 'WorkForce App'}</div>

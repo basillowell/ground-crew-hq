@@ -212,6 +212,7 @@ export interface ProgramSettings {
   navigationSubtitle: string;
   clientLabel: string;
   logoInitials: string;
+  logoUrl?: string;
   primaryColor: string;
   accentColor: string;
   sidebarColor: string;
@@ -355,6 +356,7 @@ export const programSettings: ProgramSettings[] = [
     navigationSubtitle: 'Task Tracker',
     clientLabel: 'Ground Crew HQ',
     logoInitials: 'GC',
+    logoUrl: '',
     primaryColor: '#2f855a',
     accentColor: '#d7f5e5',
     sidebarColor: '#203127',

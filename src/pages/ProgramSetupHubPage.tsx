@@ -64,6 +64,7 @@ function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
     navigationSubtitle: settings.navigationSubtitle || 'Operations platform',
     clientLabel: settings.clientLabel || settings.organizationName || 'Client profile',
     logoInitials: settings.logoInitials || (settings.organizationName || 'WF').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'WF',
+    logoUrl: settings.logoUrl || '',
     primaryColor: settings.primaryColor || '#2f855a',
     accentColor: settings.accentColor || '#d7f5e5',
     sidebarColor: settings.sidebarColor || '#203127',
@@ -376,6 +377,18 @@ export default function ProgramSetupHubPage() {
                   className="mt-1"
                 />
               </div>
+              <div className="sm:col-span-2">
+                <label className="text-sm font-medium">Logo Image URL</label>
+                <Input
+                  value={programSetting?.logoUrl ?? ''}
+                  onChange={(event) => setProgramSetting((current) => current ? { ...current, logoUrl: event.target.value } : current)}
+                  placeholder="https://your-club.com/logo.png"
+                  className="mt-1"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use a square PNG or SVG URL. If blank, the app falls back to logo initials.
+                </p>
+              </div>
               <div>
                 <label className="text-sm font-medium">Primary Color</label>
                 <div className="mt-1 flex items-center gap-2">
@@ -458,7 +471,15 @@ export default function ProgramSetupHubPage() {
                 <div className="mt-4 rounded-3xl p-4 text-white" style={{ backgroundColor: programSetting?.sidebarColor || '#203127' }}>
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl font-semibold" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
-                      {(programSetting?.logoInitials || 'WF').slice(0, 2)}
+                      {programSetting?.logoUrl ? (
+                        <img
+                          src={programSetting.logoUrl}
+                          alt={`${programSetting.organizationName || 'Client'} logo`}
+                          className="h-8 w-8 rounded-lg object-contain"
+                        />
+                      ) : (
+                        (programSetting?.logoInitials || 'WF').slice(0, 2)
+                      )}
                     </div>
                     <div>
                       <div className="text-sm font-semibold">{programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App'}</div>
@@ -475,6 +496,7 @@ export default function ProgramSetupHubPage() {
                 <div className="mt-3 space-y-3 text-sm text-muted-foreground">
                   <p>App name updates the browser tab and top-level product identity.</p>
                   <p>Navigation title and subtitle control the sidebar shell seen by crews and managers every day.</p>
+                  <p>Logo image URLs let each club bring its own visual mark into the shell without waiting on a code change.</p>
                   <p>Primary, accent, and sidebar colors set the tone for the interface so each club feels client-specific instead of generic.</p>
                 </div>
               </div>
