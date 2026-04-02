@@ -390,20 +390,26 @@ export default function WorkboardPage() {
           badge={<Badge variant="secondary">{department} / {boardDate}</Badge>}
           action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '') }}
         >
-          <Badge variant="outline" className="h-7 px-3 text-xs">
-            Scheduled Crew Only
-          </Badge>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" aria-label="Breakroom cast help">
-                <MonitorSmartphone className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
-              Use Breakroom as the passive cast screen for a Wi-Fi connected TV on the existing network. Build the plan here, then refresh Breakroom to display the live crew order and task sequence.
-            </TooltipContent>
-          </Tooltip>
-        </PageHeader>
+           <Badge variant="outline" className="h-7 px-3 text-xs">
+             Scheduled Crew Only
+           </Badge>
+           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'timeline')}>
+             <TabsList className="h-8">
+               <TabsTrigger value="list" className="text-xs gap-1"><LayoutList className="h-3.5 w-3.5" /> List</TabsTrigger>
+               <TabsTrigger value="timeline" className="text-xs gap-1"><GanttChart className="h-3.5 w-3.5" /> Timeline</TabsTrigger>
+             </TabsList>
+           </Tabs>
+           <Tooltip>
+             <TooltipTrigger asChild>
+               <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" aria-label="Breakroom cast help">
+                 <MonitorSmartphone className="h-4 w-4" />
+               </Button>
+             </TooltipTrigger>
+             <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
+               Use Breakroom as the passive cast screen for a Wi-Fi connected TV on the existing network. Build the plan here, then refresh Breakroom to display the live crew order and task sequence.
+             </TooltipContent>
+           </Tooltip>
+         </PageHeader>
 
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
