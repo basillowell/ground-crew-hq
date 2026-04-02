@@ -29,23 +29,23 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { loadProgramSettings } from '@/lib/dataStore';
+import { loadCurrentPropertyId, loadProgramSettings, loadProperties, loadPropertyClassOptions } from '@/lib/dataStore';
 
 const navItems = [
-  { title: 'Command Center', url: '/app/dashboard', icon: Building2 },
-  { title: 'Workflow', url: '/app/workboard', icon: LayoutDashboard },
-  { title: 'Time Management', url: '/app/scheduler', icon: Clock },
-  { title: 'Employee Management', url: '/app/employees', icon: Users },
-  { title: 'Task Management', url: '/app/tasks', icon: ListChecks },
-  { title: 'Equipment Management', url: '/app/equipment', icon: Wrench },
-  { title: 'Breakroom', url: '/app/breakroom', icon: MonitorSmartphone },
-  { title: 'Weather', url: '/app/weather', icon: CloudSun },
-  { title: 'Applications', url: '/app/applications', icon: FlaskConical },
-  { title: 'Safety Management', url: '/app/safety', icon: Shield },
-  { title: 'Report Tracking', url: '/app/reports', icon: BarChart3 },
-  { title: 'Messaging', url: '/app/messaging', icon: MessageSquare },
-  { title: 'Field Companion', url: '/app/field', icon: Smartphone },
-  { title: 'Program Setup', url: '/app/settings', icon: Settings },
+  { title: 'Command Center', url: '/app/dashboard', icon: Building2, moduleId: 'command-center' },
+  { title: 'Workflow', url: '/app/workboard', icon: LayoutDashboard, moduleId: 'workflow' },
+  { title: 'Time Management', url: '/app/scheduler', icon: Clock, moduleId: 'workflow' },
+  { title: 'Employee Management', url: '/app/employees', icon: Users, moduleId: 'workflow' },
+  { title: 'Task Management', url: '/app/tasks', icon: ListChecks, moduleId: 'workflow' },
+  { title: 'Equipment Management', url: '/app/equipment', icon: Wrench, moduleId: 'equipment' },
+  { title: 'Breakroom', url: '/app/breakroom', icon: MonitorSmartphone, moduleId: 'breakroom' },
+  { title: 'Weather', url: '/app/weather', icon: CloudSun, moduleId: 'weather' },
+  { title: 'Applications', url: '/app/applications', icon: FlaskConical, moduleId: 'applications' },
+  { title: 'Safety Management', url: '/app/safety', icon: Shield, moduleId: 'workflow' },
+  { title: 'Report Tracking', url: '/app/reports', icon: BarChart3, moduleId: 'reports' },
+  { title: 'Messaging', url: '/app/messaging', icon: MessageSquare, moduleId: 'workflow' },
+  { title: 'Field Companion', url: '/app/field', icon: Smartphone, moduleId: 'field' },
+  { title: 'Program Setup', url: '/app/settings', icon: Settings, moduleId: 'command-center' },
 ];
 
 export function AppSidebarRefined() {
@@ -57,6 +57,14 @@ export function AppSidebarRefined() {
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
   const logoUrl = programSetting?.logoUrl;
+  const properties = loadProperties();
+  const propertyClasses = loadPropertyClassOptions();
+  const currentPropertyId = loadCurrentPropertyId();
+  const currentProperty = properties.find((property) => property.id === currentPropertyId);
+  const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentProperty?.propertyClassId);
+  const visibleNavItems = activePropertyClass
+    ? navItems.filter((item) => item.title === 'Program Setup' || activePropertyClass.enabledModules.includes(item.moduleId))
+    : navItems;
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -84,7 +92,7 @@ export function AppSidebarRefined() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location.pathname === item.url} tooltip={item.title}>
                     <NavLink
