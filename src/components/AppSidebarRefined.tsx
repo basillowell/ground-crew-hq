@@ -12,6 +12,8 @@ import {
   CloudSun,
   FlaskConical,
   MonitorSmartphone,
+  Building2,
+  Smartphone,
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { NavLink } from '@/components/NavLink';
