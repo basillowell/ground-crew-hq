@@ -61,16 +61,17 @@ export function EmployeeRow({
       onDrop={() => onDropRow?.(employee.id)}
     >
       <div className="flex items-start gap-3">
-        <div
+        <button
+          type="button"
           draggable
           onDragStart={() => onDragStart?.(employee.id)}
           onDragEnd={onDragEnd}
-          className="cursor-grab text-muted-foreground/40 mt-1 hidden sm:flex items-center gap-1 rounded-full border border-dashed px-2 py-1 text-[11px]"
+          className="cursor-grab text-muted-foreground/60 mt-1 flex items-center gap-1 rounded-full border border-dashed px-2 py-1 text-[11px] hover:border-primary/30 hover:text-primary"
           title="Drag to reorder employee lanes for the display board"
         >
           <GripVertical className="h-4 w-4" />
           <span>Lane</span>
-        </div>
+        </button>
         <AvatarInitials firstName={employee.firstName} lastName={employee.lastName} size="md" className="mt-0.5" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">

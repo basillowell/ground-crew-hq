@@ -183,9 +183,9 @@ export default function WorkboardPage() {
     return activeDepartmentEmployees.filter((employee) => !scheduledIds.has(employee.id));
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
-  const assignmentEligibleEmployees = useMemo(
-    () => scheduledEmployees,
-    [scheduledEmployees],
+  const fallbackEligibleEmployees = useMemo(
+    () => (scheduledEmployees.length > 0 ? scheduledEmployees : activeDepartmentEmployees),
+    [scheduledEmployees, activeDepartmentEmployees],
   );
 
   const dayAssignments = useMemo(
@@ -272,7 +272,7 @@ export default function WorkboardPage() {
 
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = workLocations[0]?.name ?? 'Primary zone';
-    const targetEmployeeId = employeeId || scheduledEmployees[0]?.id || '';
+    const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
     setAssignmentDraft({
@@ -388,7 +388,7 @@ export default function WorkboardPage() {
           title="Workflow"
           subtitle="Pull the scheduled crew for the selected day, assign tasks from Task Management, and send the finished plan straight to the breakroom screen."
           badge={<Badge variant="secondary">{department} / {boardDate}</Badge>}
-          action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || scheduledEmployees[0]?.id || '') }}
+          action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '') }}
         >
           <Badge variant="outline" className="h-7 px-3 text-xs">
             Scheduled Crew Only
@@ -677,15 +677,15 @@ export default function WorkboardPage() {
                 onChange={(event) => setAssignmentDraft({ ...assignmentDraft, employeeId: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {assignmentEligibleEmployees.length === 0 && <option value="">No scheduled employees available</option>}
-                {assignmentEligibleEmployees.map((employee) => (
+                {fallbackEligibleEmployees.length === 0 && <option value="">No employees available</option>}
+                {fallbackEligibleEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
                     {employee.firstName} {employee.lastName} · {employee.department} · {employee.group}{employee.status !== 'active' ? ' · inactive' : ''}
                   </option>
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Only scheduled employees for this day appear here. If someone is missing, add their shift in Scheduler first.
+                Scheduled employees appear first. If no one is scheduled yet, the active filtered roster is available so you can keep building the day.
               </p>
             </div>
             <div className="col-span-2">

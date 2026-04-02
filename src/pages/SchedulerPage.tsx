@@ -10,8 +10,34 @@ import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
 import { loadApplicationAreas, loadChemicalApplicationLogs, loadEmployees, loadScheduleEntries, loadWeatherDailyLogs, loadWeatherLocations, saveScheduleEntries } from '@/lib/dataStore';
 
-const days = ['Mon 3/25', 'Tue 3/26', 'Wed 3/27', 'Thu 3/28', 'Fri 3/29', 'Sat 3/30', 'Sun 3/31'];
-const dayDates = ['2024-03-25', '2024-03-26', '2024-03-27', '2024-03-28', '2024-03-29', '2024-03-30', '2024-03-31'];
+function toDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfWeek(date: Date) {
+  const next = new Date(date);
+  const day = next.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  next.setDate(next.getDate() + diff);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function buildWeekDays(anchorDate: Date) {
+  const start = startOfWeek(anchorDate);
+  return Array.from({ length: 7 }, (_, index) => {
+    const next = new Date(start);
+    next.setDate(start.getDate() + index);
+    return {
+      label: next.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'numeric',
+        day: 'numeric',
+      }),
+      date: toDateKey(next),
+    };
+  });
+}
 
 const statusColors: Record<string, string> = {
   scheduled: 'bg-primary/10 border-primary/30 text-primary',
@@ -21,6 +47,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function SchedulerPage() {
+  const [currentDate, setCurrentDate] = useState(() => new Date());
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
   const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
@@ -30,15 +57,23 @@ export default function SchedulerPage() {
   const [applicationLogs, setApplicationLogs] = useState<ChemicalApplicationLog[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const weekDays = useMemo(() => buildWeekDays(currentDate), [currentDate]);
   const [draft, setDraft] = useState({
     employeeId: '',
-    date: dayDates[0],
+    date: toDateKey(startOfWeek(new Date())),
     shiftStart: '05:00',
     shiftEnd: '13:30',
     status: 'scheduled' as ScheduleEntry['status'],
   });
 
   useEffect(() => {
+    const handleOperationsContext = (event: Event) => {
+      const detail = (event as CustomEvent<{ date?: string }>).detail;
+      if (detail?.date) {
+        setCurrentDate(new Date(`${detail.date}T12:00:00`));
+      }
+    };
+
     const storedEmployees = loadEmployees();
     setEmployeeList(storedEmployees);
     setApplicationAreas(loadApplicationAreas());
@@ -51,6 +86,8 @@ export default function SchedulerPage() {
       ...current,
       employeeId: storedEmployees.find((employee) => employee.status === 'active')?.id ?? current.employeeId,
     }));
+    window.addEventListener('operations-context-updated', handleOperationsContext as EventListener);
+    return () => window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
   }, []);
 
   const activeEmployees = useMemo(
@@ -65,11 +102,11 @@ export default function SchedulerPage() {
 
   const summary = useMemo(
     () => ({
-      scheduledShifts: scheduleList.filter((entry) => entry.status === 'scheduled').length,
-      dayOffs: scheduleList.filter((entry) => entry.status === 'day-off').length,
-      coverage: new Set(scheduleList.filter((entry) => entry.status === 'scheduled').map((entry) => entry.employeeId)).size,
+      scheduledShifts: scheduleList.filter((entry) => entry.status === 'scheduled' && weekDays.some((day) => day.date === entry.date)).length,
+      dayOffs: scheduleList.filter((entry) => entry.status === 'day-off' && weekDays.some((day) => day.date === entry.date)).length,
+      coverage: new Set(scheduleList.filter((entry) => entry.status === 'scheduled' && weekDays.some((day) => day.date === entry.date)).map((entry) => entry.employeeId)).size,
     }),
-    [scheduleList],
+    [scheduleList, weekDays],
   );
 
   const latestWeatherLog = useMemo(
@@ -82,8 +119,8 @@ export default function SchedulerPage() {
     : weatherLocations[0];
 
   const weeklyApplications = useMemo(
-    () => applicationLogs.filter((log) => dayDates.includes(log.applicationDate)),
-    [applicationLogs],
+    () => applicationLogs.filter((log) => weekDays.some((day) => day.date === log.applicationDate)),
+    [applicationLogs, weekDays],
   );
 
   function persist(nextEntries: ScheduleEntry[]) {
@@ -95,7 +132,7 @@ export default function SchedulerPage() {
     const targetEmployeeId = employeeId ?? selectedEmployeeId ?? activeEmployees[0]?.id ?? '';
     setDraft({
       employeeId: targetEmployeeId,
-      date: date ?? dayDates[0],
+      date: date ?? weekDays[0]?.date ?? toDateKey(currentDate),
       shiftStart: '05:00',
       shiftEnd: '13:30',
       status: 'scheduled',
@@ -132,14 +169,15 @@ export default function SchedulerPage() {
   }
 
   function copyWeek() {
-    const sourceDate = dayDates[0];
+    const sourceDate = weekDays[0]?.date;
+    if (!sourceDate) return;
     const nextEntries = [...scheduleList];
 
     for (const employee of activeEmployees) {
       const base = scheduleList.find((entry) => entry.employeeId === employee.id && entry.date === sourceDate);
       if (!base) continue;
 
-      for (const date of dayDates.slice(1)) {
+      for (const date of weekDays.slice(1).map((day) => day.date)) {
         const exists = nextEntries.find((entry) => entry.employeeId === employee.id && entry.date === date);
         if (!exists) {
           nextEntries.push({ ...base, id: `s${Date.now()}-${employee.id}-${date}`, date });
@@ -207,7 +245,12 @@ export default function SchedulerPage() {
         </div>
       </div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Weekly Schedule</h2>
+        <div>
+          <h2 className="text-lg font-semibold">Weekly Schedule</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Week of {weekDays[0]?.label} through {weekDays[6]?.label}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => openAddShift()}>
             <Plus className="h-3 w-3" /> Add Shift
@@ -231,8 +274,8 @@ export default function SchedulerPage() {
           <thead>
             <tr className="border-b bg-muted/50">
               <th className="text-left p-3 font-medium text-muted-foreground text-xs sticky left-0 bg-muted/50 min-w-[180px]">Employee</th>
-              {days.map(d => (
-                <th key={d} className="text-center p-3 font-medium text-muted-foreground text-xs min-w-[110px]">{d}</th>
+              {weekDays.map((day) => (
+                <th key={day.date} className="text-center p-3 font-medium text-muted-foreground text-xs min-w-[110px]">{day.label}</th>
               ))}
               <th className="text-center p-3 font-medium text-muted-foreground text-xs min-w-[80px]">Total</th>
             </tr>
@@ -253,15 +296,15 @@ export default function SchedulerPage() {
                       </div>
                     </div>
                   </td>
-                  {days.map((day, index) => {
-                    const entry = scheduleList.find((scheduleEntry) => scheduleEntry.employeeId === emp.id && scheduleEntry.date === dayDates[index]);
+                  {weekDays.map((day) => {
+                    const entry = scheduleList.find((scheduleEntry) => scheduleEntry.employeeId === emp.id && scheduleEntry.date === day.date);
                     if (!entry) {
                       return (
-                        <td key={day} className="p-2 text-center">
+                        <td key={day.date} className="p-2 text-center">
                           <button
                             type="button"
                             className="h-10 w-full rounded border border-dashed border-border text-[10px] text-muted-foreground"
-                            onClick={() => openAddShift(emp.id, dayDates[index])}
+                            onClick={() => openAddShift(emp.id, day.date)}
                           >
                             Add
                           </button>
@@ -274,14 +317,14 @@ export default function SchedulerPage() {
                       totalHours += (endHour * 60 + endMinute - (startHour * 60 + startMinute)) / 60;
                     }
                     return (
-                      <td key={day} className="p-2">
+                      <td key={day.date} className="p-2">
                         <button
                           type="button"
                           className={`w-full rounded border px-2 py-1.5 text-center text-xs ${statusColors[entry.status] || statusColors.scheduled}`}
                           onClick={() => {
                             setDraft({
                               employeeId: emp.id,
-                              date: dayDates[index],
+                              date: day.date,
                               shiftStart: entry.shiftStart,
                               shiftEnd: entry.shiftEnd,
                               status: entry.status,
@@ -336,9 +379,9 @@ export default function SchedulerPage() {
                 onChange={(event) => setDraft({ ...draft, date: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {dayDates.map((date, index) => (
-                  <option key={date} value={date}>
-                    {days[index]}
+                {weekDays.map((day) => (
+                  <option key={day.date} value={day.date}>
+                    {day.label}
                   </option>
                 ))}
               </select>
