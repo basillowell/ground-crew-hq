@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Copy, Download, Search, Filter, CalendarDays, CloudSun, FlaskConical } from 'lucide-react';
+import { ScheduleTemplates } from '@/components/scheduler/ScheduleTemplates';
 import { Input } from '@/components/ui/input';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
@@ -244,6 +245,11 @@ export default function SchedulerPage() {
           </div>
         </div>
       </div>
+
+      <div className="mb-6">
+        <ScheduleTemplates />
+      </div>
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-semibold">Weekly Schedule</h2>

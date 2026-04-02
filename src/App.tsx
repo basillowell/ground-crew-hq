@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
 
 const LandingPage = lazy(() => import("./pages/LaunchpadPage"));
+const CommandCenterPage = lazy(() => import("./pages/CommandCenterPage"));
 const WorkboardPage = lazy(() => import("./pages/WorkboardPage"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
 const SchedulerPage = lazy(() => import("./pages/SchedulerPage"));
@@ -20,6 +21,7 @@ const SafetyPage = lazy(() => import("./pages/SafetyPage"));
 const SettingsPage = lazy(() => import("./pages/ProgramSetupHubPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const ApplicationsPage = lazy(() => import("./pages/ApplicationsPage"));
+const MobileFieldPage = lazy(() => import("./pages/MobileFieldPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -43,6 +45,7 @@ function AppRoutes() {
     <Suspense fallback={<RouteFallback />}>
       <AppLayout>
         <Routes>
+          <Route path="dashboard" element={<CommandCenterPage />} />
           <Route path="workboard" element={<WorkboardPage />} />
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="scheduler" element={<SchedulerPage />} />
@@ -55,6 +58,7 @@ function AppRoutes() {
           <Route path="tasks" element={<TasksPage />} />
           <Route path="safety" element={<SafetyPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="field" element={<MobileFieldPage />} />
         </Routes>
       </AppLayout>
     </Suspense>

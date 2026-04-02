@@ -3,15 +3,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
 import { EmployeeRow } from '@/components/workboard/EmployeeRow';
+import { GanttTimeline } from '@/components/workboard/GanttTimeline';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
+import { EscalationCenter } from '@/components/notifications/EscalationCenter';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
-import { StickyNote, Droplets, CloudSun, MonitorSmartphone } from 'lucide-react';
+import { StickyNote, Droplets, CloudSun, MonitorSmartphone, LayoutList, GanttChart } from 'lucide-react';
 import {
   loadApplicationAreas,
   loadAssignments,
@@ -70,6 +73,7 @@ export default function WorkboardPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
   const [dropTargetEmployeeId, setDropTargetEmployeeId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
@@ -386,20 +390,26 @@ export default function WorkboardPage() {
           badge={<Badge variant="secondary">{department} / {boardDate}</Badge>}
           action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '') }}
         >
-          <Badge variant="outline" className="h-7 px-3 text-xs">
-            Scheduled Crew Only
-          </Badge>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" aria-label="Breakroom cast help">
-                <MonitorSmartphone className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
-              Use Breakroom as the passive cast screen for a Wi-Fi connected TV on the existing network. Build the plan here, then refresh Breakroom to display the live crew order and task sequence.
-            </TooltipContent>
-          </Tooltip>
-        </PageHeader>
+           <Badge variant="outline" className="h-7 px-3 text-xs">
+             Scheduled Crew Only
+           </Badge>
+           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'timeline')}>
+             <TabsList className="h-8">
+               <TabsTrigger value="list" className="text-xs gap-1"><LayoutList className="h-3.5 w-3.5" /> List</TabsTrigger>
+               <TabsTrigger value="timeline" className="text-xs gap-1"><GanttChart className="h-3.5 w-3.5" /> Timeline</TabsTrigger>
+             </TabsList>
+           </Tabs>
+           <Tooltip>
+             <TooltipTrigger asChild>
+               <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" aria-label="Breakroom cast help">
+                 <MonitorSmartphone className="h-4 w-4" />
+               </Button>
+             </TooltipTrigger>
+             <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
+               Use Breakroom as the passive cast screen for a Wi-Fi connected TV on the existing network. Build the plan here, then refresh Breakroom to display the live crew order and task sequence.
+             </TooltipContent>
+           </Tooltip>
+         </PageHeader>
 
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
@@ -506,6 +516,21 @@ export default function WorkboardPage() {
           <div className="rounded-3xl border border-dashed bg-card/80 p-6 text-sm text-muted-foreground shadow-sm">
             No scheduled employees are available for {boardDate}. Build the day in Scheduler first, then return here to assign tasks from Task Management.
           </div>
+        ) : viewMode === 'timeline' ? (
+          <GanttTimeline
+            employees={orderedDispatchBoard.map((lane) => lane.employee)}
+            assignments={dayAssignments}
+            tasks={taskList}
+            equipment={equipmentList}
+            scheduleEntries={scheduleList}
+            date={boardDate}
+            onAssignmentClick={(a) => openEditAssignmentDialog(a)}
+            onDropTask={(employeeId, startMinute) => {
+              const hours = Math.floor(startMinute / 60);
+              const mins = startMinute % 60;
+              openAssignmentDialog(employeeId);
+            }}
+          />
         ) : (
           <div className="space-y-2">
             {orderedDispatchBoard.map((lane, index) => (
@@ -538,6 +563,10 @@ export default function WorkboardPage() {
       {/* Right rail */}
       <div className="w-80 border-l bg-card overflow-auto p-4 hidden lg:block">
         <div className="space-y-4">
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <EscalationCenter />
+          </div>
+
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
               <CloudSun className="h-4 w-4 text-primary" />

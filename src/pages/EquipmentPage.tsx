@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { equipmentTypes, workOrders, type Employee, type EquipmentUnit } from '@/data/seedData';
+import { WorkOrderKanban } from '@/components/equipment/WorkOrderKanban';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -188,30 +189,7 @@ export default function EquipmentPage() {
           </TabsContent>
 
           <TabsContent value="orders" className="mt-3">
-            <Card>
-              <div className="divide-y">
-                {typeOrders.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground text-sm">No work orders</div>
-                ) : typeOrders.map(wo => {
-                  const unit = unitList.find(u => u.id === wo.unitId);
-                  return (
-                    <div key={wo.id} className="p-3 flex items-center gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm">{wo.title}</span>
-                          <StatusChip variant={woStatusMap[wo.status]}>{wo.status}</StatusChip>
-                          <StatusChip variant={prioMap[wo.priority]}>{wo.priority}</StatusChip>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{wo.description}</p>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Unit: {unit?.unitNumber} • Created: {wo.createdDate} • Cost: ${wo.cost}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
+            <WorkOrderKanban />
           </TabsContent>
 
           <TabsContent value="stats" className="mt-3">
