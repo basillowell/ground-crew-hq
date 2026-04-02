@@ -416,7 +416,7 @@ export default function EmployeesPage() {
   function handleStatusToggle(employeeId: string) {
     const nextEmployees = employeeList.map((employee) =>
       employee.id === employeeId
-        ? { ...employee, status: employee.status === 'active' ? 'inactive' : 'active' }
+        ? { ...employee, status: (employee.status === 'active' ? 'inactive' : 'active') as 'active' | 'inactive' }
         : employee,
     );
     persist(nextEmployees);
