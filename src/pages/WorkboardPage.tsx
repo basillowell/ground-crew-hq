@@ -3,15 +3,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
 import { EmployeeRow } from '@/components/workboard/EmployeeRow';
+import { GanttTimeline } from '@/components/workboard/GanttTimeline';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
+import { EscalationCenter } from '@/components/notifications/EscalationCenter';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
-import { StickyNote, Droplets, CloudSun, MonitorSmartphone } from 'lucide-react';
+import { StickyNote, Droplets, CloudSun, MonitorSmartphone, LayoutList, GanttChart } from 'lucide-react';
 import {
   loadApplicationAreas,
   loadAssignments,
