@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
 import { EmployeeRow } from '@/components/workboard/EmployeeRow';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
@@ -10,7 +11,7 @@ import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
-import { StickyNote, Droplets, CloudSun, MonitorSmartphone, Users } from 'lucide-react';
+import { StickyNote, Droplets, CloudSun, MonitorSmartphone } from 'lucide-react';
 import {
   loadApplicationAreas,
   loadAssignments,
@@ -231,11 +232,6 @@ export default function WorkboardPage() {
     });
   }, [dispatchBoard, laneOrder]);
 
-  const readyForBreakroomCount = useMemo(
-    () => orderedDispatchBoard.filter((lane) => lane.employeeAssignments.length > 0).length,
-    [orderedDispatchBoard],
-  );
-
   const totalOpenMinutes = useMemo(
     () => orderedDispatchBoard.reduce((total, lane) => total + lane.openMinutes, 0),
     [orderedDispatchBoard],
@@ -393,6 +389,16 @@ export default function WorkboardPage() {
           <Badge variant="outline" className="h-7 px-3 text-xs">
             Scheduled Crew Only
           </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" aria-label="Breakroom cast help">
+                <MonitorSmartphone className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
+              Use Breakroom as the passive cast screen for a Wi-Fi connected TV on the existing network. Build the plan here, then refresh Breakroom to display the live crew order and task sequence.
+            </TooltipContent>
+          </Tooltip>
         </PageHeader>
 
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
@@ -424,80 +430,12 @@ export default function WorkboardPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3 mb-4">
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="text-sm text-muted-foreground mb-1">Scheduled crew</div>
-            <div className="text-3xl font-semibold">{orderedDispatchBoard.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Employees on the board for this date and department.</p>
-          </div>
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="text-sm text-muted-foreground mb-1">Needs scheduling</div>
-            <div className="text-3xl font-semibold">{unscheduledEmployees.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Active employees in this filter who still need a shift before they can appear in Workflow.</p>
-          </div>
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="text-sm text-muted-foreground mb-1">Assignments</div>
-            <div className="text-3xl font-semibold">{dayAssignments.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Persistent task rows that feed breakroom and reporting.</p>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 mb-4">
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold">Dispatch Status</div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  This board is for live dispatching. Every scheduled employee should either have a clear task lane or be obviously waiting for assignment.
-                </p>
-              </div>
-              <Users className="h-5 w-5 text-primary" />
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge variant="outline">{readyForBreakroomCount} lanes ready</Badge>
-              <Badge variant="outline">{Math.max(orderedDispatchBoard.length - readyForBreakroomCount, 0)} lanes incomplete</Badge>
-              <Badge variant="outline">{totalOpenMinutes} open mins</Badge>
-            </div>
-          </div>
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold">Breakroom Handoff</div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Breakroom should be the passive TV display. Once lanes are assigned here, the cast board should read cleanly without manager-only controls.
-                </p>
-              </div>
-              <MonitorSmartphone className="h-5 w-5 text-primary" />
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge variant="outline">{dayAssignments.length} task rows prepared</Badge>
-              <Badge variant="outline">{boardDate}</Badge>
-              <Badge variant="outline">{department}</Badge>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Daily Crew Board</h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Every scheduled crew member should read as one clean lane, with tasks visible in sequence and remaining open time easy to spot.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{assignedEmployeeIds.size} crew with tasks</Badge>
-              <Badge variant="outline">{Math.max(orderedDispatchBoard.length - assignedEmployeeIds.size, 0)} waiting assignment</Badge>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">1. Scheduler sets who is working on {boardDate}</Badge>
-            <Badge variant="outline">2. Workflow assigns tasks, equipment, and locations</Badge>
-            <Badge variant="outline">3. Breakroom displays the final crew plan for the day</Badge>
-          </div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Badge variant="outline">{orderedDispatchBoard.length} scheduled crew</Badge>
+          <Badge variant="outline">{assignedEmployeeIds.size} with tasks</Badge>
+          <Badge variant="outline">{Math.max(orderedDispatchBoard.length - assignedEmployeeIds.size, 0)} waiting assignment</Badge>
+          <Badge variant="outline">{dayAssignments.length} task rows</Badge>
+          <Badge variant="outline">{totalOpenMinutes} open mins</Badge>
         </div>
 
         <div className="hidden grid gap-4 xl:grid-cols-[1.15fr_0.85fr] mb-4">
