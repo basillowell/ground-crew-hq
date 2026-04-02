@@ -32,6 +32,7 @@ import {
 import { loadProgramSettings } from '@/lib/dataStore';
 
 const navItems = [
+  { title: 'Command Center', url: '/app/dashboard', icon: Building2 },
   { title: 'Workflow', url: '/app/workboard', icon: LayoutDashboard },
   { title: 'Time Management', url: '/app/scheduler', icon: Clock },
   { title: 'Employee Management', url: '/app/employees', icon: Users },
@@ -43,6 +44,7 @@ const navItems = [
   { title: 'Safety Management', url: '/app/safety', icon: Shield },
   { title: 'Report Tracking', url: '/app/reports', icon: BarChart3 },
   { title: 'Messaging', url: '/app/messaging', icon: MessageSquare },
+  { title: 'Field Companion', url: '/app/field', icon: Smartphone },
   { title: 'Program Setup', url: '/app/settings', icon: Settings },
 ];
 
