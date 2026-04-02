@@ -72,6 +72,7 @@ function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
     logoInitials: settings.logoInitials || (settings.organizationName || 'WF').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'WF',
     logoUrl: settings.logoUrl || '',
     uiThemePreset: settings.uiThemePreset || 'club-emerald',
+    themeNotes: settings.themeNotes || '',
     primaryColor: settings.primaryColor || '#2f855a',
     accentColor: settings.accentColor || '#d7f5e5',
     sidebarColor: settings.sidebarColor || '#203127',
@@ -544,23 +545,23 @@ export default function ProgramSetupHubPage() {
                 <div className="text-sm font-semibold">Brand Preview</div>
                 <div className="mt-4 rounded-3xl p-4 text-white" style={{ backgroundColor: programSetting?.sidebarColor || '#203127' }}>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl font-semibold" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 font-semibold shadow-sm" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
                       {programSetting?.logoUrl ? (
                         <img
                           src={programSetting.logoUrl}
                           alt={`${programSetting.organizationName || 'Client'} logo`}
-                          className="h-8 w-8 rounded-lg object-contain"
+                          className="h-12 w-12 rounded-xl object-contain"
                         />
                       ) : (
                         (programSetting?.logoInitials || 'WF').slice(0, 2)
                       )}
                     </div>
                     <div>
-                      <div className="text-sm font-semibold">{programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App'}</div>
+                      <div className="text-base font-semibold">{programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App'}</div>
                       <div className="text-xs text-white/75">{programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations platform'}</div>
                     </div>
                   </div>
-                  <div className="mt-4 rounded-2xl px-3 py-2 text-sm font-medium" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
+                  <div className="mt-4 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
                     {programSetting?.clientLabel || programSetting?.organizationName || 'Client label'}
                   </div>
                 </div>
@@ -575,6 +576,18 @@ export default function ProgramSetupHubPage() {
                   <p>Primary, accent, and sidebar colors set the tone for the interface so each club feels client-specific instead of generic.</p>
                 </div>
               </div>
+            </div>
+            <div className="rounded-2xl border bg-muted/20 p-4">
+              <div className="font-semibold">Client Theme Direction</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Capture the client’s own input here so the branding can evolve beyond presets and stay tied to the club’s real visual expectations.
+              </p>
+              <textarea
+                value={programSetting?.themeNotes ?? ''}
+                onChange={(event) => setProgramSetting((current) => current ? { ...current, themeNotes: event.target.value } : current)}
+                className="mt-3 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                placeholder="Example: We want a more premium coastal-club feel, larger crest treatment, calmer neutrals, and less dashboard green."
+              />
             </div>
             <div className="grid gap-3 lg:grid-cols-3">
               <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-4">

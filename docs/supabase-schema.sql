@@ -221,6 +221,7 @@ create table if not exists public.program_settings (
   "logoInitials" text not null default 'WF',
   "logoUrl" text,
   "uiThemePreset" text not null default 'club-emerald',
+  "themeNotes" text,
   "primaryColor" text not null default '#2f855a',
   "accentColor" text not null default '#d7f5e5',
   "sidebarColor" text not null default '#203127',
@@ -359,6 +360,7 @@ alter table public.program_settings add column if not exists "clientLabel" text 
 alter table public.program_settings add column if not exists "logoInitials" text not null default 'WF';
 alter table public.program_settings add column if not exists "logoUrl" text;
 alter table public.program_settings add column if not exists "uiThemePreset" text not null default 'club-emerald';
+alter table public.program_settings add column if not exists "themeNotes" text;
 alter table public.program_settings add column if not exists "primaryColor" text not null default '#2f855a';
 alter table public.program_settings add column if not exists "accentColor" text not null default '#d7f5e5';
 alter table public.program_settings add column if not exists "sidebarColor" text not null default '#203127';

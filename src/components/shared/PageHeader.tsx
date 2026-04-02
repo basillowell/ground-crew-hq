@@ -1,6 +1,8 @@
 import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Plus } from 'lucide-react';
+import { loadProgramSettings } from '@/lib/dataStore';
 
 interface PageHeaderProps {
   title: string;
@@ -15,10 +17,32 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, badge, action, children }: PageHeaderProps) {
+  const programSetting = loadProgramSettings()[0];
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-3">
         <div>
+          {(programSetting?.clientLabel || programSetting?.appName || programSetting?.logoUrl) ? (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {programSetting?.logoUrl ? (
+                <img
+                  src={programSetting.logoUrl}
+                  alt={`${programSetting.clientLabel || programSetting.organizationName || 'Client'} logo`}
+                  className="h-8 w-8 rounded-lg object-contain"
+                />
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+                  {(programSetting?.logoInitials || 'WF').slice(0, 2)}
+                </div>
+              )}
+              <Badge variant="outline" className="rounded-full">
+                {programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'}
+              </Badge>
+              <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                {programSetting?.appName || 'WorkForce App'}
+              </span>
+            </div>
+          ) : null}
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold">{title}</h2>
             {badge}

@@ -214,6 +214,7 @@ export interface ProgramSettings {
   logoInitials: string;
   logoUrl?: string;
   uiThemePreset?: string;
+  themeNotes?: string;
   primaryColor: string;
   accentColor: string;
   sidebarColor: string;
@@ -359,6 +360,7 @@ export const programSettings: ProgramSettings[] = [
     logoInitials: 'GC',
     logoUrl: '',
     uiThemePreset: 'club-emerald',
+    themeNotes: '',
     primaryColor: '#2f855a',
     accentColor: '#d7f5e5',
     sidebarColor: '#203127',
