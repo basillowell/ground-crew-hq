@@ -3,12 +3,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/shared';
 import { EmployeeRow } from '@/components/workboard/EmployeeRow';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
+import { toast } from '@/components/ui/sonner';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
 import { StickyNote, Droplets, ClipboardList, CloudSun, MonitorSmartphone, Users } from 'lucide-react';
 import {
@@ -63,7 +63,6 @@ export default function WorkboardPage() {
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [applicationLogs, setApplicationLogs] = useState(loadChemicalApplicationLogs());
-  const [view, setView] = useState<'employee' | 'task'>('employee');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -127,16 +126,6 @@ export default function WorkboardPage() {
     [employeeList],
   );
 
-  const allRosterEmployees = useMemo(
-    () => [...employeeList].sort((left, right) => {
-      if (left.status !== right.status) {
-        return left.status === 'active' ? -1 : 1;
-      }
-      return `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`);
-    }),
-    [employeeList],
-  );
-
   const activeDepartmentEmployees = useMemo(
     () =>
       allActiveEmployees.filter(
@@ -172,15 +161,10 @@ export default function WorkboardPage() {
     return activeDepartmentEmployees.filter((employee) => !scheduledIds.has(employee.id));
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
-  const assignmentEligibleEmployees = useMemo(() => {
-    const prioritized = [...scheduledEmployees, ...activeDepartmentEmployees, ...allActiveEmployees, ...allRosterEmployees];
-    const seen = new Set<string>();
-    return prioritized.filter((employee) => {
-      if (seen.has(employee.id)) return false;
-      seen.add(employee.id);
-      return true;
-    });
-  }, [activeDepartmentEmployees, allActiveEmployees, scheduledEmployees]);
+  const assignmentEligibleEmployees = useMemo(
+    () => scheduledEmployees,
+    [scheduledEmployees],
+  );
 
   const dayAssignments = useMemo(
     () => assignmentList.filter((assignment) => assignment.date === boardDate),
@@ -265,7 +249,7 @@ export default function WorkboardPage() {
 
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = workLocations[0]?.name ?? 'Primary zone';
-    const targetEmployeeId = employeeId || assignmentEligibleEmployees[0]?.id || '';
+    const targetEmployeeId = employeeId || scheduledEmployees[0]?.id || '';
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
     setAssignmentDraft({
@@ -350,32 +334,19 @@ export default function WorkboardPage() {
       <div className="flex-1 p-4 overflow-auto">
         <PageHeader
           title="Workflow"
-          subtitle="Dispatch scheduled crew, assign every lane cleanly, and hand the finished plan straight to the breakroom TV board."
+          subtitle="Pull the scheduled crew for the selected day, assign tasks from Task Management, and send the finished plan straight to the breakroom screen."
           badge={<Badge variant="secondary">{department} / {boardDate}</Badge>}
-          action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || assignmentEligibleEmployees[0]?.id || '') }}
+          action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || scheduledEmployees[0]?.id || '') }}
         >
-          <Button
-            variant={view === 'employee' ? 'default' : 'outline'}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setView('employee')}
-          >
-            Employee View
-          </Button>
-          <Button
-            variant={view === 'task' ? 'default' : 'outline'}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setView('task')}
-          >
-            Task View
-          </Button>
+          <Badge variant="outline" className="h-7 px-3 text-xs">
+            Scheduled Crew Only
+          </Badge>
         </PageHeader>
 
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm font-medium">Crew filter</div>
-            <p className="text-xs text-muted-foreground mt-1">The workflow view follows the top-bar department and date. Assignment dialogs now allow the full roster so a crew filter or status mismatch never blocks dispatching work.</p>
+            <p className="text-xs text-muted-foreground mt-1">This board follows the top-bar department and date. The assignment flow stays focused on the scheduled crew for that day so dispatching is faster and cleaner.</p>
             <div className="mt-3">
               <label className="text-xs text-muted-foreground">Group</label>
               <select
@@ -392,7 +363,7 @@ export default function WorkboardPage() {
           </div>
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm font-medium">Program setup tie-in</div>
-            <p className="text-xs text-muted-foreground mt-1">Assignments use active tasks and program locations, while scheduled employees inherit role, department, group, and worker type from Employee Management.</p>
+            <p className="text-xs text-muted-foreground mt-1">Assignments pull from Task Management and Program Setup locations, while employee rows inherit role, department, group, and worker type from Employee Management.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge variant="outline">{taskList.length} active tasks</Badge>
               <Badge variant="outline">{workLocations.length} locations</Badge>
@@ -410,7 +381,7 @@ export default function WorkboardPage() {
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm text-muted-foreground mb-1">Needs scheduling</div>
             <div className="text-3xl font-semibold">{unscheduledEmployees.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Active employees in this filter with no shift for the selected day.</p>
+            <p className="text-xs text-muted-foreground mt-1">Active employees in this filter who still need a shift before they can appear in Workflow.</p>
           </div>
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm text-muted-foreground mb-1">Assignments</div>
@@ -472,12 +443,12 @@ export default function WorkboardPage() {
         <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">1. Scheduler sets who is working on {boardDate}</Badge>
-            <Badge variant="outline">2. Workboard assigns tasks, equipment, and locations</Badge>
+            <Badge variant="outline">2. Workflow assigns tasks, equipment, and locations</Badge>
             <Badge variant="outline">3. Breakroom displays the final crew plan for the day</Badge>
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr] mb-4">
+        <div className="hidden grid gap-4 xl:grid-cols-[1.15fr_0.85fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <CloudSun className="h-4 w-4 text-primary" />
@@ -541,7 +512,7 @@ export default function WorkboardPage() {
           )}
         </div>
 
-        {view === 'employee' ? (
+        {true ? (
           <div className="space-y-2">
             {scheduledEmployees.map((employee) => (
               <EmployeeRow
@@ -596,22 +567,69 @@ export default function WorkboardPage() {
 
       {/* Right rail */}
       <div className="w-80 border-l bg-card overflow-auto p-4 hidden lg:block">
-        <Tabs defaultValue="notes">
-          <TabsList className="w-full grid grid-cols-2 h-8 mb-3">
-            <TabsTrigger value="notes" className="text-xs gap-1">
-              <StickyNote className="h-3 w-3" /> Notes
-            </TabsTrigger>
-            <TabsTrigger value="turf" className="text-xs gap-1">
-              <Droplets className="h-3 w-3" /> Turf
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="notes">
+        <div className="space-y-4">
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <CloudSun className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Daily Weather</h3>
+            </div>
+            {planningWeatherLocation && latestWeatherLog ? (
+              <WeatherSnapshotCard
+                location={planningWeatherLocation}
+                log={latestWeatherLog}
+                compact
+                title="Daily Weather"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">No weather snapshot is available for the selected day yet.</p>
+            )}
+          </div>
+
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <Droplets className="h-4 w-4 text-chart-blue" />
+              <h3 className="text-sm font-semibold">Daily Applications</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="rounded-2xl bg-muted/50 p-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Applications scheduled today</div>
+                <div className="mt-1 text-2xl font-semibold">{todayApplications.length}</div>
+              </div>
+              {todayApplications.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No chemical applications are logged for this day.</p>
+              ) : (
+                todayApplications.slice(0, 3).map((log) => {
+                  const area = applicationAreas.find((entry) => entry.id === log.areaId);
+                  return (
+                    <div key={log.id} className="rounded-2xl border p-3">
+                      <div className="text-sm font-medium">{area?.name ?? 'Unknown area'}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {log.startTime} - {log.endTime} · {log.areaTreated} {log.areaUnit}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">{log.agronomicPurpose}</div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <StickyNote className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Notes</h3>
+            </div>
             <NotesPanel notes={noteList.filter((note) => note.date === boardDate || note.type === 'general')} onAddNote={() => setNoteDialogOpen(true)} />
-          </TabsContent>
-          <TabsContent value="turf">
+          </div>
+
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <Droplets className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Turf</h3>
+            </div>
             <TurfPanel data={turfData} />
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </div>
 
       <Dialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen}>
@@ -627,7 +645,7 @@ export default function WorkboardPage() {
                 onChange={(event) => setAssignmentDraft({ ...assignmentDraft, employeeId: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {assignmentEligibleEmployees.length === 0 && <option value="">No active employees available</option>}
+                {assignmentEligibleEmployees.length === 0 && <option value="">No scheduled employees available</option>}
                 {assignmentEligibleEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
                     {employee.firstName} {employee.lastName} · {employee.department} · {employee.group}{employee.status !== 'active' ? ' · inactive' : ''}
@@ -635,7 +653,7 @@ export default function WorkboardPage() {
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Scheduled crew is listed first, then the rest of the roster.
+                Only scheduled employees for this day appear here. If someone is missing, add their shift in Scheduler first.
               </p>
             </div>
             <div className="col-span-2">

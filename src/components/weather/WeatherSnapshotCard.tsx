@@ -6,14 +6,15 @@ interface WeatherSnapshotCardProps {
   location: WeatherLocation;
   log?: WeatherDailyLog;
   compact?: boolean;
+  title?: string;
 }
 
-export function WeatherSnapshotCard({ location, log, compact = false }: WeatherSnapshotCardProps) {
+export function WeatherSnapshotCard({ location, log, compact = false, title = 'Weather Snapshot' }: WeatherSnapshotCardProps) {
   return (
     <Card className={`border-primary/10 bg-gradient-to-br from-background to-accent/30 ${compact ? 'p-4' : 'p-5'}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Weather Snapshot</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">{title}</p>
           <h3 className="mt-1 text-base font-semibold">{location.name}</h3>
           <p className="text-xs text-muted-foreground">{location.property} - {location.area}</p>
         </div>
