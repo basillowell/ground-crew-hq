@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { equipmentTypes, workOrders, type Employee, type EquipmentUnit } from '@/data/seedData';
+import { WorkOrderKanban } from '@/components/equipment/WorkOrderKanban';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
