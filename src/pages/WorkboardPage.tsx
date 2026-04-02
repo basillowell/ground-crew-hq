@@ -564,6 +564,10 @@ export default function WorkboardPage() {
       <div className="w-80 border-l bg-card overflow-auto p-4 hidden lg:block">
         <div className="space-y-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <EscalationCenter />
+          </div>
+
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="mb-3 flex items-center gap-2">
               <CloudSun className="h-4 w-4 text-primary" />
               <h3 className="text-sm font-semibold">Daily Weather</h3>
