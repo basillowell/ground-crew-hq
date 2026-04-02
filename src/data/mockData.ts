@@ -266,6 +266,7 @@ export interface Property {
   name: string;
   shortName: string;
   type: 'golf-course' | 'resort' | 'estate' | 'municipal';
+  propertyClassId?: string;
   address: string;
   city: string;
   state: string;
@@ -273,6 +274,27 @@ export interface Property {
   logoInitials: string;
   color: string;
   status: 'active' | 'onboarding' | 'paused';
+}
+
+export interface PropertyClassOption {
+  id: string;
+  name: string;
+  description: string;
+  enabledModules: string[];
+}
+
+export interface TaskRequest {
+  id: string;
+  propertyId: string;
+  date: string;
+  title: string;
+  taskId?: string;
+  requestedBy: string;
+  requestedByType: 'client' | 'user' | 'admin';
+  priority: 'low' | 'medium' | 'high';
+  status: 'new' | 'planned' | 'assigned' | 'closed';
+  preferredLocation?: string;
+  notes: string;
 }
 
 export interface ShiftTemplate {
@@ -443,9 +465,59 @@ export const languageOptions: LanguageOption[] = [
 ];
 
 export const properties: Property[] = [
-  { id: 'prop-1', name: 'Ground Crew HQ', shortName: 'GC HQ', type: 'golf-course', address: '1200 Championship Dr', city: 'Scottsdale', state: 'AZ', acreage: 180, logoInitials: 'GC', color: 'hsl(152, 55%, 38%)', status: 'active' },
-  { id: 'prop-2', name: 'Pine Valley Club', shortName: 'PVC', type: 'golf-course', address: '450 Fairway Ln', city: 'Pine Valley', state: 'NJ', acreage: 220, logoInitials: 'PV', color: 'hsl(210, 80%, 52%)', status: 'active' },
-  { id: 'prop-3', name: 'Oceanview Resort & Spa', shortName: 'OVR', type: 'resort', address: '8900 Coastal Blvd', city: 'Carlsbad', state: 'CA', acreage: 95, logoInitials: 'OV', color: 'hsl(270, 60%, 55%)', status: 'active' },
+  { id: 'prop-1', name: 'Ground Crew HQ', shortName: 'GC HQ', type: 'golf-course', propertyClassId: 'pc-golf-premium', address: '1200 Championship Dr', city: 'Scottsdale', state: 'AZ', acreage: 180, logoInitials: 'GC', color: 'hsl(152, 55%, 38%)', status: 'active' },
+  { id: 'prop-2', name: 'Pine Valley Club', shortName: 'PVC', type: 'golf-course', propertyClassId: 'pc-golf-premium', address: '450 Fairway Ln', city: 'Pine Valley', state: 'NJ', acreage: 220, logoInitials: 'PV', color: 'hsl(210, 80%, 52%)', status: 'active' },
+  { id: 'prop-3', name: 'Oceanview Resort & Spa', shortName: 'OVR', type: 'resort', propertyClassId: 'pc-resort', address: '8900 Coastal Blvd', city: 'Carlsbad', state: 'CA', acreage: 95, logoInitials: 'OV', color: 'hsl(270, 60%, 55%)', status: 'active' },
+];
+
+export const propertyClassOptions: PropertyClassOption[] = [
+  {
+    id: 'pc-golf-premium',
+    name: 'Golf Course Premium',
+    description: 'Full agronomy, crew workflow, breakroom, applications, and weather tracking for private or destination golf properties.',
+    enabledModules: ['command-center', 'workflow', 'breakroom', 'weather', 'applications', 'reports', 'field', 'equipment'],
+  },
+  {
+    id: 'pc-resort',
+    name: 'Resort Grounds',
+    description: 'Balanced crew workflow for mixed landscape, guest areas, and light agronomic operations.',
+    enabledModules: ['command-center', 'workflow', 'breakroom', 'weather', 'reports', 'equipment', 'field'],
+  },
+  {
+    id: 'pc-municipal',
+    name: 'Municipal Ops',
+    description: 'Lean operational stack for public properties that need labor planning and equipment readiness without the full chemical suite.',
+    enabledModules: ['command-center', 'workflow', 'breakroom', 'reports', 'equipment'],
+  },
+];
+
+export const taskRequests: TaskRequest[] = [
+  {
+    id: 'tr1',
+    propertyId: 'prop-1',
+    date: '2026-04-02',
+    title: 'Topdress practice green collars before member clinic',
+    taskId: 't1',
+    requestedBy: 'Nick Chavez',
+    requestedByType: 'client',
+    priority: 'high',
+    status: 'new',
+    preferredLocation: 'Practice Range',
+    notes: 'Client requested completion before 8:30 AM due to guest clinic start.',
+  },
+  {
+    id: 'tr2',
+    propertyId: 'prop-1',
+    date: '2026-04-02',
+    title: 'Blow clubhouse entry and cart staging area',
+    taskId: 't12',
+    requestedBy: 'Basil Lowell',
+    requestedByType: 'admin',
+    priority: 'medium',
+    status: 'planned',
+    preferredLocation: 'Clubhouse',
+    notes: 'Requested for visual cleanup ahead of afternoon board meeting.',
+  },
 ];
 
 export const workLocations: WorkLocation[] = [

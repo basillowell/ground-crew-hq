@@ -13,7 +13,7 @@ import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { EscalationCenter } from '@/components/notifications/EscalationCenter';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
-import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
+import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type Property, type ScheduleEntry, type Task, type TaskRequest, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
 import { StickyNote, Droplets, CloudSun, MonitorSmartphone, LayoutList, GanttChart } from 'lucide-react';
 import {
   DATA_STORE_UPDATED_EVENT,
@@ -23,13 +23,16 @@ import {
   loadEmployees,
   loadEquipmentUnits,
   loadNotes,
+  loadProperties,
   loadScheduleEntries,
+  loadTaskRequests,
   loadTasks,
   loadWeatherDailyLogs,
   loadWeatherLocations,
   loadWorkLocations,
   saveAssignments,
   saveNotes,
+  saveTaskRequests,
 } from '@/lib/dataStore';
 
 function defaultBoardDate() {
@@ -57,6 +60,7 @@ export default function WorkboardPage() {
   const [boardDate, setBoardDate] = useState(defaultBoardDate());
   const [department, setDepartment] = useState('Maintenance');
   const [propertyId, setPropertyId] = useState('');
+  const [properties, setProperties] = useState<Property[]>([]);
   const [groupFilter, setGroupFilter] = useState('all');
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
   const [taskList, setTaskList] = useState<Task[]>([]);
@@ -68,10 +72,13 @@ export default function WorkboardPage() {
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
+  const [taskRequests, setTaskRequests] = useState<TaskRequest[]>([]);
   const [applicationLogs, setApplicationLogs] = useState(loadChemicalApplicationLogs());
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
+  const [linkedRequestId, setLinkedRequestId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
   const [dropTargetEmployeeId, setDropTargetEmployeeId] = useState<string | null>(null);
@@ -96,6 +103,15 @@ export default function WorkboardPage() {
     author: 'Operations Admin',
     location: '',
   });
+  const [requestDraft, setRequestDraft] = useState({
+    title: '',
+    taskId: '',
+    requestedBy: 'Client Request',
+    requestedByType: 'client' as TaskRequest['requestedByType'],
+    priority: 'medium' as TaskRequest['priority'],
+    preferredLocation: '',
+    notes: '',
+  });
 
   useEffect(() => {
     const refresh = () => {
@@ -109,11 +125,13 @@ export default function WorkboardPage() {
       setAssignmentList(loadAssignments());
       setApplicationAreas(loadApplicationAreas());
       setNoteList(loadNotes());
+      setProperties(loadProperties());
       setScheduleList(storedSchedules);
       setEquipmentList(loadEquipmentUnits());
       setWeatherLogs(loadWeatherDailyLogs());
       setWeatherLocations(loadWeatherLocations());
       setWorkLocations(loadWorkLocations());
+      setTaskRequests(loadTaskRequests());
       setApplicationLogs(loadChemicalApplicationLogs());
       const firstScheduled =
         storedSchedules.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??
@@ -167,6 +185,22 @@ export default function WorkboardPage() {
   const propertyWorkLocations = useMemo(
     () => workLocations.filter((location) => !propertyId || location.propertyId === propertyId),
     [propertyId, workLocations],
+  );
+
+  const activeProperty = useMemo(
+    () => properties.find((property) => property.id === propertyId) ?? null,
+    [properties, propertyId],
+  );
+
+  const propertyRequests = useMemo(
+    () =>
+      taskRequests
+        .filter((request) => (!propertyId || request.propertyId === propertyId) && request.date === boardDate)
+        .sort((left, right) => {
+          const priorityOrder = { high: 0, medium: 1, low: 2 } as const;
+          return priorityOrder[left.priority] - priorityOrder[right.priority];
+        }),
+    [boardDate, propertyId, taskRequests],
   );
 
   const scheduledEmployees = useMemo(() => {
@@ -291,6 +325,11 @@ export default function WorkboardPage() {
     saveNotes(nextNotes);
   }
 
+  function persistTaskRequests(nextRequests: TaskRequest[]) {
+    setTaskRequests(nextRequests);
+    saveTaskRequests(nextRequests);
+  }
+
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
@@ -305,6 +344,19 @@ export default function WorkboardPage() {
       duration: '60',
     });
     setAssignmentDialogOpen(true);
+  }
+
+  function openRequestDialog() {
+    setRequestDraft({
+      title: '',
+      taskId: taskList[0]?.id ?? '',
+      requestedBy: activeProperty?.name ? `${activeProperty.name} Client` : 'Client Request',
+      requestedByType: 'client',
+      priority: 'medium',
+      preferredLocation: propertyWorkLocations[0]?.name ?? '',
+      notes: '',
+    });
+    setRequestDialogOpen(true);
   }
 
   function openEditAssignmentDialog(assignment: Assignment) {
@@ -339,6 +391,16 @@ export default function WorkboardPage() {
       ? assignmentList.map((assignment) => (assignment.id === editingAssignmentId ? nextAssignment : assignment))
       : [...assignmentList, nextAssignment];
     persistAssignments(nextAssignments);
+    if (linkedRequestId) {
+      persistTaskRequests(
+        taskRequests.map((request) =>
+          request.id === linkedRequestId
+            ? { ...request, status: 'assigned', taskId: assignmentDraft.taskId, preferredLocation: assignmentDraft.area }
+            : request,
+        ),
+      );
+    }
+    setLinkedRequestId(null);
     setEditingAssignmentId(null);
     setAssignmentDialogOpen(false);
     toast(editingAssignmentId ? 'Assignment updated' : 'Assignment added', {
@@ -351,6 +413,45 @@ export default function WorkboardPage() {
   function removeAssignment(assignmentId: string) {
     const nextAssignments = assignmentList.filter((assignment) => assignment.id !== assignmentId);
     persistAssignments(nextAssignments);
+  }
+
+  function saveTaskRequest() {
+    if (!propertyId || !requestDraft.title.trim()) return;
+    const nextRequest: TaskRequest = {
+      id: makeId('treq'),
+      propertyId,
+      date: boardDate,
+      title: requestDraft.title.trim(),
+      taskId: requestDraft.taskId || undefined,
+      requestedBy: requestDraft.requestedBy.trim() || 'Client Request',
+      requestedByType: requestDraft.requestedByType,
+      priority: requestDraft.priority,
+      status: 'new',
+      preferredLocation: requestDraft.preferredLocation.trim() || undefined,
+      notes: requestDraft.notes.trim(),
+    };
+    persistTaskRequests([...taskRequests, nextRequest]);
+    setRequestDialogOpen(false);
+    toast('Property request added', {
+      description: 'This request is now ready for admin review and assignment on the selected workflow board.',
+    });
+  }
+
+  function useRequestForAssignment(request: TaskRequest) {
+    setLinkedRequestId(request.id);
+    const targetTaskId = request.taskId || taskList[0]?.id || '';
+    const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
+    setEditingAssignmentId(null);
+    setSelectedEmployeeId(targetEmployeeId);
+    setAssignmentDraft({
+      employeeId: targetEmployeeId,
+      taskId: targetTaskId,
+      equipmentId: '',
+      area: request.preferredLocation || propertyWorkLocations[0]?.name || 'Primary zone',
+      startTime: '05:30',
+      duration: String(taskList.find((task) => task.id === targetTaskId)?.duration ?? 60),
+    });
+    setAssignmentDialogOpen(true);
   }
 
   function saveNote() {
@@ -407,10 +508,15 @@ export default function WorkboardPage() {
       <div className="flex-1 p-4 overflow-auto">
         <PageHeader
           title="Workflow"
-          subtitle="Pull the scheduled crew for the selected day, assign tasks from Task Management, and send the finished plan straight to the breakroom screen."
-          badge={<Badge variant="secondary">{department} / {boardDate}</Badge>}
+          subtitle={activeProperty ? `Dispatch board for ${activeProperty.name}. Collect property work needs, match them to scheduled crew, and hand the finished plan off to Breakroom.` : 'Pull the scheduled crew for the selected day, assign tasks from Task Management, and send the finished plan straight to the breakroom screen.'}
+          badge={<Badge variant="secondary">{activeProperty ? `${activeProperty.name} / ${department} / ${boardDate}` : `${department} / ${boardDate}`}</Badge>}
           action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '') }}
         >
+           {activeProperty ? (
+             <Badge variant="outline" className="h-7 px-3 text-xs" style={{ borderColor: activeProperty.color, color: activeProperty.color }}>
+               {activeProperty.shortName}
+             </Badge>
+           ) : null}
            <Badge variant="outline" className="h-7 px-3 text-xs">
              Scheduled Crew Only
            </Badge>
@@ -452,11 +558,12 @@ export default function WorkboardPage() {
           </div>
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm font-medium">Program setup tie-in</div>
-            <p className="text-xs text-muted-foreground mt-1">Assignments pull from Task Management and Program Setup locations, while employee rows inherit role, department, group, and worker type from Employee Management.</p>
+            <p className="text-xs text-muted-foreground mt-1">Assignments pull from Task Management and property locations, while employee rows inherit role, department, group, worker type, and property from Employee Management.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge variant="outline">{taskList.length} active tasks</Badge>
               <Badge variant="outline">{propertyWorkLocations.length} locations</Badge>
               <Badge variant="outline">{activeDepartmentEmployees.length} active employees</Badge>
+              <Badge variant="outline">{propertyRequests.length} property requests</Badge>
             </div>
           </div>
         </div>
@@ -586,6 +693,46 @@ export default function WorkboardPage() {
         <div className="space-y-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <EscalationCenter />
+          </div>
+
+          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">Property Requests</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Client, user, and admin requests waiting to be turned into scheduled work for this property and day.</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={openRequestDialog}>Add Request</Button>
+            </div>
+            <div className="space-y-3">
+              {propertyRequests.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No task requests have been collected for this property yet.</p>
+              ) : (
+                propertyRequests.map((request) => (
+                  <div key={request.id} className="rounded-2xl border p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium">{request.title}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {request.requestedBy} · {request.requestedByType} · {request.preferredLocation || 'No preferred location'}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <Badge variant={request.priority === 'high' ? 'destructive' : request.priority === 'medium' ? 'secondary' : 'outline'}>
+                          {request.priority}
+                        </Badge>
+                        <Badge variant="outline">{request.status}</Badge>
+                      </div>
+                    </div>
+                    {request.notes ? <div className="mt-2 text-xs text-muted-foreground">{request.notes}</div> : null}
+                    <div className="mt-3 flex justify-end">
+                      <Button size="sm" onClick={() => useRequestForAssignment(request)} disabled={request.status === 'assigned' || fallbackEligibleEmployees.length === 0}>
+                        Use for Assignment
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
@@ -735,6 +882,86 @@ export default function WorkboardPage() {
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setAssignmentDialogOpen(false)}>Cancel</Button>
             <Button onClick={saveAssignment}>{editingAssignmentId ? 'Save Changes' : 'Save Assignment'}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Property Request</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Request title</label>
+              <Input value={requestDraft.title} onChange={(event) => setRequestDraft({ ...requestDraft, title: event.target.value })} className="mt-1" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Suggested task</label>
+              <select
+                value={requestDraft.taskId}
+                onChange={(event) => setRequestDraft({ ...requestDraft, taskId: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No task linked yet</option>
+                {taskList.map((task) => (
+                  <option key={task.id} value={task.id}>{task.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Requested by</label>
+              <Input value={requestDraft.requestedBy} onChange={(event) => setRequestDraft({ ...requestDraft, requestedBy: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Request type</label>
+              <select
+                value={requestDraft.requestedByType}
+                onChange={(event) => setRequestDraft({ ...requestDraft, requestedByType: event.target.value as TaskRequest['requestedByType'] })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="client">Client</option>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Priority</label>
+              <select
+                value={requestDraft.priority}
+                onChange={(event) => setRequestDraft({ ...requestDraft, priority: event.target.value as TaskRequest['priority'] })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Preferred location</label>
+              <select
+                value={requestDraft.preferredLocation}
+                onChange={(event) => setRequestDraft({ ...requestDraft, preferredLocation: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No location preference</option>
+                {propertyWorkLocations.map((location) => (
+                  <option key={location.id} value={location.name}>{location.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Notes</label>
+              <textarea
+                value={requestDraft.notes}
+                onChange={(event) => setRequestDraft({ ...requestDraft, notes: event.target.value })}
+                className="mt-1 min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>Cancel</Button>
+            <Button onClick={saveTaskRequest}>Save Request</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -11,6 +11,7 @@ import {
   languageOptions,
   manualRainfallEntries,
   notes,
+  propertyClassOptions,
   properties,
   programSettings,
   roleOptions,
@@ -34,16 +35,19 @@ import {
   type LanguageOption,
   type ManualRainfallEntry,
   type Note,
+  type PropertyClassOption,
   type Property,
   type ProgramSettings,
   type RoleOption,
   type ScheduleEntry,
   type ShiftTemplate,
   type Task,
+  type TaskRequest,
   type WeatherDailyLog,
   type WeatherLocation,
   type WeatherStation,
   type WorkLocation,
+  taskRequests,
   workLocations,
 } from '@/data/seedData';
 
@@ -70,6 +74,8 @@ const ROLES_KEY = 'gchq-roles';
 const LANGUAGES_KEY = 'gchq-languages';
 const WORK_LOCATIONS_KEY = 'gchq-work-locations';
 const PROPERTIES_KEY = 'gchq-properties';
+const PROPERTY_CLASSES_KEY = 'gchq-property-classes';
+const TASK_REQUESTS_KEY = 'gchq-task-requests';
 const SHIFT_TEMPLATES_KEY = 'gchq-shift-templates';
 const APP_USERS_KEY = 'gchq-app-users';
 const CURRENT_APP_USER_KEY = 'gchq-current-app-user-id';
@@ -262,6 +268,22 @@ export function loadProperties() {
 
 export function saveProperties(value: Property[]) {
   writeList(PROPERTIES_KEY, value);
+}
+
+export function loadPropertyClassOptions() {
+  return readList<PropertyClassOption>(PROPERTY_CLASSES_KEY, propertyClassOptions);
+}
+
+export function savePropertyClassOptions(value: PropertyClassOption[]) {
+  writeList(PROPERTY_CLASSES_KEY, value);
+}
+
+export function loadTaskRequests() {
+  return readList<TaskRequest>(TASK_REQUESTS_KEY, taskRequests);
+}
+
+export function saveTaskRequests(value: TaskRequest[]) {
+  writeList(TASK_REQUESTS_KEY, value);
 }
 
 export function loadShiftTemplates() {

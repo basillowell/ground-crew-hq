@@ -12,11 +12,13 @@ import {
   languageOptions,
   manualRainfallEntries,
   notes,
+  propertyClassOptions,
   properties,
   programSettings,
   roleOptions,
   scheduleEntries,
   shiftTemplates,
+  taskRequests,
   tasks,
   weatherDailyLogs,
   weatherLocations,
@@ -35,12 +37,14 @@ import {
   type LanguageOption,
   type ManualRainfallEntry,
   type Note,
+  type PropertyClassOption,
   type Property,
   type ProgramSettings,
   type RoleOption,
   type ScheduleEntry,
   type ShiftTemplate,
   type Task,
+  type TaskRequest,
   type WeatherDailyLog,
   type WeatherLocation,
   type WeatherStation,
@@ -61,10 +65,12 @@ import {
   loadManualRainfallEntries as loadManualRainfallEntriesLocal,
   loadNotes as loadNotesLocal,
   loadProgramSettings as loadProgramSettingsLocal,
+  loadPropertyClassOptions as loadPropertyClassOptionsLocal,
   loadProperties as loadPropertiesLocal,
   loadRoleOptions as loadRoleOptionsLocal,
   loadScheduleEntries as loadScheduleEntriesLocal,
   loadShiftTemplates as loadShiftTemplatesLocal,
+  loadTaskRequests as loadTaskRequestsLocal,
   loadTasks as loadTasksLocal,
   loadWeatherDailyLogs as loadWeatherDailyLogsLocal,
   loadWeatherLocations as loadWeatherLocationsLocal,
@@ -86,10 +92,12 @@ import {
   saveManualRainfallEntries as saveManualRainfallEntriesLocal,
   saveNotes as saveNotesLocal,
   saveProgramSettings as saveProgramSettingsLocal,
+  savePropertyClassOptions as savePropertyClassOptionsLocal,
   saveProperties as savePropertiesLocal,
   saveRoleOptions as saveRoleOptionsLocal,
   saveScheduleEntries as saveScheduleEntriesLocal,
   saveShiftTemplates as saveShiftTemplatesLocal,
+  saveTaskRequests as saveTaskRequestsLocal,
   saveTasks as saveTasksLocal,
   saveWeatherDailyLogs as saveWeatherDailyLogsLocal,
   saveWeatherLocations as saveWeatherLocationsLocal,
@@ -236,6 +244,18 @@ const collections = {
     loadLocal: loadPropertiesLocal,
     saveLocal: savePropertiesLocal,
   } satisfies CollectionConfig<Property>,
+  propertyClassOptions: {
+    table: 'property_class_options',
+    seed: propertyClassOptions,
+    loadLocal: loadPropertyClassOptionsLocal,
+    saveLocal: savePropertyClassOptionsLocal,
+  } satisfies CollectionConfig<PropertyClassOption>,
+  taskRequests: {
+    table: 'task_requests',
+    seed: taskRequests,
+    loadLocal: loadTaskRequestsLocal,
+    saveLocal: saveTaskRequestsLocal,
+  } satisfies CollectionConfig<TaskRequest>,
   shiftTemplates: {
     table: 'shift_templates',
     seed: shiftTemplates,
@@ -341,6 +361,8 @@ export async function initializeDataStore() {
     hydrateCollection(collections.languageOptions),
     hydrateCollection(collections.workLocations),
     hydrateCollection(collections.properties),
+    hydrateCollection(collections.propertyClassOptions),
+    hydrateCollection(collections.taskRequests),
     hydrateCollection(collections.shiftTemplates),
     hydrateCollection(collections.appUsers),
   ]);
@@ -512,6 +534,22 @@ export function loadProperties() {
 
 export function saveProperties(value: Property[]) {
   syncCollection(collections.properties, value);
+}
+
+export function loadPropertyClassOptions() {
+  return collections.propertyClassOptions.loadLocal();
+}
+
+export function savePropertyClassOptions(value: PropertyClassOption[]) {
+  syncCollection(collections.propertyClassOptions, value);
+}
+
+export function loadTaskRequests() {
+  return collections.taskRequests.loadLocal();
+}
+
+export function saveTaskRequests(value: TaskRequest[]) {
+  syncCollection(collections.taskRequests, value);
 }
 
 export function loadShiftTemplates() {

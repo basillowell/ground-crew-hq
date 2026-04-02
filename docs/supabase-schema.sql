@@ -27,6 +27,7 @@ create table if not exists public.properties (
   name text not null,
   "shortName" text not null,
   type text not null,
+  "propertyClassId" text,
   address text not null default '',
   city text not null default '',
   state text not null default '',
@@ -34,6 +35,27 @@ create table if not exists public.properties (
   "logoInitials" text not null default 'WF',
   color text not null default '#2f855a',
   status text not null default 'active'
+);
+
+create table if not exists public.property_class_options (
+  id text primary key,
+  name text not null,
+  description text not null default '',
+  "enabledModules" text[] not null default '{}'
+);
+
+create table if not exists public.task_requests (
+  id text primary key,
+  "propertyId" text not null,
+  "date" date not null,
+  title text not null,
+  "taskId" text,
+  "requestedBy" text not null,
+  "requestedByType" text not null default 'user',
+  priority text not null default 'medium',
+  status text not null default 'new',
+  "preferredLocation" text,
+  notes text not null default ''
 );
 
 create table if not exists public.tasks (
@@ -308,6 +330,8 @@ alter table public.program_settings enable row level security;
 alter table public.department_options enable row level security;
 alter table public.group_options enable row level security;
 alter table public.properties enable row level security;
+alter table public.property_class_options enable row level security;
+alter table public.task_requests enable row level security;
 alter table public.work_locations enable row level security;
 alter table public.shift_templates enable row level security;
 alter table public.role_options enable row level security;
@@ -367,6 +391,12 @@ create policy "public full access group_options" on public.group_options for all
 drop policy if exists "public full access properties" on public.properties;
 create policy "public full access properties" on public.properties for all using (true) with check (true);
 
+drop policy if exists "public full access property_class_options" on public.property_class_options;
+create policy "public full access property_class_options" on public.property_class_options for all using (true) with check (true);
+
+drop policy if exists "public full access task_requests" on public.task_requests;
+create policy "public full access task_requests" on public.task_requests for all using (true) with check (true);
+
 drop policy if exists "public full access work_locations" on public.work_locations;
 create policy "public full access work_locations" on public.work_locations for all using (true) with check (true);
 
@@ -408,6 +438,7 @@ alter table public.program_settings add column if not exists "shellImageUrl" tex
 alter table public.program_settings add column if not exists "primaryColor" text not null default '#2f855a';
 alter table public.program_settings add column if not exists "accentColor" text not null default '#d7f5e5';
 alter table public.program_settings add column if not exists "sidebarColor" text not null default '#203127';
+alter table public.properties add column if not exists "propertyClassId" text;
 alter table public.employees add column if not exists "propertyId" text;
 alter table public.employees add column if not exists "portalEnabled" boolean not null default false;
 alter table public.employees add column if not exists "loginEmail" text not null default '';

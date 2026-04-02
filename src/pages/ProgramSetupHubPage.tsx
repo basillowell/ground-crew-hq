@@ -21,7 +21,7 @@ import {
   Waves,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
-import type { AppUser, DepartmentOption, GroupOption, ProgramSettings, Property, ShiftTemplate, WorkLocation } from '@/data/seedData';
+import type { AppUser, DepartmentOption, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WorkLocation } from '@/data/seedData';
 import {
   loadLanguageOptions,
   loadApplicationAreas,
@@ -31,6 +31,7 @@ import {
   loadEmployees,
   loadGroupOptions,
   loadProperties,
+  loadPropertyClassOptions,
   loadProgramSettings,
   loadRoleOptions,
   loadScheduleEntries,
@@ -43,6 +44,7 @@ import {
   saveDepartmentOptions,
   saveGroupOptions,
   saveProperties,
+  savePropertyClassOptions,
   saveProgramSettings,
   saveRoleOptions,
   saveShiftTemplates,
@@ -170,6 +172,7 @@ export default function ProgramSetupHubPage() {
   const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
   const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [propertyClasses, setPropertyClasses] = useState<PropertyClassOption[]>([]);
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
@@ -182,6 +185,7 @@ export default function ProgramSetupHubPage() {
     setRoleOptions(loadRoleOptions());
     setLanguageOptions(loadLanguageOptions());
     setProperties(loadProperties());
+    setPropertyClasses(loadPropertyClassOptions());
     setWorkLocations(loadWorkLocations());
     setShiftTemplates(loadShiftTemplates());
     setAppUsers(loadAppUsers());
@@ -207,8 +211,9 @@ export default function ProgramSetupHubPage() {
       weatherAreas: weatherAreas.length,
       applicationAreas: applicationAreas.length,
       properties: properties.length,
+      propertyClasses: propertyClasses.length,
     };
-  }, [appUsers, departmentOptions, groupOptions, properties, shiftTemplates, workLocations, programSetting]);
+  }, [appUsers, departmentOptions, groupOptions, properties, propertyClasses, shiftTemplates, workLocations, programSetting]);
 
   function saveGeneralSettings() {
     if (!programSetting) return;
@@ -253,6 +258,14 @@ export default function ProgramSetupHubPage() {
     announceProgramSetupUpdate();
     toast('Properties saved', {
       description: `${properties.length} properties now feed Command Center and property-specific workflow routing.`,
+    });
+  }
+
+  function savePropertyClassesTab() {
+    savePropertyClassOptions(propertyClasses);
+    announceProgramSetupUpdate();
+    toast('Property classes saved', {
+      description: `${propertyClasses.length} master property classes now control which modules each club is set up to use.`,
     });
   }
 
@@ -358,6 +371,12 @@ export default function ProgramSetupHubPage() {
           helper="Client admins, managers, and supervisors who can enter this workspace."
           icon={<ShieldCheck className="h-5 w-5" />}
         />
+        <StatCard
+          label="Property Classes"
+          value={liveCounts.propertyClasses}
+          helper="Reusable property blueprints that define which modules and workflows each site uses."
+          icon={<Building2 className="h-5 w-5" />}
+        />
       </div>
 
       <Card className="p-5">
@@ -399,6 +418,7 @@ export default function ProgramSetupHubPage() {
           <TabsTrigger value="general" className="text-xs gap-1 border bg-card px-3 py-2"><Settings className="h-3 w-3" /> Brand + Club Profile</TabsTrigger>
           <TabsTrigger value="structure" className="text-xs gap-1 border bg-card px-3 py-2"><Users className="h-3 w-3" /> Workforce Structure</TabsTrigger>
           <TabsTrigger value="users" className="text-xs gap-1 border bg-card px-3 py-2"><ShieldCheck className="h-3 w-3" /> Users + Access</TabsTrigger>
+          <TabsTrigger value="property-classes" className="text-xs gap-1 border bg-card px-3 py-2"><Waves className="h-3 w-3" /> Property Classes</TabsTrigger>
           <TabsTrigger value="properties" className="text-xs gap-1 border bg-card px-3 py-2"><Building2 className="h-3 w-3" /> Properties</TabsTrigger>
           <TabsTrigger value="locations" className="text-xs gap-1 border bg-card px-3 py-2"><MapPin className="h-3 w-3" /> Locations</TabsTrigger>
           <TabsTrigger value="shifts" className="text-xs gap-1 border bg-card px-3 py-2"><Clock className="h-3 w-3" /> Shift Templates</TabsTrigger>
@@ -1087,6 +1107,108 @@ export default function ProgramSetupHubPage() {
           </div>
         </TabsContent>
 
+        <TabsContent value="property-classes">
+          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+            <Card className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">Property Class Master Options</div>
+                  <p className="text-xs text-muted-foreground">Define reusable property blueprints so each club can show only the modules it actually needs.</p>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() =>
+                    setPropertyClasses((current) => [
+                      ...current,
+                      {
+                        id: makeId('pclass'),
+                        name: `Property Class ${current.length + 1}`,
+                        description: '',
+                        enabledModules: ['command-center', 'workflow', 'breakroom', 'reports'],
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="h-3 w-3" /> Add Class
+                </Button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {propertyClasses.map((propertyClass) => (
+                  <div key={propertyClass.id} className="rounded-2xl border p-4">
+                    <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+                      <Input
+                        value={propertyClass.name}
+                        onChange={(event) => setPropertyClasses((current) => current.map((entry) => entry.id === propertyClass.id ? { ...entry, name: event.target.value } : entry))}
+                        className="h-9"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                        onClick={() => setPropertyClasses((current) => current.filter((entry) => entry.id !== propertyClass.id))}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <Input
+                      value={propertyClass.description}
+                      onChange={(event) => setPropertyClasses((current) => current.map((entry) => entry.id === propertyClass.id ? { ...entry, description: event.target.value } : entry))}
+                      placeholder="Describe when this property class should be used"
+                      className="mt-3 h-9"
+                    />
+                    <div className="mt-4 grid gap-2 md:grid-cols-2">
+                      {['command-center', 'workflow', 'breakroom', 'weather', 'applications', 'reports', 'field', 'equipment'].map((moduleId) => {
+                        const enabled = propertyClass.enabledModules.includes(moduleId);
+                        return (
+                          <label key={moduleId} className="flex items-center justify-between rounded-xl border bg-muted/20 px-3 py-2 text-sm">
+                            <span className="capitalize">{moduleId.replace('-', ' ')}</span>
+                            <Switch
+                              checked={enabled}
+                              onCheckedChange={(checked) =>
+                                setPropertyClasses((current) =>
+                                  current.map((entry) =>
+                                    entry.id === propertyClass.id
+                                      ? {
+                                          ...entry,
+                                          enabledModules: checked
+                                            ? [...entry.enabledModules, moduleId]
+                                            : entry.enabledModules.filter((value) => value !== moduleId),
+                                        }
+                                      : entry,
+                                  ),
+                                )
+                              }
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={savePropertyClassesTab}>Save Property Classes</Button>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="font-semibold">Why This Matters</div>
+              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                <p>Property classes become your master blueprint for how different clubs and sites use the platform.</p>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="font-medium text-foreground">Golf Course vs Resort</div>
+                  <p className="mt-1 text-xs">A golf property may need weather and chemical applications, while a resort may focus more on workflow, breakroom, and guest-area reporting.</p>
+                </div>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="font-medium text-foreground">Scalable Client Setup</div>
+                  <p className="mt-1 text-xs">Once a property is tied to a class, the app can later hide or prioritize modules based on that saved blueprint instead of making every client see the same stack.</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="properties">
           <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
             <Card className="p-6">
@@ -1151,6 +1273,21 @@ export default function ProgramSetupHubPage() {
                         <option value="onboarding">Onboarding</option>
                         <option value="paused">Paused</option>
                       </select>
+                    </div>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1.2fr]">
+                      <select
+                        value={property.propertyClassId || ''}
+                        onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, propertyClassId: event.target.value || undefined } : entry))}
+                        className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="">No property class</option>
+                        {propertyClasses.map((propertyClass) => (
+                          <option key={propertyClass.id} value={propertyClass.id}>{propertyClass.name}</option>
+                        ))}
+                      </select>
+                      <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                        {(propertyClasses.find((entry) => entry.id === property.propertyClassId)?.enabledModules || []).join(' · ') || 'Assign a property class to define which modules this property should emphasize.'}
+                      </div>
                     </div>
                   </div>
                 ))}
