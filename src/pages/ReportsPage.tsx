@@ -62,11 +62,54 @@ function downloadCsv(filename: string, rows: string[]) {
   link.click();
 }
 
+function currentDateIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function shiftHours(entry: ScheduleEntry) {
+  const [startHour, startMinute] = entry.shiftStart.split(':').map(Number);
+  const [endHour, endMinute] = entry.shiftEnd.split(':').map(Number);
+  return Math.max(endHour * 60 + endMinute - (startHour * 60 + startMinute), 0) / 60;
+}
+
+function applicationHours(log: ChemicalApplicationLog) {
+  const [startHour, startMinute] = log.startTime.split(':').map(Number);
+  const [endHour, endMinute] = log.endTime.split(':').map(Number);
+  return Math.max(endHour * 60 + endMinute - (startHour * 60 + startMinute), 0) / 60;
+}
+
+function reportDescription(report: string) {
+  const map: Record<string, string> = {
+    'Daily Labor Summary': 'See who was scheduled, how many hours were planned, and how much workboard activity was actually dispatched.',
+    'Weekly Hours by Employee': 'Roll labor hours up by employee so the manager can review utilization instead of guessing from the board.',
+    'Overtime Report': 'Flag long shift windows and crew members trending toward overloaded days.',
+    'Labor Cost by Task': 'Tie assignment time to employee wage so labor planning reflects real task cost.',
+    'Task Completion Rate': 'Compare planned task durations to assigned task time so recurring work can be tightened.',
+    'Task Distribution': 'See which task categories are dominating the workboard in the selected date range.',
+    'Area Coverage': 'Understand where the crew is working and how assignment minutes are spread by area.',
+    'Chemical Application Log': 'Review chemical application records with weather context and applicator accountability.',
+    'Rainfall History': 'Track rainfall totals by day and location for agronomic planning.',
+    'Weather By Location': 'Compare weather conditions by property area rather than reading one generic station.',
+    'ET Trend Summary': 'Surface evapotranspiration trends next to rainfall so irrigation and spray timing make sense together.',
+    'Application Log Register': 'Generate a printable compliance-ready register of applications with tank mix detail and weather context.',
+    'Product Usage Summary': 'Aggregate product usage across all logged applications to support inventory and reporting.',
+    'Rainfall vs Application Window': 'See whether rainfall and ET lined up with application timing and treatment volume.',
+  };
+  return map[report] ?? 'Run operational reports that are driven by the real roster, schedule, workboard, weather, and application data inside the app.';
+}
+
 export default function ReportsPage() {
   const [selectedCategory, setSelectedCategory] = useState(reportCategories[4] ?? reportCategories[0]);
   const [selectedReport, setSelectedReport] = useState((reportCategories[4] ?? reportCategories[0]).reports[0]);
-  const [startDate, setStartDate] = useState('2024-03-20');
-  const [endDate, setEndDate] = useState('2024-03-31');
+  const [endDate, setEndDate] = useState(currentDateIso());
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 13);
+    return date.toISOString().slice(0, 10);
+  });
+  const [employeeFilter, setEmployeeFilter] = useState('all');
+  const [taskFilter, setTaskFilter] = useState('all');
+  const [areaFilter, setAreaFilter] = useState('all');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [applicationLogs, setApplicationLogs] = useState<ChemicalApplicationLog[]>([]);
@@ -97,8 +140,14 @@ export default function ReportsPage() {
   );
 
   const filteredApplications = useMemo(
-    () => applicationLogs.filter((log) => inRange(log.applicationDate, startDate, endDate)),
-    [applicationLogs, endDate, startDate],
+    () =>
+      applicationLogs.filter((log) => {
+        const matchesDate = inRange(log.applicationDate, startDate, endDate);
+        const matchesEmployee = employeeFilter === 'all' || log.applicatorId === employeeFilter;
+        const matchesArea = areaFilter === 'all' || areaFilter === `app:${log.areaId}`;
+        return matchesDate && matchesEmployee && matchesArea;
+      }),
+    [applicationLogs, areaFilter, employeeFilter, endDate, startDate],
   );
 
   const weatherByLocation = useMemo(() => {
@@ -192,13 +241,25 @@ export default function ReportsPage() {
   };
 
   const filteredSchedules = useMemo(
-    () => scheduleEntries.filter((entry) => inRange(entry.date, startDate, endDate)),
-    [endDate, scheduleEntries, startDate],
+    () =>
+      scheduleEntries.filter(
+        (entry) =>
+          inRange(entry.date, startDate, endDate) &&
+          (employeeFilter === 'all' || entry.employeeId === employeeFilter),
+      ),
+    [employeeFilter, endDate, scheduleEntries, startDate],
   );
 
   const filteredAssignments = useMemo(
-    () => assignments.filter((assignment) => inRange(assignment.date, startDate, endDate)),
-    [assignments, endDate, startDate],
+    () =>
+      assignments.filter((assignment) => {
+        const matchesDate = inRange(assignment.date, startDate, endDate);
+        const matchesEmployee = employeeFilter === 'all' || assignment.employeeId === employeeFilter;
+        const matchesTask = taskFilter === 'all' || assignment.taskId === taskFilter;
+        const matchesArea = areaFilter === 'all' || areaFilter === `work:${assignment.area}`;
+        return matchesDate && matchesEmployee && matchesTask && matchesArea;
+      }),
+    [areaFilter, assignments, employeeFilter, endDate, startDate, taskFilter],
   );
 
   const dailyLabor = useMemo(() => {
@@ -225,6 +286,95 @@ export default function ReportsPage() {
     });
   }, [filteredAssignments, filteredSchedules]);
 
+  const taskTimeRows = useMemo(() => {
+    return tasks
+      .map((task) => {
+        const taskAssignments = filteredAssignments.filter((assignment) => assignment.taskId === task.id);
+        const assignedMinutes = taskAssignments.reduce((sum, assignment) => sum + assignment.duration, 0);
+        const plannedMinutes = taskAssignments.length * task.duration;
+        const varianceMinutes = assignedMinutes - plannedMinutes;
+        const areas = [...new Set(taskAssignments.map((assignment) => assignment.area))];
+        return {
+          taskId: task.id,
+          task: task.name,
+          category: task.category,
+          occurrences: taskAssignments.length,
+          plannedMinutes,
+          assignedMinutes,
+          varianceMinutes,
+          areas: areas.join(', '),
+        };
+      })
+      .filter((entry) => entry.occurrences > 0)
+      .sort((left, right) => right.assignedMinutes - left.assignedMinutes);
+  }, [filteredAssignments, tasks]);
+
+  const employeeHoursRows = useMemo(() => {
+    return employees
+      .map((employee) => {
+        const shifts = filteredSchedules.filter((entry) => entry.employeeId === employee.id && entry.status === 'scheduled');
+        const employeeAssignments = filteredAssignments.filter((assignment) => assignment.employeeId === employee.id);
+        const employeeApplications = filteredApplications.filter((log) => log.applicatorId === employee.id);
+        const scheduledHours = shifts.reduce((sum, entry) => sum + shiftHours(entry), 0);
+        const assignedHours = employeeAssignments.reduce((sum, assignment) => sum + assignment.duration, 0) / 60;
+        const applicationHoursTotal = employeeApplications.reduce((sum, log) => sum + applicationHours(log), 0);
+        const utilization = scheduledHours > 0 ? (assignedHours / scheduledHours) * 100 : 0;
+        return {
+          employeeId: employee.id,
+          employee: `${employee.firstName} ${employee.lastName}`,
+          department: employee.department,
+          group: employee.group,
+          wage: employee.wage,
+          scheduledHours: Number(scheduledHours.toFixed(2)),
+          assignedHours: Number(assignedHours.toFixed(2)),
+          applicationHours: Number(applicationHoursTotal.toFixed(2)),
+          assignmentCount: employeeAssignments.length,
+          applicationCount: employeeApplications.length,
+          utilization: Number(utilization.toFixed(1)),
+          laborCost: Number((assignedHours * employee.wage).toFixed(2)),
+        };
+      })
+      .filter((entry) => entry.scheduledHours > 0 || entry.assignmentCount > 0 || entry.applicationCount > 0)
+      .sort((left, right) => right.scheduledHours - left.scheduledHours);
+  }, [employees, filteredApplications, filteredAssignments, filteredSchedules]);
+
+  const applicationsToHoursRows = useMemo(() => {
+    return filteredApplications
+      .map((log) => {
+        const applicator = employees.find((employee) => employee.id === log.applicatorId);
+        const area = applicationAreas.find((entry) => entry.id === log.areaId);
+        const relatedAssignments = filteredAssignments.filter(
+          (assignment) =>
+            assignment.date === log.applicationDate &&
+            assignment.employeeId === log.applicatorId,
+        );
+        const applicatorShiftHours = filteredSchedules
+          .filter(
+            (entry) =>
+              entry.date === log.applicationDate &&
+              entry.employeeId === log.applicatorId &&
+              entry.status === 'scheduled',
+          )
+          .reduce((sum, entry) => sum + shiftHours(entry), 0);
+        const totalQuantity = tankMixItems
+          .filter((item) => item.applicationLogId === log.id)
+          .reduce((sum, item) => sum + item.totalQuantityUsed, 0);
+        const appliedHours = applicationHours(log);
+        return {
+          id: log.id,
+          date: log.applicationDate,
+          applicator: applicator ? `${applicator.firstName} ${applicator.lastName}` : 'Unassigned',
+          area: area?.name ?? 'Unknown area',
+          appliedHours: Number(appliedHours.toFixed(2)),
+          scheduledHours: Number(applicatorShiftHours.toFixed(2)),
+          assignmentHoursSameDay: Number((relatedAssignments.reduce((sum, assignment) => sum + assignment.duration, 0) / 60).toFixed(2)),
+          totalQuantity: Number(totalQuantity.toFixed(2)),
+          areaTreated: `${log.areaTreated} ${log.areaUnit}`,
+        };
+      })
+      .sort((left, right) => `${right.date}${right.applicator}`.localeCompare(`${left.date}${left.applicator}`));
+  }, [applicationAreas, employees, filteredApplications, filteredAssignments, filteredSchedules, tankMixItems]);
+
   const taskDistribution = useMemo(() => {
     return tasks
       .map((task) => ({
@@ -240,6 +390,23 @@ export default function ReportsPage() {
     assignments: filteredAssignments.length,
     activeEmployees: employees.filter((employee) => employee.status === 'active').length,
   };
+
+  const summaryMetrics = {
+    totalApplicationHours: Number(applicationsToHoursRows.reduce((sum, row) => sum + row.appliedHours, 0).toFixed(2)),
+    totalAssignedHours: Number((filteredAssignments.reduce((sum, assignment) => sum + assignment.duration, 0) / 60).toFixed(2)),
+    totalScheduledHours: Number(filteredSchedules.reduce((sum, entry) => sum + shiftHours(entry), 0).toFixed(2)),
+    totalTaskMinutes: taskTimeRows.reduce((sum, row) => sum + row.assignedMinutes, 0),
+  };
+
+  const reportAreaOptions = useMemo(() => {
+    const workAreas = [...new Set(assignments.map((assignment) => assignment.area).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right))
+      .map((area) => ({ value: `work:${area}`, label: `${area} (workboard)` }));
+    const appAreas = applicationAreas
+      .map((area) => ({ value: `app:${area.id}`, label: `${area.name} (applications)` }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+    return [...workAreas, ...appAreas];
+  }, [applicationAreas, assignments]);
 
   function handleExportCsv() {
     const rows = [
@@ -298,8 +465,7 @@ export default function ReportsPage() {
               </div>
               <h2 className="text-2xl font-semibold tracking-tight">{selectedReport}</h2>
               <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-                Analyze weather, rainfall, ET, and chemical application activity together so admins can make better
-                scheduling, agronomic, and compliance decisions from one report surface.
+                {reportDescription(selectedReport)}
               </p>
             </div>
 
@@ -326,6 +492,62 @@ export default function ReportsPage() {
                 <Printer className="h-3 w-3" />
                 Print
               </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-4">
+            <div className="rounded-2xl border bg-background/80 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Employee</label>
+              <select
+                value={employeeFilter}
+                onChange={(event) => setEmployeeFilter(event.target.value)}
+                className="mt-2 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="all">All employees</option>
+                {employees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.firstName} {employee.lastName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="rounded-2xl border bg-background/80 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Task</label>
+              <select
+                value={taskFilter}
+                onChange={(event) => setTaskFilter(event.target.value)}
+                className="mt-2 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="all">All tasks</option>
+                {tasks.map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="rounded-2xl border bg-background/80 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Application area</label>
+              <select
+                value={areaFilter}
+                onChange={(event) => setAreaFilter(event.target.value)}
+                className="mt-2 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="all">All areas</option>
+                {reportAreaOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="rounded-2xl border bg-background/80 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Report focus</label>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant="outline">{selectedCategory.name}</Badge>
+                <Badge variant="outline">{filteredAssignments.length} assignments</Badge>
+                <Badge variant="outline">{filteredApplications.length} applications</Badge>
+              </div>
             </div>
           </div>
         </div>
@@ -380,6 +602,28 @@ export default function ReportsPage() {
             <div className="text-sm text-muted-foreground mb-1">Active roster</div>
             <div className="text-3xl font-semibold">{workforceTotals.activeEmployees}</div>
             <p className="text-xs text-muted-foreground mt-1">Live employee roster count from the shared workforce store.</p>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3 mb-5">
+          <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
+            <div className="text-sm text-muted-foreground mb-1">Applications to Hours</div>
+            <div className="text-3xl font-semibold">
+              {summaryMetrics.totalScheduledHours > 0
+                ? `${((summaryMetrics.totalApplicationHours / summaryMetrics.totalScheduledHours) * 100).toFixed(1)}%`
+                : '0%'}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Application hours compared to scheduled labor hours in the same report window.</p>
+          </Card>
+          <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
+            <div className="text-sm text-muted-foreground mb-1">Task Time Logged</div>
+            <div className="text-3xl font-semibold">{summaryMetrics.totalAssignedHours.toFixed(1)}h</div>
+            <p className="text-xs text-muted-foreground mt-1">Total workboard task time taken from assignment rows, not generic placeholders.</p>
+          </Card>
+          <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
+            <div className="text-sm text-muted-foreground mb-1">Task Minutes Tracked</div>
+            <div className="text-3xl font-semibold">{summaryMetrics.totalTaskMinutes}</div>
+            <p className="text-xs text-muted-foreground mt-1">Used for task time analysis and labor-vs-plan comparisons.</p>
           </Card>
         </div>
 
@@ -498,6 +742,131 @@ export default function ReportsPage() {
             </ResponsiveContainer>
           </Card>
         </div>
+
+        <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] mb-5">
+          <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-sm font-semibold">Applications to Hours</h3>
+                <p className="text-xs text-muted-foreground">Tie chemical applications back to applicator shifts and same-day task load.</p>
+              </div>
+              <Badge variant="secondary" className="rounded-full px-3 py-1">
+                {applicationsToHoursRows.length} application rows
+              </Badge>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    <th className="px-3 py-3 font-medium">Date</th>
+                    <th className="px-3 py-3 font-medium">Applicator</th>
+                    <th className="px-3 py-3 font-medium">Area</th>
+                    <th className="px-3 py-3 font-medium">App Hrs</th>
+                    <th className="px-3 py-3 font-medium">Shift Hrs</th>
+                    <th className="px-3 py-3 font-medium">Task Hrs</th>
+                    <th className="px-3 py-3 font-medium">Qty Used</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {applicationsToHoursRows.map((row) => (
+                    <tr key={row.id} className="border-b last:border-b-0">
+                      <td className="px-3 py-3">{row.date}</td>
+                      <td className="px-3 py-3">{row.applicator}</td>
+                      <td className="px-3 py-3">{row.area}</td>
+                      <td className="px-3 py-3">{row.appliedHours}</td>
+                      <td className="px-3 py-3">{row.scheduledHours}</td>
+                      <td className="px-3 py-3">{row.assignmentHoursSameDay}</td>
+                      <td className="px-3 py-3">{row.totalQuantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-sm font-semibold">Task Time Taken</h3>
+                <p className="text-xs text-muted-foreground">Compare expected task duration to actual assignment time from the live workboard.</p>
+              </div>
+              <Badge variant="secondary" className="rounded-full px-3 py-1">
+                {taskTimeRows.length} tracked tasks
+              </Badge>
+            </div>
+            <div className="space-y-3">
+              {taskTimeRows.slice(0, 8).map((row) => (
+                <div key={row.taskId} className="rounded-2xl border bg-background/70 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium">{row.task}</div>
+                      <div className="text-xs text-muted-foreground">{row.category} {row.areas ? `· ${row.areas}` : ''}</div>
+                    </div>
+                    <Badge variant={row.varianceMinutes > 0 ? 'destructive' : 'outline'}>
+                      {row.varianceMinutes > 0 ? `+${row.varianceMinutes}` : row.varianceMinutes} min
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-xl bg-muted/50 px-3 py-2">
+                      <div className="text-muted-foreground">Occurrences</div>
+                      <div className="mt-1 font-semibold">{row.occurrences}</div>
+                    </div>
+                    <div className="rounded-xl bg-muted/50 px-3 py-2">
+                      <div className="text-muted-foreground">Planned</div>
+                      <div className="mt-1 font-semibold">{row.plannedMinutes} min</div>
+                    </div>
+                    <div className="rounded-xl bg-muted/50 px-3 py-2">
+                      <div className="text-muted-foreground">Assigned</div>
+                      <div className="mt-1 font-semibold">{row.assignedMinutes} min</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm mb-5">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-sm font-semibold">Hours by Employee</h3>
+              <p className="text-xs text-muted-foreground">This is the workforce-specific layer the app was missing: scheduled hours, task hours, application hours, utilization, and labor cost together.</p>
+            </div>
+            <Badge variant="secondary" className="rounded-full px-3 py-1">
+              {employeeHoursRows.length} employees
+            </Badge>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                  <th className="px-3 py-3 font-medium">Employee</th>
+                  <th className="px-3 py-3 font-medium">Dept / Group</th>
+                  <th className="px-3 py-3 font-medium">Scheduled Hrs</th>
+                  <th className="px-3 py-3 font-medium">Task Hrs</th>
+                  <th className="px-3 py-3 font-medium">App Hrs</th>
+                  <th className="px-3 py-3 font-medium">Utilization</th>
+                  <th className="px-3 py-3 font-medium">Labor Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employeeHoursRows.map((row) => (
+                  <tr key={row.employeeId} className="border-b last:border-b-0">
+                    <td className="px-3 py-3">{row.employee}</td>
+                    <td className="px-3 py-3 text-muted-foreground">{row.department} / {row.group}</td>
+                    <td className="px-3 py-3">{row.scheduledHours}</td>
+                    <td className="px-3 py-3">{row.assignedHours}</td>
+                    <td className="px-3 py-3">{row.applicationHours}</td>
+                    <td className="px-3 py-3">
+                      <Badge variant={row.utilization >= 85 ? 'default' : 'outline'}>{row.utilization}%</Badge>
+                    </td>
+                    <td className="px-3 py-3">${row.laborCost.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
         <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
           <div className="flex items-center justify-between gap-4 mb-4">
