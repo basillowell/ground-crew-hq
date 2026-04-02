@@ -73,6 +73,7 @@ export default function WorkboardPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
   const [dropTargetEmployeeId, setDropTargetEmployeeId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
