@@ -214,6 +214,14 @@ alter table public.chemical_application_tank_mix_items add column if not exists 
 create table if not exists public.program_settings (
   id text primary key,
   "organizationName" text not null,
+  "appName" text not null default 'WorkForce App',
+  "navigationTitle" text not null default 'WorkForce App',
+  "navigationSubtitle" text not null default 'Operations platform',
+  "clientLabel" text not null default 'Client profile',
+  "logoInitials" text not null default 'WF',
+  "primaryColor" text not null default '#2f855a',
+  "accentColor" text not null default '#d7f5e5',
+  "sidebarColor" text not null default '#203127',
   "defaultDepartment" text not null,
   "timeZone" text not null,
   "fiscalYearStart" text not null,
@@ -342,5 +350,13 @@ alter table public.weather_stations add column if not exists "providerType" text
 alter table public.weather_stations add column if not exists latitude numeric;
 alter table public.weather_stations add column if not exists longitude numeric;
 alter table public.weather_stations add column if not exists "timeZone" text not null default '';
+alter table public.program_settings add column if not exists "appName" text not null default 'WorkForce App';
+alter table public.program_settings add column if not exists "navigationTitle" text not null default 'WorkForce App';
+alter table public.program_settings add column if not exists "navigationSubtitle" text not null default 'Operations platform';
+alter table public.program_settings add column if not exists "clientLabel" text not null default 'Client profile';
+alter table public.program_settings add column if not exists "logoInitials" text not null default 'WF';
+alter table public.program_settings add column if not exists "primaryColor" text not null default '#2f855a';
+alter table public.program_settings add column if not exists "accentColor" text not null default '#d7f5e5';
+alter table public.program_settings add column if not exists "sidebarColor" text not null default '#203127';
 alter table public.employees add column if not exists "defaultLocationId" text;
 alter table public.employees add column if not exists "shiftTemplateId" text;

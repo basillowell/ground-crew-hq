@@ -207,6 +207,14 @@ export interface ChemicalApplicationTankMixItem {
 export interface ProgramSettings {
   id: string;
   organizationName: string;
+  appName: string;
+  navigationTitle: string;
+  navigationSubtitle: string;
+  clientLabel: string;
+  logoInitials: string;
+  primaryColor: string;
+  accentColor: string;
+  sidebarColor: string;
   defaultDepartment: string;
   timeZone: string;
   fiscalYearStart: string;
@@ -342,6 +350,14 @@ export const programSettings: ProgramSettings[] = [
   {
     id: 'ps1',
     organizationName: 'Ground Crew HQ',
+    appName: 'WorkForce App',
+    navigationTitle: 'GroundsCrew',
+    navigationSubtitle: 'Task Tracker',
+    clientLabel: 'Ground Crew HQ',
+    logoInitials: 'GC',
+    primaryColor: '#2f855a',
+    accentColor: '#d7f5e5',
+    sidebarColor: '#203127',
     defaultDepartment: 'Maintenance',
     timeZone: 'Eastern Time (ET)',
     fiscalYearStart: 'January',

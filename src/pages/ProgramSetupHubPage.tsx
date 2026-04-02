@@ -56,6 +56,20 @@ function announceProgramSetupUpdate() {
   window.dispatchEvent(new CustomEvent('program-setup-updated'));
 }
 
+function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
+  return {
+    ...settings,
+    appName: settings.appName || 'WorkForce App',
+    navigationTitle: settings.navigationTitle || settings.appName || settings.organizationName || 'WorkForce App',
+    navigationSubtitle: settings.navigationSubtitle || 'Operations platform',
+    clientLabel: settings.clientLabel || settings.organizationName || 'Client profile',
+    logoInitials: settings.logoInitials || (settings.organizationName || 'WF').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'WF',
+    primaryColor: settings.primaryColor || '#2f855a',
+    accentColor: settings.accentColor || '#d7f5e5',
+    sidebarColor: settings.sidebarColor || '#203127',
+  };
+}
+
 function StatCard({
   label,
   value,
@@ -116,7 +130,8 @@ export default function ProgramSetupHubPage() {
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
 
   useEffect(() => {
-    setProgramSetting(loadProgramSettings()[0] ?? null);
+    const loadedSettings = loadProgramSettings()[0];
+    setProgramSetting(loadedSettings ? withBrandDefaults(loadedSettings) : null);
     setDepartmentOptions(loadDepartmentOptions());
     setGroupOptions(loadGroupOptions());
     setRoleOptions(loadRoleOptions());
@@ -147,10 +162,12 @@ export default function ProgramSetupHubPage() {
 
   function saveGeneralSettings() {
     if (!programSetting) return;
-    saveProgramSettings([programSetting]);
+    const nextSetting = withBrandDefaults(programSetting);
+    setProgramSetting(nextSetting);
+    saveProgramSettings([nextSetting]);
     announceProgramSetupUpdate();
     toast('Program setup saved', {
-      description: `${programSetting.organizationName} is now the active club profile.`,
+      description: `${nextSetting.organizationName} now drives the active club and brand profile.`,
     });
   }
 
@@ -250,7 +267,7 @@ export default function ProgramSetupHubPage() {
       <Tabs defaultValue="overview">
         <TabsList className="mb-4 h-auto flex-wrap gap-2 bg-transparent p-0">
           <TabsTrigger value="overview" className="text-xs gap-1 border bg-card px-3 py-2"><Building2 className="h-3 w-3" /> Overview</TabsTrigger>
-          <TabsTrigger value="general" className="text-xs gap-1 border bg-card px-3 py-2"><Settings className="h-3 w-3" /> Club Profile</TabsTrigger>
+          <TabsTrigger value="general" className="text-xs gap-1 border bg-card px-3 py-2"><Settings className="h-3 w-3" /> Brand + Club Profile</TabsTrigger>
           <TabsTrigger value="structure" className="text-xs gap-1 border bg-card px-3 py-2"><Users className="h-3 w-3" /> Workforce Structure</TabsTrigger>
           <TabsTrigger value="locations" className="text-xs gap-1 border bg-card px-3 py-2"><MapPin className="h-3 w-3" /> Locations</TabsTrigger>
           <TabsTrigger value="shifts" className="text-xs gap-1 border bg-card px-3 py-2"><Clock className="h-3 w-3" /> Shift Templates</TabsTrigger>
@@ -302,7 +319,13 @@ export default function ProgramSetupHubPage() {
 
         <TabsContent value="general">
           <Card className="p-6 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border bg-muted/20 p-4">
+              <div className="font-semibold">Brand System</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                These values now drive the browser title, sidebar identity, top-bar client label, and the global UI color direction for each club or client.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <div>
                 <label className="text-sm font-medium">Organization Name</label>
                 <Input
@@ -311,6 +334,95 @@ export default function ProgramSetupHubPage() {
                   className="mt-1"
                 />
               </div>
+              <div>
+                <label className="text-sm font-medium">App Name</label>
+                <Input
+                  value={programSetting?.appName ?? ''}
+                  onChange={(event) => setProgramSetting((current) => current ? { ...current, appName: event.target.value } : current)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Client / Club Label</label>
+                <Input
+                  value={programSetting?.clientLabel ?? ''}
+                  onChange={(event) => setProgramSetting((current) => current ? { ...current, clientLabel: event.target.value } : current)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Navigation Title</label>
+                <Input
+                  value={programSetting?.navigationTitle ?? ''}
+                  onChange={(event) => setProgramSetting((current) => current ? { ...current, navigationTitle: event.target.value } : current)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Navigation Subtitle</label>
+                <Input
+                  value={programSetting?.navigationSubtitle ?? ''}
+                  onChange={(event) => setProgramSetting((current) => current ? { ...current, navigationSubtitle: event.target.value } : current)}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="text-sm font-medium">Logo Initials</label>
+                <Input
+                  value={programSetting?.logoInitials ?? ''}
+                  onChange={(event) => setProgramSetting((current) => current ? { ...current, logoInitials: event.target.value.toUpperCase().slice(0, 3) } : current)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Primary Color</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={programSetting?.primaryColor ?? '#2f855a'}
+                    onChange={(event) => setProgramSetting((current) => current ? { ...current, primaryColor: event.target.value } : current)}
+                    className="h-10 w-12 rounded border bg-transparent"
+                  />
+                  <Input
+                    value={programSetting?.primaryColor ?? ''}
+                    onChange={(event) => setProgramSetting((current) => current ? { ...current, primaryColor: event.target.value } : current)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Accent Color</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={programSetting?.accentColor ?? '#d7f5e5'}
+                    onChange={(event) => setProgramSetting((current) => current ? { ...current, accentColor: event.target.value } : current)}
+                    className="h-10 w-12 rounded border bg-transparent"
+                  />
+                  <Input
+                    value={programSetting?.accentColor ?? ''}
+                    onChange={(event) => setProgramSetting((current) => current ? { ...current, accentColor: event.target.value } : current)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Sidebar Color</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={programSetting?.sidebarColor ?? '#203127'}
+                    onChange={(event) => setProgramSetting((current) => current ? { ...current, sidebarColor: event.target.value } : current)}
+                    className="h-10 w-12 rounded border bg-transparent"
+                  />
+                  <Input
+                    value={programSetting?.sidebarColor ?? ''}
+                    onChange={(event) => setProgramSetting((current) => current ? { ...current, sidebarColor: event.target.value } : current)}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div>
                 <label className="text-sm font-medium">Default Department</label>
                 <select
@@ -338,6 +450,33 @@ export default function ProgramSetupHubPage() {
                   onChange={(event) => setProgramSetting((current) => current ? { ...current, fiscalYearStart: event.target.value } : current)}
                   className="mt-1"
                 />
+              </div>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-2xl border bg-card/90 p-4 shadow-sm">
+                <div className="text-sm font-semibold">Brand Preview</div>
+                <div className="mt-4 rounded-3xl p-4 text-white" style={{ backgroundColor: programSetting?.sidebarColor || '#203127' }}>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl font-semibold" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
+                      {(programSetting?.logoInitials || 'WF').slice(0, 2)}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold">{programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App'}</div>
+                      <div className="text-xs text-white/75">{programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations platform'}</div>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-2xl px-3 py-2 text-sm font-medium" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
+                    {programSetting?.clientLabel || programSetting?.organizationName || 'Client label'}
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-2xl border bg-muted/20 p-4">
+                <div className="font-semibold">What Changes Live</div>
+                <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+                  <p>App name updates the browser tab and top-level product identity.</p>
+                  <p>Navigation title and subtitle control the sidebar shell seen by crews and managers every day.</p>
+                  <p>Primary, accent, and sidebar colors set the tone for the interface so each club feels client-specific instead of generic.</p>
+                </div>
               </div>
             </div>
             <div className="grid gap-3 lg:grid-cols-3">

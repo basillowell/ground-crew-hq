@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Badge } from '@/components/ui/badge';
+import type { ProgramSettings } from '@/data/seedData';
 
 interface TopBarProps {
   department: string;
@@ -10,11 +11,12 @@ interface TopBarProps {
   departments: string[];
   currentDate: Date;
   setCurrentDate: (d: Date) => void;
+  programSetting?: ProgramSettings;
 }
 
 const formatDate = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-export function TopBar({ department, setDepartment, departments, currentDate, setCurrentDate }: TopBarProps) {
+export function TopBar({ department, setDepartment, departments, currentDate, setCurrentDate, programSetting }: TopBarProps) {
   const prevDay = () => setCurrentDate(new Date(currentDate.getTime() - 86400000));
   const nextDay = () => setCurrentDate(new Date(currentDate.getTime() + 86400000));
   const today = () => setCurrentDate(new Date());
@@ -48,6 +50,13 @@ export function TopBar({ department, setDepartment, departments, currentDate, se
       </div>
 
       <div className="flex-1" />
+
+      <div className="hidden xl:flex items-center gap-2 rounded-2xl border bg-background px-3 py-1.5">
+        <div className="text-right">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Client</div>
+          <div className="text-xs font-semibold">{programSetting?.clientLabel || programSetting?.organizationName || 'WorkForce App'}</div>
+        </div>
+      </div>
 
       <Button size="sm" className="h-8 gap-1.5">
         <Save className="h-3.5 w-3.5" />

@@ -9,6 +9,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader,
   SidebarFooter, useSidebar,
 } from '@/components/ui/sidebar';
+import { loadProgramSettings } from '@/lib/dataStore';
 
 const navItems = [
   { title: 'Workboard', url: '/app/workboard', icon: LayoutDashboard },
@@ -29,18 +30,26 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
+  const programSetting = loadProgramSettings()[0];
+  const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App';
+  const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
+  const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <Leaf className="w-5 h-5 text-sidebar-primary-foreground" />
+            {collapsed ? (
+              <span className="text-xs font-bold text-sidebar-primary-foreground">{logoInitials.slice(0, 2)}</span>
+            ) : (
+              <Leaf className="w-5 h-5 text-sidebar-primary-foreground" />
+            )}
           </div>
           {!collapsed && (
             <div>
-              <h1 className="text-sm font-bold text-sidebar-accent-foreground">GroundsCrew</h1>
-              <p className="text-xs text-sidebar-foreground">Task Tracker</p>
+              <h1 className="text-sm font-bold text-sidebar-accent-foreground">{navigationTitle}</h1>
+              <p className="text-xs text-sidebar-foreground">{navigationSubtitle}</p>
             </div>
           )}
         </div>
