@@ -10,7 +10,7 @@ import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type ScheduleEntry, type Task, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
-import { StickyNote, Droplets, ClipboardList, CloudSun, MonitorSmartphone, Users } from 'lucide-react';
+import { StickyNote, Droplets, CloudSun, MonitorSmartphone, Users } from 'lucide-react';
 import {
   loadApplicationAreas,
   loadAssignments,
@@ -67,6 +67,13 @@ export default function WorkboardPage() {
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
+  const [dropTargetEmployeeId, setDropTargetEmployeeId] = useState<string | null>(null);
+  const [laneOrder, setLaneOrder] = useState<string[]>([]);
+  const laneOrderStorageKey = useMemo(
+    () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
+    [boardDate, department, groupFilter],
+  );
   const [assignmentDraft, setAssignmentDraft] = useState({
     employeeId: '',
     taskId: '',
@@ -152,6 +159,21 @@ export default function WorkboardPage() {
       });
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedOrder = window.localStorage.getItem(laneOrderStorageKey);
+    if (!storedOrder) {
+      setLaneOrder([]);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(storedOrder);
+      setLaneOrder(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setLaneOrder([]);
+    }
+  }, [laneOrderStorageKey]);
+
   const unscheduledEmployees = useMemo(() => {
     const scheduledIds = new Set(
       scheduleList
@@ -197,26 +219,27 @@ export default function WorkboardPage() {
     [boardDate, dayAssignments, scheduleList, scheduledEmployees],
   );
 
+  const orderedDispatchBoard = useMemo(() => {
+    const ranking = new Map(laneOrder.map((employeeId, index) => [employeeId, index]));
+    return [...dispatchBoard].sort((left, right) => {
+      const leftRank = ranking.get(left.employee.id);
+      const rightRank = ranking.get(right.employee.id);
+      if (leftRank != null && rightRank != null) return leftRank - rightRank;
+      if (leftRank != null) return -1;
+      if (rightRank != null) return 1;
+      return 0;
+    });
+  }, [dispatchBoard, laneOrder]);
+
   const readyForBreakroomCount = useMemo(
-    () => dispatchBoard.filter((lane) => lane.employeeAssignments.length > 0).length,
-    [dispatchBoard],
+    () => orderedDispatchBoard.filter((lane) => lane.employeeAssignments.length > 0).length,
+    [orderedDispatchBoard],
   );
 
   const totalOpenMinutes = useMemo(
-    () => dispatchBoard.reduce((total, lane) => total + lane.openMinutes, 0),
-    [dispatchBoard],
+    () => orderedDispatchBoard.reduce((total, lane) => total + lane.openMinutes, 0),
+    [orderedDispatchBoard],
   );
-
-  const taskView = useMemo(() => {
-    return taskList
-      .map((task) => ({
-        task,
-        assignees: dayAssignments
-          .filter((assignment) => assignment.taskId === task.id)
-          .sort((left, right) => left.startTime.localeCompare(right.startTime)),
-      }))
-      .filter((entry) => entry.assignees.length > 0);
-  }, [dayAssignments, taskList]);
 
   const availableEquipment = useMemo(
     () => equipmentList.filter((unit) => unit.status === 'available' || unit.status === 'in-use'),
@@ -328,6 +351,35 @@ export default function WorkboardPage() {
     setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
   }
 
+  function persistLaneOrder(nextOrder: string[]) {
+    setLaneOrder(nextOrder);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(laneOrderStorageKey, JSON.stringify(nextOrder));
+    }
+  }
+
+  function moveEmployeeLane(targetEmployeeId: string) {
+    if (!draggingEmployeeId || draggingEmployeeId === targetEmployeeId) {
+      setDraggingEmployeeId(null);
+      setDropTargetEmployeeId(null);
+      return;
+    }
+
+    const employeeIds = orderedDispatchBoard.map((lane) => lane.employee.id);
+    const baseOrder = employeeIds.filter((employeeId) => employeeId !== draggingEmployeeId);
+    const targetIndex = baseOrder.indexOf(targetEmployeeId);
+    if (targetIndex === -1) {
+      setDraggingEmployeeId(null);
+      setDropTargetEmployeeId(null);
+      return;
+    }
+
+    baseOrder.splice(targetIndex, 0, draggingEmployeeId);
+    persistLaneOrder(baseOrder);
+    setDraggingEmployeeId(null);
+    setDropTargetEmployeeId(null);
+  }
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
       {/* Main workflow board */}
@@ -375,7 +427,7 @@ export default function WorkboardPage() {
         <div className="grid gap-4 md:grid-cols-3 mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm text-muted-foreground mb-1">Scheduled crew</div>
-            <div className="text-3xl font-semibold">{scheduledEmployees.length}</div>
+            <div className="text-3xl font-semibold">{orderedDispatchBoard.length}</div>
             <p className="text-xs text-muted-foreground mt-1">Employees on the board for this date and department.</p>
           </div>
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
@@ -403,7 +455,7 @@ export default function WorkboardPage() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Badge variant="outline">{readyForBreakroomCount} lanes ready</Badge>
-              <Badge variant="outline">{Math.max(dispatchBoard.length - readyForBreakroomCount, 0)} lanes incomplete</Badge>
+              <Badge variant="outline">{Math.max(orderedDispatchBoard.length - readyForBreakroomCount, 0)} lanes incomplete</Badge>
               <Badge variant="outline">{totalOpenMinutes} open mins</Badge>
             </div>
           </div>
@@ -435,7 +487,7 @@ export default function WorkboardPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline">{assignedEmployeeIds.size} crew with tasks</Badge>
-              <Badge variant="outline">{Math.max(scheduledEmployees.length - assignedEmployeeIds.size, 0)} waiting assignment</Badge>
+              <Badge variant="outline">{Math.max(orderedDispatchBoard.length - assignedEmployeeIds.size, 0)} waiting assignment</Badge>
             </div>
           </div>
         </div>
@@ -512,54 +564,34 @@ export default function WorkboardPage() {
           )}
         </div>
 
-        {true ? (
+        {orderedDispatchBoard.length === 0 ? (
+          <div className="rounded-3xl border border-dashed bg-card/80 p-6 text-sm text-muted-foreground shadow-sm">
+            No scheduled employees are available for {boardDate}. Build the day in Scheduler first, then return here to assign tasks from Task Management.
+          </div>
+        ) : (
           <div className="space-y-2">
-            {scheduledEmployees.map((employee) => (
+            {orderedDispatchBoard.map((lane, index) => (
               <EmployeeRow
-                key={employee.id}
-                employee={employee}
-                assignments={dayAssignments.filter((assignment) => assignment.employeeId === employee.id)}
+                key={lane.employee.id}
+                employee={lane.employee}
+                assignments={lane.employeeAssignments}
                 tasks={taskList}
-                shiftLabel={(() => {
-                  const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
-                  return shift ? `${shift.shiftStart}-${shift.shiftEnd}` : undefined;
-                })()}
-                laneSummary={(() => {
-                  const lane = dispatchBoard.find((entry) => entry.employee.id === employee.id);
-                  if (!lane) return undefined;
-                  if (!lane.shift) return `${lane.employeeAssignments.length} tasks assigned`;
-                  return `${lane.assignedMinutes} assigned mins / ${lane.openMinutes} open mins`;
-                })()}
+                orderIndex={index}
+                isDragging={draggingEmployeeId === lane.employee.id}
+                isDropTarget={dropTargetEmployeeId === lane.employee.id}
+                shiftLabel={lane.shift ? `${lane.shift.shiftStart}-${lane.shift.shiftEnd}` : undefined}
+                laneSummary={lane.shift ? `${lane.assignedMinutes} assigned mins / ${lane.openMinutes} open mins` : `${lane.employeeAssignments.length} tasks assigned`}
+                onDragStart={setDraggingEmployeeId}
+                onDragEnter={setDropTargetEmployeeId}
+                onDragEnd={() => {
+                  setDraggingEmployeeId(null);
+                  setDropTargetEmployeeId(null);
+                }}
+                onDropRow={moveEmployeeLane}
                 onAddTask={openAssignmentDialog}
                 onEditAssignment={openEditAssignmentDialog}
                 onRemoveAssignment={removeAssignment}
               />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {taskView.map(({ task, assignees }) => (
-              <div key={task.id} className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="text-lg">{task.icon}</div>
-                  <div>
-                    <div className="font-semibold">{task.name}</div>
-                    <div className="text-xs text-muted-foreground">{task.category} · {assignees.length} assignments</div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {assignees.map((assignment, index) => {
-                    const employee = employeeList.find((entry) => entry.id === assignment.employeeId);
-                    return (
-                      <div key={`${assignment.employeeId}-${index}`} className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs">
-                        <ClipboardList className="h-3 w-3 text-primary" />
-                        <span>{employee ? `${employee.firstName} ${employee.lastName}` : assignment.employeeId}</span>
-                        <span className="text-muted-foreground">{assignment.area}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
             ))}
           </div>
         )}

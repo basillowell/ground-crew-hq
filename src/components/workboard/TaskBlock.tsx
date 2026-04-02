@@ -8,11 +8,12 @@ import { Pencil, X } from 'lucide-react';
 interface TaskBlockProps {
   task: Task;
   assignment: Assignment;
+  priorityIndex?: number;
   onEdit?: () => void;
   onRemove?: () => void;
 }
 
-export function TaskBlock({ task, assignment, onEdit, onRemove }: TaskBlockProps) {
+export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove }: TaskBlockProps) {
   const equipmentUnits = loadEquipmentUnits();
   const equipment = assignment.equipmentId
     ? equipmentUnits.find(u => u.id === assignment.equipmentId)
@@ -31,6 +32,11 @@ export function TaskBlock({ task, assignment, onEdit, onRemove }: TaskBlockProps
           <span className="text-sm">{task.icon}</span>
           <span className="truncate text-sm font-semibold" style={{ color: task.color }}>{task.name}</span>
           <Badge variant="outline" className="text-[10px]">{task.category}</Badge>
+          {typeof priorityIndex === 'number' ? (
+            <Badge variant="secondary" className="text-[10px]">
+              Priority {priorityIndex + 1}
+            </Badge>
+          ) : null}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <StatusChip variant="neutral">{assignment.area}</StatusChip>
