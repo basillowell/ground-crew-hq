@@ -1,5 +1,6 @@
 import {
   applicationAreas,
+  appUsers,
   chemicalApplicationLogs,
   chemicalApplicationTankMixItems,
   chemicalProducts,
@@ -21,6 +22,7 @@ import {
   weatherStations,
   workLocations,
   type ApplicationArea,
+  type AppUser,
   type Assignment,
   type ChemicalApplicationLog,
   type ChemicalApplicationTankMixItem,
@@ -44,6 +46,7 @@ import {
 } from '@/data/seedData';
 import {
   loadApplicationAreas as loadApplicationAreasLocal,
+  loadAppUsers as loadAppUsersLocal,
   loadAssignments as loadAssignmentsLocal,
   loadChemicalApplicationLogs as loadChemicalApplicationLogsLocal,
   loadChemicalApplicationTankMixItems as loadChemicalApplicationTankMixItemsLocal,
@@ -64,7 +67,9 @@ import {
   loadWeatherLocations as loadWeatherLocationsLocal,
   loadWeatherStations as loadWeatherStationsLocal,
   loadWorkLocations as loadWorkLocationsLocal,
+  loadCurrentAppUserId as loadCurrentAppUserIdLocal,
   saveApplicationAreas as saveApplicationAreasLocal,
+  saveAppUsers as saveAppUsersLocal,
   saveAssignments as saveAssignmentsLocal,
   saveChemicalApplicationLogs as saveChemicalApplicationLogsLocal,
   saveChemicalApplicationTankMixItems as saveChemicalApplicationTankMixItemsLocal,
@@ -85,6 +90,7 @@ import {
   saveWeatherLocations as saveWeatherLocationsLocal,
   saveWeatherStations as saveWeatherStationsLocal,
   saveWorkLocations as saveWorkLocationsLocal,
+  saveCurrentAppUserId as saveCurrentAppUserIdLocal,
 } from './operationsStorage';
 import { hasSupabaseConfig, supabase } from './supabase';
 
@@ -222,6 +228,12 @@ const collections = {
     loadLocal: loadShiftTemplatesLocal,
     saveLocal: saveShiftTemplatesLocal,
   } satisfies CollectionConfig<ShiftTemplate>,
+  appUsers: {
+    table: 'app_users',
+    seed: appUsers,
+    loadLocal: loadAppUsersLocal,
+    saveLocal: saveAppUsersLocal,
+  } satisfies CollectionConfig<AppUser>,
 } as const;
 
 let initialized = false;
@@ -308,6 +320,7 @@ export async function initializeDataStore() {
     hydrateCollection(collections.languageOptions),
     hydrateCollection(collections.workLocations),
     hydrateCollection(collections.shiftTemplates),
+    hydrateCollection(collections.appUsers),
   ]);
 }
 
@@ -477,4 +490,20 @@ export function loadShiftTemplates() {
 
 export function saveShiftTemplates(value: ShiftTemplate[]) {
   syncCollection(collections.shiftTemplates, value);
+}
+
+export function loadAppUsers() {
+  return collections.appUsers.loadLocal();
+}
+
+export function saveAppUsers(value: AppUser[]) {
+  syncCollection(collections.appUsers, value);
+}
+
+export function loadCurrentAppUserId() {
+  return loadCurrentAppUserIdLocal();
+}
+
+export function saveCurrentAppUserId(value: string) {
+  saveCurrentAppUserIdLocal(value);
 }

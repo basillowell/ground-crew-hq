@@ -262,6 +262,19 @@ export interface ShiftTemplate {
   days: string[];
 }
 
+export interface AppUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role: 'admin' | 'manager' | 'supervisor' | 'crew';
+  title: string;
+  department: string;
+  clubId: string;
+  clubLabel: string;
+  avatarInitials: string;
+  status: 'active' | 'inactive';
+}
+
 export const employees: Employee[] = [
   { id: 'e1', firstName: 'Mike', lastName: 'Johnson', group: 'Greens', role: 'Lead', wage: 22, phone: '555-0101', email: 'mike.j@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'English', workerType: 'full-time', hireDate: '2019-03-15', defaultLocationId: 'loc1', shiftTemplateId: 'st1' },
   { id: 'e2', firstName: 'Carlos', lastName: 'Rivera', group: 'Fairways', role: 'Operator', wage: 18, phone: '555-0102', email: 'carlos.r@course.com', photo: '', status: 'active', department: 'Maintenance', language: 'Spanish', workerType: 'full-time', hireDate: '2020-06-01', defaultLocationId: 'loc3', shiftTemplateId: 'st1' },
@@ -425,6 +438,45 @@ export const shiftTemplates: ShiftTemplate[] = [
   { id: 'st2', name: 'Day Crew', start: '06:00', end: '14:30', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] },
   { id: 'st3', name: 'Weekend Crew', start: '06:00', end: '12:00', days: ['Sat', 'Sun'] },
   { id: 'st4', name: 'Late Shift', start: '10:00', end: '18:00', days: ['Mon', 'Wed', 'Fri'] },
+];
+
+export const appUsers: AppUser[] = [
+  {
+    id: 'au1',
+    fullName: 'Basil Lowell',
+    email: 'basil@groundcrewhq.com',
+    role: 'admin',
+    title: 'Platform Admin',
+    department: 'Maintenance',
+    clubId: 'club-1',
+    clubLabel: 'Ground Crew HQ',
+    avatarInitials: 'BL',
+    status: 'active',
+  },
+  {
+    id: 'au2',
+    fullName: 'Nick Chavez',
+    email: 'nick@groundcrewhq.com',
+    role: 'manager',
+    title: 'Operations Manager',
+    department: 'Maintenance',
+    clubId: 'club-1',
+    clubLabel: 'Ground Crew HQ',
+    avatarInitials: 'NC',
+    status: 'active',
+  },
+  {
+    id: 'au3',
+    fullName: 'Sarah Chen',
+    email: 'sarah@groundcrewhq.com',
+    role: 'supervisor',
+    title: 'Course Supervisor',
+    department: 'Landscape',
+    clubId: 'club-1',
+    clubLabel: 'Ground Crew HQ',
+    avatarInitials: 'SC',
+    status: 'active',
+  },
 ];
 
 export const departments = departmentOptions.map((department) => department.name);

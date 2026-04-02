@@ -1,12 +1,33 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { TopBar } from './TopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { loadDepartmentOptions, loadProgramSettings } from '@/lib/dataStore';
-import type { ProgramSettings } from '@/data/seedData';
+import {
+  loadAppUsers,
+  loadAssignments,
+  loadChemicalApplicationLogs,
+  loadCurrentAppUserId,
+  loadDepartmentOptions,
+  loadEmployees,
+  loadEquipmentUnits,
+  loadProgramSettings,
+  loadScheduleEntries,
+  loadWeatherStations,
+  saveCurrentAppUserId,
+} from '@/lib/dataStore';
+import type { AppUser, ProgramSettings } from '@/data/seedData';
 
 interface AppLayoutProps {
   children: ReactNode;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  description: string;
+  severity: 'critical' | 'warning' | 'info';
+  route: string;
 }
 
 function hexToHslValues(hex: string | undefined, fallback: string) {
@@ -87,24 +108,40 @@ function applyBranding(programSetting?: ProgramSettings) {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const navigate = useNavigate();
   const [departmentOptions, setDepartmentOptions] = useState<string[]>(['Maintenance']);
   const [department, setDepartment] = useState('Maintenance');
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
+  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
 
   useEffect(() => {
     const refreshProgramSetup = () => {
       const nextDepartments = loadDepartmentOptions().map((entry) => entry.name);
       const settings = loadProgramSettings()[0];
+      const nextUsers = loadAppUsers();
+      const savedUserId = loadCurrentAppUserId();
+      const fallbackUser = nextUsers.find((entry) => entry.status === 'active') || nextUsers[0] || null;
+      const resolvedUser = nextUsers.find((entry) => entry.id === savedUserId) || fallbackUser || null;
       const fallbackDepartment = nextDepartments[0] ?? 'Maintenance';
       setProgramSetting(settings ?? null);
       setDepartmentOptions(nextDepartments.length > 0 ? nextDepartments : ['Maintenance']);
-      setDepartment(settings?.defaultDepartment || fallbackDepartment);
+      setAppUsers(nextUsers);
+      setCurrentUser(resolvedUser);
+      if (resolvedUser && resolvedUser.id !== savedUserId) {
+        saveCurrentAppUserId(resolvedUser.id);
+      }
+      setDepartment(resolvedUser?.department || settings?.defaultDepartment || fallbackDepartment);
     };
 
     refreshProgramSetup();
     window.addEventListener('program-setup-updated', refreshProgramSetup);
-    return () => window.removeEventListener('program-setup-updated', refreshProgramSetup);
+    window.addEventListener('user-session-updated', refreshProgramSetup);
+    return () => {
+      window.removeEventListener('program-setup-updated', refreshProgramSetup);
+      window.removeEventListener('user-session-updated', refreshProgramSetup);
+    };
   }, []);
 
   useEffect(() => {
@@ -117,10 +154,119 @@ export function AppLayout({ children }: AppLayoutProps) {
         detail: {
           department,
           date: currentDate.toISOString().slice(0, 10),
+          currentUserId: currentUser?.id || '',
         },
       }),
     );
-  }, [currentDate, department]);
+  }, [currentDate, currentUser?.id, department]);
+
+  const notifications = useMemo(() => {
+    const todayKey = currentDate.toISOString().slice(0, 10);
+    const employees = loadEmployees();
+    const scheduleEntries = loadScheduleEntries();
+    const assignments = loadAssignments();
+    const equipmentUnits = loadEquipmentUnits();
+    const weatherStations = loadWeatherStations();
+    const applicationLogs = loadChemicalApplicationLogs();
+
+    const activeEmployees = employees.filter((employee) => employee.status === 'active' && employee.department === department);
+    const scheduledToday = scheduleEntries.filter(
+      (entry) => entry.date === todayKey && entry.status === 'scheduled' && activeEmployees.some((employee) => employee.id === entry.employeeId),
+    );
+    const assignmentsToday = assignments.filter((entry) => entry.date === todayKey);
+    const primaryStationsOffline = weatherStations.filter((station) => station.isPrimary && station.status === 'offline');
+    const equipmentIssues = equipmentUnits.filter((unit) => unit.status === 'maintenance' || unit.status === 'out-of-service');
+    const unassignedCrew = scheduledToday.filter(
+      (entry) => !assignmentsToday.some((assignment) => assignment.employeeId === entry.employeeId),
+    );
+    const unscheduledCrew = activeEmployees.filter(
+      (employee) => !scheduledToday.some((entry) => entry.employeeId === employee.id),
+    );
+    const complianceGaps = applicationLogs.filter(
+      (log) =>
+        log.applicationDate === todayKey &&
+        (!log.applicatorLicenseNumber || !log.supervisorLicenseNumber || !log.weatherLogId),
+    );
+
+    const nextNotifications: AppNotification[] = [];
+
+    if (currentUser?.role === 'admin' || currentUser?.role === 'manager') {
+      if (unscheduledCrew.length > 0) {
+        nextNotifications.push({
+          id: 'unscheduled-crew',
+          title: `${unscheduledCrew.length} crew members still need shifts`,
+          description: `${unscheduledCrew.slice(0, 3).map((entry) => `${entry.firstName} ${entry.lastName}`).join(', ')}${unscheduledCrew.length > 3 ? ' and more' : ''}`,
+          severity: 'warning',
+          route: '/app/scheduler',
+        });
+      }
+      if (unassignedCrew.length > 0) {
+        nextNotifications.push({
+          id: 'unassigned-crew',
+          title: `${unassignedCrew.length} scheduled crew members lack assignments`,
+          description: 'Open the workboard to finish dispatching today’s labor plan.',
+          severity: 'critical',
+          route: '/app/workboard',
+        });
+      }
+      if (equipmentIssues.length > 0) {
+        nextNotifications.push({
+          id: 'equipment-issues',
+          title: `${equipmentIssues.length} equipment units need attention`,
+          description: 'Maintenance or out-of-service equipment can affect labor and spray plans.',
+          severity: 'warning',
+          route: '/app/equipment',
+        });
+      }
+    }
+
+    if (primaryStationsOffline.length > 0) {
+      nextNotifications.push({
+        id: 'weather-station',
+        title: `${primaryStationsOffline.length} primary weather stations are offline`,
+        description: 'Weather should be reviewed or manually overridden before planning applications.',
+        severity: 'warning',
+        route: '/app/weather',
+      });
+    }
+
+    if (complianceGaps.length > 0) {
+      nextNotifications.push({
+        id: 'application-compliance',
+        title: `${complianceGaps.length} application logs are missing compliance fields`,
+        description: 'Finish applicator license, supervisor, or weather linkage before exporting reports.',
+        severity: 'critical',
+        route: '/app/applications',
+      });
+    }
+
+    if (nextNotifications.length === 0) {
+      nextNotifications.push({
+        id: 'all-clear',
+        title: 'Operations look clean',
+        description: 'No urgent admin issues were detected for the current date and department.',
+        severity: 'info',
+        route: '/app/workboard',
+      });
+    }
+
+    return nextNotifications;
+  }, [currentDate, currentUser?.role, department]);
+
+  const handleSelectUser = (userId: string) => {
+    const selected = appUsers.find((entry) => entry.id === userId);
+    if (!selected) return;
+    setCurrentUser(selected);
+    saveCurrentAppUserId(selected.id);
+    setDepartment(selected.department || programSetting?.defaultDepartment || departmentOptions[0] || 'Maintenance');
+    window.dispatchEvent(new CustomEvent('user-session-updated'));
+  };
+
+  const handleSignOut = () => {
+    saveCurrentAppUserId('');
+    window.dispatchEvent(new CustomEvent('user-session-updated'));
+    navigate('/');
+  };
 
   return (
     <SidebarProvider>
@@ -133,6 +279,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             departments={departmentOptions}
             currentDate={currentDate}
             setCurrentDate={setCurrentDate}
+            appUsers={appUsers}
+            currentUser={currentUser ?? undefined}
+            notifications={notifications}
+            onSelectUser={handleSelectUser}
+            onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
           />
           {programSetting ? (

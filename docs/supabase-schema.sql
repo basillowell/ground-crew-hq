@@ -351,6 +351,21 @@ drop policy if exists "public full access role_options" on public.role_options;
 create policy "public full access role_options" on public.role_options for all using (true) with check (true);
 drop policy if exists "public full access language_options" on public.language_options;
 create policy "public full access language_options" on public.language_options for all using (true) with check (true);
+create table if not exists public.app_users (
+  id text primary key,
+  "fullName" text not null,
+  email text not null,
+  role text not null default 'manager',
+  title text not null default '',
+  department text not null default '',
+  "clubId" text not null default 'club-1',
+  "clubLabel" text not null default 'Client profile',
+  "avatarInitials" text not null default 'WF',
+  status text not null default 'active'
+);
+alter table public.app_users enable row level security;
+drop policy if exists "public full access app_users" on public.app_users;
+create policy "public full access app_users" on public.app_users for all using (true) with check (true);
 alter table public.weather_stations add column if not exists "providerType" text not null default 'manual';
 alter table public.weather_stations add column if not exists latitude numeric;
 alter table public.weather_stations add column if not exists longitude numeric;
@@ -370,3 +385,12 @@ alter table public.program_settings add column if not exists "accentColor" text 
 alter table public.program_settings add column if not exists "sidebarColor" text not null default '#203127';
 alter table public.employees add column if not exists "defaultLocationId" text;
 alter table public.employees add column if not exists "shiftTemplateId" text;
+alter table public.app_users add column if not exists "fullName" text not null default '';
+alter table public.app_users add column if not exists email text not null default '';
+alter table public.app_users add column if not exists role text not null default 'manager';
+alter table public.app_users add column if not exists title text not null default '';
+alter table public.app_users add column if not exists department text not null default '';
+alter table public.app_users add column if not exists "clubId" text not null default 'club-1';
+alter table public.app_users add column if not exists "clubLabel" text not null default 'Client profile';
+alter table public.app_users add column if not exists "avatarInitials" text not null default 'WF';
+alter table public.app_users add column if not exists status text not null default 'active';

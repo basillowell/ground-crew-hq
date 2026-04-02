@@ -13,6 +13,7 @@ import {
   notes,
   programSettings,
   roleOptions,
+  appUsers,
   scheduleEntries,
   shiftTemplates,
   tasks,
@@ -20,6 +21,7 @@ import {
   weatherLocations,
   weatherStations,
   type ApplicationArea,
+  type AppUser,
   type Assignment,
   type ChemicalApplicationLog,
   type ChemicalApplicationTankMixItem,
@@ -66,6 +68,8 @@ const ROLES_KEY = 'gchq-roles';
 const LANGUAGES_KEY = 'gchq-languages';
 const WORK_LOCATIONS_KEY = 'gchq-work-locations';
 const SHIFT_TEMPLATES_KEY = 'gchq-shift-templates';
+const APP_USERS_KEY = 'gchq-app-users';
+const CURRENT_APP_USER_KEY = 'gchq-current-app-user-id';
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -254,4 +258,22 @@ export function loadShiftTemplates() {
 
 export function saveShiftTemplates(value: ShiftTemplate[]) {
   writeList(SHIFT_TEMPLATES_KEY, value);
+}
+
+export function loadAppUsers() {
+  return readList<AppUser>(APP_USERS_KEY, appUsers);
+}
+
+export function saveAppUsers(value: AppUser[]) {
+  writeList(APP_USERS_KEY, value);
+}
+
+export function loadCurrentAppUserId() {
+  if (!canUseStorage()) return '';
+  return window.localStorage.getItem(CURRENT_APP_USER_KEY) || '';
+}
+
+export function saveCurrentAppUserId(value: string) {
+  if (!canUseStorage()) return;
+  window.localStorage.setItem(CURRENT_APP_USER_KEY, value);
 }
