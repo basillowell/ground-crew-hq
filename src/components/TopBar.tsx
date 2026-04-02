@@ -1,4 +1,4 @@
-import { Bell, ChevronLeft, ChevronRight, LogOut, Save, ShieldCheck } from 'lucide-react';
+import { Bell, CalendarDays, LogOut, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -11,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { AppNotification } from './AppLayout';
 import type { AppUser, ProgramSettings } from '@/data/seedData';
 import { useNavigate } from 'react-router-dom';
@@ -45,63 +47,61 @@ export function TopBar({
   programSetting,
 }: TopBarProps) {
   const navigate = useNavigate();
-  const prevDay = () => setCurrentDate(new Date(currentDate.getTime() - 86400000));
-  const nextDay = () => setCurrentDate(new Date(currentDate.getTime() + 86400000));
   const today = () => setCurrentDate(new Date());
+  const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
 
   return (
-    <header className="h-14 border-b bg-card flex items-center px-3 gap-3 shrink-0">
-      <SidebarTrigger className="text-muted-foreground" />
+    <header className="border-b bg-card px-3 py-2 shrink-0">
+      <div className="flex flex-wrap items-center gap-3">
+        <SidebarTrigger className="text-muted-foreground" />
 
-      <Select value={department} onValueChange={setDepartment}>
-        <SelectTrigger className="w-40 h-8 text-sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {departments.map(d => (
-            <SelectItem key={d} value={d}>{d}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        <Select value={department} onValueChange={setDepartment}>
+          <SelectTrigger className="h-9 w-[170px] text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {departments.map((entry) => (
+              <SelectItem key={entry} value={entry}>{entry}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-      <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={prevDay}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm font-medium min-w-[220px] text-center">{formatDate(currentDate)}</span>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={nextDay}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={today}>
-          Today
-        </Button>
-      </div>
-
-      <div className="flex-1" />
-
-      <div className="hidden xl:flex items-center gap-3 rounded-2xl border bg-background px-4 py-2 shadow-sm">
-        {programSetting?.logoUrl ? (
-          <img
-            src={programSetting.logoUrl}
-            alt={`${programSetting.clientLabel || programSetting.organizationName || 'Client'} logo`}
-            className="h-12 w-12 rounded-xl object-contain"
-          />
-        ) : (
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground">
-            {(programSetting?.logoInitials || 'WF').slice(0, 2)}
-          </div>
-        )}
-        <div className="text-right">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Client</div>
-          <div className="text-sm font-semibold">{programSetting?.clientLabel || programSetting?.organizationName || 'WorkForce App'}</div>
-          <div className="text-[11px] text-muted-foreground">{programSetting?.appName || 'WorkForce App'}</div>
+        <div className="min-w-[250px]">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Workflow Date</div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl px-3 text-left font-medium">
+                <span>{formatDate(currentDate)}</span>
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={currentDate}
+                onSelect={(date) => date && setCurrentDate(date)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
         </div>
-      </div>
 
-      <Button size="sm" className="h-8 gap-1.5">
-        <Save className="h-3.5 w-3.5" />
-        Save Board
-      </Button>
+        <Button variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={today}>
+          {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
+        </Button>
+
+        {programSetting?.clientLabel ? (
+          <Badge variant="outline" className="hidden rounded-full px-3 py-1 text-[11px] lg:inline-flex">
+            {programSetting.clientLabel}
+          </Badge>
+        ) : null}
+
+        <div className="flex-1" />
+
+        <div className="hidden text-right xl:block">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Active Profile</div>
+          <div className="text-sm font-medium">{currentUser?.fullName || 'Select User'}</div>
+        </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

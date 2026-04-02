@@ -22,7 +22,7 @@ import { loadAppUsers, loadCurrentAppUserId, loadProgramSettings, saveCurrentApp
 import type { AppUser } from '@/data/seedData';
 
 const modules = [
-  { title: 'Workboard', desc: 'Dispatch daily labor, sequence assignments, and hand work cleanly into the breakroom view.', icon: LayoutDashboard, route: '/app/workboard', color: 'hsl(152,55%,38%)' },
+  { title: 'Workflow', desc: 'Dispatch daily labor, sequence assignments, and hand work cleanly into the breakroom view.', icon: LayoutDashboard, route: '/app/workboard', color: 'hsl(152,55%,38%)' },
   { title: 'Scheduler', desc: 'Build crew coverage by day, department, and reusable labor pattern.', icon: Clock, route: '/app/scheduler', color: 'hsl(210,80%,52%)' },
   { title: 'Employees', desc: 'Manage roster setup, defaults, and the people that power every workflow downstream.', icon: Users, route: '/app/employees', color: 'hsl(270,60%,55%)' },
   { title: 'Tasks', desc: 'Maintain the live task catalog used by scheduling, workboard dispatching, and reporting.', icon: ListChecks, route: '/app/tasks', color: 'hsl(38,92%,50%)' },
@@ -35,7 +35,7 @@ const modules = [
 const features = [
   'Client-branded launch and workspace shell',
   'Role-based admin notifications and crew dispatch awareness',
-  'Integrated scheduler, workboard, breakroom, and reports flow',
+  'Integrated scheduler, workflow, breakroom, and reports flow',
   'Weather and applications tied into planning and compliance',
   'Program setup that drives real dropdowns and workflow defaults',
   'Scalable foundation for multiple clubs and client profiles',

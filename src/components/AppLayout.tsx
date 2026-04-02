@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppSidebar } from './AppSidebar';
-import { TopBar } from './TopBar';
+import { AppSidebarRefined } from './AppSidebarRefined';
+import { WorkflowTopBar } from './WorkflowTopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import {
   loadAppUsers,
@@ -204,7 +204,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         nextNotifications.push({
           id: 'unassigned-crew',
           title: `${unassignedCrew.length} scheduled crew members lack assignments`,
-          description: 'Open the workboard to finish dispatching today’s labor plan.',
+          description: 'Open the workflow board to finish dispatching today’s labor plan.',
           severity: 'critical',
           route: '/app/workboard',
         });
@@ -271,9 +271,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
+        <AppSidebarRefined />
         <div className="flex-1 flex flex-col min-w-0">
-          <TopBar
+          <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}
             departments={departmentOptions}

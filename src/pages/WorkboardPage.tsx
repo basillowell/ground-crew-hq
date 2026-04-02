@@ -315,8 +315,8 @@ export default function WorkboardPage() {
     setAssignmentDialogOpen(false);
     toast(editingAssignmentId ? 'Assignment updated' : 'Assignment added', {
       description: editingAssignmentId
-        ? 'The workboard, breakroom, and reports now reflect the updated task plan.'
-        : 'The workboard, breakroom, and reports now reflect this planned task.',
+        ? 'The workflow board, breakroom, and reports now reflect the updated task plan.'
+        : 'The workflow board, breakroom, and reports now reflect this planned task.',
     });
   }
 
@@ -346,10 +346,10 @@ export default function WorkboardPage() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
-      {/* Main workboard */}
+      {/* Main workflow board */}
       <div className="flex-1 p-4 overflow-auto">
         <PageHeader
-          title="Workboard"
+          title="Workflow"
           subtitle="Dispatch scheduled crew, assign every lane cleanly, and hand the finished plan straight to the breakroom TV board."
           badge={<Badge variant="secondary">{department} / {boardDate}</Badge>}
           action={{ label: 'Add Assignment', onClick: () => openAssignmentDialog(selectedEmployeeId || assignmentEligibleEmployees[0]?.id || '') }}
@@ -375,7 +375,7 @@ export default function WorkboardPage() {
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
           <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
             <div className="text-sm font-medium">Crew filter</div>
-            <p className="text-xs text-muted-foreground mt-1">The board view follows the top-bar department and date. Assignment dialogs now allow the full roster so a crew filter or status mismatch never blocks dispatching work.</p>
+            <p className="text-xs text-muted-foreground mt-1">The workflow view follows the top-bar department and date. Assignment dialogs now allow the full roster so a crew filter or status mismatch never blocks dispatching work.</p>
             <div className="mt-3">
               <label className="text-xs text-muted-foreground">Group</label>
               <select
@@ -617,7 +617,7 @@ export default function WorkboardPage() {
       <Dialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingAssignmentId ? 'Edit Workboard Assignment' : 'Add Workboard Assignment'}</DialogTitle>
+            <DialogTitle>{editingAssignmentId ? 'Edit Workflow Assignment' : 'Add Workflow Assignment'}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -704,7 +704,7 @@ export default function WorkboardPage() {
       <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Workboard Note</DialogTitle>
+            <DialogTitle>Add Workflow Note</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>

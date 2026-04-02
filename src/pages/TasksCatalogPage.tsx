@@ -188,7 +188,7 @@ export default function TasksCatalogPage() {
     setDialogOpen(false);
     setDraft(defaultDraft);
     toast(editingTaskId ? 'Task updated' : 'Task added', {
-      description: `${nextTask.name} is ready for scheduling and workboard assignment.`,
+      description: `${nextTask.name} is ready for scheduling and workflow assignment.`,
     });
   }
 
@@ -243,7 +243,7 @@ export default function TasksCatalogPage() {
     <div className="p-4 max-w-7xl mx-auto space-y-4">
       <PageHeader
         title="Task Management"
-        subtitle="Bulk-manage, prioritize, and enrich the task catalog that drives scheduling, workboard assignment, and operational setup."
+        subtitle="Bulk-manage, prioritize, and enrich the task catalog that drives scheduling, workflow assignment, and operational setup."
         badge={<Badge variant="secondary">{taskList.length} tasks</Badge>}
         action={{ label: 'Add Task', onClick: openAddDialog, icon: <Plus className="h-3.5 w-3.5" /> }}
       />
@@ -449,7 +449,7 @@ export default function TasksCatalogPage() {
               <div className="rounded-2xl border bg-muted/20 p-4">
                 <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Archived Tasks</div>
                 <div className="mt-2 text-3xl font-semibold">{archivedCount}</div>
-                <p className="mt-2 text-sm text-muted-foreground">Archive old workflows instead of deleting them when you want a cleaner workboard catalog.</p>
+                <p className="mt-2 text-sm text-muted-foreground">Archive old workflows instead of deleting them when you want a cleaner workflow catalog.</p>
               </div>
               <div className="rounded-2xl border bg-muted/20 p-4">
                 <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Selected for Review</div>

@@ -263,7 +263,7 @@ export default function ProgramSetupHubPage() {
         <StatCard
           label="Active Crew"
           value={liveCounts.activeEmployees}
-          helper="Employees available for scheduling and workboard assignment."
+          helper="Employees available for scheduling and workflow assignment."
           icon={<Users className="h-5 w-5" />}
         />
         <StatCard
@@ -346,7 +346,7 @@ export default function ProgramSetupHubPage() {
                   <p className="mt-2 text-sm text-muted-foreground">Locations defined here become anchors for weather areas and chemical application zones.</p>
                 </div>
                 <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium"><Clock className="h-4 w-4 text-primary" /> Scheduler + Workboard</div>
+                  <div className="flex items-center gap-2 text-sm font-medium"><Clock className="h-4 w-4 text-primary" /> Scheduler + Workflow</div>
                   <p className="mt-2 text-sm text-muted-foreground">Shift templates and default department choices reduce repetitive setup and keep labor planning consistent.</p>
                 </div>
               </div>
@@ -356,7 +356,7 @@ export default function ProgramSetupHubPage() {
               <h3 className="font-semibold">Live Operational Snapshot</h3>
               <div className="mt-4 space-y-3">
                 <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Assignments in Workboard</div>
+                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Assignments in Workflow</div>
                   <div className="mt-2 text-3xl font-semibold">{liveCounts.assignments}</div>
                 </div>
                 <div className="rounded-2xl border bg-muted/20 p-4">
@@ -735,7 +735,7 @@ export default function ProgramSetupHubPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-semibold">Crew Groups</div>
-                  <p className="text-xs text-muted-foreground">Helps employees, workboard routing, and breakroom organization stay consistent.</p>
+                  <p className="text-xs text-muted-foreground">Helps employees, workflow routing, and breakroom organization stay consistent.</p>
                 </div>
                 <Button
                   size="sm"

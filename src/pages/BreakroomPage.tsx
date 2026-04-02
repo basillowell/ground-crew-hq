@@ -190,7 +190,7 @@ export default function BreakroomPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-2 text-base text-muted-foreground">No workboard assignment yet.</div>
+                  <div className="mt-2 text-base text-muted-foreground">No workflow assignment yet.</div>
                 )}
               </div>
 

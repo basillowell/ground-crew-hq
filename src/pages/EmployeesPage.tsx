@@ -520,7 +520,7 @@ export default function EmployeesPage() {
             <Badge variant="secondary" className="rounded-full px-3 py-1">Dynamic</Badge>
           </div>
           <div className="text-3xl font-semibold">{stats.departments}</div>
-          <p className="text-xs text-muted-foreground mt-1">Use this roster as the source for Scheduler and Workboard.</p>
+          <p className="text-xs text-muted-foreground mt-1">Use this roster as the source for Scheduler and Workflow.</p>
         </div>
       </div>
       <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
