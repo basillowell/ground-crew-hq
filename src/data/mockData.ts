@@ -213,6 +213,7 @@ export interface ProgramSettings {
   clientLabel: string;
   logoInitials: string;
   logoUrl?: string;
+  uiThemePreset?: string;
   primaryColor: string;
   accentColor: string;
   sidebarColor: string;
@@ -357,6 +358,7 @@ export const programSettings: ProgramSettings[] = [
     clientLabel: 'Ground Crew HQ',
     logoInitials: 'GC',
     logoUrl: '',
+    uiThemePreset: 'club-emerald',
     primaryColor: '#2f855a',
     accentColor: '#d7f5e5',
     sidebarColor: '#203127',

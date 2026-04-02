@@ -45,6 +45,12 @@ import {
 } from '@/lib/dataStore';
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const themePresets = [
+  { id: 'club-emerald', name: 'Club Emerald', primaryColor: '#2f855a', accentColor: '#d7f5e5', sidebarColor: '#203127' },
+  { id: 'coastal-blue', name: 'Coastal Blue', primaryColor: '#1d4ed8', accentColor: '#dbeafe', sidebarColor: '#172554' },
+  { id: 'heritage-gold', name: 'Heritage Gold', primaryColor: '#b7791f', accentColor: '#fef3c7', sidebarColor: '#3b2f1a' },
+  { id: 'fairway-slate', name: 'Fairway Slate', primaryColor: '#0f766e', accentColor: '#ccfbf1', sidebarColor: '#1f2937' },
+];
 
 function makeId(prefix: string) {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -65,9 +71,22 @@ function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
     clientLabel: settings.clientLabel || settings.organizationName || 'Client profile',
     logoInitials: settings.logoInitials || (settings.organizationName || 'WF').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'WF',
     logoUrl: settings.logoUrl || '',
+    uiThemePreset: settings.uiThemePreset || 'club-emerald',
     primaryColor: settings.primaryColor || '#2f855a',
     accentColor: settings.accentColor || '#d7f5e5',
     sidebarColor: settings.sidebarColor || '#203127',
+  };
+}
+
+function applyThemePreset(settings: ProgramSettings, presetId: string): ProgramSettings {
+  const preset = themePresets.find((entry) => entry.id === presetId);
+  if (!preset) return settings;
+  return {
+    ...settings,
+    uiThemePreset: preset.id,
+    primaryColor: preset.primaryColor,
+    accentColor: preset.accentColor,
+    sidebarColor: preset.sidebarColor,
   };
 }
 
@@ -195,6 +214,19 @@ export default function ProgramSetupHubPage() {
     toast('Shift templates saved', {
       description: `${shiftTemplates.length} reusable shift plans are ready for scheduling.`,
     });
+  }
+
+  function handleLogoUpload(file?: File | null) {
+    if (!file || !programSetting) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      setProgramSetting((current) => (current ? { ...current, logoUrl: result } : current));
+      toast('Logo uploaded', {
+        description: 'The uploaded logo is now attached to this client profile and will save with Program Setup.',
+      });
+    };
+    reader.readAsDataURL(file);
   }
 
   return (
@@ -336,12 +368,13 @@ export default function ProgramSetupHubPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">App Name</label>
+                <label className="text-sm font-medium">Client App Name</label>
                 <Input
                   value={programSetting?.appName ?? ''}
                   onChange={(event) => setProgramSetting((current) => current ? { ...current, appName: event.target.value } : current)}
                   className="mt-1"
                 />
+                <p className="mt-1 text-xs text-muted-foreground">Use the product name each club should see in the browser tab and shell.</p>
               </div>
               <div>
                 <label className="text-sm font-medium">Client / Club Label</label>
@@ -370,6 +403,25 @@ export default function ProgramSetupHubPage() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div>
+                <label className="text-sm font-medium">UI Theme Scheme</label>
+                <select
+                  value={programSetting?.uiThemePreset ?? 'club-emerald'}
+                  onChange={(event) =>
+                    setProgramSetting((current) =>
+                      current ? applyThemePreset(current, event.target.value) : current,
+                    )
+                  }
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {themePresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">Choose a fast client theme, then fine-tune colors if needed.</p>
+              </div>
+              <div>
                 <label className="text-sm font-medium">Logo Initials</label>
                 <Input
                   value={programSetting?.logoInitials ?? ''}
@@ -377,7 +429,7 @@ export default function ProgramSetupHubPage() {
                   className="mt-1"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 xl:col-span-2">
                 <label className="text-sm font-medium">Logo Image URL</label>
                 <Input
                   value={programSetting?.logoUrl ?? ''}
@@ -389,6 +441,28 @@ export default function ProgramSetupHubPage() {
                   Use a square PNG or SVG URL. If blank, the app falls back to logo initials.
                 </p>
               </div>
+              <div>
+                <label className="text-sm font-medium">Upload Logo File</label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  className="mt-1"
+                  onChange={(event) => handleLogoUpload(event.target.files?.[0] ?? null)}
+                />
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setProgramSetting((current) => current ? { ...current, logoUrl: '' } : current)}
+                  >
+                    Clear Logo
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className="text-sm font-medium">Primary Color</label>
                 <div className="mt-1 flex items-center gap-2">
@@ -496,7 +570,8 @@ export default function ProgramSetupHubPage() {
                 <div className="mt-3 space-y-3 text-sm text-muted-foreground">
                   <p>App name updates the browser tab and top-level product identity.</p>
                   <p>Navigation title and subtitle control the sidebar shell seen by crews and managers every day.</p>
-                  <p>Logo image URLs let each club bring its own visual mark into the shell without waiting on a code change.</p>
+                  <p>Logo uploads are stored with the client profile so admins can switch brands without touching code or external assets.</p>
+                  <p>Theme presets give each club a fast, polished look before any manual color tuning.</p>
                   <p>Primary, accent, and sidebar colors set the tone for the interface so each club feels client-specific instead of generic.</p>
                 </div>
               </div>
