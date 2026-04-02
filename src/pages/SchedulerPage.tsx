@@ -245,6 +245,11 @@ export default function SchedulerPage() {
           </div>
         </div>
       </div>
+
+      <div className="mb-6">
+        <ScheduleTemplates />
+      </div>
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-semibold">Weekly Schedule</h2>
