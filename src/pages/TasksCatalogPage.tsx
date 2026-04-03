@@ -79,15 +79,19 @@ export default function TasksCatalogPage() {
     setTaskList(loadTasks().map(normalizeTask));
   }, []);
 
-  const categories = useMemo(
-    () => [...new Set(taskList.map((task) => task.category))].sort((left, right) => left.localeCompare(right)),
+  const normalizedTasks = useMemo(
+    () => taskList.map((task, index) => normalizeTask(task, index)),
     [taskList],
+  );
+
+  const categories = useMemo(
+    () => [...new Set(normalizedTasks.map((task) => task.category))].sort((left, right) => left.localeCompare(right)),
+    [normalizedTasks],
   );
 
   const filteredTasks = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    const next = taskList
-      .map(normalizeTask)
+    const next = normalizedTasks
       .filter((task) => {
         const matchesSearch =
           normalizedSearch.length === 0 ||
@@ -116,16 +120,15 @@ export default function TasksCatalogPage() {
     });
 
     return next;
-  }, [categoryFilter, search, sortMode, statusFilter, taskList]);
+  }, [categoryFilter, normalizedTasks, search, sortMode, statusFilter]);
 
   const totalMinutes = filteredTasks.reduce((sum, task) => sum + task.duration, 0);
-  const activeCount = taskList.filter((task) => normalizeTask(task, 0).status === 'active').length;
-  const inactiveCount = taskList.filter((task) => normalizeTask(task, 0).status === 'inactive').length;
-  const archivedCount = taskList.filter((task) => normalizeTask(task, 0).status === 'archived').length;
-  const selectedTasks = taskList.filter((task) => selectedIds.includes(task.id)).map(normalizeTask);
+  const activeCount = normalizedTasks.filter((task) => task.status === 'active').length;
+  const inactiveCount = normalizedTasks.filter((task) => task.status === 'inactive').length;
+  const archivedCount = normalizedTasks.filter((task) => task.status === 'archived').length;
 
   function persistTasks(nextTasks: Task[]) {
-    const normalized = nextTasks.map(normalizeTask).sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999));
+    const normalized = nextTasks.map((task, index) => normalizeTask(task, index)).sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999));
     const resequenced = normalized.map((task, index) => ({ ...task, priority: index + 1 }));
     setTaskList(resequenced);
     saveTasks(resequenced);
@@ -165,7 +168,7 @@ export default function TasksCatalogPage() {
   function handleSaveTask() {
     if (!draft.name.trim() || !draft.category.trim()) return;
 
-    const existing = editingTaskId ? taskList.find((task) => task.id === editingTaskId) : undefined;
+    const existing = editingTaskId ? normalizedTasks.find((task) => task.id === editingTaskId) : undefined;
     const nextTask: Task = {
       id: editingTaskId ?? makeId(),
       name: draft.name.trim(),
@@ -193,7 +196,7 @@ export default function TasksCatalogPage() {
   }
 
   function handleDeleteTask(taskId: string) {
-    const task = taskList.find((entry) => entry.id === taskId);
+    const task = normalizedTasks.find((entry) => entry.id === taskId);
     const nextTasks = taskList.filter((entry) => entry.id !== taskId);
     persistTasks(nextTasks);
     setSelectedIds((current) => current.filter((id) => id !== taskId));
@@ -228,7 +231,7 @@ export default function TasksCatalogPage() {
   }
 
   function moveTask(taskId: string, direction: 'up' | 'down') {
-    const ordered = [...taskList].map(normalizeTask).sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999));
+    const ordered = [...normalizedTasks].sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999));
     const index = ordered.findIndex((task) => task.id === taskId);
     if (index < 0) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;

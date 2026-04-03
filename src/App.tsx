@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
 
-const LandingPage = lazy(() => import("./pages/LaunchpadPage"));
+const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
 const WorkboardPage = lazy(() => import("./pages/WorkboardPage"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
@@ -28,12 +28,12 @@ const queryClient = new QueryClient();
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.08),_transparent_30%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(244,247,245,1))]">
-      <div className="flex items-center gap-3 rounded-2xl border bg-card/90 px-5 py-4 shadow-sm backdrop-blur">
+    <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(244,247,245,1))]">
+      <div className="flex items-center gap-3 rounded-2xl border bg-card/95 px-5 py-4 shadow-sm">
         <Loader2 className="h-4 w-4 animate-spin text-primary" />
         <div>
           <div className="text-sm font-medium">Loading workspace</div>
-          <div className="text-xs text-muted-foreground">Preparing operations modules and dashboard tools.</div>
+          <div className="text-xs text-muted-foreground">Preparing the next screen.</div>
         </div>
       </div>
     </div>

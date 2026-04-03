@@ -115,31 +115,6 @@ function applyThemePreset(settings: ProgramSettings, presetId: string): ProgramS
   };
 }
 
-function StatCard({
-  label,
-  value,
-  helper,
-  icon,
-}: {
-  label: string;
-  value: number | string;
-  helper: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
-          <div className="mt-2 text-3xl font-semibold">{value}</div>
-        </div>
-        <div className="rounded-2xl border bg-muted/30 p-3 text-primary">{icon}</div>
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">{helper}</p>
-    </Card>
-  );
-}
-
 function FlowCard({
   title,
   description,
@@ -213,7 +188,46 @@ export default function ProgramSetupHubPage() {
       properties: properties.length,
       propertyClasses: propertyClasses.length,
     };
-  }, [appUsers, departmentOptions, groupOptions, properties, propertyClasses, shiftTemplates, workLocations, programSetting]);
+  }, [appUsers, properties, propertyClasses]);
+
+  const overviewStats = [
+    {
+      label: 'Active Crew',
+      value: liveCounts.activeEmployees,
+      helper: 'Employees available for scheduling and workflow assignment.',
+      icon: <Users className="h-5 w-5" />,
+    },
+    {
+      label: 'Active Tasks',
+      value: liveCounts.activeTasks,
+      helper: 'Operational tasks currently feeding daily assignment.',
+      icon: <ListChecks className="h-5 w-5" />,
+    },
+    {
+      label: 'Locations',
+      value: workLocations.length,
+      helper: 'Work areas that roll into weather, applications, and planning.',
+      icon: <MapPin className="h-5 w-5" />,
+    },
+    {
+      label: 'Shift Templates',
+      value: shiftTemplates.length,
+      helper: 'Reusable labor templates the scheduler can build from.',
+      icon: <Clock className="h-5 w-5" />,
+    },
+    {
+      label: 'Portal Users',
+      value: liveCounts.activeAppUsers,
+      helper: 'Client admins, managers, and supervisors who can enter this workspace.',
+      icon: <ShieldCheck className="h-5 w-5" />,
+    },
+    {
+      label: 'Property Classes',
+      value: liveCounts.propertyClasses,
+      helper: 'Reusable property blueprints that define which modules and workflows each site uses.',
+      icon: <Building2 className="h-5 w-5" />,
+    },
+  ];
 
   function saveGeneralSettings() {
     if (!programSetting) return;
@@ -341,42 +355,18 @@ export default function ProgramSetupHubPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <StatCard
-          label="Active Crew"
-          value={liveCounts.activeEmployees}
-          helper="Employees available for scheduling and workflow assignment."
-          icon={<Users className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Active Tasks"
-          value={liveCounts.activeTasks}
-          helper="Operational tasks currently feeding daily assignment."
-          icon={<ListChecks className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Locations"
-          value={workLocations.length}
-          helper="Work areas that roll into weather, applications, and planning."
-          icon={<MapPin className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Shift Templates"
-          value={shiftTemplates.length}
-          helper="Reusable labor templates the scheduler can build from."
-          icon={<Clock className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Portal Users"
-          value={liveCounts.activeAppUsers}
-          helper="Client admins, managers, and supervisors who can enter this workspace."
-          icon={<ShieldCheck className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Property Classes"
-          value={liveCounts.propertyClasses}
-          helper="Reusable property blueprints that define which modules and workflows each site uses."
-          icon={<Building2 className="h-5 w-5" />}
-        />
+        {overviewStats.map((stat) => (
+          <Card key={stat.label} className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stat.label}</div>
+                <div className="mt-2 text-3xl font-semibold">{stat.value}</div>
+              </div>
+              <div className="rounded-2xl border bg-muted/30 p-3 text-primary">{stat.icon}</div>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">{stat.helper}</p>
+          </Card>
+        ))}
       </div>
 
       <Card className="p-5">

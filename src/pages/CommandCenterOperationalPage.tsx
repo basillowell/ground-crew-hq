@@ -212,6 +212,23 @@ export default function CommandCenterOperationalPage() {
     );
   }, [propertyStats]);
 
+  const aggregateMetrics = useMemo(
+    () => [
+      { icon: Users, label: 'Total Crew', value: totals.crew, subtext: 'across active properties' },
+      { icon: CheckCircle, label: 'Tasks Done', value: totals.tasks, subtext: `of ${totals.tasksTotal} today`, color: 'hsl(var(--success))' },
+      { icon: Wrench, label: 'Equipment', value: totals.equipment, subtext: `${totals.equipmentDown} down`, color: 'hsl(var(--warning))' },
+      { icon: AlertTriangle, label: 'Issues', value: totals.workOrders, subtext: 'alerts + work orders', color: 'hsl(var(--destructive))' },
+      {
+        icon: Shield,
+        label: 'Avg Compliance',
+        value: `${propertyStats.length ? Math.round(propertyStats.reduce((sum, stats) => sum + stats.complianceScore, 0) / propertyStats.length) : 0}%`,
+        color: 'hsl(var(--info))',
+      },
+      { icon: Building2, label: 'Properties', value: properties.length, subtext: `${totals.alerts} weather alert${totals.alerts !== 1 ? 's' : ''}` },
+    ],
+    [properties.length, propertyStats, totals],
+  );
+
   const liveCrew = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return employees
@@ -258,12 +275,16 @@ export default function CommandCenterOperationalPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-        <AggregateMetric icon={Users} label="Total Crew" value={totals.crew} subtext="across active properties" />
-        <AggregateMetric icon={CheckCircle} label="Tasks Done" value={totals.tasks} subtext={`of ${totals.tasksTotal} today`} color="hsl(var(--success))" />
-        <AggregateMetric icon={Wrench} label="Equipment" value={totals.equipment} subtext={`${totals.equipmentDown} down`} color="hsl(var(--warning))" />
-        <AggregateMetric icon={AlertTriangle} label="Issues" value={totals.workOrders} subtext="alerts + work orders" color="hsl(var(--destructive))" />
-        <AggregateMetric icon={Shield} label="Avg Compliance" value={`${propertyStats.length ? Math.round(propertyStats.reduce((sum, stats) => sum + stats.complianceScore, 0) / propertyStats.length) : 0}%`} color="hsl(var(--info))" />
-        <AggregateMetric icon={Building2} label="Properties" value={properties.length} subtext={`${totals.alerts} weather alert${totals.alerts !== 1 ? 's' : ''}`} />
+        {aggregateMetrics.map((metric) => (
+          <AggregateMetric
+            key={metric.label}
+            icon={metric.icon}
+            label={metric.label}
+            value={metric.value}
+            subtext={metric.subtext}
+            color={metric.color}
+          />
+        ))}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Employee, ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Copy, Download, Search, Filter, CalendarDays, CloudSun, FlaskConical } from 'lucide-react';
 import { ScheduleTemplates } from '@/components/scheduler/ScheduleTemplates';

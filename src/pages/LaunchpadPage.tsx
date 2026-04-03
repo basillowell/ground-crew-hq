@@ -5,40 +5,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
-  BarChart3,
   CheckCircle,
-  Clock,
-  LayoutDashboard,
   Leaf,
-  ListChecks,
-  MessageSquare,
-  Shield,
   ShieldCheck,
-  Smartphone,
-  Users,
-  Wrench,
 } from 'lucide-react';
 import { DATA_STORE_UPDATED_EVENT, loadAppUsers, loadCurrentAppUserId, loadProgramSettings, saveCurrentAppUserId } from '@/lib/dataStore';
 import type { AppUser } from '@/data/seedData';
 
-const modules = [
-  { title: 'Workflow', desc: 'Dispatch daily labor, sequence assignments, and hand work cleanly into the breakroom view.', icon: LayoutDashboard, route: '/app/workboard', color: 'hsl(152,55%,38%)' },
-  { title: 'Scheduler', desc: 'Build crew coverage by day, department, and reusable labor pattern.', icon: Clock, route: '/app/scheduler', color: 'hsl(210,80%,52%)' },
-  { title: 'Employees', desc: 'Manage roster setup, defaults, and the people that power every workflow downstream.', icon: Users, route: '/app/employees', color: 'hsl(270,60%,55%)' },
-  { title: 'Tasks', desc: 'Maintain the live task catalog used by scheduling, workboard dispatching, and reporting.', icon: ListChecks, route: '/app/tasks', color: 'hsl(38,92%,50%)' },
-  { title: 'Equipment', desc: 'Track fleet readiness, location, assignment, and maintenance pressure.', icon: Wrench, route: '/app/equipment', color: 'hsl(0,72%,55%)' },
-  { title: 'Safety', desc: 'Keep compliance, incidents, and crew readiness visible to the operation.', icon: Shield, route: '/app/safety', color: 'hsl(25,90%,55%)' },
-  { title: 'Reports', desc: 'Turn labor, application, weather, and equipment data into client-facing insight.', icon: BarChart3, route: '/app/reports', color: 'hsl(152,40%,50%)' },
-  { title: 'Messaging', desc: 'Coordinate supervisors, crews, and client communications from one workspace.', icon: MessageSquare, route: '/app/messaging', color: 'hsl(200,70%,50%)' },
-];
-
-const features = [
-  'Client-branded launch and workspace shell',
-  'Role-based admin notifications and crew dispatch awareness',
-  'Integrated scheduler, workflow, breakroom, and reports flow',
-  'Weather and applications tied into planning and compliance',
-  'Program setup that drives real dropdowns and workflow defaults',
-  'Scalable foundation for multiple clubs and client profiles',
+const launchSteps = [
+  'Select the correct client workspace',
+  'Choose the user entering operations today',
+  'Go straight into Command Center or Workflow',
 ];
 
 export default function LaunchpadPage() {
@@ -78,12 +55,12 @@ export default function LaunchpadPage() {
     [appUsers, selectedUserId],
   );
 
-  const handleLaunch = () => {
+  const launchTo = (route: string) => {
     if (selectedUserId) {
       saveCurrentAppUserId(selectedUserId);
       window.dispatchEvent(new CustomEvent('user-session-updated'));
     }
-    navigate('/app/workboard');
+    navigate(route);
   };
 
   return (
@@ -108,18 +85,17 @@ export default function LaunchpadPage() {
               <div className="text-xs text-white/70 uppercase tracking-[0.18em]">{clientName}</div>
             </div>
           </div>
-          <Button onClick={handleLaunch} className="gap-1.5">
-            Launch App <ArrowRight className="h-4 w-4" />
+          <Button onClick={() => launchTo('/app/dashboard')} className="gap-1.5">
+            Enter App <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
       </header>
 
       <section className="max-w-6xl mx-auto px-6 py-16 md:py-24">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-          <div className="max-w-3xl">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-center">
+          <div className="max-w-2xl">
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-foreground">
               {clientName},<br />
-              <span className="text-foreground">powered by </span>
               <span className="text-primary">{appName}</span>
             </h1>
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl">

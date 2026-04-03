@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Employee } from '@/data/seedData';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
