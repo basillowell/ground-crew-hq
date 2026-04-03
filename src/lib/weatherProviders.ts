@@ -42,6 +42,20 @@ export type GeocodeResult = {
   longitude: number;
 };
 
+export type WeatherHourlyPoint = {
+  time: string;
+  temperature: number;
+  rain: number;
+  wind: number;
+  gust: number;
+};
+
+export type WeatherForecastDetail = {
+  next24Rainfall: number;
+  summary: string;
+  hourly: WeatherHourlyPoint[];
+};
+
 function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number) {
   const toRadians = (value: number) => (value * Math.PI) / 180;
   const earthRadiusMiles = 3958.8;
@@ -268,4 +282,67 @@ export async function fetchPrimaryStationSnapshot(
   }
 
   return null;
+}
+
+export async function fetchStationForecastDetail(station: WeatherStation): Promise<WeatherForecastDetail | null> {
+  if (typeof station.latitude !== 'number' || typeof station.longitude !== 'number') return null;
+
+  const params = new URLSearchParams({
+    latitude: String(station.latitude),
+    longitude: String(station.longitude),
+    hourly: 'temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,weather_code',
+    timezone: station.timeZone || 'auto',
+    forecast_days: '2',
+  });
+
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(`Forecast provider request failed with ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const times: string[] = Array.isArray(payload?.hourly?.time) ? payload.hourly.time : [];
+  const temps: number[] = Array.isArray(payload?.hourly?.temperature_2m) ? payload.hourly.temperature_2m : [];
+  const rain: number[] = Array.isArray(payload?.hourly?.precipitation) ? payload.hourly.precipitation : [];
+  const wind: number[] = Array.isArray(payload?.hourly?.wind_speed_10m) ? payload.hourly.wind_speed_10m : [];
+  const gust: number[] = Array.isArray(payload?.hourly?.wind_gusts_10m) ? payload.hourly.wind_gusts_10m : [];
+  const codes: number[] = Array.isArray(payload?.hourly?.weather_code) ? payload.hourly.weather_code : [];
+
+  const now = Date.now();
+  const next24 = times
+    .map((time, index) => ({
+      time,
+      temperature: Number(temps[index] ?? 0),
+      rain: Number(rain[index] ?? 0),
+      wind: Number(wind[index] ?? 0),
+      gust: Number(gust[index] ?? 0),
+      code: Number(codes[index] ?? -1),
+    }))
+    .filter((point) => new Date(point.time).getTime() >= now)
+    .slice(0, 24);
+
+  const next24Rainfall = Number(next24.reduce((sum, point) => sum + point.rain, 0).toFixed(2));
+  const maxGust = Math.max(...next24.map((point) => point.gust), 0);
+  const wetHours = next24.filter((point) => point.rain > 0.01).length;
+
+  let summary = 'Stable weather expected.';
+  if (next24Rainfall >= 0.3) {
+    summary = 'Meaningful rainfall is expected in the next 24 hours.';
+  } else if (wetHours >= 4) {
+    summary = 'Intermittent showers are expected through the next 24 hours.';
+  } else if (maxGust >= 20) {
+    summary = 'Wind gusts may affect spraying or event setup.';
+  }
+
+  return {
+    next24Rainfall,
+    summary,
+    hourly: next24.map((point) => ({
+      time: point.time,
+      temperature: point.temperature,
+      rain: point.rain,
+      wind: point.wind,
+      gust: point.gust,
+    })),
+  };
 }

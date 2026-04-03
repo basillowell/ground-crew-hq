@@ -34,7 +34,7 @@ import {
   saveWeatherStations,
 } from '@/lib/dataStore';
 import { toast } from '@/components/ui/sonner';
-import { fetchPrimaryStationSnapshot, fetchWeatherStationSuggestions, type GeocodeResult } from '@/lib/weatherProviders';
+import { fetchPrimaryStationSnapshot, fetchStationForecastDetail, fetchWeatherStationSuggestions, type GeocodeResult, type WeatherForecastDetail } from '@/lib/weatherProviders';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -87,6 +87,7 @@ export default function WeatherPage() {
   const [stationSuggestions, setStationSuggestions] = useState<WeatherStationSuggestion[]>([]);
   const [stationSearchStatus, setStationSearchStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [propertyLiveLogs, setPropertyLiveLogs] = useState<Record<string, WeatherDailyLog | null>>({});
+  const [selectedForecast, setSelectedForecast] = useState<WeatherForecastDetail | null>(null);
 
   useEffect(() => {
     const locations = loadWeatherLocations();
@@ -168,6 +169,29 @@ export default function WeatherPage() {
       cancelled = true;
     };
   }, [primaryStation, refreshTick, selectedLocation]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateForecast() {
+      if (!primaryStation || primaryStation.status !== 'online') {
+        setSelectedForecast(null);
+        return;
+      }
+
+      try {
+        const forecast = await fetchStationForecastDetail(primaryStation);
+        if (!cancelled) setSelectedForecast(forecast);
+      } catch {
+        if (!cancelled) setSelectedForecast(null);
+      }
+    }
+
+    void hydrateForecast();
+    return () => {
+      cancelled = true;
+    };
+  }, [primaryStation, refreshTick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -512,11 +536,16 @@ export default function WeatherPage() {
         const storedLog = [...weatherLogs]
           .filter((log) => log.locationId === location.id)
           .sort((left, right) => right.date.localeCompare(left.date))[0];
+        const recentRain24 = [...weatherLogs]
+          .filter((log) => log.locationId === location.id)
+          .sort((left, right) => right.date.localeCompare(left.date))
+          .slice(0, 2)
+          .reduce((sum, log) => sum + log.rainfallTotal, 0);
         const live = propertyLiveLogs[location.id] ?? null;
         const log = live ?? storedLog ?? null;
-        return { property, location, station, log };
+        return { property, location, station, log, recentRain24: Number(recentRain24.toFixed(2)) };
       })
-      .filter(Boolean) as { property: Property; location: WeatherLocation; station?: WeatherStation; log: WeatherDailyLog | null }[];
+      .filter(Boolean) as { property: Property; location: WeatherLocation; station?: WeatherStation; log: WeatherDailyLog | null; recentRain24: number }[];
   }, [properties, propertyLiveLogs, weatherLocations, weatherStations, weatherLogs]);
 
   const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? locationStations[0];
@@ -598,7 +627,7 @@ export default function WeatherPage() {
               </Button>
             </div>
             <div className="grid gap-3 lg:grid-cols-3">
-              {propertyWeatherCards.map(({ property, location, station, log }) => (
+              {propertyWeatherCards.map(({ property, location, station, log, recentRain24 }) => (
                 <button
                   key={property.id}
                   type="button"
@@ -617,7 +646,11 @@ export default function WeatherPage() {
                   </div>
                   <div className="mt-3 text-3xl font-semibold">{log ? `${Math.round(log.temperature)}F` : '--'}</div>
                   <div className="mt-1 text-xs text-muted-foreground">{station ? `${station.name} - ${station.provider}` : 'No station selected'}</div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                    <div className="rounded-xl bg-muted/30 px-2 py-2">
+                      <div className="text-muted-foreground">Past 24h</div>
+                      <div className="font-medium">{`${recentRain24.toFixed(2)} in`}</div>
+                    </div>
                     <div className="rounded-xl bg-muted/30 px-2 py-2">
                       <div className="text-muted-foreground">Rain</div>
                       <div className="font-medium">{log ? `${log.rainfallTotal.toFixed(2)} in` : '--'}</div>
@@ -630,6 +663,9 @@ export default function WeatherPage() {
                       <div className="text-muted-foreground">Gust</div>
                       <div className="font-medium">{log ? `${Math.round(log.windGust ?? 0)} mph` : '--'}</div>
                     </div>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {location.id === selectedLocationId && selectedForecast ? `Next 24h expected: ${selectedForecast.next24Rainfall.toFixed(2)} in` : 'Tap to drill into hourly forecast'}
                   </div>
                 </button>
               ))}
@@ -659,6 +695,37 @@ export default function WeatherPage() {
                       <div className="mt-2 text-sm font-semibold">{latestLog?.alerts?.length ? latestLog.alerts.join(', ') : 'No major alerts'}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {latestLog?.capturedAt ? `Last capture ${new Date(latestLog.capturedAt).toLocaleString()}` : 'No live capture yet'}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold">Next 24 Hours</p>
+                    <p className="text-xs text-muted-foreground">Forecast outlook from the selected station coordinates, with a simple hourly drill-in.</p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border bg-background/70 p-4">
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Expected Rainfall</div>
+                      <div className="mt-2 text-2xl font-semibold">
+                        {selectedForecast ? `${selectedForecast.next24Rainfall.toFixed(2)} in` : '--'}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {selectedForecast?.summary ?? 'Forecast detail unavailable for this station yet.'}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border bg-background/70 p-4">
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Hourly Drill-In</div>
+                      <div className="mt-2 space-y-2">
+                        {selectedForecast?.hourly?.slice(0, 6).map((point) => (
+                          <div key={point.time} className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2 text-xs">
+                            <span>{new Date(point.time).toLocaleTimeString([], { hour: 'numeric' })}</span>
+                            <span>{Math.round(point.temperature)}F</span>
+                            <span>{point.rain.toFixed(2)} in</span>
+                            <span>{Math.round(point.gust)} mph gust</span>
+                          </div>
+                        )) ?? <p className="text-xs text-muted-foreground">No hourly forecast loaded.</p>}
                       </div>
                     </div>
                   </div>
