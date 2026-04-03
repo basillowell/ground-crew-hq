@@ -108,7 +108,12 @@ import {
 } from './operationsStorage';
 import { hasSupabaseConfig, supabase } from './supabase';
 
-type CollectionConfig<T> = {
+type PersistedRow = {
+  id?: string;
+  clubId?: string | null;
+};
+
+type CollectionConfig<T extends PersistedRow> = {
   table: string;
   seed: T[];
   loadLocal: () => T[];
@@ -318,32 +323,129 @@ function normalizeWeatherStation(station: WeatherStation): WeatherStation {
   };
 }
 
-async function replaceRemoteRows<T extends { id?: string }>(table: string, rows: T[]) {
-  if (!supabase) return;
-  const { error: deleteError } = await supabase.from(table).delete().not('id', 'is', null);
-  if (deleteError && !deleteError.message.includes('0 rows')) {
-    throw deleteError;
-  }
-  if (rows.length === 0) return;
-  const { error: insertError } = await supabase.from(table).insert(rows as never);
-  if (insertError) throw insertError;
+function getCurrentClubId() {
+  const currentUserId = loadCurrentAppUserIdLocal();
+  const currentUser = loadAppUsersLocal().find((user) => user.id === currentUserId);
+  if (currentUser?.clubId) return currentUser.clubId;
+
+  const settings = loadProgramSettingsLocal();
+  const configuredClubId = (settings[0] as ProgramSettings & { clubId?: string } | undefined)?.clubId;
+  if (configuredClubId) return configuredClubId;
+
+  return 'club-1';
 }
 
-async function hydrateCollection<T extends { id?: string }>(config: CollectionConfig<T>) {
+function attachClubId<T extends PersistedRow>(rows: T[], clubId: string) {
+  return rows.map((row) => ({ ...row, clubId: row.clubId ?? clubId })) as T[];
+}
+
+function isMissingClubIdError(error: { message?: string | null; details?: string | null; hint?: string | null } | null) {
+  if (!error) return false;
+  const detail = `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`.toLowerCase();
+  return detail.includes('clubid') && (detail.includes('column') || detail.includes('schema cache') || detail.includes('could not find'));
+}
+
+async function syncRemoteRowsGlobal<T extends PersistedRow>(table: string, rows: T[]) {
+  if (!supabase) return;
+  const { data: existingRows, error: existingError } = await supabase.from(table).select('id');
+  if (existingError) throw existingError;
+
+  const nextRows = rows.filter((row) => row.id);
+  if (nextRows.length > 0) {
+    const { error: upsertError } = await supabase.from(table).upsert(nextRows as never, { onConflict: 'id' });
+    if (upsertError) throw upsertError;
+  }
+
+  const nextIds = new Set(nextRows.map((row) => row.id as string));
+  const staleIds = (existingRows ?? [])
+    .map((row) => row.id as string | null | undefined)
+    .filter((id): id is string => Boolean(id) && !nextIds.has(id));
+
+  if (staleIds.length > 0) {
+    const { error: deleteError } = await supabase.from(table).delete().in('id', staleIds);
+    if (deleteError) throw deleteError;
+  }
+}
+
+async function syncRemoteRowsScoped<T extends PersistedRow>(table: string, rows: T[], clubId: string) {
+  if (!supabase) return;
+  const scopedRows = attachClubId(rows, clubId);
+  const { data: existingRows, error: existingError } = await supabase.from(table).select('id').eq('clubId', clubId);
+  if (existingError) {
+    if (isMissingClubIdError(existingError)) {
+      await syncRemoteRowsGlobal(table, rows);
+      return;
+    }
+    throw existingError;
+  }
+
+  const nextRows = scopedRows.filter((row) => row.id);
+  if (nextRows.length > 0) {
+    const { error: upsertError } = await supabase.from(table).upsert(nextRows as never, { onConflict: 'id' });
+    if (upsertError) {
+      if (isMissingClubIdError(upsertError)) {
+        await syncRemoteRowsGlobal(table, rows);
+        return;
+      }
+      throw upsertError;
+    }
+  }
+
+  const nextIds = new Set(nextRows.map((row) => row.id as string));
+  const staleIds = (existingRows ?? [])
+    .map((row) => row.id as string | null | undefined)
+    .filter((id): id is string => Boolean(id) && !nextIds.has(id));
+
+  if (staleIds.length > 0) {
+    const { error: deleteError } = await supabase.from(table).delete().eq('clubId', clubId).in('id', staleIds);
+    if (deleteError) throw deleteError;
+  }
+}
+
+async function readRemoteRows<T extends PersistedRow>(table: string, clubId: string) {
+  if (!supabase) return [] as T[];
+  const { data: scopedRows, error: scopedError } = await supabase.from(table).select('*').eq('clubId', clubId);
+  if (scopedError) {
+    if (isMissingClubIdError(scopedError)) {
+      const { data: globalRows, error: globalError } = await supabase.from(table).select('*');
+      if (globalError) throw globalError;
+      return (globalRows ?? []) as T[];
+    }
+    throw scopedError;
+  }
+
+  if ((scopedRows ?? []).length > 0) {
+    return scopedRows as T[];
+  }
+
+  const { data: legacyRows, error: legacyError } = await supabase.from(table).select('*').is('clubId', null);
+  if (legacyError) {
+    if (isMissingClubIdError(legacyError)) return [];
+    throw legacyError;
+  }
+
+  return attachClubId((legacyRows ?? []) as T[], clubId);
+}
+
+async function hydrateCollection<T extends PersistedRow>(config: CollectionConfig<T>) {
+  const clubId = getCurrentClubId();
+  const localRows = attachClubId(config.loadLocal(), clubId);
   if (!supabase) {
-    return config.loadLocal();
+    if (localRows.length > 0) config.saveLocal(localRows);
+    return localRows;
   }
 
-  const { data, error } = await supabase.from(config.table).select('*');
-  if (error) {
-    return config.loadLocal();
+  let remoteRows: T[] = [];
+  try {
+    remoteRows = await readRemoteRows<T>(config.table, clubId);
+  } catch {
+    return localRows;
   }
 
-  if (!data || data.length === 0) {
-    const localRows = config.loadLocal();
+  if (remoteRows.length === 0) {
     if (localRows.length > 0) {
       try {
-        await replaceRemoteRows(config.table, localRows);
+        await syncRemoteRowsScoped(config.table, localRows, clubId);
       } catch {
         return localRows;
       }
@@ -351,12 +453,15 @@ async function hydrateCollection<T extends { id?: string }>(config: CollectionCo
     return localRows;
   }
 
-  config.saveLocal(data as T[]);
-  return data as T[];
+  const normalizedRemoteRows = attachClubId(remoteRows, clubId);
+  config.saveLocal(normalizedRemoteRows);
+  return normalizedRemoteRows;
 }
 
-function syncCollection<T extends { id?: string }>(config: CollectionConfig<T>, rows: T[]) {
-  config.saveLocal(rows);
+function syncCollection<T extends PersistedRow>(config: CollectionConfig<T>, rows: T[]) {
+  const clubId = getCurrentClubId();
+  const scopedRows = attachClubId(rows, clubId);
+  config.saveLocal(scopedRows);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent(DATA_STORE_UPDATED_EVENT, {
@@ -365,7 +470,9 @@ function syncCollection<T extends { id?: string }>(config: CollectionConfig<T>, 
     );
   }
   if (!supabase) return;
-  void replaceRemoteRows(config.table, rows).catch(() => undefined);
+  void syncRemoteRowsScoped(config.table, scopedRows, clubId).catch((error) => {
+    console.error(`Failed to sync ${config.table}`, error);
+  });
 }
 
 export async function initializeDataStore() {

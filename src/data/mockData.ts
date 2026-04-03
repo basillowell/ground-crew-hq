@@ -2,6 +2,7 @@
 
 export interface Employee {
   id: string;
+  clubId?: string;
   firstName: string;
   lastName: string;
   propertyId?: string;
@@ -26,6 +27,7 @@ export interface Employee {
 
 export interface Task {
   id: string;
+  clubId?: string;
   name: string;
   category: string;
   duration: number; // minutes
@@ -49,6 +51,7 @@ export interface EquipmentType {
 
 export interface EquipmentUnit {
   id: string;
+  clubId?: string;
   typeId: string;
   unitNumber: string;
   status: 'available' | 'in-use' | 'maintenance' | 'out-of-service';
@@ -73,6 +76,7 @@ export interface WorkOrder {
 
 export interface ScheduleEntry {
   id: string;
+  clubId?: string;
   employeeId: string;
   date: string;
   shiftStart: string;
@@ -82,6 +86,7 @@ export interface ScheduleEntry {
 
 export interface Note {
   id: string;
+  clubId?: string;
   type: 'daily' | 'general' | 'geo' | 'alert';
   title: string;
   content: string;
@@ -92,6 +97,7 @@ export interface Note {
 
 export interface Assignment {
   id?: string;
+  clubId?: string;
   employeeId: string;
   taskId: string;
   equipmentId?: string;
@@ -103,6 +109,7 @@ export interface Assignment {
 
 export interface WeatherLocation {
   id: string;
+  clubId?: string;
   name: string;
   property: string;
   propertyId?: string;
@@ -114,6 +121,7 @@ export interface WeatherLocation {
 
 export interface WeatherStation {
   id: string;
+  clubId?: string;
   locationId: string;
   name: string;
   provider: string;
@@ -144,6 +152,7 @@ export interface WeatherStationSuggestion {
 
 export interface WeatherDailyLog {
   id: string;
+  clubId?: string;
   locationId: string;
   stationId?: string;
   date: string;
@@ -163,6 +172,7 @@ export interface WeatherDailyLog {
 
 export interface ManualRainfallEntry {
   id: string;
+  clubId?: string;
   locationId: string;
   date: string;
   rainfallAmount: number;
@@ -172,6 +182,7 @@ export interface ManualRainfallEntry {
 
 export interface ChemicalProduct {
   id: string;
+  clubId?: string;
   name: string;
   productType: string;
   targetUse: string;
@@ -187,6 +198,7 @@ export interface ChemicalProduct {
 
 export interface ApplicationArea {
   id: string;
+  clubId?: string;
   name: string;
   property: string;
   weatherLocationId: string;
@@ -194,6 +206,7 @@ export interface ApplicationArea {
 
 export interface ChemicalApplicationLog {
   id: string;
+  clubId?: string;
   applicationDate: string;
   startTime: string;
   endTime: string;
@@ -224,6 +237,7 @@ export interface ChemicalApplicationLog {
 
 export interface ChemicalApplicationTankMixItem {
   id: string;
+  clubId?: string;
   applicationLogId: string;
   productId: string;
   rateApplied: number;
@@ -234,6 +248,7 @@ export interface ChemicalApplicationTankMixItem {
 
 export interface ProgramSettings {
   id: string;
+  clubId?: string;
   organizationName: string;
   appName: string;
   navigationTitle: string;
@@ -258,27 +273,32 @@ export interface ProgramSettings {
 
 export interface DepartmentOption {
   id: string;
+  clubId?: string;
   name: string;
 }
 
 export interface GroupOption {
   id: string;
+  clubId?: string;
   name: string;
   color: string;
 }
 
 export interface RoleOption {
   id: string;
+  clubId?: string;
   name: string;
 }
 
 export interface LanguageOption {
   id: string;
+  clubId?: string;
   name: string;
 }
 
 export interface WorkLocation {
   id: string;
+  clubId?: string;
   name: string;
   propertyId?: string;
   propertyName?: string;
@@ -286,6 +306,7 @@ export interface WorkLocation {
 
 export interface Property {
   id: string;
+  clubId?: string;
   name: string;
   shortName: string;
   type: 'golf-course' | 'resort' | 'estate' | 'municipal';
@@ -301,6 +322,7 @@ export interface Property {
 
 export interface PropertyClassOption {
   id: string;
+  clubId?: string;
   name: string;
   description: string;
   enabledModules: string[];
@@ -308,6 +330,7 @@ export interface PropertyClassOption {
 
 export interface TaskRequest {
   id: string;
+  clubId?: string;
   propertyId: string;
   date: string;
   title: string;
@@ -322,6 +345,7 @@ export interface TaskRequest {
 
 export interface ShiftTemplate {
   id: string;
+  clubId?: string;
   name: string;
   start: string;
   end: string;
@@ -433,6 +457,7 @@ export const assignments: Assignment[] = [
 export const programSettings: ProgramSettings[] = [
   {
     id: 'ps1',
+    clubId: 'club-1',
     organizationName: 'Ground Crew HQ',
     appName: 'WorkForce App',
     navigationTitle: 'GroundsCrew',
