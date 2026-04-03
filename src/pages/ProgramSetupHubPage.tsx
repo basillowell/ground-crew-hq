@@ -353,12 +353,12 @@ export default function ProgramSetupHubPage() {
     <div className="p-4 max-w-7xl mx-auto space-y-4">
       <PageHeader
         title="Program Setup"
-        subtitle="Build the club profile, workforce structure, locations, and reusable labor patterns that power the rest of the platform."
+        subtitle="Set up the client brand, workforce structure, properties, and labor patterns that feed the rest of the platform."
         badge={<Badge variant="secondary">{programSetting?.organizationName ?? 'Club profile'}</Badge>}
       />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        {overviewStats.map((stat) => (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {overviewStats.slice(0, 4).map((stat) => (
           <Card key={stat.label} className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -405,15 +405,14 @@ export default function ProgramSetupHubPage() {
         </div>
       </Card>
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue="general">
         <TabsList className="mb-4 h-auto flex-wrap gap-2 bg-transparent p-0">
-          <TabsTrigger value="overview" className="text-xs gap-1 border bg-card px-3 py-2"><Building2 className="h-3 w-3" /> Overview</TabsTrigger>
           <TabsTrigger value="general" className="text-xs gap-1 border bg-card px-3 py-2"><Settings className="h-3 w-3" /> Brand + Club Profile</TabsTrigger>
-          <TabsTrigger value="structure" className="text-xs gap-1 border bg-card px-3 py-2"><Users className="h-3 w-3" /> Workforce Structure</TabsTrigger>
+          <TabsTrigger value="structure" className="text-xs gap-1 border bg-card px-3 py-2"><Users className="h-3 w-3" /> Workforce</TabsTrigger>
           <TabsTrigger value="users" className="text-xs gap-1 border bg-card px-3 py-2"><ShieldCheck className="h-3 w-3" /> Users + Access</TabsTrigger>
           <TabsTrigger value="property-classes" className="text-xs gap-1 border bg-card px-3 py-2"><Waves className="h-3 w-3" /> Property Classes</TabsTrigger>
           <TabsTrigger value="properties" className="text-xs gap-1 border bg-card px-3 py-2"><Building2 className="h-3 w-3" /> Properties</TabsTrigger>
-          <TabsTrigger value="locations" className="text-xs gap-1 border bg-card px-3 py-2"><MapPin className="h-3 w-3" /> Locations</TabsTrigger>
+          <TabsTrigger value="locations" className="text-xs gap-1 border bg-card px-3 py-2"><MapPin className="h-3 w-3" /> Areas + Locations</TabsTrigger>
           <TabsTrigger value="shifts" className="text-xs gap-1 border bg-card px-3 py-2"><Clock className="h-3 w-3" /> Shift Templates</TabsTrigger>
         </TabsList>
 
@@ -470,7 +469,7 @@ export default function ProgramSetupHubPage() {
             <div className="rounded-2xl border bg-muted/20 p-4">
               <div className="font-semibold">Brand System</div>
               <p className="mt-1 text-sm text-muted-foreground">
-                These values now drive the browser title, sidebar identity, top-bar client label, and the global UI color direction for each club or client.
+                Use this section to define the client-facing identity that shows up across the shell, launch screen, and navigation.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -734,14 +733,11 @@ export default function ProgramSetupHubPage() {
                 </div>
               </div>
               <div className="rounded-2xl border bg-muted/20 p-4">
-                <div className="font-semibold">What Changes Live</div>
+                <div className="font-semibold">Live Branding Impact</div>
                 <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-                  <p>App name updates the browser tab and top-level product identity.</p>
-                  <p>Navigation title and subtitle control the sidebar shell seen by crews and managers every day.</p>
-                  <p>Logo uploads are stored with the client profile so admins can switch brands without touching code or external assets.</p>
-                  <p>Typography and shell imagery help the product feel tailored to the club, not just recolored.</p>
-                  <p>Theme presets give each club a fast, polished look before any manual color tuning.</p>
-                  <p>Primary, accent, and sidebar colors set the tone for the interface so each club feels client-specific instead of generic.</p>
+                  <p>App name and client label update the browser title, launch experience, and shell identity.</p>
+                  <p>Logo, typography, and shell imagery help each client feel distinct without custom code.</p>
+                  <p>Theme presets and color controls let you move quickly, then fine-tune if the client wants more ownership of the look.</p>
                 </div>
               </div>
             </div>
@@ -935,7 +931,7 @@ export default function ProgramSetupHubPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="font-semibold">Client Portal Users</div>
-                  <p className="text-xs text-muted-foreground">These are the people who enter the app from the launch screen and appear in the top-right profile switcher.</p>
+                  <p className="text-xs text-muted-foreground">These accounts enter the app, receive alerts, and carry admin, manager, or supervisor access.</p>
                 </div>
                 <Button
                   size="sm"
@@ -1080,20 +1076,20 @@ export default function ProgramSetupHubPage() {
             </Card>
 
             <Card className="p-6">
-              <div className="font-semibold">How This Scales Per Client</div>
+              <div className="font-semibold">Access Model</div>
               <div className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <p>Portal users are separate from employees. Employees do the work; portal users manage the work.</p>
                 <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Launch Screen</div>
-                  <p className="mt-1 text-xs">Only active users appear when someone enters the client workspace.</p>
+                  <div className="font-medium text-foreground">Launch</div>
+                  <p className="mt-1 text-xs">Only active users should be able to enter the workspace.</p>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Top-Right Profile Menu</div>
-                  <p className="mt-1 text-xs">Managers can switch between admin, manager, and supervisor views without changing the client brand profile.</p>
+                  <div className="font-medium text-foreground">Roles</div>
+                  <p className="mt-1 text-xs">Admin, manager, and supervisor access should be assigned here, not improvised elsewhere in the app.</p>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Notifications</div>
-                  <p className="mt-1 text-xs">Role-aware alerts become more useful once each club maintains its real operational users here.</p>
+                  <div className="font-medium text-foreground">Alerts</div>
+                  <p className="mt-1 text-xs">Role-aware notifications get cleaner once this list reflects the real operating team for each client.</p>
                 </div>
               </div>
             </Card>
@@ -1186,16 +1182,16 @@ export default function ProgramSetupHubPage() {
             </Card>
 
             <Card className="p-6">
-              <div className="font-semibold">Why This Matters</div>
+              <div className="font-semibold">Class Usage</div>
               <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <p>Property classes become your master blueprint for how different clubs and sites use the platform.</p>
+                <p>Property classes act as reusable blueprints for how different sites use the platform.</p>
                 <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Golf Course vs Resort</div>
-                  <p className="mt-1 text-xs">A golf property may need weather and chemical applications, while a resort may focus more on workflow, breakroom, and guest-area reporting.</p>
+                  <div className="font-medium text-foreground">Site Type</div>
+                  <p className="mt-1 text-xs">A golf course may need weather and applications while a resort may emphasize workflow, reporting, and guest-area work.</p>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Scalable Client Setup</div>
-                  <p className="mt-1 text-xs">Once a property is tied to a class, the app can later hide or prioritize modules based on that saved blueprint instead of making every client see the same stack.</p>
+                  <div className="font-medium text-foreground">Scalability</div>
+                  <p className="mt-1 text-xs">Tie each property to a class so the app can prioritize the right modules without making every client see the same stack.</p>
                 </div>
               </div>
             </Card>
@@ -1353,16 +1349,16 @@ export default function ProgramSetupHubPage() {
 
             <div className="space-y-4">
               <Card className="p-6">
-                <div className="font-semibold">How Properties Flow Through the App</div>
+                <div className="font-semibold">Property Setup Notes</div>
                 <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                  <p>Command Center reads these saved properties, not a separate demo list.</p>
+                  <p>These saved properties drive Command Center, Workflow scoping, weather, and scheduling context.</p>
                   <div className="rounded-xl border bg-muted/20 p-4">
                     <div className="font-medium text-foreground">Workflow Routing</div>
-                    <p className="mt-1 text-xs">Clicking a property in Command Center now sets the active property before routing into Workflow.</p>
+                    <p className="mt-1 text-xs">Selecting a property in Command Center should move managers straight into the correct property workflow.</p>
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-4">
                     <div className="font-medium text-foreground">Employee Assignment</div>
-                    <p className="mt-1 text-xs">Employees and locations can now be tied to a property so task planning stays scoped correctly.</p>
+                    <p className="mt-1 text-xs">Keep employee and location assignment aligned here so planning stays scoped correctly.</p>
                   </div>
                 </div>
               </Card>
@@ -1454,20 +1450,20 @@ export default function ProgramSetupHubPage() {
             </Card>
 
             <Card className="p-6">
-              <div className="font-semibold">Why Locations Matter</div>
+              <div className="font-semibold">Location Usage</div>
               <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <p>Locations created here become the clean source for property areas across the system.</p>
+                <p>Locations created here become the shared source for property areas across the system.</p>
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="font-medium text-foreground">Weather</div>
-                  <p className="mt-1 text-xs">Weather areas can be built from these saved locations so realtime and manual logs map to the same property structure.</p>
+                  <p className="mt-1 text-xs">Use these saved areas for weather so live and manual data map to the same property structure.</p>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="font-medium text-foreground">Applications</div>
-                  <p className="mt-1 text-xs">Chemical application areas stay more consistent when they inherit the same club geography.</p>
+                  <p className="mt-1 text-xs">Application zones stay cleaner when they inherit the same property geography.</p>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="font-medium text-foreground">Operations</div>
-                  <p className="mt-1 text-xs">Routing, notes, and breakroom communication get less cluttered when the same location names are reused everywhere.</p>
+                  <p className="mt-1 text-xs">Routing, notes, and display communication get less cluttered when the same names are reused everywhere.</p>
                 </div>
               </div>
             </Card>
