@@ -1248,12 +1248,27 @@ export default function ProgramSetupHubPage() {
                     <div className="grid gap-3 lg:grid-cols-[1.2fr_0.7fr_0.8fr_auto]">
                       <Input value={property.name} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, name: event.target.value } : entry))} className="h-9" />
                       <Input value={property.shortName} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, shortName: event.target.value } : entry))} className="h-9" />
-                      <select value={property.type} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, type: event.target.value as Property['type'] } : entry))} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
-                        <option value="golf-course">Golf Course</option>
-                        <option value="resort">Resort</option>
-                        <option value="estate">Estate</option>
-                        <option value="municipal">Municipal</option>
-                      </select>
+                      <div>
+                        <Input
+                          list={`property-type-options-${property.id}`}
+                          value={property.type}
+                          onChange={(event) =>
+                            setProperties((current) =>
+                              current.map((entry) => (entry.id === property.id ? { ...entry, type: event.target.value } : entry)),
+                            )
+                          }
+                          className="h-9"
+                          placeholder="Property type label"
+                        />
+                        <datalist id={`property-type-options-${property.id}`}>
+                          <option value="Golf Course" />
+                          <option value="Polo Club" />
+                          <option value="Athletic Field" />
+                          <option value="Resort" />
+                          <option value="Estate" />
+                          <option value="Municipal Grounds" />
+                        </datalist>
+                      </div>
                       <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => {
                         const confirmed = window.confirm(`Delete ${property.name}? This only removes the property record. Reassign linked employees and locations first.`);
                         if (!confirmed) return;

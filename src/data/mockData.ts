@@ -309,7 +309,7 @@ export interface Property {
   clubId?: string;
   name: string;
   shortName: string;
-  type: 'golf-course' | 'resort' | 'estate' | 'municipal';
+  type: string;
   propertyClassId?: string;
   address: string;
   city: string;

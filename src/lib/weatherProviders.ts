@@ -56,6 +56,29 @@ export type WeatherForecastDetail = {
   hourly: WeatherHourlyPoint[];
 };
 
+async function fetchOpenMeteoPast24Rainfall(station: Pick<WeatherStation, 'latitude' | 'longitude' | 'timeZone'>) {
+  if (typeof station.latitude !== 'number' || typeof station.longitude !== 'number') return 0;
+
+  const params = new URLSearchParams({
+    latitude: String(station.latitude),
+    longitude: String(station.longitude),
+    hourly: 'precipitation',
+    timezone: station.timeZone || 'auto',
+    past_hours: '24',
+    forecast_hours: '1',
+  });
+
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(`Open-Meteo rainfall request failed with ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const rain: number[] = Array.isArray(payload?.hourly?.precipitation) ? payload.hourly.precipitation : [];
+  const last24 = rain.slice(0, 24);
+  return Number(last24.reduce((sum, point) => sum + Number(point ?? 0), 0).toFixed(2));
+}
+
 function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number) {
   const toRadians = (value: number) => (value * Math.PI) / 180;
   const earthRadiusMiles = 3958.8;
@@ -185,9 +208,12 @@ export async function fetchPrimaryStationSnapshot(
       latitude: String(station.latitude),
       longitude: String(station.longitude),
       current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code',
-      daily: 'precipitation_sum,et0_fao_evapotranspiration',
+      daily: 'et0_fao_evapotranspiration',
+      hourly: 'precipitation',
       timezone: station.timeZone || 'auto',
       forecast_days: '1',
+      past_hours: '24',
+      forecast_hours: '1',
     });
 
     const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
@@ -201,9 +227,10 @@ export async function fetchPrimaryStationSnapshot(
     const wind = Number(payload?.current?.wind_speed_10m ?? 0);
     const windGust = Number(payload?.current?.wind_gusts_10m ?? 0);
     const weatherCode = Number(payload?.current?.weather_code ?? -1);
-    const rainfallTotal = Number(payload?.daily?.precipitation_sum?.[0] ?? 0);
+    const hourlyRain: number[] = Array.isArray(payload?.hourly?.precipitation) ? payload.hourly.precipitation : [];
+    const rainfallTotal = Number(hourlyRain.slice(0, 24).reduce((sum, point) => sum + Number(point ?? 0), 0).toFixed(2));
     const et = Number(payload?.daily?.et0_fao_evapotranspiration?.[0] ?? 0);
-    const date = String(payload?.daily?.time?.[0] ?? new Date().toISOString().slice(0, 10));
+    const date = new Date().toISOString().slice(0, 10);
     const alerts: string[] = [];
     if (rainfallTotal >= 0.25) alerts.push('Rainfall accumulation');
     if (windGust >= 20) alerts.push('High wind gusts');
@@ -248,14 +275,9 @@ export async function fetchPrimaryStationSnapshot(
     const humidityValue = noaaTextValue(properties?.relativeHumidity);
     const windMps = noaaTextValue(properties?.windSpeed);
     const gustMps = noaaTextValue(properties?.windGust);
-    const precipMm =
-      noaaTextValue(properties?.precipitationLastHour) ??
-      noaaTextValue(properties?.precipitationLast3Hours) ??
-      noaaTextValue(properties?.precipitationLast6Hours) ??
-      0;
     const gustMph = gustMps != null ? metersPerSecondToMph(gustMps) : 0;
     const windMph = windMps != null ? metersPerSecondToMph(windMps) : 0;
-    const rainfallInches = Number((precipMm / 25.4).toFixed(2));
+    const rainfallInches = await fetchOpenMeteoPast24Rainfall(station);
     const alerts: string[] = [];
     if (rainfallInches >= 0.25) alerts.push('Rainfall accumulation');
     if (gustMph >= 20) alerts.push('High wind gusts');

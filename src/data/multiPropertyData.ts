@@ -4,7 +4,7 @@ export interface Property {
   id: string;
   name: string;
   shortName: string;
-  type: 'golf-course' | 'resort' | 'estate' | 'municipal';
+  type: string;
   address: string;
   city: string;
   state: string;

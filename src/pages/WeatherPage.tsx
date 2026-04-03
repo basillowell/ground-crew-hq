@@ -536,14 +536,10 @@ export default function WeatherPage() {
         const storedLog = [...weatherLogs]
           .filter((log) => log.locationId === location.id)
           .sort((left, right) => right.date.localeCompare(left.date))[0];
-        const recentRain24 = [...weatherLogs]
-          .filter((log) => log.locationId === location.id)
-          .sort((left, right) => right.date.localeCompare(left.date))
-          .slice(0, 2)
-          .reduce((sum, log) => sum + log.rainfallTotal, 0);
         const live = propertyLiveLogs[location.id] ?? null;
         const log = live ?? storedLog ?? null;
-        return { property, location, station, log, recentRain24: Number(recentRain24.toFixed(2)) };
+        const recentRain24 = Number((live?.rainfallTotal ?? storedLog?.rainfallTotal ?? 0).toFixed(2));
+        return { property, location, station, log, recentRain24 };
       })
       .filter(Boolean) as { property: Property; location: WeatherLocation; station?: WeatherStation; log: WeatherDailyLog | null; recentRain24: number }[];
   }, [properties, propertyLiveLogs, weatherLocations, weatherStations, weatherLogs]);
