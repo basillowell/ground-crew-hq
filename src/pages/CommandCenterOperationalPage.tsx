@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Activity,
@@ -24,16 +26,22 @@ import {
 import type { Assignment, Employee, Note, Property, ScheduleEntry, Task, WorkLocation } from '@/data/seedData';
 import {
   DATA_STORE_UPDATED_EVENT,
+  initializeDataStore,
   loadAssignments,
+  loadCurrentPropertyId,
   loadEmployees,
   loadEquipmentUnits,
   loadNotes,
   loadProperties,
   loadScheduleEntries,
   loadTasks,
+  loadWeatherLocations,
+  loadWeatherStations,
   loadWorkLocations,
   saveCurrentPropertyId,
 } from '@/lib/dataStore';
+import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
+import { supabase } from '@/lib/supabase';
 
 type PropertyStats = {
   propertyId: string;
@@ -143,28 +151,70 @@ function AggregateMetric({ icon: Icon, label, value, subtext, color }: { icon: a
 export default function CommandCenterOperationalPage() {
   const navigate = useNavigate();
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
+  const dashboardLiveQuery = useQuery<{
+    properties: Property[];
+    employees: Employee[];
+    assignments: Assignment[];
+    scheduleEntries: ScheduleEntry[];
+    tasks: Task[];
+    notes: Note[];
+    workLocations: WorkLocation[];
+    currentPropertyId: string;
+    weatherLocations: ReturnType<typeof loadWeatherLocations>;
+    weatherStations: ReturnType<typeof loadWeatherStations>;
+  }>({
+    queryKey: ['dashboard-live-data'],
+    queryFn: async () => {
+      await initializeDataStore();
+      return {
+        properties: loadProperties(),
+        employees: loadEmployees(),
+        assignments: loadAssignments(),
+        scheduleEntries: loadScheduleEntries(),
+        tasks: loadTasks(),
+        notes: loadNotes(),
+        workLocations: loadWorkLocations(),
+        currentPropertyId: loadCurrentPropertyId(),
+        weatherLocations: loadWeatherLocations(),
+        weatherStations: loadWeatherStations(),
+      };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const properties = dashboardLiveQuery.data?.properties ?? [];
+  const employees = dashboardLiveQuery.data?.employees ?? [];
+  const assignments = dashboardLiveQuery.data?.assignments ?? [];
+  const scheduleEntries = dashboardLiveQuery.data?.scheduleEntries ?? [];
+  const tasks = dashboardLiveQuery.data?.tasks ?? [];
+  const notes = dashboardLiveQuery.data?.notes ?? [];
+  const workLocations = dashboardLiveQuery.data?.workLocations ?? [];
+  const currentPropertyId = dashboardLiveQuery.data?.currentPropertyId ?? '';
+  const weatherLocations = dashboardLiveQuery.data?.weatherLocations ?? [];
+  const weatherStations = dashboardLiveQuery.data?.weatherStations ?? [];
 
   useEffect(() => {
-    const refresh = () => {
-      setProperties(loadProperties());
-      setEmployees(loadEmployees());
-      setAssignments(loadAssignments());
-      setScheduleEntries(loadScheduleEntries());
-      setTasks(loadTasks());
-      setNotes(loadNotes());
-      setWorkLocations(loadWorkLocations());
-    };
-    refresh();
+    const refresh = () => void dashboardLiveQuery.refetch();
     window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
     return () => window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-  }, []);
+  }, [dashboardLiveQuery.refetch]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel('dashboard-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries' }, () => {
+        void dashboardLiveQuery.refetch();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, () => {
+        void dashboardLiveQuery.refetch();
+      })
+      .subscribe();
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [dashboardLiveQuery.refetch]);
 
   const propertyStats = useMemo<PropertyStats[]>(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -248,6 +298,55 @@ export default function CommandCenterOperationalPage() {
         };
       });
   }, [assignments, employees, properties, scheduleEntries, tasks]);
+
+  const activeWeatherProperty = useMemo(() => {
+    return properties.find((property) => property.id === currentPropertyId) ?? properties[0] ?? null;
+  }, [currentPropertyId, properties]);
+
+  const dashboardWeatherCoordinates = useMemo(() => {
+    if (!activeWeatherProperty) return null;
+
+    const location =
+      weatherLocations.find((entry) => entry.propertyId === activeWeatherProperty.id) ??
+      weatherLocations.find((entry) => entry.property === activeWeatherProperty.name);
+
+    const station = location
+      ? weatherStations.find((entry) => entry.locationId === location.id && entry.isPrimary) ??
+        weatherStations.find((entry) => entry.locationId === location.id)
+      : null;
+
+    if (typeof station?.latitude === 'number' && typeof station?.longitude === 'number') {
+      return {
+        latitude: station.latitude,
+        longitude: station.longitude,
+        label: `${station.name} · ${station.provider}`,
+      };
+    }
+
+    if (typeof location?.latitude === 'number' && typeof location?.longitude === 'number') {
+      return {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        label: `${location.name} area`,
+      };
+    }
+
+    return null;
+  }, [activeWeatherProperty, weatherLocations, weatherStations]);
+
+  const dashboardWeatherQuery = useQuery({
+    queryKey: ['command-center-weather', activeWeatherProperty?.id, dashboardWeatherCoordinates?.latitude, dashboardWeatherCoordinates?.longitude],
+    enabled: Boolean(activeWeatherProperty && dashboardWeatherCoordinates),
+    staleTime: 1000 * 60 * 30,
+    queryFn: async () =>
+      fetchOpenMeteoWeather({
+        latitude: dashboardWeatherCoordinates!.latitude,
+        longitude: dashboardWeatherCoordinates!.longitude,
+      }),
+  });
+
+  const dashboardWeatherMeta = getWeatherConditionMeta(dashboardWeatherQuery.data?.current.weatherCode);
+  const DashboardWeatherIcon = dashboardWeatherMeta.icon;
 
   const openPropertyWorkflow = (propertyId: string) => {
     saveCurrentPropertyId(propertyId);
@@ -337,6 +436,61 @@ export default function CommandCenterOperationalPage() {
         </div>
 
         <div className="space-y-4">
+          <Card className="space-y-3 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <CloudRain className="h-4 w-4 text-primary" />
+                Outdoor Weather
+              </h3>
+              <Badge variant="outline" className="text-[10px]">
+                {activeWeatherProperty?.shortName ?? 'No property'}
+              </Badge>
+            </div>
+
+            {dashboardWeatherQuery.isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-20 rounded-2xl" />
+                <Skeleton className="h-10 rounded-xl" />
+              </div>
+            ) : dashboardWeatherQuery.data ? (
+              <>
+                <div className="rounded-2xl border bg-background/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        {activeWeatherProperty?.name ?? 'Selected Property'}
+                      </div>
+                      <div className="mt-2 text-3xl font-semibold">
+                        {Math.round(dashboardWeatherQuery.data.current.temperature)}F
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">{dashboardWeatherMeta.label}</div>
+                    </div>
+                    <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+                      <DashboardWeatherIcon className="h-6 w-6" />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Wind {Math.round(dashboardWeatherQuery.data.current.windSpeed)} mph</span>
+                    <span>{dashboardWeatherCoordinates?.label ?? 'Live feed'}</span>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 w-full justify-between text-xs"
+                  onClick={() => navigate('/app/weather')}
+                >
+                  Open Weather Planning
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                Add a property weather station or area coordinates to surface live outdoor conditions here.
+              </div>
+            )}
+          </Card>
+
           <Card className="space-y-3 p-4">
             <div className="flex items-center justify-between">
               <h3 className="flex items-center gap-2 text-sm font-semibold">

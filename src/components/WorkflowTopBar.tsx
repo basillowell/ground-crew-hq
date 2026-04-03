@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Bell, CalendarDays, LogOut, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -42,7 +43,7 @@ const formatDate = (d: Date) =>
     year: 'numeric',
   });
 
-export function WorkflowTopBar({
+export const WorkflowTopBar = memo(function WorkflowTopBar({
   department,
   setDepartment,
   departments,
@@ -219,4 +220,4 @@ export function WorkflowTopBar({
       </div>
     </header>
   );
-}
+});

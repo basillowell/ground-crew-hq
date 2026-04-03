@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import { turfData, type ApplicationArea, type Assignment, type Employee, type Eq
 import { StickyNote, Droplets, CloudSun, MonitorSmartphone, LayoutList, GanttChart } from 'lucide-react';
 import {
   DATA_STORE_UPDATED_EVENT,
+  initializeDataStore,
   loadApplicationAreas,
   loadAssignments,
   loadChemicalApplicationLogs,
@@ -35,6 +37,7 @@ import {
   saveNotes,
   saveTaskRequests,
 } from '@/lib/dataStore';
+import { supabase } from '@/lib/supabase';
 
 function defaultBoardDate() {
   return new Date().toISOString().slice(0, 10);
@@ -65,8 +68,6 @@ export default function WorkboardPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [groupFilter, setGroupFilter] = useState('all');
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
-  const [taskList, setTaskList] = useState<Task[]>([]);
-  const [assignmentList, setAssignmentList] = useState<Assignment[]>([]);
   const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
   const [noteList, setNoteList] = useState<Note[]>([]);
   const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
@@ -74,7 +75,6 @@ export default function WorkboardPage() {
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
-  const [taskRequests, setTaskRequests] = useState<TaskRequest[]>([]);
   const [applicationLogs, setApplicationLogs] = useState(loadChemicalApplicationLogs());
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
@@ -118,17 +118,36 @@ export default function WorkboardPage() {
   const workflowParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const focusedPropertyId = workflowParams.get('property') || '';
   const focusMode = workflowParams.get('focus') || '';
+  const queryClient = useQueryClient();
+
+  const workflowLiveQuery = useQuery<{
+    assignments: Assignment[];
+    taskRequests: TaskRequest[];
+    tasks: Task[];
+  }>({
+    queryKey: ['workflow-live-data'],
+    queryFn: async () => {
+      await initializeDataStore();
+      return {
+        assignments: loadAssignments(),
+        taskRequests: loadTaskRequests(),
+        tasks: loadTasks()
+          .filter((task) => task.status === 'active')
+          .sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999) || left.name.localeCompare(right.name)),
+      };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const assignmentList = workflowLiveQuery.data?.assignments ?? [];
+  const taskRequests = workflowLiveQuery.data?.taskRequests ?? [];
+  const taskList = workflowLiveQuery.data?.tasks ?? [];
 
   useEffect(() => {
     const refresh = () => {
       const storedEmployees = loadEmployees();
       const storedSchedules = loadScheduleEntries();
-      const storedTasks = loadTasks()
-        .filter((task) => task.status === 'active')
-        .sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999) || left.name.localeCompare(right.name));
       setEmployeeList(storedEmployees);
-      setTaskList(storedTasks);
-      setAssignmentList(loadAssignments());
       setApplicationAreas(loadApplicationAreas());
       setNoteList(loadNotes());
       setProperties(loadProperties());
@@ -137,7 +156,6 @@ export default function WorkboardPage() {
       setWeatherLogs(loadWeatherDailyLogs());
       setWeatherLocations(loadWeatherLocations());
       setWorkLocations(loadWorkLocations());
-      setTaskRequests(loadTaskRequests());
       setApplicationLogs(loadChemicalApplicationLogs());
       const firstScheduled =
         storedSchedules.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??
@@ -147,7 +165,7 @@ export default function WorkboardPage() {
       setAssignmentDraft((current) => ({
         ...current,
         employeeId: current.employeeId || firstScheduled,
-        taskId: current.taskId || storedTasks[0]?.id || '',
+        taskId: current.taskId || loadTasks()[0]?.id || '',
       }));
     };
 
@@ -166,6 +184,26 @@ export default function WorkboardPage() {
       window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
     };
   }, [boardDate]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel('workflow-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
+      })
+      .subscribe();
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [queryClient]);
 
   useEffect(() => {
     if (focusedPropertyId) {
@@ -328,8 +366,8 @@ export default function WorkboardPage() {
   );
 
   function persistAssignments(nextAssignments: Assignment[]) {
-    setAssignmentList(nextAssignments);
     saveAssignments(nextAssignments);
+    void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
   }
 
   function persistNotes(nextNotes: Note[]) {
@@ -338,8 +376,8 @@ export default function WorkboardPage() {
   }
 
   function persistTaskRequests(nextRequests: TaskRequest[]) {
-    setTaskRequests(nextRequests);
     saveTaskRequests(nextRequests);
+    void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
   }
 
   function openAssignmentDialog(employeeId: string) {

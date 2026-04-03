@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
 import { DATA_STORE_UPDATED_EVENT, loadApplicationAreas, loadChemicalApplicationLogs, loadEmployees, loadScheduleEntries, loadWeatherDailyLogs, loadWeatherLocations, saveScheduleEntries } from '@/lib/dataStore';
+import { exportScheduleEntriesAsICS } from '@/lib/integrations';
+import { toast } from '@/components/ui/sonner';
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -207,6 +209,30 @@ export default function SchedulerPage() {
     persist(nextEntries);
   }
 
+  function exportWeekToCalendar() {
+    const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
+    const weekEntries = scheduleList.filter(
+      (entry) => activeEmployeeIds.has(entry.employeeId) && weekDays.some((day) => day.date === entry.date),
+    );
+
+    const result = exportScheduleEntriesAsICS({
+      filename: `ground-crew-week-${weekDays[0]?.date ?? toDateKey(currentDate)}.ics`,
+      scheduleEntries: weekEntries,
+      employees: employeeList,
+      title: 'Ground Crew HQ Schedule',
+    });
+
+    if (result.ok) {
+      toast.success(`Calendar export ready`, {
+        description: `${result.data?.eventCount ?? 0} shifts exported to ${result.data?.filename}.`,
+      });
+    } else {
+      toast.error('Calendar export failed', {
+        description: result.error,
+      });
+    }
+  }
+
   return (
     <div className="p-4">
       <div className="grid gap-4 md:grid-cols-3 mb-4">
@@ -281,6 +307,9 @@ export default function SchedulerPage() {
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={copyWeek}>
             <Copy className="h-3 w-3" /> Copy Week
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={exportWeekToCalendar}>
+            <Download className="h-3 w-3" /> Export .ics
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => window.print()}>
             <Download className="h-3 w-3" /> Export PDF

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,10 +11,12 @@ import {
   Wrench, StickyNote, ChevronRight, Play, Pause,
   ArrowLeft, User, CloudSun
 } from 'lucide-react';
-import { loadAssignments, loadEmployees, loadEquipmentUnits, loadTasks } from '@/lib/dataStore';
+import { DATA_STORE_UPDATED_EVENT, initializeDataStore, loadAssignments, loadEmployees, loadEquipmentUnits, loadTasks } from '@/lib/dataStore';
 import { equipmentTypes, type Assignment, type Employee, type Task, type EquipmentUnit } from '@/data/seedData';
 import { toast } from '@/components/ui/sonner';
 import { useNavigate } from 'react-router-dom';
+import { buildOpenStreetMapEmbedUrl, getBrowserLocation } from '@/lib/integrations';
+import { supabase } from '@/lib/supabase';
 
 function QuickNote({ onSubmit }: { onSubmit: (note: string) => void }) {
   const [text, setText] = useState('');
@@ -153,10 +156,57 @@ function EquipmentScanner() {
 
 export default function MobileFieldPage() {
   const navigate = useNavigate();
-  const [assignments] = useState(() => loadAssignments().filter((a) => a.date === new Date().toISOString().slice(0, 10)));
-  const [tasks] = useState(loadTasks);
-  const [employees] = useState(loadEmployees);
+  const queryClient = useQueryClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const fieldDataQuery = useQuery<{
+    assignments: Assignment[];
+    tasks: Task[];
+    employees: Employee[];
+  }>({
+    queryKey: ['mobile-field-data', today],
+    queryFn: async () => {
+      await initializeDataStore();
+      return {
+        assignments: loadAssignments().filter((assignment) => assignment.date === today),
+        tasks: loadTasks(),
+        employees: loadEmployees(),
+      };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const assignments = fieldDataQuery.data?.assignments ?? [];
+  const tasks = fieldDataQuery.data?.tasks ?? [];
+  const employees = fieldDataQuery.data?.employees ?? [];
   const currentEmployee = employees.find((e) => e.status === 'active');
+  const locationQuery = useQuery({
+    queryKey: ['mobile-field-location'],
+    staleTime: 1000 * 60 * 10,
+    queryFn: getBrowserLocation,
+  });
+  const mapUrl = locationQuery.data?.ok && locationQuery.data.data
+    ? buildOpenStreetMapEmbedUrl(locationQuery.data.data.latitude, locationQuery.data.data.longitude)
+    : null;
+
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel('mobile-field-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['mobile-field-data', today] });
+        void queryClient.invalidateQueries({ queryKey: ['dashboard-live-data'] });
+        window.dispatchEvent(new CustomEvent(DATA_STORE_UPDATED_EVENT, { detail: { table: 'schedule_entries' } }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['mobile-field-data', today] });
+        void queryClient.invalidateQueries({ queryKey: ['dashboard-live-data'] });
+        window.dispatchEvent(new CustomEvent(DATA_STORE_UPDATED_EVENT, { detail: { table: 'assignments' } }));
+      })
+      .subscribe();
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [queryClient, today]);
 
   return (
     <div className="max-w-lg mx-auto p-4 space-y-4">
@@ -176,6 +226,43 @@ export default function MobileFieldPage() {
           {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
       </div>
+
+      <Card className="overflow-hidden">
+        <div className="border-b bg-muted/30 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <MapPin className="h-4 w-4 text-primary" />
+            Crew Location
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Native device geolocation with OpenStreetMap for live field awareness.
+          </p>
+        </div>
+        {mapUrl ? (
+          <>
+            <iframe
+              title="Current field location"
+              src={mapUrl}
+              className="h-52 w-full border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+            <div className="flex items-center justify-between px-4 py-3 text-xs text-muted-foreground">
+              <span>
+                {locationQuery.data?.data?.latitude}, {locationQuery.data?.data?.longitude}
+              </span>
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => locationQuery.refetch()}>
+                Refresh
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="px-4 py-6 text-sm text-muted-foreground">
+            {locationQuery.isLoading
+              ? 'Checking device location...'
+              : locationQuery.data?.error || 'Allow location access to enable field tracking.'}
+          </div>
+        )}
+      </Card>
 
       <Tabs defaultValue="tasks" className="w-full">
         <TabsList className="w-full grid grid-cols-3">

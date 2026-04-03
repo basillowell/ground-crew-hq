@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -65,7 +66,7 @@ function statusBadgeVariant(status: TaskStatus): 'default' | 'secondary' | 'outl
 }
 
 export default function TasksCatalogPage() {
-  const [taskList, setTaskList] = useState<Task[]>([]);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
@@ -75,9 +76,11 @@ export default function TasksCatalogPage() {
   const [draft, setDraft] = useState<TaskDraft>(defaultDraft);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
-  useEffect(() => {
-    setTaskList(loadTasks().map(normalizeTask));
-  }, []);
+  const { data: taskList = [], isLoading } = useQuery<Task[]>({
+    queryKey: ['tasks-catalog'],
+    queryFn: async () => loadTasks(),
+    staleTime: 60 * 1000,
+  });
 
   const normalizedTasks = useMemo(
     () => taskList.map((task, index) => normalizeTask(task, index)),
@@ -126,12 +129,13 @@ export default function TasksCatalogPage() {
   const activeCount = normalizedTasks.filter((task) => task.status === 'active').length;
   const inactiveCount = normalizedTasks.filter((task) => task.status === 'inactive').length;
   const archivedCount = normalizedTasks.filter((task) => task.status === 'archived').length;
+  const selectedTasks = normalizedTasks.filter((task) => selectedIds.includes(task.id));
 
   function persistTasks(nextTasks: Task[]) {
     const normalized = nextTasks.map((task, index) => normalizeTask(task, index)).sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999));
     const resequenced = normalized.map((task, index) => ({ ...task, priority: index + 1 }));
-    setTaskList(resequenced);
     saveTasks(resequenced);
+    queryClient.setQueryData<Task[]>(['tasks-catalog'], resequenced);
   }
 
   function openAddDialog() {
@@ -241,6 +245,43 @@ export default function TasksCatalogPage() {
   }
 
   const allFilteredSelected = filteredTasks.length > 0 && filteredTasks.every((task) => selectedIds.includes(task.id));
+
+  if (isLoading) {
+    return (
+      <div className="p-4 max-w-7xl mx-auto space-y-4">
+        <div className="space-y-2">
+          <div className="h-8 w-56 animate-pulse rounded-lg bg-muted/60" />
+          <div className="h-4 w-96 animate-pulse rounded bg-muted/40" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index} className="p-4">
+              <div className="space-y-3">
+                <div className="h-3 w-20 animate-pulse rounded bg-muted/40" />
+                <div className="h-8 w-16 animate-pulse rounded bg-muted/60" />
+              </div>
+            </Card>
+          ))}
+        </div>
+        <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
+          <Card className="p-4">
+            <div className="space-y-3">
+              <div className="h-10 w-full animate-pulse rounded-lg bg-muted/40" />
+              <div className="h-10 w-full animate-pulse rounded-lg bg-muted/40" />
+              <div className="h-10 w-full animate-pulse rounded-lg bg-muted/40" />
+            </div>
+          </Card>
+          <Card className="p-5">
+            <div className="space-y-3">
+              <div className="h-4 w-32 animate-pulse rounded bg-muted/40" />
+              <div className="h-24 w-full animate-pulse rounded-2xl bg-muted/40" />
+              <div className="h-24 w-full animate-pulse rounded-2xl bg-muted/40" />
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">

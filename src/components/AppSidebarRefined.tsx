@@ -16,7 +16,7 @@ import {
   Building2,
   Smartphone,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { memo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import { NavLink } from '@/components/NavLink';
@@ -115,7 +115,7 @@ function resolveNavRoleFromMetadata(authUser?: {
   return metadataRole === 'admin' ? 'admin' : 'employee';
 }
 
-export function AppSidebarRefined() {
+export const AppSidebarRefined = memo(function AppSidebarRefined() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
@@ -234,4 +234,4 @@ export function AppSidebarRefined() {
       </SidebarFooter>
     </Sidebar>
   );
-}
+});

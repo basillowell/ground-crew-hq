@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CloudSun, Crosshair, Droplets, MapPin, PencilLine, Plus, Radar, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
@@ -35,6 +37,7 @@ import {
 } from '@/lib/dataStore';
 import { toast } from '@/components/ui/sonner';
 import { fetchPrimaryStationSnapshot, fetchStationForecastDetail, fetchWeatherStationSuggestions, type GeocodeResult, type WeatherForecastDetail } from '@/lib/weatherProviders';
+import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -88,6 +91,7 @@ export default function WeatherPage() {
   const [stationSearchStatus, setStationSearchStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [propertyLiveLogs, setPropertyLiveLogs] = useState<Record<string, WeatherDailyLog | null>>({});
   const [selectedForecast, setSelectedForecast] = useState<WeatherForecastDetail | null>(null);
+  const [browserCoordinates, setBrowserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
     const locations = loadWeatherLocations();
@@ -105,6 +109,24 @@ export default function WeatherPage() {
     setSelectedWorkLocationId(opsLocations[0]?.id ?? '');
     setWeatherLogs(loadWeatherDailyLogs());
     setRainEntries(loadManualRainfallEntries());
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setBrowserCoordinates({
+          latitude: Number(position.coords.latitude.toFixed(4)),
+          longitude: Number(position.coords.longitude.toFixed(4)),
+        });
+      },
+      () => undefined,
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 1000 * 60 * 30,
+      },
+    );
   }, []);
 
   const selectedLocation = weatherLocations.find((location) => location.id === selectedLocationId) ?? weatherLocations[0];
@@ -545,6 +567,47 @@ export default function WeatherPage() {
   }, [properties, propertyLiveLogs, weatherLocations, weatherStations, weatherLogs]);
 
   const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? locationStations[0];
+  const liveWeatherCoordinates = useMemo(() => {
+    if (typeof selectedLocationPrimary?.latitude === 'number' && typeof selectedLocationPrimary?.longitude === 'number') {
+      return {
+        latitude: selectedLocationPrimary.latitude,
+        longitude: selectedLocationPrimary.longitude,
+        label: `${selectedLocationPrimary.name} · ${selectedLocationPrimary.provider}`,
+      };
+    }
+
+    if (typeof selectedLocation?.latitude === 'number' && typeof selectedLocation?.longitude === 'number') {
+      return {
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
+        label: `${selectedLocation.name} area coordinates`,
+      };
+    }
+
+    if (browserCoordinates) {
+      return {
+        latitude: browserCoordinates.latitude,
+        longitude: browserCoordinates.longitude,
+        label: 'Current device location',
+      };
+    }
+
+    return null;
+  }, [browserCoordinates, selectedLocation, selectedLocationPrimary]);
+
+  const liveForecastQuery = useQuery({
+    queryKey: ['weather-page-open-meteo', selectedLocationId, liveWeatherCoordinates?.latitude, liveWeatherCoordinates?.longitude],
+    enabled: Boolean(liveWeatherCoordinates),
+    staleTime: 1000 * 60 * 30,
+    queryFn: async () =>
+      fetchOpenMeteoWeather({
+        latitude: liveWeatherCoordinates!.latitude,
+        longitude: liveWeatherCoordinates!.longitude,
+      }),
+  });
+
+  const liveConditionMeta = getWeatherConditionMeta(liveForecastQuery.data?.current.weatherCode);
+  const LiveConditionIcon = liveConditionMeta.icon;
   const decisionCards = useMemo(() => {
     if (!latestLog) {
       return [
@@ -611,6 +674,81 @@ export default function WeatherPage() {
               </Card>
             ))}
           </div>
+
+          <Card className="p-5">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">Real-Time Forecast</p>
+                <p className="text-xs text-muted-foreground">
+                  Open-Meteo current conditions and the next 8 hours for the selected property.
+                </p>
+              </div>
+              <Badge variant="outline">
+                {liveWeatherCoordinates?.label ?? 'Waiting for station or device location'}
+              </Badge>
+            </div>
+
+            {liveForecastQuery.isLoading ? (
+              <div className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+                  <Skeleton className="h-36 rounded-2xl" />
+                  <Skeleton className="h-36 rounded-2xl" />
+                </div>
+                <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-8">
+                  {Array.from({ length: 8 }).map((_, index) => (
+                    <Skeleton key={index} className="h-24 rounded-2xl" />
+                  ))}
+                </div>
+              </div>
+            ) : liveForecastQuery.data ? (
+              <>
+                <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+                  <div className="rounded-2xl border bg-background/70 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current Conditions</div>
+                        <div className="mt-3 text-4xl font-semibold">
+                          {Math.round(liveForecastQuery.data.current.temperature)}F
+                        </div>
+                        <div className="mt-1 text-sm text-muted-foreground">{liveConditionMeta.label}</div>
+                        <div className="mt-3 text-xs text-muted-foreground">
+                          Wind {Math.round(liveForecastQuery.data.current.windSpeed)} mph
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+                        <LiveConditionIcon className="h-8 w-8" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border bg-background/70 p-5">
+                    <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Hourly Forecast</div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
+                      {liveForecastQuery.data.hourly.map((point) => {
+                        const pointMeta = getWeatherConditionMeta(point.weatherCode);
+                        const PointIcon = pointMeta.icon;
+                        return (
+                          <div key={point.time} className="rounded-xl bg-muted/25 px-3 py-3 text-center">
+                            <div className="text-[11px] font-medium text-muted-foreground">
+                              {new Date(point.time).toLocaleTimeString([], { hour: 'numeric' })}
+                            </div>
+                            <PointIcon className="mx-auto mt-2 h-4 w-4 text-primary" />
+                            <div className="mt-2 text-sm font-semibold">{Math.round(point.temperature)}F</div>
+                            <div className="mt-1 text-[11px] text-muted-foreground">{point.precipitationProbability}% rain</div>
+                            <div className="text-[11px] text-muted-foreground">{Math.round(point.windSpeed)} mph wind</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-2xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                Connect a station with coordinates or allow location access to load live weather.
+              </div>
+            )}
+          </Card>
 
           <Card className="p-5">
             <div className="mb-4 flex items-center justify-between">

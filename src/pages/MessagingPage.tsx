@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Employee } from '@/data/seedData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,19 +8,78 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Send, Mail, Phone, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { loadEmployees } from '@/lib/dataStore';
+import { initializeDataStore, loadEmployees } from '@/lib/dataStore';
+import { supabase } from '@/lib/supabase';
+
+type MessageRecord = {
+  id: string;
+  subject?: string | null;
+  body?: string | null;
+  sender_id?: string | null;
+  recipient_id?: string | null;
+  created_at?: string | null;
+};
 
 export default function MessagingPage() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [search, setSearch] = useState('');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const employeesQuery = useQuery<Employee[]>({
+    queryKey: ['messaging-employees'],
+    queryFn: async () => {
+      await initializeDataStore();
+      return loadEmployees();
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const authUserQuery = useQuery({
+    queryKey: ['messaging-auth-user'],
+    queryFn: async () => {
+      if (!supabase) return null;
+      const { data } = await supabase.auth.getUser();
+      return data.user ?? null;
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const messagesQuery = useQuery<MessageRecord[]>({
+    queryKey: ['messages', authUserQuery.data?.id ?? 'anonymous'],
+    enabled: Boolean(authUserQuery.data?.id && supabase),
+    queryFn: async () => {
+      if (!supabase || !authUserQuery.data?.id) return [];
+      const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(20);
+      if (error || !Array.isArray(data)) return [];
+      return data.filter((message: any) => {
+        if ('sender_id' in message || 'recipient_id' in message) {
+          return message.sender_id === authUserQuery.data?.id || message.recipient_id === authUserQuery.data?.id;
+        }
+        return true;
+      }) as MessageRecord[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
 
   useEffect(() => {
-    setEmployees(loadEmployees());
-  }, []);
+    if (!supabase || !authUserQuery.data?.id) return;
+    const channel = supabase
+      .channel(`messages-live-${authUserQuery.data.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['messages', authUserQuery.data?.id ?? 'anonymous'] });
+      })
+      .subscribe();
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [authUserQuery.data?.id, queryClient]);
+
+  const employees = employeesQuery.data ?? [];
+  const recentMessages = messagesQuery.data ?? [];
 
   const filtered = useMemo(
     () =>
@@ -78,6 +138,32 @@ export default function MessagingPage() {
       {/* Compose */}
       <div className="flex-1 p-6 flex flex-col max-w-3xl">
         <h2 className="text-lg font-semibold mb-4">Compose Message</h2>
+
+        <div className="mb-4 rounded-xl border bg-muted/20 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold">Recent Messages</div>
+              <div className="text-xs text-muted-foreground">Live inbox activity for the current signed-in user.</div>
+            </div>
+            <Badge variant="outline">{recentMessages.length} recent</Badge>
+          </div>
+          <div className="mt-3 space-y-2">
+            {messagesQuery.isLoading ? (
+              <div className="text-sm text-muted-foreground">Loading recent messages...</div>
+            ) : recentMessages.length > 0 ? (
+              recentMessages.slice(0, 3).map((message) => (
+                <div key={message.id} className="rounded-lg bg-background px-3 py-2">
+                  <div className="text-sm font-medium">{message.subject || 'Message'}</div>
+                  <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{message.body || 'No preview available.'}</div>
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                No live messages yet, or the realtime messages table is not configured.
+              </div>
+            )}
+          </div>
+        </div>
 
         {selected.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">

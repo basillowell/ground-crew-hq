@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
+import { requestBrowserNotificationPermission } from "@/lib/integrations";
+import { supabase } from "@/lib/supabase";
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
@@ -25,6 +27,7 @@ const MobileFieldPage = lazy(() => import("./pages/MobileFieldPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
+const NOTIFICATION_PERMISSION_KEY = "ground-crew-notification-permission-requested";
 
 function RouteFallback() {
   return (
@@ -65,22 +68,58 @@ function AppRoutes() {
   );
 }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/app/*" element={<AppRoutes />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+function AppWithNotificationSetup() {
+  useEffect(() => {
+    if (!supabase || typeof window === "undefined") return;
 
-export default App;
+    let cancelled = false;
+
+    async function maybeRequestNotifications() {
+      const requested = window.localStorage.getItem(NOTIFICATION_PERMISSION_KEY);
+      if (requested) return;
+
+      const { data } = await supabase.auth.getUser();
+      if (!data.user || cancelled) return;
+
+      await requestBrowserNotificationPermission();
+      if (!cancelled) {
+        window.localStorage.setItem(NOTIFICATION_PERMISSION_KEY, "true");
+      }
+    }
+
+    void maybeRequestNotifications();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user && !window.localStorage.getItem(NOTIFICATION_PERMISSION_KEY)) {
+        void requestBrowserNotificationPermission().then(() => {
+          window.localStorage.setItem(NOTIFICATION_PERMISSION_KEY, "true");
+        });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/app/*" element={<AppRoutes />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default AppWithNotificationSetup;
