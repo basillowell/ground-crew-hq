@@ -43,7 +43,9 @@ export function WeatherSnapshotCard({ location, log, compact = false, title = 'W
           <div className="rounded-xl bg-background/70 px-3 py-3">
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Wind</div>
             <div className="mt-1 text-sm font-medium">{log.wind} mph</div>
-            <div className="text-xs text-muted-foreground">{log.date}</div>
+            <div className="text-xs text-muted-foreground">
+              {typeof log.windGust === 'number' ? `Gusts ${log.windGust} mph` : log.date}
+            </div>
           </div>
         </div>
       ) : (
@@ -51,6 +53,20 @@ export function WeatherSnapshotCard({ location, log, compact = false, title = 'W
           No weather reading available for this location yet.
         </div>
       )}
+
+      {log?.alerts?.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {log.alerts.map((alert, index) => (
+            <Badge key={`${alert}-${index}`} variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700">
+              {alert}
+            </Badge>
+          ))}
+        </div>
+      ) : log ? (
+        <div className="mt-3 text-xs text-muted-foreground">
+          {log?.capturedAt ? `Last captured ${new Date(log.capturedAt).toLocaleString()}` : null}
+        </div>
+      ) : null}
     </Card>
   );
 }

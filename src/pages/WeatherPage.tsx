@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import {
@@ -52,6 +53,7 @@ const emptyEntry = {
   temperature: '72',
   humidity: '62',
   wind: '6',
+  windGust: '10',
   et: '0.18',
 };
 
@@ -84,6 +86,7 @@ export default function WeatherPage() {
   const [discoveryAnchor, setDiscoveryAnchor] = useState<GeocodeResult | null>(null);
   const [stationSuggestions, setStationSuggestions] = useState<WeatherStationSuggestion[]>([]);
   const [stationSearchStatus, setStationSearchStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [propertyLiveLogs, setPropertyLiveLogs] = useState<Record<string, WeatherDailyLog | null>>({});
 
   useEffect(() => {
     const locations = loadWeatherLocations();
@@ -165,6 +168,39 @@ export default function WeatherPage() {
       cancelled = true;
     };
   }, [primaryStation, refreshTick, selectedLocation]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydratePropertyWeather() {
+      const nextEntries = await Promise.all(
+        weatherLocations.map(async (location) => {
+          const station = weatherStations
+            .filter((candidate) => candidate.locationId === location.id)
+            .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary))[0];
+
+          if (!station || station.status !== 'online' || station.providerType === 'manual' || station.providerType === 'davis') {
+            return [location.id, null] as const;
+          }
+
+          try {
+            const snapshot = await fetchPrimaryStationSnapshot(location.id, station);
+            return [location.id, snapshot] as const;
+          } catch {
+            return [location.id, null] as const;
+          }
+        }),
+      );
+
+      if (cancelled) return;
+      setPropertyLiveLogs(Object.fromEntries(nextEntries));
+    }
+
+    void hydratePropertyWeather();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTick, weatherLocations, weatherStations]);
 
   function openDialog(mode: EntryMode) {
     setDialogMode(mode);
@@ -435,14 +471,17 @@ export default function WeatherPage() {
         id: `wd-${Date.now()}`,
         locationId: draft.locationId,
         date: draft.date,
+        capturedAt: new Date().toISOString(),
         currentConditions: draft.currentConditions,
         forecast: draft.forecast,
         rainfallTotal: Number(draft.rainfallAmount),
         temperature: Number(draft.temperature),
         humidity: Number(draft.humidity),
         wind: Number(draft.wind),
+        windGust: Number(draft.windGust),
         et: Number(draft.et),
         source: 'manual-override',
+        alerts: [],
         notes: draft.notes,
       };
       const next = [nextLog, ...weatherLogs];
@@ -459,6 +498,61 @@ export default function WeatherPage() {
     { label: 'Manual Overrides', value: manualOverrideCount, icon: PencilLine },
   ]), [locationRain.length, locationStations.length, manualOverrideCount, stationsOnline]);
 
+  const propertyWeatherCards = useMemo(() => {
+    return properties
+      .map((property) => {
+        const location =
+          weatherLocations.find((item) => item.propertyId === property.id) ??
+          weatherLocations.find((item) => item.property === property.name);
+        if (!location) return null;
+        const stations = weatherStations
+          .filter((station) => station.locationId === location.id)
+          .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary));
+        const station = stations[0];
+        const storedLog = [...weatherLogs]
+          .filter((log) => log.locationId === location.id)
+          .sort((left, right) => right.date.localeCompare(left.date))[0];
+        const live = propertyLiveLogs[location.id] ?? null;
+        const log = live ?? storedLog ?? null;
+        return { property, location, station, log };
+      })
+      .filter(Boolean) as { property: Property; location: WeatherLocation; station?: WeatherStation; log: WeatherDailyLog | null }[];
+  }, [properties, propertyLiveLogs, weatherLocations, weatherStations, weatherLogs]);
+
+  const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? locationStations[0];
+  const decisionCards = useMemo(() => {
+    if (!latestLog) {
+      return [
+        { label: 'Event Outlook', value: 'Waiting on data', detail: 'Connect a live station or enter a manual reading.' },
+        { label: 'Spray Window', value: 'Undetermined', detail: 'Need current rain and wind data.' },
+        { label: 'Traffic Risk', value: 'Undetermined', detail: 'Rainfall log not available yet.' },
+      ];
+    }
+
+    const eventOutlook =
+      latestLog.alerts?.some((alert) => alert.toLowerCase().includes('storm')) || latestLog.rainfallTotal >= 0.35
+        ? { value: 'High watch', detail: 'Use this when evaluating tournament, guest, or event setup timing.' }
+        : latestLog.rainfallTotal >= 0.15
+          ? { value: 'Monitor', detail: 'Surface moisture may affect playability and setup windows.' }
+          : { value: 'Favorable', detail: 'No major weather pressure on normal property operations.' };
+
+    const sprayWindow =
+      (latestLog.windGust ?? 0) >= 15 || latestLog.rainfallTotal >= 0.1
+        ? { value: 'Caution', detail: 'Wind or moisture is elevated. Recheck before spraying.' }
+        : { value: 'Open', detail: 'Wind and rainfall are currently within a more favorable operating window.' };
+
+    const trafficRisk =
+      latestLog.rainfallTotal >= 0.2
+        ? { value: 'Soft surfaces', detail: 'Expect cart-path pressure and turf wear risk.' }
+        : { value: 'Normal', detail: 'No unusual rainfall pressure for vehicle or foot traffic.' };
+
+    return [
+      { label: 'Event Outlook', ...eventOutlook },
+      { label: 'Spray Window', ...sprayWindow },
+      { label: 'Traffic Risk', ...trafficRisk },
+    ];
+  }, [latestLog]);
+
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
       <PageHeader
@@ -472,6 +566,197 @@ export default function WeatherPage() {
         </Button>
       </PageHeader>
 
+      <Tabs defaultValue="daily" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="daily">Daily Weather</TabsTrigger>
+          <TabsTrigger value="manage">Weather Management</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="daily" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {summaryCards.map((item) => (
+              <Card key={item.label} className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
+                    <p className="mt-2 text-2xl font-semibold">{item.value}</p>
+                  </div>
+                  <item.icon className="h-5 w-5 text-primary" />
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <Card className="p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Property Weather Now</p>
+                <p className="text-xs text-muted-foreground">Current conditions by property, tied to the chosen live station.</p>
+              </div>
+              <Button size="sm" variant="outline" className="gap-1" onClick={refreshLiveWeather}>
+                <RefreshCcw className="h-3.5 w-3.5" /> Refresh Live Weather
+              </Button>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-3">
+              {propertyWeatherCards.map(({ property, location, station, log }) => (
+                <button
+                  key={property.id}
+                  type="button"
+                  onClick={() => setSelectedLocationId(location.id)}
+                  className={`rounded-2xl border p-4 text-left transition ${selectedLocationId === location.id ? 'bg-accent/40 shadow-sm' : 'hover:bg-muted/20'}`}
+                  style={selectedLocationId === location.id ? { borderColor: `${property.color}66` } : undefined}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">{property.name}</div>
+                      <div className="text-xs text-muted-foreground">{location.name}</div>
+                    </div>
+                    <Badge variant="outline" style={{ borderColor: property.color, color: property.color }}>
+                      {property.shortName}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 text-3xl font-semibold">{log ? `${Math.round(log.temperature)}F` : '--'}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{station ? `${station.name} - ${station.provider}` : 'No station selected'}</div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-xl bg-muted/30 px-2 py-2">
+                      <div className="text-muted-foreground">Rain</div>
+                      <div className="font-medium">{log ? `${log.rainfallTotal.toFixed(2)} in` : '--'}</div>
+                    </div>
+                    <div className="rounded-xl bg-muted/30 px-2 py-2">
+                      <div className="text-muted-foreground">Wind</div>
+                      <div className="font-medium">{log ? `${Math.round(log.wind)} mph` : '--'}</div>
+                    </div>
+                    <div className="rounded-xl bg-muted/30 px-2 py-2">
+                      <div className="text-muted-foreground">Gust</div>
+                      <div className="font-medium">{log ? `${Math.round(log.windGust ?? 0)} mph` : '--'}</div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {selectedLocation ? (
+            <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className="space-y-4">
+                <WeatherSnapshotCard location={selectedLocation} log={latestLog} title="Daily Weather" />
+
+                <Card className="p-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold">Selected Live Station</p>
+                    <p className="text-xs text-muted-foreground">This station currently drives live weather for the selected property.</p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border bg-background/70 p-4">
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Station</div>
+                      <div className="mt-2 text-sm font-semibold">{selectedLocationPrimary ? selectedLocationPrimary.name : 'No live station selected'}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {selectedLocationPrimary ? `${selectedLocationPrimary.provider} - ${selectedLocationPrimary.stationCode}` : 'Open Weather Management to connect a station.'}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border bg-background/70 p-4">
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current Alerts</div>
+                      <div className="mt-2 text-sm font-semibold">{latestLog?.alerts?.length ? latestLog.alerts.join(', ') : 'No major alerts'}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {latestLog?.capturedAt ? `Last capture ${new Date(latestLog.capturedAt).toLocaleString()}` : 'No live capture yet'}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">Rainfall + Wind History</p>
+                      <p className="text-xs text-muted-foreground">Use this for future agronomic reflection, not just current dispatch.</p>
+                    </div>
+                    <Badge variant="outline">{selectedLocation.name}</Badge>
+                  </div>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <AreaChart data={locationLogs.map((log) => ({ date: log.date.slice(5), rainfall: log.rainfallTotal, gust: log.windGust ?? 0 }))}>
+                      <defs>
+                        <linearGradient id="rainDaily" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="0%" stopColor="hsl(var(--info))" stopOpacity={0.45} />
+                          <stop offset="100%" stopColor="hsl(var(--info))" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="rainfall" stroke="hsl(var(--info))" fill="url(#rainDaily)" />
+                      <Area type="monotone" dataKey="gust" stroke="hsl(var(--warning))" fillOpacity={0} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Card>
+              </div>
+
+              <div className="space-y-4">
+                <Card className="p-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold">Weather Decision Support</p>
+                    <p className="text-xs text-muted-foreground">Built for event timing, spray windows, and revenue-sensitive course decisions.</p>
+                  </div>
+                  <div className="space-y-3">
+                    {decisionCards.map((card) => (
+                      <div key={card.label} className="rounded-xl border bg-background/70 p-4">
+                        <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{card.label}</div>
+                        <div className="mt-2 text-base font-semibold">{card.value}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{card.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
+                <Card className="p-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold">Forecast Service Strategy</p>
+                    <p className="text-xs text-muted-foreground">Use free live feeds now, and connect paid services next for deeper forecast confidence.</p>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="rounded-xl border bg-background/70 p-4">
+                      <div className="font-medium">Live today</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Open-Meteo, NOAA, and airport observations are active in this app today.</div>
+                    </div>
+                    <div className="rounded-xl border bg-background/70 p-4">
+                      <div className="font-medium">Paid service ready</div>
+                      <div className="mt-1 text-xs text-muted-foreground">WeatherBug, DTN, or Tomorrow.io can be connected next as premium forecast layers per property.</div>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold">Recent Rainfall Entries</p>
+                    <p className="text-xs text-muted-foreground">Manual gauge entries stay visible whenever they are more trustworthy than the live feed.</p>
+                  </div>
+                  <div className="space-y-3">
+                    {locationRain.length === 0 ? (
+                      <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                        No manual rainfall entries yet.
+                      </div>
+                    ) : (
+                      locationRain.slice(0, 6).map((entry) => (
+                        <div key={entry.id} className="rounded-xl border bg-background/70 px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium">{entry.date}</p>
+                              <p className="text-xs text-muted-foreground">{entry.enteredBy}</p>
+                            </div>
+                            <Badge variant="outline">{entry.rainfallAmount.toFixed(2)} in</Badge>
+                          </div>
+                          {entry.notes ? <p className="mt-2 text-xs text-muted-foreground">{entry.notes}</p> : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              </div>
+            </div>
+          ) : null}
+        </TabsContent>
+
+        <TabsContent value="manage">
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="space-y-3">
           <Card className="p-4 space-y-3">
@@ -923,6 +1208,8 @@ export default function WeatherPage() {
           </div>
         </div>
       </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-xl">
@@ -966,7 +1253,7 @@ export default function WeatherPage() {
                     <Input className="mt-1" value={draft.forecast} onChange={(e) => setDraft((current) => ({ ...current, forecast: e.target.value }))} />
                   </div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-5">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Temp</label>
                     <Input className="mt-1" type="number" value={draft.temperature} onChange={(e) => setDraft((current) => ({ ...current, temperature: e.target.value }))} />
@@ -978,6 +1265,10 @@ export default function WeatherPage() {
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Wind</label>
                     <Input className="mt-1" type="number" value={draft.wind} onChange={(e) => setDraft((current) => ({ ...current, wind: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Gust</label>
+                    <Input className="mt-1" type="number" value={draft.windGust} onChange={(e) => setDraft((current) => ({ ...current, windGust: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">ET</label>

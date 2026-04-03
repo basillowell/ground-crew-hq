@@ -148,20 +148,26 @@ alter table public.weather_locations add column if not exists longitude numeric;
 
 alter table public.weather_stations add column if not exists "stationCategory" text not null default 'manual';
 alter table public.weather_stations add column if not exists "distanceMiles" numeric;
+alter table public.weather_daily_logs add column if not exists "capturedAt" text not null default '';
+alter table public.weather_daily_logs add column if not exists "windGust" numeric not null default 0;
+alter table public.weather_daily_logs add column if not exists alerts text[] not null default '{}';
 
 create table if not exists public.weather_daily_logs (
   id text primary key,
   "locationId" text not null,
   "stationId" text,
   "date" date not null,
+  "capturedAt" text not null default '',
   "currentConditions" text not null,
   forecast text not null,
   "rainfallTotal" numeric not null default 0,
   temperature numeric not null default 0,
   humidity numeric not null default 0,
   wind numeric not null default 0,
+  "windGust" numeric not null default 0,
   et numeric not null default 0,
   source text not null,
+  alerts text[] not null default '{}',
   notes text
 );
 

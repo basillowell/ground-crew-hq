@@ -147,14 +147,17 @@ export interface WeatherDailyLog {
   locationId: string;
   stationId?: string;
   date: string;
+  capturedAt?: string;
   currentConditions: string;
   forecast: string;
   rainfallTotal: number;
   temperature: number;
   humidity: number;
   wind: number;
+  windGust?: number;
   et: number;
   source: 'station' | 'manual-override';
+  alerts?: string[];
   notes?: string;
 }
 
@@ -639,10 +642,10 @@ export const weatherStations: WeatherStation[] = [
 ];
 
 export const weatherDailyLogs: WeatherDailyLog[] = [
-  { id: 'wd1', locationId: 'wl1', stationId: 'ws1', date: '2024-03-25', currentConditions: 'Partly Cloudy', forecast: 'Warm afternoon with light wind', rainfallTotal: 0.08, temperature: 71, humidity: 64, wind: 7, et: 0.17, source: 'station' },
-  { id: 'wd2', locationId: 'wl1', stationId: 'ws1', date: '2024-03-26', currentConditions: 'Sunny', forecast: 'Dry and bright', rainfallTotal: 0.0, temperature: 76, humidity: 58, wind: 6, et: 0.19, source: 'station' },
-  { id: 'wd3', locationId: 'wl2', stationId: 'ws3', date: '2024-03-25', currentConditions: 'Manual Override', forecast: 'Station offline, conditions entered manually', rainfallTotal: 0.12, temperature: 69, humidity: 70, wind: 8, et: 0.14, source: 'manual-override', notes: 'South station offline at 5:40 AM' },
-  { id: 'wd4', locationId: 'wl3', stationId: 'ws4', date: '2024-03-25', currentConditions: 'Cloudy', forecast: 'Chance of passing shower after 4 PM', rainfallTotal: 0.04, temperature: 68, humidity: 73, wind: 9, et: 0.12, source: 'station' },
+  { id: 'wd1', locationId: 'wl1', stationId: 'ws1', date: '2024-03-25', capturedAt: '2024-03-25T06:10:00', currentConditions: 'Partly Cloudy', forecast: 'Warm afternoon with light wind', rainfallTotal: 0.08, temperature: 71, humidity: 64, wind: 7, windGust: 11, et: 0.17, source: 'station', alerts: [] },
+  { id: 'wd2', locationId: 'wl1', stationId: 'ws1', date: '2024-03-26', capturedAt: '2024-03-26T06:00:00', currentConditions: 'Sunny', forecast: 'Dry and bright', rainfallTotal: 0.0, temperature: 76, humidity: 58, wind: 6, windGust: 9, et: 0.19, source: 'station', alerts: [] },
+  { id: 'wd3', locationId: 'wl2', stationId: 'ws3', date: '2024-03-25', capturedAt: '2024-03-25T05:40:00', currentConditions: 'Manual Override', forecast: 'Station offline, conditions entered manually', rainfallTotal: 0.12, temperature: 69, humidity: 70, wind: 8, windGust: 13, et: 0.14, source: 'manual-override', alerts: ['Station offline'], notes: 'South station offline at 5:40 AM' },
+  { id: 'wd4', locationId: 'wl3', stationId: 'ws4', date: '2024-03-25', capturedAt: '2024-03-25T06:05:00', currentConditions: 'Cloudy', forecast: 'Chance of passing shower after 4 PM', rainfallTotal: 0.04, temperature: 68, humidity: 73, wind: 9, windGust: 14, et: 0.12, source: 'station', alerts: ['Shower risk after 4 PM'] },
 ];
 
 export const manualRainfallEntries: ManualRainfallEntry[] = [

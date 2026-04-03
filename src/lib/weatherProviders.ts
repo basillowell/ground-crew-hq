@@ -170,7 +170,7 @@ export async function fetchPrimaryStationSnapshot(
     const params = new URLSearchParams({
       latitude: String(station.latitude),
       longitude: String(station.longitude),
-      current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code',
+      current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code',
       daily: 'precipitation_sum,et0_fao_evapotranspiration',
       timezone: station.timeZone || 'auto',
       forecast_days: '1',
@@ -185,24 +185,32 @@ export async function fetchPrimaryStationSnapshot(
     const temperature = Number(payload?.current?.temperature_2m ?? 0);
     const humidity = Number(payload?.current?.relative_humidity_2m ?? 0);
     const wind = Number(payload?.current?.wind_speed_10m ?? 0);
+    const windGust = Number(payload?.current?.wind_gusts_10m ?? 0);
     const weatherCode = Number(payload?.current?.weather_code ?? -1);
     const rainfallTotal = Number(payload?.daily?.precipitation_sum?.[0] ?? 0);
     const et = Number(payload?.daily?.et0_fao_evapotranspiration?.[0] ?? 0);
     const date = String(payload?.daily?.time?.[0] ?? new Date().toISOString().slice(0, 10));
+    const alerts: string[] = [];
+    if (rainfallTotal >= 0.25) alerts.push('Rainfall accumulation');
+    if (windGust >= 20) alerts.push('High wind gusts');
+    if ([95, 96, 99].includes(weatherCode)) alerts.push('Storm risk');
 
     return {
       id: `live-${station.id}-${date}`,
       locationId,
       stationId: station.id,
       date,
+      capturedAt: new Date().toISOString(),
       currentConditions: weatherCodeToConditions(weatherCode),
       forecast: weatherCodeToForecast(weatherCode),
       rainfallTotal,
       temperature,
       humidity,
       wind,
+      windGust,
       et,
       source: 'station',
+      alerts,
       notes: `Live weather from ${station.provider}`,
     };
   }
@@ -225,25 +233,36 @@ export async function fetchPrimaryStationSnapshot(
     const temperatureC = noaaTextValue(properties?.temperature);
     const humidityValue = noaaTextValue(properties?.relativeHumidity);
     const windMps = noaaTextValue(properties?.windSpeed);
+    const gustMps = noaaTextValue(properties?.windGust);
     const precipMm =
       noaaTextValue(properties?.precipitationLastHour) ??
       noaaTextValue(properties?.precipitationLast3Hours) ??
       noaaTextValue(properties?.precipitationLast6Hours) ??
       0;
+    const gustMph = gustMps != null ? metersPerSecondToMph(gustMps) : 0;
+    const windMph = windMps != null ? metersPerSecondToMph(windMps) : 0;
+    const rainfallInches = Number((precipMm / 25.4).toFixed(2));
+    const alerts: string[] = [];
+    if (rainfallInches >= 0.25) alerts.push('Rainfall accumulation');
+    if (gustMph >= 20) alerts.push('High wind gusts');
+    if (String(properties?.textDescription ?? '').toLowerCase().includes('thunder')) alerts.push('Storm risk');
 
     return {
       id: `live-${station.id}-${date}`,
       locationId,
       stationId: station.id,
       date,
+      capturedAt: timestamp,
       currentConditions: String(properties?.textDescription ?? (station.providerType === 'airport' ? 'Airport Observation' : 'NOAA Observation')),
       forecast: station.providerType === 'airport' ? 'Airport observation station selected for live weather' : 'NOAA observation station selected for live weather',
-      rainfallTotal: Number((precipMm / 25.4).toFixed(2)),
+      rainfallTotal: rainfallInches,
       temperature: Number(((temperatureC != null ? celsiusToFahrenheit(temperatureC) : 0)).toFixed(1)),
       humidity: Number((humidityValue ?? 0).toFixed(0)),
-      wind: Number(((windMps != null ? metersPerSecondToMph(windMps) : 0)).toFixed(1)),
+      wind: Number((windMph).toFixed(1)),
+      windGust: Number((gustMph).toFixed(1)),
       et: 0,
       source: 'station',
+      alerts,
       notes: `Live observation from ${station.provider}`,
     };
   }
