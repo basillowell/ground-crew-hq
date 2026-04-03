@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { Employee, ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,9 +9,12 @@ import { ScheduleTemplates } from '@/components/scheduler/ScheduleTemplates';
 import { Input } from '@/components/ui/input';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
-import { DATA_STORE_UPDATED_EVENT, loadApplicationAreas, loadChemicalApplicationLogs, loadEmployees, loadScheduleEntries, loadWeatherDailyLogs, loadWeatherLocations, saveScheduleEntries } from '@/lib/dataStore';
+import { DATA_STORE_UPDATED_EVENT, loadApplicationAreas, loadChemicalApplicationLogs, loadWeatherDailyLogs, loadWeatherLocations } from '@/lib/dataStore';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { toast } from '@/components/ui/sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useEmployees } from '@/lib/supabase-queries';
+import { supabase } from '@/lib/supabase';
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -49,10 +53,9 @@ const statusColors: Record<string, string> = {
 };
 
 export default function SchedulerPage() {
+  const queryClient = useQueryClient();
+  const { currentPropertyId, currentUser, isAdmin, isManager } = useAuth();
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [propertyId, setPropertyId] = useState('');
-  const [employeeList, setEmployeeList] = useState<Employee[]>([]);
-  const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
   const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
   const [search, setSearch] = useState('');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
@@ -60,7 +63,44 @@ export default function SchedulerPage() {
   const [applicationLogs, setApplicationLogs] = useState<ChemicalApplicationLog[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const weekDays = useMemo(() => buildWeekDays(currentDate), [currentDate]);
+  const today = useMemo(() => toDateKey(new Date()), []);
+  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
+  const employeesQuery = useEmployees(propertyScope);
+  const weekScheduleQueries = useQueries({
+    queries: weekDays.map((day) => ({
+      queryKey: ['schedule-entries', day.date, propertyScope ?? 'all'],
+      queryFn: async () => {
+        if (!supabase) return [] as ScheduleEntry[];
+        let query = supabase
+          .from('schedule_entries')
+          .select('*')
+          .eq('date', day.date)
+          .order('shift_start');
+        if (propertyScope && propertyScope !== 'all') {
+          query = query.eq('property_id', propertyScope);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        return (data ?? []).map((row) => ({
+          id: row.id,
+          employeeId: row.employee_id,
+          date: row.date,
+          shiftStart: String(row.shift_start).slice(0, 5),
+          shiftEnd: String(row.shift_end).slice(0, 5),
+          status: row.status as ScheduleEntry['status'],
+        }));
+      },
+      staleTime: 1000 * 60 * 5,
+    })),
+  });
+  const employeeList = employeesQuery.data ?? [];
+  const scheduleList = useMemo(
+    () => weekScheduleQueries.flatMap((query) => query.data ?? []),
+    [weekScheduleQueries],
+  );
+  const isSchedulerLoading = employeesQuery.isLoading || weekScheduleQueries.some((query) => query.isLoading);
   const [draft, setDraft] = useState({
     employeeId: '',
     date: toDateKey(startOfWeek(new Date())),
@@ -71,27 +111,16 @@ export default function SchedulerPage() {
 
   useEffect(() => {
     const refresh = () => {
-      const storedEmployees = loadEmployees();
-      setEmployeeList(storedEmployees);
       setApplicationAreas(loadApplicationAreas());
-      setScheduleList(loadScheduleEntries());
       setWeatherLogs(loadWeatherDailyLogs());
       setWeatherLocations(loadWeatherLocations());
       setApplicationLogs(loadChemicalApplicationLogs());
-      setSelectedEmployeeId(storedEmployees.find((employee) => employee.status === 'active')?.id ?? '');
-      setDraft((current) => ({
-        ...current,
-        employeeId: storedEmployees.find((employee) => employee.status === 'active')?.id ?? current.employeeId,
-      }));
     };
 
     const handleOperationsContext = (event: Event) => {
-      const detail = (event as CustomEvent<{ date?: string; propertyId?: string }>).detail;
+      const detail = (event as CustomEvent<{ date?: string }>).detail;
       if (detail?.date) {
         setCurrentDate(new Date(`${detail.date}T12:00:00`));
-      }
-      if (detail?.propertyId !== undefined) {
-        setPropertyId(detail.propertyId);
       }
     };
 
@@ -104,15 +133,26 @@ export default function SchedulerPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const firstActiveEmployeeId = employeeList.find((employee) => employee.status === 'active')?.id ?? '';
+    setSelectedEmployeeId((current) => (current && employeeList.some((employee) => employee.id === current) ? current : firstActiveEmployeeId));
+    setDraft((current) => ({
+      ...current,
+      employeeId: current.employeeId && employeeList.some((employee) => employee.id === current.employeeId)
+        ? current.employeeId
+        : firstActiveEmployeeId,
+    }));
+  }, [employeeList]);
+
   const activeEmployees = useMemo(
     () =>
       employeeList.filter(
         (employee) =>
           employee.status === 'active' &&
-          (!propertyId || employee.propertyId === propertyId) &&
+          (!propertyScope || propertyScope === 'all' || employee.propertyId === propertyScope) &&
           `${employee.firstName} ${employee.lastName} ${employee.group}`.toLowerCase().includes(search.toLowerCase()),
       ),
-    [employeeList, propertyId, search],
+    [employeeList, propertyScope, search],
   );
 
   const summary = useMemo(
@@ -144,11 +184,6 @@ export default function SchedulerPage() {
     [applicationLogs, weekDays],
   );
 
-  function persist(nextEntries: ScheduleEntry[]) {
-    setScheduleList(nextEntries);
-    saveScheduleEntries(nextEntries);
-  }
-
   function openAddShift(employeeId?: string, date?: string) {
     const targetEmployeeId = employeeId ?? selectedEmployeeId ?? activeEmployees[0]?.id ?? '';
     setDraft({
@@ -161,52 +196,103 @@ export default function SchedulerPage() {
     setDialogOpen(true);
   }
 
-  function handleSaveShift() {
+  async function handleSaveShift() {
     if (!draft.employeeId || !draft.date) return;
-
-    const existing = scheduleList.find((entry) => entry.employeeId === draft.employeeId && entry.date === draft.date);
-    let nextEntries: ScheduleEntry[];
-
-    if (existing) {
-      nextEntries = scheduleList.map((entry) =>
-        entry.id === existing.id ? { ...entry, ...draft } : entry,
-      );
-    } else {
-      nextEntries = [
-        ...scheduleList,
-        {
-          id: `s${Date.now()}`,
-          employeeId: draft.employeeId,
-          date: draft.date,
-          shiftStart: draft.shiftStart,
-          shiftEnd: draft.shiftEnd,
-          status: draft.status,
-        },
-      ];
+    if (!supabase) {
+      toast.error('Supabase is not configured for schedule updates.');
+      return;
     }
 
-    persist(nextEntries);
+    const existing = scheduleList.find((entry) => entry.employeeId === draft.employeeId && entry.date === draft.date);
+    const employee = employeeList.find((entry) => entry.id === draft.employeeId);
+    const propertyId = employee?.propertyId || (propertyScope !== 'all' ? propertyScope : '') || currentUser?.propertyId || '';
+    if (!propertyId) {
+      toast.error('Select or assign a property before saving a shift.');
+      return;
+    }
+    setIsSaving(true);
+
+    const payload = {
+      employee_id: draft.employeeId,
+      property_id: propertyId,
+      date: draft.date,
+      shift_start: draft.shiftStart,
+      shift_end: draft.shiftEnd,
+      status: draft.status,
+    };
+
+    const response = existing
+      ? await supabase.from('schedule_entries').update(payload).eq('id', existing.id)
+      : await supabase.from('schedule_entries').insert(payload);
+
+    setIsSaving(false);
+
+    if (response.error) {
+      toast.error('Shift save failed', {
+        description: response.error.message,
+      });
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
     setDialogOpen(false);
+    toast.success(existing ? 'Shift updated' : 'Shift added');
   }
 
-  function copyWeek() {
+  async function copyWeek() {
+    if (!supabase) {
+      toast.error('Supabase is not configured for schedule updates.');
+      return;
+    }
     const sourceDate = weekDays[0]?.date;
     if (!sourceDate) return;
-    const nextEntries = [...scheduleList];
+    const inserts: Array<{
+      employee_id: string;
+      property_id: string;
+      date: string;
+      shift_start: string;
+      shift_end: string;
+      status: ScheduleEntry['status'];
+    }> = [];
 
     for (const employee of activeEmployees) {
       const base = scheduleList.find((entry) => entry.employeeId === employee.id && entry.date === sourceDate);
       if (!base) continue;
 
       for (const date of weekDays.slice(1).map((day) => day.date)) {
-        const exists = nextEntries.find((entry) => entry.employeeId === employee.id && entry.date === date);
+        const exists = scheduleList.find((entry) => entry.employeeId === employee.id && entry.date === date);
         if (!exists) {
-          nextEntries.push({ ...base, id: `s${Date.now()}-${employee.id}-${date}`, date });
+          inserts.push({
+            employee_id: employee.id,
+            property_id: employee.propertyId || currentUser?.propertyId || '',
+            date,
+            shift_start: base.shiftStart,
+            shift_end: base.shiftEnd,
+            status: base.status,
+          });
         }
       }
     }
 
-    persist(nextEntries);
+    if (inserts.length === 0) {
+      toast.message('Nothing to copy', {
+        description: 'Every remaining day already has an entry for the selected week.',
+      });
+      return;
+    }
+
+    const { error } = await supabase.from('schedule_entries').insert(inserts);
+    if (error) {
+      toast.error('Week copy failed', {
+        description: error.message,
+      });
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
+    toast.success('Week copied', {
+      description: `${inserts.length} shifts added from the first day of the week.`,
+    });
   }
 
   function exportWeekToCalendar() {
@@ -235,6 +321,13 @@ export default function SchedulerPage() {
 
   return (
     <div className="p-4">
+      {isSchedulerLoading ? (
+        <div className="grid gap-4 md:grid-cols-3 mb-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-32 animate-pulse rounded-3xl border bg-card/70" />
+          ))}
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-3 mb-4">
         <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
           <div className="text-sm text-muted-foreground mb-1">Scheduled shifts</div>
@@ -345,7 +438,7 @@ export default function SchedulerPage() {
                       </div>
                       <div>
                         <div className="font-medium text-xs">{emp.firstName} {emp.lastName}</div>
-                        <div className="text-[10px] text-muted-foreground">{emp.group}</div>
+                  <div className="text-[10px] text-muted-foreground">{emp.group || emp.department}</div>
                       </div>
                     </div>
                   </td>
@@ -463,7 +556,9 @@ export default function SchedulerPage() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveShift}>Save Shift</Button>
+            <Button onClick={() => void handleSaveShift()} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Shift'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -10,6 +10,12 @@ interface WeatherSnapshotCardProps {
 }
 
 export function WeatherSnapshotCard({ location, log, compact = false, title = 'Weather Snapshot' }: WeatherSnapshotCardProps) {
+  const rainfallTotal = typeof log?.rainfallTotal === 'number' ? log.rainfallTotal : 0;
+  const et = typeof log?.et === 'number' ? log.et : 0;
+  const humidity = typeof log?.humidity === 'number' ? log.humidity : 0;
+  const temperature = typeof log?.temperature === 'number' ? log.temperature : '--';
+  const wind = typeof log?.wind === 'number' ? log.wind : '--';
+
   return (
     <Card className={`border-primary/10 bg-gradient-to-br from-background to-accent/30 ${compact ? 'p-4' : 'p-5'}`}>
       <div className="flex items-start justify-between gap-3">
@@ -32,17 +38,17 @@ export function WeatherSnapshotCard({ location, log, compact = false, title = 'W
           </div>
           <div className="rounded-xl bg-background/70 px-3 py-3">
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Rain / ET</div>
-            <div className="mt-1 text-sm font-medium">{log.rainfallTotal.toFixed(2)} in rain</div>
-            <div className="text-xs text-muted-foreground">{log.et.toFixed(2)} ET</div>
+            <div className="mt-1 text-sm font-medium">{rainfallTotal.toFixed(2)} in rain</div>
+            <div className="text-xs text-muted-foreground">{et.toFixed(2)} ET</div>
           </div>
           <div className="rounded-xl bg-background/70 px-3 py-3">
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Temp / Humidity</div>
-            <div className="mt-1 text-sm font-medium">{log.temperature} F</div>
-            <div className="text-xs text-muted-foreground">{log.humidity}% humidity</div>
+            <div className="mt-1 text-sm font-medium">{temperature} F</div>
+            <div className="text-xs text-muted-foreground">{humidity}% humidity</div>
           </div>
           <div className="rounded-xl bg-background/70 px-3 py-3">
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Wind</div>
-            <div className="mt-1 text-sm font-medium">{log.wind} mph</div>
+            <div className="mt-1 text-sm font-medium">{wind} mph</div>
             <div className="text-xs text-muted-foreground">
               {typeof log.windGust === 'number' ? `Gusts ${log.windGust} mph` : log.date}
             </div>
