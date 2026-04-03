@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Clock3, MapPin, MessageSquare, Phone, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, MapPin, MessageSquare, Phone, PlayCircle, ShieldAlert } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { getBrowserLocation } from '@/lib/integrations';
 import { supabase } from '@/lib/supabase';
 import { useAssignments, useClockEvents, useEmployees, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
+import { computeTimecardSummary, getOrderedAssignmentsForEmployee, getShiftMinutes } from '@/lib/laborMetrics';
 
 const MobileFieldMap = lazy(() =>
   import('@/components/field/MobileFieldMap').then((module) => ({ default: module.MobileFieldMap })),
@@ -99,28 +100,26 @@ export default function MobileFieldWorkspacePage() {
   );
 
   const employeeAssignments = useMemo(
-    () =>
-      assignments
-        .filter((assignment) => assignment.employeeId === currentEmployee?.id)
-        .sort((left, right) => {
-          if ((left.status ?? 'planned') === 'completed' && (right.status ?? 'planned') !== 'completed') return 1;
-          if ((right.status ?? 'planned') === 'completed' && (left.status ?? 'planned') !== 'completed') return -1;
-          return left.startTime.localeCompare(right.startTime);
-        }),
-    [assignments, currentEmployee?.id],
+    () => getOrderedAssignmentsForEmployee(assignments.filter((assignment) => assignment.employeeId === currentEmployee?.id), tasks),
+    [assignments, currentEmployee?.id, tasks],
   );
 
-  const currentAssignment = employeeAssignments.find((assignment) => assignment.status !== 'completed') ?? employeeAssignments[0] ?? null;
+  const currentAssignment =
+    employeeAssignments.find((assignment) => assignment.status === 'in-progress') ??
+    employeeAssignments.find((assignment) => assignment.status !== 'completed') ??
+    employeeAssignments[0] ??
+    null;
+  const nextAssignment = employeeAssignments.find(
+    (assignment) => assignment.id !== currentAssignment?.id && assignment.status !== 'completed',
+  ) ?? null;
   const currentTask = tasks.find((task) => task.id === currentAssignment?.taskId);
-  const latestClockEvent = clockEvents.find((event) => event.employeeId === currentEmployee?.id) ?? null;
-  const clockStatusLabel =
-    latestClockEvent?.eventType === 'in'
-      ? 'Clocked in'
-      : latestClockEvent?.eventType === 'break'
-        ? 'On break'
-        : latestClockEvent?.eventType === 'out'
-          ? 'Clocked out'
-          : 'Ready to start';
+  const nextTask = tasks.find((task) => task.id === nextAssignment?.taskId);
+  const employeeClockEvents = useMemo(
+    () => clockEvents.filter((event) => event.employeeId === currentEmployee?.id),
+    [clockEvents, currentEmployee?.id],
+  );
+  const timecardSummary = useMemo(() => computeTimecardSummary(employeeClockEvents), [employeeClockEvents]);
+  const clockStatusLabel = timecardSummary.statusLabel;
 
   const supervisor = useMemo(
     () =>
@@ -188,24 +187,34 @@ export default function MobileFieldWorkspacePage() {
     await queryClient.invalidateQueries({ queryKey: ['clock-events'] });
   }
 
-  async function markAssignmentComplete(assignmentId?: string) {
+  async function updateAssignmentStatus(assignmentId: string | undefined, status: 'planned' | 'in-progress' | 'completed') {
     if (!supabase || !assignmentId) {
       toast.error('This task cannot be updated yet.');
       return;
     }
 
-    const { error } = await supabase.from('assignments').update({ status: 'completed' }).eq('id', assignmentId);
-
+    const { error } = await supabase.from('assignments').update({ status }).eq('id', assignmentId);
     if (error) {
       toast.error('Task status could not be updated.');
       return;
     }
 
-    toast.success('Task marked complete');
     await queryClient.invalidateQueries({ queryKey: ['assignments'] });
     await queryClient.invalidateQueries({ queryKey: ['dashboard-live-data'] });
     await queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
+    toast.success(status === 'completed' ? 'Task marked complete' : 'Task started');
   }
+
+  async function markAssignmentComplete(assignmentId?: string) {
+    await updateAssignmentStatus(assignmentId, 'completed');
+  }
+
+  const shiftMinutes = getShiftMinutes(employeeSchedule);
+  const progressMinutes = currentAssignment?.duration ?? 0;
+  const completedTasks = employeeAssignments.filter((assignment) => assignment.status === 'completed').length;
+  const canClockIn = !timecardSummary.isClockedIn && !timecardSummary.isOnBreak;
+  const breakButtonLabel = timecardSummary.isOnBreak ? 'Resume' : 'Break';
+  const breakAction: ClockAction = timecardSummary.isOnBreak ? 'in' : 'break';
 
   if (isLoading) {
     return <MobileFieldSkeleton />;
@@ -245,22 +254,70 @@ export default function MobileFieldWorkspacePage() {
             </Badge>
           </div>
 
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-2xl border border-border/70 bg-background px-3 py-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Worked</div>
+              <div className="mt-1 text-base font-semibold text-foreground">{timecardSummary.workedHours.toFixed(2)}h</div>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background px-3 py-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Break</div>
+              <div className="mt-1 text-base font-semibold text-foreground">{timecardSummary.breakMinutes} min</div>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background px-3 py-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Shift</div>
+              <div className="mt-1 text-base font-semibold text-foreground">{(shiftMinutes / 60).toFixed(1)}h</div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-border/70 bg-muted/40 p-4">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Current Task</p>
             <h2 className="mt-2 text-lg font-semibold text-foreground">{currentTask?.name ?? 'No active task assigned'}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {currentTask?.notes || 'Your supervisor will assign the next task when the day is ready.'}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline" className="rounded-full">{currentAssignment?.area ?? 'No work location'}</Badge>
+              <Badge variant="outline" className="rounded-full">{progressMinutes} min estimated</Badge>
+              <Badge variant={currentAssignment?.status === 'completed' ? 'secondary' : 'default'} className="rounded-full">
+                {(currentAssignment?.status ?? 'planned').replace('-', ' ')}
+              </Badge>
+            </div>
+            {currentAssignment ? (
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button
+                  className="min-h-11 rounded-2xl text-sm"
+                  variant={currentAssignment.status === 'in-progress' ? 'secondary' : 'outline'}
+                  onClick={() => void updateAssignmentStatus(currentAssignment.id, 'in-progress')}
+                  disabled={currentAssignment.status === 'completed'}
+                >
+                  <PlayCircle className="mr-2 h-4 w-4" />
+                  {currentAssignment.status === 'in-progress' ? 'In Progress' : 'Start Task'}
+                </Button>
+                <Button
+                  className="min-h-11 rounded-2xl text-sm"
+                  onClick={() => void markAssignmentComplete(currentAssignment.id)}
+                  disabled={currentAssignment.status === 'completed'}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Complete Task
+                </Button>
+              </div>
+            ) : null}
+            <div className="mt-4 rounded-2xl border border-dashed border-border/70 bg-background px-3 py-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Next Up</div>
+              <div className="mt-1 text-sm font-medium text-foreground">{nextTask?.name ?? 'No next task queued yet'}</div>
+              <div className="text-xs text-muted-foreground">{nextAssignment?.area ?? 'Awaiting supervisor assignment'}</div>
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <Button className="min-h-11 rounded-2xl text-sm" onClick={() => void recordClockEvent('in')}>
+            <Button className="min-h-11 rounded-2xl text-sm" onClick={() => void recordClockEvent('in')} disabled={!canClockIn}>
               Clock In
             </Button>
-            <Button className="min-h-11 rounded-2xl text-sm" variant="outline" onClick={() => void recordClockEvent('break')}>
-              Break
+            <Button className="min-h-11 rounded-2xl text-sm" variant="outline" onClick={() => void recordClockEvent(breakAction)} disabled={!timecardSummary.isClockedIn && !timecardSummary.isOnBreak}>
+              {breakButtonLabel}
             </Button>
-            <Button className="min-h-11 rounded-2xl text-sm" variant="outline" onClick={() => void recordClockEvent('out')}>
+            <Button className="min-h-11 rounded-2xl text-sm" variant="outline" onClick={() => void recordClockEvent('out')} disabled={!timecardSummary.isClockedIn && !timecardSummary.isOnBreak}>
               Clock Out
             </Button>
           </div>
@@ -289,13 +346,14 @@ export default function MobileFieldWorkspacePage() {
                 const task = tasks.find((item) => item.id === assignment.taskId);
                 const estimatedMinutes = task?.duration ?? assignment.duration ?? 0;
                 const isComplete = assignment.status === 'completed';
+                const isCurrent = assignment.id === currentAssignment?.id;
 
                 return (
                   <button
                     key={assignment.id ?? `${assignment.employeeId}-${assignment.taskId}-${assignment.area}`}
                     type="button"
-                    onClick={() => void markAssignmentComplete(assignment.id)}
-                    className="flex w-full items-start gap-3 rounded-2xl border border-border/70 bg-background px-4 py-4 text-left transition hover:border-primary/40"
+                    onClick={() => void (isComplete ? updateAssignmentStatus(assignment.id, 'planned') : markAssignmentComplete(assignment.id))}
+                    className={`flex w-full items-start gap-3 rounded-2xl border border-border/70 bg-background px-4 py-4 text-left transition hover:border-primary/40 ${isCurrent ? 'border-primary/40 bg-primary/5' : ''}`}
                   >
                     <Checkbox checked={isComplete} className="mt-0.5 h-5 w-5" />
                     <div className="min-w-0 flex-1">
@@ -305,6 +363,9 @@ export default function MobileFieldWorkspacePage() {
                             {task?.name ?? 'Assigned Task'}
                           </p>
                           <p className="mt-1 text-sm text-muted-foreground">{assignment.area}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {(assignment.status ?? 'planned').replace('-', ' ')} {isCurrent ? '• current focus' : ''}
+                          </p>
                         </div>
                         <Badge variant={isComplete ? 'secondary' : 'outline'} className="rounded-full text-xs">
                           {estimatedMinutes} min

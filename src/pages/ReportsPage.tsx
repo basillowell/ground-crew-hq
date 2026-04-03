@@ -31,6 +31,8 @@ import {
   loadWeatherDailyLogs,
   loadWeatherLocations,
 } from '@/lib/dataStore';
+import { useClockEventsRange } from '@/lib/supabase-queries';
+import { computeTimecardSummary } from '@/lib/laborMetrics';
 
 const COLORS = ['hsl(152,55%,38%)', 'hsl(210,80%,52%)', 'hsl(38,92%,50%)', 'hsl(270,60%,55%)', 'hsl(0,0%,55%)'];
 const LazyReportsCharts = lazy(() =>
@@ -112,6 +114,7 @@ export default function ReportsPage() {
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const clockEventsRangeQuery = useClockEventsRange(startDate, endDate, propertyId || undefined);
 
   useEffect(() => {
     const refresh = () => {
@@ -168,6 +171,11 @@ export default function ReportsPage() {
         return matchesDate && matchesProperty && matchesEmployee && matchesArea;
       }),
     [applicationLogs, areaFilter, employeeFilter, endDate, filteredEmployeeIds, startDate],
+  );
+
+  const filteredClockEvents = useMemo(
+    () => (clockEventsRangeQuery.data ?? []).filter((event) => filteredEmployeeIds.has(event.employeeId)),
+    [clockEventsRangeQuery.data, filteredEmployeeIds],
   );
 
   const weatherByLocation = useMemo(() => {
@@ -316,6 +324,8 @@ export default function ReportsPage() {
         const plannedMinutes = taskAssignments.length * task.duration;
         const varianceMinutes = assignedMinutes - plannedMinutes;
         const areas = [...new Set(taskAssignments.map((assignment) => assignment.area))];
+        const completedCount = taskAssignments.filter((assignment) => assignment.status === 'completed').length;
+        const inProgressCount = taskAssignments.filter((assignment) => assignment.status === 'in-progress').length;
         return {
           taskId: task.id,
           task: task.name,
@@ -325,6 +335,8 @@ export default function ReportsPage() {
           assignedMinutes,
           varianceMinutes,
           areas: areas.join(', '),
+          completedCount,
+          inProgressCount,
         };
       })
       .filter((entry) => entry.occurrences > 0)
@@ -337,10 +349,15 @@ export default function ReportsPage() {
         const shifts = filteredSchedules.filter((entry) => entry.employeeId === employee.id && entry.status === 'scheduled');
         const employeeAssignments = filteredAssignments.filter((assignment) => assignment.employeeId === employee.id);
         const employeeApplications = filteredApplications.filter((log) => log.applicatorId === employee.id);
+        const employeeClockEvents = filteredClockEvents.filter((event) => event.employeeId === employee.id);
+        const timecard = computeTimecardSummary(employeeClockEvents, `${endDate}T23:59:59.999Z`);
         const scheduledHours = shifts.reduce((sum, entry) => sum + shiftHours(entry), 0);
         const assignedHours = employeeAssignments.reduce((sum, assignment) => sum + assignment.duration, 0) / 60;
         const applicationHoursTotal = employeeApplications.reduce((sum, log) => sum + applicationHours(log), 0);
-        const utilization = scheduledHours > 0 ? (assignedHours / scheduledHours) * 100 : 0;
+        const actualWorkedHours = timecard.workedHours;
+        const breakMinutes = timecard.breakMinutes;
+        const utilizationBase = actualWorkedHours || scheduledHours;
+        const utilization = utilizationBase > 0 ? (assignedHours / utilizationBase) * 100 : 0;
         return {
           employeeId: employee.id,
           employee: `${employee.firstName} ${employee.lastName}`,
@@ -349,16 +366,18 @@ export default function ReportsPage() {
           wage: employee.wage,
           scheduledHours: Number(scheduledHours.toFixed(2)),
           assignedHours: Number(assignedHours.toFixed(2)),
+          actualWorkedHours: Number(actualWorkedHours.toFixed(2)),
           applicationHours: Number(applicationHoursTotal.toFixed(2)),
+          breakMinutes,
           assignmentCount: employeeAssignments.length,
           applicationCount: employeeApplications.length,
           utilization: Number(utilization.toFixed(1)),
-          laborCost: Number((assignedHours * employee.wage).toFixed(2)),
+          laborCost: Number(((actualWorkedHours || assignedHours) * employee.wage).toFixed(2)),
         };
       })
-      .filter((entry) => entry.scheduledHours > 0 || entry.assignmentCount > 0 || entry.applicationCount > 0)
-      .sort((left, right) => right.scheduledHours - left.scheduledHours);
-  }, [filteredApplications, filteredAssignments, filteredEmployees, filteredSchedules]);
+      .filter((entry) => entry.scheduledHours > 0 || entry.assignmentCount > 0 || entry.applicationCount > 0 || entry.actualWorkedHours > 0)
+      .sort((left, right) => (right.actualWorkedHours || right.scheduledHours) - (left.actualWorkedHours || left.scheduledHours));
+  }, [endDate, filteredApplications, filteredAssignments, filteredClockEvents, filteredEmployees, filteredSchedules]);
 
   const applicationsToHoursRows = useMemo(() => {
     return filteredApplications
@@ -416,6 +435,8 @@ export default function ReportsPage() {
   const summaryMetrics = {
     totalApplicationHours: Number(applicationsToHoursRows.reduce((sum, row) => sum + row.appliedHours, 0).toFixed(2)),
     totalAssignedHours: Number((filteredAssignments.reduce((sum, assignment) => sum + assignment.duration, 0) / 60).toFixed(2)),
+    totalWorkedHours: Number(employeeHoursRows.reduce((sum, row) => sum + row.actualWorkedHours, 0).toFixed(2)),
+    totalBreakMinutes: employeeHoursRows.reduce((sum, row) => sum + row.breakMinutes, 0),
     totalScheduledHours: Number(filteredSchedules.reduce((sum, entry) => sum + shiftHours(entry), 0).toFixed(2)),
     totalTaskMinutes: taskTimeRows.reduce((sum, row) => sum + row.assignedMinutes, 0),
   };
@@ -631,11 +652,11 @@ export default function ReportsPage() {
           <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
             <div className="text-sm text-muted-foreground mb-1">Applications to Hours</div>
             <div className="text-3xl font-semibold">
-              {summaryMetrics.totalScheduledHours > 0
-                ? `${((summaryMetrics.totalApplicationHours / summaryMetrics.totalScheduledHours) * 100).toFixed(1)}%`
+              {(summaryMetrics.totalWorkedHours || summaryMetrics.totalScheduledHours) > 0
+                ? `${((summaryMetrics.totalApplicationHours / (summaryMetrics.totalWorkedHours || summaryMetrics.totalScheduledHours)) * 100).toFixed(1)}%`
                 : '0%'}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Application hours compared to scheduled labor hours in the same report window.</p>
+            <p className="text-xs text-muted-foreground mt-1">Application hours compared to actual worked hours when clock data exists.</p>
           </Card>
           <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
             <div className="text-sm text-muted-foreground mb-1">Task Time Logged</div>
@@ -643,9 +664,9 @@ export default function ReportsPage() {
             <p className="text-xs text-muted-foreground mt-1">Total workboard task time taken from assignment rows, not generic placeholders.</p>
           </Card>
           <Card className="rounded-3xl border-0 bg-card/90 backdrop-blur p-5 shadow-sm">
-            <div className="text-sm text-muted-foreground mb-1">Task Minutes Tracked</div>
-            <div className="text-3xl font-semibold">{summaryMetrics.totalTaskMinutes}</div>
-            <p className="text-xs text-muted-foreground mt-1">Used for task time analysis and labor-vs-plan comparisons.</p>
+            <div className="text-sm text-muted-foreground mb-1">Worked / Break</div>
+            <div className="text-3xl font-semibold">{summaryMetrics.totalWorkedHours.toFixed(1)}h</div>
+            <p className="text-xs text-muted-foreground mt-1">{summaryMetrics.totalBreakMinutes} logged break minutes across the selected labor window.</p>
           </Card>
         </div>
 
@@ -745,9 +766,12 @@ export default function ReportsPage() {
                       <div className="mt-1 font-semibold">{row.plannedMinutes} min</div>
                     </div>
                     <div className="rounded-xl bg-muted/50 px-3 py-2">
-                      <div className="text-muted-foreground">Assigned</div>
-                      <div className="mt-1 font-semibold">{row.assignedMinutes} min</div>
+                      <div className="text-muted-foreground">Assigned / Done</div>
+                      <div className="mt-1 font-semibold">{row.assignedMinutes} min / {row.completedCount}</div>
                     </div>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {row.inProgressCount} in progress right now
                   </div>
                 </div>
               ))}
@@ -772,8 +796,10 @@ export default function ReportsPage() {
                   <th className="px-3 py-3 font-medium">Employee</th>
                   <th className="px-3 py-3 font-medium">Dept / Group</th>
                   <th className="px-3 py-3 font-medium">Scheduled Hrs</th>
+                  <th className="px-3 py-3 font-medium">Worked Hrs</th>
                   <th className="px-3 py-3 font-medium">Task Hrs</th>
                   <th className="px-3 py-3 font-medium">App Hrs</th>
+                  <th className="px-3 py-3 font-medium">Break Min</th>
                   <th className="px-3 py-3 font-medium">Utilization</th>
                   <th className="px-3 py-3 font-medium">Labor Cost</th>
                 </tr>
@@ -784,8 +810,10 @@ export default function ReportsPage() {
                     <td className="px-3 py-3">{row.employee}</td>
                     <td className="px-3 py-3 text-muted-foreground">{row.department} / {row.group}</td>
                     <td className="px-3 py-3">{row.scheduledHours}</td>
+                    <td className="px-3 py-3">{row.actualWorkedHours}</td>
                     <td className="px-3 py-3">{row.assignedHours}</td>
                     <td className="px-3 py-3">{row.applicationHours}</td>
+                    <td className="px-3 py-3">{row.breakMinutes}</td>
                     <td className="px-3 py-3">
                       <Badge variant={row.utilization >= 85 ? 'default' : 'outline'}>{row.utilization}%</Badge>
                     </td>

@@ -444,6 +444,23 @@ async function fetchClockEvents(date: string, propertyId?: string): Promise<Cloc
   return (data as DbClockEvent[]).map(toClockEvent);
 }
 
+async function fetchClockEventsRange(startDate: string, endDate: string, propertyId?: string): Promise<ClockEvent[]> {
+  const client = ensureSupabase();
+  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
+  const start = `${startDate}T00:00:00.000Z`;
+  const end = `${endDate}T23:59:59.999Z`;
+  let query = client
+    .from('clock_events')
+    .select('*')
+    .gte('timestamp', start)
+    .lte('timestamp', end)
+    .order('timestamp', { ascending: false });
+  if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data as DbClockEvent[]).map(toClockEvent);
+}
+
 export function useProperties() {
   return useQuery({
     queryKey: ['properties'],
@@ -540,6 +557,15 @@ export function useClockEvents(date: string, propertyId?: string) {
     queryKey: ['clock-events', date, propertyId ?? 'all'],
     queryFn: () => fetchClockEvents(date, propertyId),
     enabled: Boolean(date),
+    staleTime: 1000 * 60 * 1,
+  });
+}
+
+export function useClockEventsRange(startDate: string, endDate: string, propertyId?: string) {
+  return useQuery({
+    queryKey: ['clock-events-range', startDate, endDate, propertyId ?? 'all'],
+    queryFn: () => fetchClockEventsRange(startDate, endDate, propertyId),
+    enabled: Boolean(startDate && endDate),
     staleTime: 1000 * 60 * 1,
   });
 }
