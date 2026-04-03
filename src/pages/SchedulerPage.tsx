@@ -210,21 +210,21 @@ export default function SchedulerPage() {
   }
 
   function exportWeekToCalendar() {
-    const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
-    const weekEntries = scheduleList.filter(
-      (entry) => activeEmployeeIds.has(entry.employeeId) && weekDays.some((day) => day.date === entry.date),
-    );
+    const targetEmployeeId = selectedEmployeeId || activeEmployees[0]?.id;
+    const upcomingEntries = scheduleList
+      .filter((entry) => entry.employeeId === targetEmployeeId && entry.date >= today && entry.status === 'scheduled')
+      .sort((left, right) => left.date.localeCompare(right.date));
 
     const result = exportScheduleEntriesAsICS({
-      filename: `ground-crew-week-${weekDays[0]?.date ?? toDateKey(currentDate)}.ics`,
-      scheduleEntries: weekEntries,
+      filename: 'schedule.ics',
+      scheduleEntries: upcomingEntries,
       employees: employeeList,
       title: 'Ground Crew HQ Schedule',
     });
 
     if (result.ok) {
       toast.success(`Calendar export ready`, {
-        description: `${result.data?.eventCount ?? 0} shifts exported to ${result.data?.filename}.`,
+        description: `${result.data?.eventCount ?? 0} upcoming shifts exported to ${result.data?.filename}.`,
       });
     } else {
       toast.error('Calendar export failed', {
@@ -309,7 +309,7 @@ export default function SchedulerPage() {
             <Copy className="h-3 w-3" /> Copy Week
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={exportWeekToCalendar}>
-            <Download className="h-3 w-3" /> Export .ics
+            <Download className="h-3 w-3" /> Export to Calendar
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => window.print()}>
             <Download className="h-3 w-3" /> Export PDF

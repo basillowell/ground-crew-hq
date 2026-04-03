@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,25 +23,12 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import type { Assignment, Employee, Note, Property, ScheduleEntry, Task, WorkLocation } from '@/data/seedData';
-import {
-  DATA_STORE_UPDATED_EVENT,
-  initializeDataStore,
-  loadAssignments,
-  loadCurrentPropertyId,
-  loadEmployees,
-  loadEquipmentUnits,
-  loadNotes,
-  loadProperties,
-  loadScheduleEntries,
-  loadTasks,
-  loadWeatherLocations,
-  loadWeatherStations,
-  loadWorkLocations,
-  saveCurrentPropertyId,
-} from '@/lib/dataStore';
+import type { Property } from '@/data/seedData';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
+import { useAssignments, useClockEvents, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { useWeather } from '@/lib/weather';
 
 type PropertyStats = {
   propertyId: string;
@@ -58,6 +45,9 @@ type PropertyStats = {
 
 function PropertyCard({ property, stats, onClick }: { property: Property; stats: PropertyStats; onClick: () => void }) {
   const taskPct = stats.tasksTotal > 0 ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100) : 0;
+  const weatherQuery = useWeather(property.id);
+  const weatherMeta = getWeatherConditionMeta(weatherQuery.data?.current.weatherCode);
+  const WeatherIcon = weatherMeta.icon;
   return (
     <Card className="group cursor-pointer overflow-hidden border transition-all hover:border-primary/30 hover:shadow-lg" onClick={onClick}>
       <div className="h-1.5" style={{ background: property.color }} />
@@ -128,6 +118,22 @@ function PropertyCard({ property, stats, onClick }: { property: Property; stats:
           <span>{stats.openWorkOrders} open issue{stats.openWorkOrders !== 1 ? 's' : ''}</span>
           {stats.equipmentDown > 0 ? <span className="text-destructive">· {stats.equipmentDown} down</span> : null}
         </div>
+        <div className="rounded-xl border bg-muted/20 px-3 py-2">
+          {weatherQuery.isLoading ? (
+            <div className="text-[11px] text-muted-foreground">Loading weather...</div>
+          ) : weatherQuery.data ? (
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <WeatherIcon className="h-3.5 w-3.5 text-primary" />
+                <span className="font-medium text-foreground">{Math.round(weatherQuery.data.current.temperature)}F</span>
+                <span className="text-muted-foreground">{weatherMeta.label}</span>
+              </div>
+              <span className="text-muted-foreground">Wind {Math.round(weatherQuery.data.current.windSpeed)} mph</span>
+            </div>
+          ) : (
+            <div className="text-[11px] text-muted-foreground">Add property coordinates to show live weather.</div>
+          )}
+        </div>
       </div>
     </Card>
   );
@@ -150,84 +156,74 @@ function AggregateMetric({ icon: Icon, label, value, subtext, color }: { icon: a
 
 export default function CommandCenterOperationalPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const dashboardLiveQuery = useQuery<{
-    properties: Property[];
-    employees: Employee[];
-    assignments: Assignment[];
-    scheduleEntries: ScheduleEntry[];
-    tasks: Task[];
-    notes: Note[];
-    workLocations: WorkLocation[];
-    currentPropertyId: string;
-    weatherLocations: ReturnType<typeof loadWeatherLocations>;
-    weatherStations: ReturnType<typeof loadWeatherStations>;
-  }>({
-    queryKey: ['dashboard-live-data'],
-    queryFn: async () => {
-      await initializeDataStore();
-      return {
-        properties: loadProperties(),
-        employees: loadEmployees(),
-        assignments: loadAssignments(),
-        scheduleEntries: loadScheduleEntries(),
-        tasks: loadTasks(),
-        notes: loadNotes(),
-        workLocations: loadWorkLocations(),
-        currentPropertyId: loadCurrentPropertyId(),
-        weatherLocations: loadWeatherLocations(),
-        weatherStations: loadWeatherStations(),
-      };
-    },
-    staleTime: 1000 * 60 * 5,
-  });
+  const { currentPropertyId, setCurrentPropertyId, currentUser, isAdmin, isManager } = useAuth();
+  const today = new Date().toISOString().slice(0, 10);
+  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
+  const propertiesQuery = useProperties();
+  const employeesQuery = useEmployees(propertyScope);
+  const assignmentsQuery = useAssignments(today, propertyScope);
+  const scheduleEntriesQuery = useScheduleEntries(today, propertyScope);
+  const tasksQuery = useTasks(propertyScope);
+  const notesQuery = useNotes(propertyScope);
+  const equipmentUnitsQuery = useEquipmentUnits(propertyScope);
+  const clockEventsQuery = useClockEvents(today, propertyScope);
 
-  const properties = dashboardLiveQuery.data?.properties ?? [];
-  const employees = dashboardLiveQuery.data?.employees ?? [];
-  const assignments = dashboardLiveQuery.data?.assignments ?? [];
-  const scheduleEntries = dashboardLiveQuery.data?.scheduleEntries ?? [];
-  const tasks = dashboardLiveQuery.data?.tasks ?? [];
-  const notes = dashboardLiveQuery.data?.notes ?? [];
-  const workLocations = dashboardLiveQuery.data?.workLocations ?? [];
-  const currentPropertyId = dashboardLiveQuery.data?.currentPropertyId ?? '';
-  const weatherLocations = dashboardLiveQuery.data?.weatherLocations ?? [];
-  const weatherStations = dashboardLiveQuery.data?.weatherStations ?? [];
+  const allProperties = propertiesQuery.data ?? [];
+  const properties = useMemo(() => {
+    if (isAdmin || isManager) return allProperties;
+    if (!currentUser?.propertyId) return [];
+    return allProperties.filter((property) => property.id === currentUser.propertyId);
+  }, [allProperties, currentUser?.propertyId, isAdmin, isManager]);
+  const employees = employeesQuery.data ?? [];
+  const assignments = assignmentsQuery.data ?? [];
+  const scheduleEntries = scheduleEntriesQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
+  const notes = notesQuery.data ?? [];
+  const equipmentUnits = equipmentUnitsQuery.data ?? [];
+  const clockEvents = clockEventsQuery.data ?? [];
 
   useEffect(() => {
-    const refresh = () => void dashboardLiveQuery.refetch();
-    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-    return () => window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-  }, [dashboardLiveQuery.refetch]);
+    if (isAdmin || isManager) {
+      if (!currentPropertyId) {
+        setCurrentPropertyId('all');
+      }
+      return;
+    }
+    if (!currentPropertyId && properties.length > 0) {
+      setCurrentPropertyId(properties[0].id);
+    }
+  }, [currentPropertyId, isAdmin, isManager, properties, setCurrentPropertyId]);
 
   useEffect(() => {
     if (!supabase) return;
     const channel = supabase
       .channel('dashboard-live-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries' }, () => {
-        void dashboardLiveQuery.refetch();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `date=eq.${today}` }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['schedule-entries', today] });
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, () => {
-        void dashboardLiveQuery.refetch();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments', filter: `date=eq.${today}` }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['assignments', today] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clock_events' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['clock-events', today] });
       })
       .subscribe();
 
     return () => {
       void channel.unsubscribe();
     };
-  }, [dashboardLiveQuery.refetch]);
+  }, [queryClient, today]);
 
   const propertyStats = useMemo<PropertyStats[]>(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const equipmentUnits = loadEquipmentUnits();
-
     return properties.map((property) => {
       const propertyEmployees = employees.filter((employee) => employee.propertyId === property.id && employee.status === 'active');
       const propertyEmployeeIds = new Set(propertyEmployees.map((employee) => employee.id));
-      const propertyLocationNames = new Set(workLocations.filter((location) => location.propertyId === property.id).map((location) => location.name));
       const scheduledToday = scheduleEntries.filter((entry) => entry.date === today && entry.status === 'scheduled' && propertyEmployeeIds.has(entry.employeeId));
       const propertyAssignments = assignments.filter((assignment) => assignment.date === today && propertyEmployeeIds.has(assignment.employeeId));
-      const equipmentAtProperty = equipmentUnits.filter((unit) => propertyLocationNames.has(unit.location));
-      const propertyAlerts = notes.filter((note) => note.type === 'alert' && (!note.location || note.location.includes(property.name)));
+      const equipmentAtProperty = equipmentUnits.filter((unit) => (unit as { propertyId?: string }).propertyId === property.id);
+      const propertyAlerts = notes.filter((note) => note.type === 'alert');
       const weatherAlert = propertyAlerts.some((note) => /weather|storm|rain/i.test(`${note.title} ${note.content}`));
       const equipmentDown = equipmentAtProperty.filter((unit) => unit.status === 'maintenance' || unit.status === 'out-of-service').length;
       const openWorkOrders = propertyAlerts.length;
@@ -245,7 +241,7 @@ export default function CommandCenterOperationalPage() {
         complianceScore: Math.max(74, 100 - equipmentDown * 8 - openWorkOrders * 3),
       };
     });
-  }, [assignments, employees, notes, properties, scheduleEntries, tasks, workLocations]);
+  }, [assignments, employees, equipmentUnits, notes, properties, scheduleEntries, tasks, today]);
 
   const totals = useMemo(() => {
     return propertyStats.reduce(
@@ -287,52 +283,33 @@ export default function CommandCenterOperationalPage() {
       .map((employee) => {
         const assignment = assignments.find((entry) => entry.employeeId === employee.id && entry.date === today);
         const isScheduled = scheduleEntries.some((entry) => entry.employeeId === employee.id && entry.date === today && entry.status === 'scheduled');
+        const latestClockEvent = clockEvents.find((event) => event.employeeId === employee.id);
         const property = properties.find((entry) => entry.id === employee.propertyId);
         return {
           id: employee.id,
           name: `${employee.firstName} ${employee.lastName}`,
           role: employee.role,
           propertyShortName: property?.shortName || 'Property',
-          status: assignment ? 'active' : isScheduled ? 'on-break' : 'traveling',
+          status:
+            latestClockEvent?.eventType === 'out'
+              ? 'traveling'
+              : latestClockEvent?.eventType === 'break'
+                ? 'on-break'
+                : assignment || latestClockEvent?.eventType === 'in'
+                  ? 'active'
+                  : isScheduled
+                    ? 'on-break'
+                    : 'traveling',
           currentTask: assignment ? tasks.find((task) => task.id === assignment.taskId)?.name || 'Assigned' : '',
         };
       });
-  }, [assignments, employees, properties, scheduleEntries, tasks]);
+  }, [assignments, clockEvents, employees, properties, scheduleEntries, tasks]);
 
   const activeWeatherProperty = useMemo(() => {
     return properties.find((property) => property.id === currentPropertyId) ?? properties[0] ?? null;
   }, [currentPropertyId, properties]);
 
-  const dashboardWeatherCoordinates = useMemo(() => {
-    if (!activeWeatherProperty) return null;
-
-    const location =
-      weatherLocations.find((entry) => entry.propertyId === activeWeatherProperty.id) ??
-      weatherLocations.find((entry) => entry.property === activeWeatherProperty.name);
-
-    const station = location
-      ? weatherStations.find((entry) => entry.locationId === location.id && entry.isPrimary) ??
-        weatherStations.find((entry) => entry.locationId === location.id)
-      : null;
-
-    if (typeof station?.latitude === 'number' && typeof station?.longitude === 'number') {
-      return {
-        latitude: station.latitude,
-        longitude: station.longitude,
-        label: `${station.name} · ${station.provider}`,
-      };
-    }
-
-    if (typeof location?.latitude === 'number' && typeof location?.longitude === 'number') {
-      return {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        label: `${location.name} area`,
-      };
-    }
-
-    return null;
-  }, [activeWeatherProperty, weatherLocations, weatherStations]);
+  const dashboardWeatherCoordinates: { latitude: number; longitude: number; label: string } | null = null;
 
   const dashboardWeatherQuery = useQuery({
     queryKey: ['command-center-weather', activeWeatherProperty?.id, dashboardWeatherCoordinates?.latitude, dashboardWeatherCoordinates?.longitude],
@@ -349,8 +326,7 @@ export default function CommandCenterOperationalPage() {
   const DashboardWeatherIcon = dashboardWeatherMeta.icon;
 
   const openPropertyWorkflow = (propertyId: string) => {
-    saveCurrentPropertyId(propertyId);
-    window.dispatchEvent(new CustomEvent('operations-context-updated', { detail: { propertyId } }));
+    setCurrentPropertyId(propertyId);
     navigate(`/app/workboard?property=${encodeURIComponent(propertyId)}&focus=requests`);
   };
 

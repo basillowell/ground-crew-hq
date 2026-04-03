@@ -21,7 +21,7 @@ import {
   Waves,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
-import type { AppUser, DepartmentOption, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WorkLocation } from '@/data/seedData';
+import type { AppUser, DepartmentOption, Employee, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WorkLocation } from '@/data/seedData';
 import {
   loadLanguageOptions,
   loadApplicationAreas,
@@ -42,6 +42,7 @@ import {
   saveAppUsers,
   saveLanguageOptions,
   saveDepartmentOptions,
+  saveEmployees,
   saveGroupOptions,
   saveProperties,
   savePropertyClassOptions,
@@ -151,6 +152,7 @@ export default function ProgramSetupHubPage() {
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   useEffect(() => {
     const loadedSettings = loadProgramSettings()[0];
@@ -164,10 +166,10 @@ export default function ProgramSetupHubPage() {
     setWorkLocations(loadWorkLocations());
     setShiftTemplates(loadShiftTemplates());
     setAppUsers(loadAppUsers());
+    setEmployees(loadEmployees());
   }, []);
 
   const liveCounts = useMemo(() => {
-    const employees = loadEmployees();
     const tasks = loadTasks();
     const schedules = loadScheduleEntries();
     const assignments = loadAssignments();
@@ -188,7 +190,7 @@ export default function ProgramSetupHubPage() {
       properties: properties.length,
       propertyClasses: propertyClasses.length,
     };
-  }, [appUsers, properties, propertyClasses]);
+  }, [appUsers, employees, properties, propertyClasses]);
 
   const overviewStats = [
     {
@@ -269,9 +271,10 @@ export default function ProgramSetupHubPage() {
 
   function savePropertiesTab() {
     saveProperties(properties);
+    saveEmployees(employees);
     announceProgramSetupUpdate();
     toast('Properties saved', {
-      description: `${properties.length} properties now feed Command Center and property-specific workflow routing.`,
+      description: `${properties.length} properties and ${employees.length} employee property assignments are now aligned across the app.`,
     });
   }
 
@@ -1221,6 +1224,8 @@ export default function ProgramSetupHubPage() {
                         address: '',
                         city: '',
                         state: '',
+                        latitude: undefined,
+                        longitude: undefined,
                         acreage: 18,
                         logoInitials: 'PR',
                         color: '#2f855a',
@@ -1259,13 +1264,27 @@ export default function ProgramSetupHubPage() {
                           <option value="Municipal Grounds" />
                         </datalist>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => {
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 px-2 text-xs text-muted-foreground"
+                          onClick={() =>
+                            setProperties((current) =>
+                              current.map((entry) => (entry.id === property.id ? { ...entry, status: 'paused' } : entry)),
+                            )
+                          }
+                        >
+                          Archive
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => {
                         const confirmed = window.confirm(`Delete ${property.name}? This only removes the property record. Reassign linked employees and locations first.`);
                         if (!confirmed) return;
                         setProperties((current) => current.filter((entry) => entry.id !== property.id));
-                      }}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        }}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_0.9fr_0.4fr_0.5fr_0.6fr_0.5fr]">
                       <Input value={property.address} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, address: event.target.value } : entry))} placeholder="Address" className="h-9" />
@@ -1278,6 +1297,36 @@ export default function ProgramSetupHubPage() {
                         <option value="onboarding">Onboarding</option>
                         <option value="paused">Paused</option>
                       </select>
+                    </div>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
+                      <Input
+                        value={property.latitude ?? ''}
+                        onChange={(event) =>
+                          setProperties((current) =>
+                            current.map((entry) =>
+                              entry.id === property.id
+                                ? { ...entry, latitude: event.target.value ? Number(event.target.value) : undefined }
+                                : entry,
+                            ),
+                          )
+                        }
+                        placeholder="Latitude"
+                        className="h-9"
+                      />
+                      <Input
+                        value={property.longitude ?? ''}
+                        onChange={(event) =>
+                          setProperties((current) =>
+                            current.map((entry) =>
+                              entry.id === property.id
+                                ? { ...entry, longitude: event.target.value ? Number(event.target.value) : undefined }
+                                : entry,
+                            ),
+                          )
+                        }
+                        placeholder="Longitude"
+                        className="h-9"
+                      />
                     </div>
                     <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1.2fr]">
                       <select
@@ -1302,20 +1351,59 @@ export default function ProgramSetupHubPage() {
               </div>
             </Card>
 
-            <Card className="p-6">
-              <div className="font-semibold">How Properties Flow Through the App</div>
-              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <p>Command Center reads these saved properties, not a separate demo list.</p>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Workflow Routing</div>
-                  <p className="mt-1 text-xs">Clicking a property in Command Center now sets the active property before routing into Workflow.</p>
+            <div className="space-y-4">
+              <Card className="p-6">
+                <div className="font-semibold">How Properties Flow Through the App</div>
+                <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                  <p>Command Center reads these saved properties, not a separate demo list.</p>
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="font-medium text-foreground">Workflow Routing</div>
+                    <p className="mt-1 text-xs">Clicking a property in Command Center now sets the active property before routing into Workflow.</p>
+                  </div>
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="font-medium text-foreground">Employee Assignment</div>
+                    <p className="mt-1 text-xs">Employees and locations can now be tied to a property so task planning stays scoped correctly.</p>
+                  </div>
                 </div>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Employee Assignment</div>
-                  <p className="mt-1 text-xs">Employees and locations can now be tied to a property so task planning stays scoped correctly.</p>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold">Employee Property Assignment</div>
+                    <p className="text-xs text-muted-foreground">Assign each employee to the property they primarily work from so Command Center and Workflow scope correctly.</p>
+                  </div>
+                  <Badge variant="outline">{employees.length} employees</Badge>
                 </div>
-              </div>
-            </Card>
+                <div className="mt-4 space-y-2">
+                  {employees.map((employee) => (
+                    <div key={employee.id} className="grid gap-2 rounded-xl border p-3 md:grid-cols-[1.2fr_0.9fr_0.9fr]">
+                      <div>
+                        <div className="text-sm font-medium">{employee.firstName} {employee.lastName}</div>
+                        <div className="text-xs text-muted-foreground">{employee.department} · {employee.role}</div>
+                      </div>
+                      <select
+                        value={employee.propertyId || ''}
+                        onChange={(event) =>
+                          setEmployees((current) =>
+                            current.map((entry) => (entry.id === employee.id ? { ...entry, propertyId: event.target.value || undefined } : entry)),
+                          )
+                        }
+                        className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="">No property assigned</option>
+                        {properties.map((property) => (
+                          <option key={property.id} value={property.id}>{property.name}</option>
+                        ))}
+                      </select>
+                      <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                        {(properties.find((property) => property.id === employee.propertyId)?.shortName || 'Unassigned')} primary property
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
           </div>
         </TabsContent>
 

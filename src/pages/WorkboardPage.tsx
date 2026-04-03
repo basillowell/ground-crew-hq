@@ -85,6 +85,7 @@ export default function WorkboardPage() {
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
   const [dropTargetEmployeeId, setDropTargetEmployeeId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+  const [lastRealtimeRefreshAt, setLastRealtimeRefreshAt] = useState<number | null>(null);
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
@@ -125,7 +126,7 @@ export default function WorkboardPage() {
     taskRequests: TaskRequest[];
     tasks: Task[];
   }>({
-    queryKey: ['workflow-live-data'],
+    queryKey: ['workflow-live-data', boardDate, propertyId || 'all'],
     queryFn: async () => {
       await initializeDataStore();
       return {
@@ -142,6 +143,12 @@ export default function WorkboardPage() {
   const assignmentList = workflowLiveQuery.data?.assignments ?? [];
   const taskRequests = workflowLiveQuery.data?.taskRequests ?? [];
   const taskList = workflowLiveQuery.data?.tasks ?? [];
+
+  useEffect(() => {
+    if (workflowLiveQuery.dataUpdatedAt) {
+      setLastRealtimeRefreshAt(workflowLiveQuery.dataUpdatedAt);
+    }
+  }, [workflowLiveQuery.dataUpdatedAt]);
 
   useEffect(() => {
     const refresh = () => {
@@ -190,12 +197,15 @@ export default function WorkboardPage() {
     const channel = supabase
       .channel('workflow-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, () => {
+        setLastRealtimeRefreshAt(Date.now());
         void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests' }, () => {
+        setLastRealtimeRefreshAt(Date.now());
         void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        setLastRealtimeRefreshAt(Date.now());
         void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
       })
       .subscribe();
@@ -364,6 +374,7 @@ export default function WorkboardPage() {
     () => applicationLogs.filter((log) => log.applicationDate === boardDate),
     [applicationLogs, boardDate],
   );
+  const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
 
   function persistAssignments(nextAssignments: Assignment[]) {
     saveAssignments(nextAssignments);
@@ -697,6 +708,7 @@ export default function WorkboardPage() {
           <Badge variant="outline">{Math.max(orderedDispatchBoard.length - assignedEmployeeIds.size, 0)} waiting assignment</Badge>
           <Badge variant="outline">{dayAssignments.length} task rows</Badge>
           <Badge variant="outline">{totalOpenMinutes} open mins</Badge>
+          {showFreshUpdateBadge ? <Badge variant="secondary">Updated just now</Badge> : null}
         </div>
 
         <div className="hidden grid gap-4 xl:grid-cols-[1.15fr_0.85fr] mb-4">

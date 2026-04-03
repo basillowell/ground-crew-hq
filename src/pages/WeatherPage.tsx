@@ -38,6 +38,7 @@ import {
 import { toast } from '@/components/ui/sonner';
 import { fetchPrimaryStationSnapshot, fetchStationForecastDetail, fetchWeatherStationSuggestions, type GeocodeResult, type WeatherForecastDetail } from '@/lib/weatherProviders';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
+import { useWeather, getWeatherIconMeta } from '@/lib/weather';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -131,10 +132,13 @@ export default function WeatherPage() {
 
   const selectedLocation = weatherLocations.find((location) => location.id === selectedLocationId) ?? weatherLocations[0];
   const selectedProperty = properties.find((property) => property.id === (selectedLocation?.propertyId || currentPropertyId));
+  const selectedPropertyWeatherQuery = useWeather(selectedProperty?.id);
   const locationStations = weatherStations
     .filter((station) => station.locationId === selectedLocationId)
     .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary));
   const primaryStation = locationStations.find((station) => station.isPrimary);
+  const selectedPropertyWeatherMeta = getWeatherIconMeta(selectedPropertyWeatherQuery.data?.current.weatherCode);
+  const SelectedPropertyWeatherIcon = selectedPropertyWeatherMeta.icon;
   const locationLogs = weatherLogs
     .filter((log) => log.locationId === selectedLocationId)
     .sort((left, right) => left.date.localeCompare(right.date));
@@ -810,6 +814,59 @@ export default function WeatherPage() {
             <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
               <div className="space-y-4">
                 <WeatherSnapshotCard location={selectedLocation} log={latestLog} title="Daily Weather" />
+
+                <Card className="p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">Live Forecast</p>
+                      <p className="text-xs text-muted-foreground">Open-Meteo forecast for the selected property coordinates with the next 8 hours of precipitation probability.</p>
+                    </div>
+                    <Badge variant="outline">{selectedProperty?.shortName ?? 'No property'}</Badge>
+                  </div>
+                  {selectedPropertyWeatherQuery.isLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-20 rounded-2xl" />
+                      <Skeleton className="h-24 rounded-2xl" />
+                    </div>
+                  ) : selectedPropertyWeatherQuery.data ? (
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border bg-background/70 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current Conditions</div>
+                            <div className="mt-2 text-3xl font-semibold">{Math.round(selectedPropertyWeatherQuery.data.current.temperature)}F</div>
+                            <div className="mt-1 text-xs text-muted-foreground">{selectedPropertyWeatherMeta.label}</div>
+                          </div>
+                          <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+                            <SelectedPropertyWeatherIcon className="h-6 w-6" />
+                          </div>
+                        </div>
+                        <div className="mt-3 text-xs text-muted-foreground">Wind {Math.round(selectedPropertyWeatherQuery.data.current.windSpeed)} mph</div>
+                      </div>
+                      <div className="space-y-2">
+                        {selectedPropertyWeatherQuery.data.hourly.map((point) => {
+                          const pointMeta = getWeatherIconMeta(point.weatherCode);
+                          const PointIcon = pointMeta.icon;
+                          return (
+                            <div key={point.time} className="grid grid-cols-4 items-center gap-3 rounded-lg bg-muted/30 px-3 py-2 text-xs">
+                              <div className="flex items-center gap-2">
+                                <PointIcon className="h-3.5 w-3.5 text-primary" />
+                                <span>{new Date(point.time).toLocaleTimeString([], { hour: 'numeric' })}</span>
+                              </div>
+                              <span>{Math.round(point.temperature)}F</span>
+                              <span>{point.precipitationProbability}% rain</span>
+                              <span>{Math.round(point.windSpeed)} mph wind</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                      Add latitude and longitude on the property record to enable the live Open-Meteo forecast.
+                    </div>
+                  )}
+                </Card>
 
                 <Card className="p-5">
                   <div className="mb-4">

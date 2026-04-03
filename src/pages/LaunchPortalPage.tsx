@@ -1,86 +1,52 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Leaf, ShieldCheck, Users } from 'lucide-react';
+import { ArrowRight, Leaf, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  DATA_STORE_UPDATED_EVENT,
-  loadAppUsers,
-  loadCurrentAppUserId,
-  loadProgramSettings,
-  saveCurrentAppUserId,
-} from '@/lib/dataStore';
-import type { AppUser } from '@/data/seedData';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { supabase } from '@/lib/supabase';
+import { useProgramSettings } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
-  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
-  const [selectedAdminId, setSelectedAdminId] = useState('');
-  const [clientName, setClientName] = useState('Ground Crew HQ');
-  const [appName, setAppName] = useState('WorkForce App');
-  const [shellImageUrl, setShellImageUrl] = useState('');
+  const { currentUser } = useAuth();
+  const programSettingsQuery = useProgramSettings();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const clientName = programSettingsQuery.data?.clientLabel || 'Ground Crew HQ';
+  const appName = programSettingsQuery.data?.appName || 'WorkForce App';
+  const shellImageUrl = programSettingsQuery.data?.logoUrl || '';
 
   useEffect(() => {
-    const refresh = () => {
-      const settings = loadProgramSettings()[0];
-      const users = loadAppUsers().filter((entry) => entry.status === 'active');
-      const savedUserId = loadCurrentAppUserId();
-      const employees = users.filter((entry) => entry.role !== 'admin');
-      const admins = users.filter((entry) => entry.role === 'admin');
+    if (currentUser) {
+      navigate('/app/dashboard');
+    }
+  }, [currentUser, navigate]);
 
-      setAppUsers(users);
-      setSelectedEmployeeId(
-        employees.find((entry) => entry.id === savedUserId)?.id || employees[0]?.id || '',
-      );
-      setSelectedAdminId(
-        admins.find((entry) => entry.id === savedUserId)?.id || admins[0]?.id || '',
-      );
-      setClientName(settings?.clientLabel || settings?.organizationName || 'Ground Crew HQ');
-      setAppName(settings?.appName || 'WorkForce App');
-      setShellImageUrl(settings?.shellImageUrl || settings?.logoUrl || '');
-    };
-
-    refresh();
-    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-    window.addEventListener('program-setup-updated', refresh as EventListener);
-    window.addEventListener('user-session-updated', refresh as EventListener);
-
-    return () => {
-      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-      window.removeEventListener('program-setup-updated', refresh as EventListener);
-      window.removeEventListener('user-session-updated', refresh as EventListener);
-    };
-  }, []);
-
-  const employeeUsers = useMemo(
-    () => appUsers.filter((entry) => entry.role !== 'admin'),
-    [appUsers],
-  );
-
-  const adminUsers = useMemo(
-    () => appUsers.filter((entry) => entry.role === 'admin'),
-    [appUsers],
-  );
-
-  const selectedEmployee = useMemo(
-    () => employeeUsers.find((entry) => entry.id === selectedEmployeeId),
-    [employeeUsers, selectedEmployeeId],
-  );
-
-  const selectedAdmin = useMemo(
-    () => adminUsers.find((entry) => entry.id === selectedAdminId),
-    [adminUsers, selectedAdminId],
-  );
-
-  const launchAs = (userId: string) => {
-    if (!userId) {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase) {
+      setErrorMessage('Supabase is not configured for this environment.');
       return;
     }
 
-    saveCurrentAppUserId(userId);
-    window.dispatchEvent(new CustomEvent('user-session-updated'));
+    setIsSubmitting(true);
+    setErrorMessage('');
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    setIsSubmitting(false);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
     navigate('/app/dashboard');
   };
 
@@ -138,92 +104,42 @@ export default function LaunchPortalPage() {
               Login and access
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Choose the right entry point for today. Employee and admin access stay separate so the login
-              flow stays clear and direct.
+              Sign in with your club or company credentials to open your operations workspace.
             </p>
 
-            <div className="mt-6 space-y-4">
-              <Card className="border-border/70 bg-background/80 p-4 shadow-none">
-                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Users className="h-4 w-4 text-primary" />
-                  Employee Login
+            <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="name@club.com"
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                />
+              </div>
+              {errorMessage ? (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-3 text-sm text-destructive">
+                  {errorMessage}
                 </div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  For crew members checking schedule, tasks, messages, and field activity.
-                </p>
-                <div className="mt-4 space-y-3">
-                  <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                    <SelectTrigger className="h-11">
-                      <SelectValue placeholder="Select employee access" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {employeeUsers.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.fullName} - {user.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedEmployee ? (
-                    <div className="rounded-xl border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
-                      <div className="text-sm font-medium text-foreground">{selectedEmployee.fullName}</div>
-                      <div>
-                        {selectedEmployee.department} - {selectedEmployee.title}
-                      </div>
-                    </div>
-                  ) : null}
-                  <Button
-                    className="w-full gap-2"
-                    disabled={!selectedEmployeeId}
-                    onClick={() => launchAs(selectedEmployeeId)}
-                  >
-                    Enter as Employee
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </Card>
-
-              <Card className="border-border/70 bg-background/80 p-4 shadow-none">
-                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <ShieldCheck className="h-4 w-4 text-primary" />
-                  Admin Login
-                </div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  For managers and administrators running operations, staffing, and reporting.
-                </p>
-                <div className="mt-4 space-y-3">
-                  <Select value={selectedAdminId} onValueChange={setSelectedAdminId}>
-                    <SelectTrigger className="h-11">
-                      <SelectValue placeholder="Select admin access" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {adminUsers.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.fullName} - {user.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedAdmin ? (
-                    <div className="rounded-xl border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
-                      <div className="text-sm font-medium text-foreground">{selectedAdmin.fullName}</div>
-                      <div>
-                        {selectedAdmin.department} - {selectedAdmin.title}
-                      </div>
-                    </div>
-                  ) : null}
-                  <Button
-                    variant="outline"
-                    className="w-full gap-2"
-                    disabled={!selectedAdminId}
-                    onClick={() => launchAs(selectedAdminId)}
-                  >
-                    Enter as Admin
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </Card>
-            </div>
+              ) : null}
+              <Button className="w-full gap-2" disabled={isSubmitting || !email || !password} type="submit">
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                {isSubmitting ? 'Signing In' : 'Get Started'}
+              </Button>
+            </form>
           </Card>
         </section>
       </main>

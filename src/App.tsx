@@ -1,12 +1,15 @@
 import { lazy, Suspense, useEffect } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
-import { requestBrowserNotificationPermission } from "@/lib/integrations";
+import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
@@ -23,10 +26,24 @@ const SafetyPage = lazy(() => import("./pages/SafetyPage"));
 const SettingsPage = lazy(() => import("./pages/ProgramSetupHubPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const ApplicationsPage = lazy(() => import("./pages/ApplicationsPage"));
-const MobileFieldPage = lazy(() => import("./pages/MobileFieldPage"));
+const MobileFieldPage = lazy(() => import("./pages/MobileFieldWorkspacePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+const queryPersister =
+  typeof window !== "undefined"
+    ? createSyncStoragePersister({
+        storage: window.localStorage,
+        key: "ground-crew-query-cache",
+      })
+    : undefined;
 const NOTIFICATION_PERMISSION_KEY = "ground-crew-notification-permission-requested";
 
 function RouteFallback() {
@@ -44,6 +61,16 @@ function RouteFallback() {
 }
 
 function AppRoutes() {
+  const { currentUser, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <RouteFallback />;
+  }
+
+  if (!currentUser) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <Suspense fallback={<RouteFallback />}>
       <AppLayout>
@@ -69,57 +96,93 @@ function AppRoutes() {
 }
 
 function AppWithNotificationSetup() {
+  const { currentUser } = useAuth();
+
   useEffect(() => {
-    if (!supabase || typeof window === "undefined") return;
-
-    let cancelled = false;
-
-    async function maybeRequestNotifications() {
-      const requested = window.localStorage.getItem(NOTIFICATION_PERMISSION_KEY);
-      if (requested) return;
-
-      const { data } = await supabase.auth.getUser();
-      if (!data.user || cancelled) return;
-
-      await requestBrowserNotificationPermission();
-      if (!cancelled) {
-        window.localStorage.setItem(NOTIFICATION_PERMISSION_KEY, "true");
-      }
-    }
-
-    void maybeRequestNotifications();
-
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user && !window.localStorage.getItem(NOTIFICATION_PERMISSION_KEY)) {
-        void requestBrowserNotificationPermission().then(() => {
-          window.localStorage.setItem(NOTIFICATION_PERMISSION_KEY, "true");
-        });
-      }
+    if (typeof window === "undefined" || !currentUser) return;
+    if (window.localStorage.getItem(NOTIFICATION_PERMISSION_KEY)) return;
+    void requestNotificationPermission().then(() => {
+      window.localStorage.setItem(NOTIFICATION_PERMISSION_KEY, "true");
     });
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!supabase || !currentUser) return;
+
+    const messagesChannel = supabase
+      .channel(`app-notify-messages-${currentUser.appUserId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${currentUser.authUser.id}` },
+        (payload) => {
+          const next = payload.new as { subject?: string | null; body?: string | null };
+          sendNotification('New message received', next.subject || next.body || 'Open Messaging to view the latest message.', '/app/messaging');
+        },
+      )
+      .subscribe();
+
+    const scheduleChannel = supabase
+      .channel(`app-notify-schedule-${currentUser.employeeId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'schedule_entries', filter: `employee_id=eq.${currentUser.employeeId}` },
+        () => {
+          sendNotification('Schedule updated', 'Your shift schedule changed. Open Scheduler to review.', '/app/scheduler');
+        },
+      )
+      .subscribe();
+
+    const assignmentsChannel = supabase
+      .channel(`app-notify-assignments-${currentUser.employeeId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'assignments', filter: `employee_id=eq.${currentUser.employeeId}` },
+        () => {
+          sendNotification('New task assigned', 'A new task was assigned to you. Open Workflow to review.', '/app/workboard');
+        },
+      )
+      .subscribe();
 
     return () => {
-      cancelled = true;
-      subscription.subscription.unsubscribe();
+      void messagesChannel.unsubscribe();
+      void scheduleChannel.unsubscribe();
+      void assignmentsChannel.unsubscribe();
     };
-  }, []);
+  }, [currentUser]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/app/*" element={<AppRoutes />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/app/*" element={<AppRoutes />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </TooltipProvider>
   );
 }
 
-export default AppWithNotificationSetup;
+export default function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: queryPersister,
+        dehydrateOptions: {
+          shouldDehydrateQuery: (query) =>
+            Array.isArray(query.queryKey) &&
+            ['assignments', 'schedule-entries', 'clock-events', 'properties', 'tasks', 'employees'].includes(String(query.queryKey[0])),
+        },
+      }}
+    >
+      <AuthProvider>
+        <AppWithNotificationSetup />
+      </AuthProvider>
+    </PersistQueryClientProvider>
+  );
+}

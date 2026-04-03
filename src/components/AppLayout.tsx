@@ -3,24 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import type { ProgramSettings } from '@/data/seedData';
 import {
-  DATA_STORE_UPDATED_EVENT,
-  loadAppUsers,
-  loadAssignments,
-  loadChemicalApplicationLogs,
-  loadCurrentAppUserId,
-  loadCurrentPropertyId,
-  loadDepartmentOptions,
-  loadEmployees,
-  loadEquipmentUnits,
-  loadProperties,
-  loadProgramSettings,
-  loadScheduleEntries,
-  loadWeatherStations,
-  saveCurrentAppUserId,
-  saveCurrentPropertyId,
-} from '@/lib/dataStore';
-import type { AppUser, ProgramSettings, Property } from '@/data/seedData';
+  useAssignments,
+  useChemicalApplicationLogs,
+  useEmployees,
+  useEquipmentUnits,
+  useProgramSettings,
+  useProperties,
+  useScheduleEntries,
+  useWeatherStations,
+} from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -116,84 +110,66 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [departmentOptions, setDepartmentOptions] = useState<string[]>(['Maintenance']);
   const [department, setDepartment] = useState('Maintenance');
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
-  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [currentPropertyId, setCurrentPropertyId] = useState('');
-  const [dataRefreshTick, setDataRefreshTick] = useState(0);
+  const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, isAdmin, isManager } = useAuth();
+  const programSettingsQuery = useProgramSettings();
+  const propertiesQuery = useProperties();
+  const todayKey = currentDate.toISOString().slice(0, 10);
+  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
+  const employeesQuery = useEmployees(propertyScope);
+  const scheduleEntriesQuery = useScheduleEntries(todayKey, propertyScope);
+  const assignmentsQuery = useAssignments(todayKey, propertyScope);
+  const equipmentUnitsQuery = useEquipmentUnits(propertyScope);
+  const weatherStationsQuery = useWeatherStations();
+  const chemicalApplicationLogsQuery = useChemicalApplicationLogs(todayKey);
+
+  const programSetting = programSettingsQuery.data ?? null;
+  const allProperties = propertiesQuery.data ?? [];
+  const properties = useMemo(() => {
+    if (isAdmin || isManager) return allProperties;
+    if (!currentUser?.propertyId) return [];
+    return allProperties.filter((entry) => entry.id === currentUser.propertyId);
+  }, [allProperties, currentUser?.propertyId, isAdmin, isManager]);
+  const employees = employeesQuery.data ?? [];
+  const scheduleEntries = scheduleEntriesQuery.data ?? [];
+  const assignments = assignmentsQuery.data ?? [];
+  const equipmentUnits = equipmentUnitsQuery.data ?? [];
+  const weatherStations = weatherStationsQuery.data ?? [];
+  const applicationLogs = chemicalApplicationLogsQuery.data ?? [];
 
   useEffect(() => {
-    const refreshProgramSetup = () => {
-      const nextDepartments = loadDepartmentOptions().map((entry) => entry.name);
-      const settings = loadProgramSettings()[0];
-      const nextUsers = loadAppUsers();
-      const nextProperties = loadProperties();
-      const savedUserId = loadCurrentAppUserId();
-      const savedPropertyId = loadCurrentPropertyId();
-      const fallbackUser = nextUsers.find((entry) => entry.status === 'active') || nextUsers[0] || null;
-      const resolvedUser = nextUsers.find((entry) => entry.id === savedUserId) || fallbackUser || null;
-      const fallbackProperty = nextProperties.find((entry) => entry.status === 'active') || nextProperties[0] || null;
-      const resolvedProperty = nextProperties.find((entry) => entry.id === savedPropertyId) || fallbackProperty || null;
-      const fallbackDepartment = nextDepartments[0] ?? 'Maintenance';
-      setProgramSetting(settings ?? null);
-      setDepartmentOptions(nextDepartments.length > 0 ? nextDepartments : ['Maintenance']);
-      setAppUsers(nextUsers);
-      setProperties(nextProperties);
-      setCurrentUser(resolvedUser);
-      setCurrentPropertyId(resolvedProperty?.id || '');
-      if (resolvedUser && resolvedUser.id !== savedUserId) {
-        saveCurrentAppUserId(resolvedUser.id);
+    if (isAdmin || isManager) {
+      if (!currentPropertyId) {
+        setCurrentPropertyId('all');
       }
-      if (resolvedProperty && resolvedProperty.id !== savedPropertyId) {
-        saveCurrentPropertyId(resolvedProperty.id);
-      }
-      setDepartment(resolvedUser?.department || settings?.defaultDepartment || fallbackDepartment);
-    };
+      return;
+    }
+    const fallbackProperty = properties.find((entry) => entry.status === 'active') || properties[0] || null;
+    const resolvedProperty = properties.find((entry) => entry.id === currentPropertyId) || fallbackProperty || null;
+    if (resolvedProperty?.id && resolvedProperty.id !== currentPropertyId) {
+      setCurrentPropertyId(resolvedProperty.id);
+    }
+  }, [currentPropertyId, isAdmin, isManager, properties, setCurrentPropertyId]);
 
-    refreshProgramSetup();
-    window.addEventListener(DATA_STORE_UPDATED_EVENT, refreshProgramSetup as EventListener);
-    window.addEventListener('program-setup-updated', refreshProgramSetup);
-    window.addEventListener('user-session-updated', refreshProgramSetup);
-    return () => {
-      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refreshProgramSetup as EventListener);
-      window.removeEventListener('program-setup-updated', refreshProgramSetup);
-      window.removeEventListener('user-session-updated', refreshProgramSetup);
-    };
-  }, []);
+  useEffect(() => {
+    const derivedDepartments = [...new Set([
+      ...(programSetting?.defaultDepartment ? [programSetting.defaultDepartment] : []),
+      ...employees.map((employee) => employee.department).filter(Boolean),
+      ...(currentUser?.department ? [currentUser.department] : []),
+    ])];
+    const nextDepartmentOptions = derivedDepartments.length > 0 ? derivedDepartments : ['Maintenance'];
+    setDepartmentOptions(nextDepartmentOptions);
+    setDepartment((currentDepartment) => {
+      if (currentUser?.department) return currentUser.department;
+      if (nextDepartmentOptions.includes(currentDepartment)) return currentDepartment;
+      return nextDepartmentOptions[0] ?? 'Maintenance';
+    });
+  }, [currentUser?.department, employees, programSetting?.defaultDepartment]);
 
   useEffect(() => {
     applyBranding(programSetting ?? undefined);
   }, [programSetting]);
 
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent('operations-context-updated', {
-        detail: {
-          department,
-          date: currentDate.toISOString().slice(0, 10),
-          currentUserId: currentUser?.id || '',
-          propertyId: currentPropertyId,
-        },
-      }),
-    );
-  }, [currentDate, currentPropertyId, currentUser?.id, department]);
-
-  useEffect(() => {
-    const handleDataUpdated = () => setDataRefreshTick((current) => current + 1);
-    window.addEventListener(DATA_STORE_UPDATED_EVENT, handleDataUpdated as EventListener);
-    return () => window.removeEventListener(DATA_STORE_UPDATED_EVENT, handleDataUpdated as EventListener);
-  }, []);
-
   const notifications = useMemo(() => {
-    const todayKey = currentDate.toISOString().slice(0, 10);
-    const employees = loadEmployees();
-    const scheduleEntries = loadScheduleEntries();
-    const assignments = loadAssignments();
-    const equipmentUnits = loadEquipmentUnits();
-    const weatherStations = loadWeatherStations();
-    const applicationLogs = loadChemicalApplicationLogs();
-
     const activeEmployees = employees.filter((employee) => employee.status === 'active' && employee.department === department);
     const scheduledToday = scheduleEntries.filter(
       (entry) => entry.date === todayKey && entry.status === 'scheduled' && activeEmployees.some((employee) => employee.id === entry.employeeId),
@@ -276,33 +252,14 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
 
     return nextNotifications;
-  }, [currentDate, currentUser?.role, dataRefreshTick, department]);
-
-  const handleSelectUser = (userId: string) => {
-    const selected = appUsers.find((entry) => entry.id === userId);
-    if (!selected) return;
-    setCurrentUser(selected);
-    saveCurrentAppUserId(selected.id);
-    setDepartment(selected.department || programSetting?.defaultDepartment || departmentOptions[0] || 'Maintenance');
-    window.dispatchEvent(new CustomEvent('user-session-updated'));
-  };
+  }, [applicationLogs, assignments, currentUser?.role, department, employees, equipmentUnits, scheduleEntries, todayKey, weatherStations]);
 
   const handleSelectProperty = (propertyId: string) => {
     setCurrentPropertyId(propertyId);
-    saveCurrentPropertyId(propertyId);
-    window.dispatchEvent(new CustomEvent('operations-context-updated', {
-      detail: {
-        department,
-        date: currentDate.toISOString().slice(0, 10),
-        currentUserId: currentUser?.id || '',
-        propertyId,
-      },
-    }));
   };
 
-  const handleSignOut = () => {
-    saveCurrentAppUserId('');
-    window.dispatchEvent(new CustomEvent('user-session-updated'));
+  const handleSignOut = async () => {
+    await signOut();
     navigate('/');
   };
 
@@ -320,10 +277,33 @@ export function AppLayout({ children }: AppLayoutProps) {
             properties={properties}
             currentPropertyId={currentPropertyId}
             onSelectProperty={handleSelectProperty}
-            appUsers={appUsers}
-            currentUser={currentUser ?? undefined}
+            allowAllProperties={isAdmin || isManager}
+            appUsers={currentUser ? [{
+              id: currentUser.appUserId,
+              fullName: currentUser.fullName,
+              email: currentUser.email,
+              role: currentUser.role === 'employee' ? 'crew' : currentUser.role,
+              title: currentUser.title,
+              department: currentUser.department,
+              clubId: currentUser.propertyId || 'default-property',
+              clubLabel: programSetting?.clientLabel || 'Client profile',
+              avatarInitials: currentUser.fullName.split(' ').map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase() || 'WF',
+              status: 'active',
+            }] : []}
+            currentUser={currentUser ? {
+              id: currentUser.appUserId,
+              fullName: currentUser.fullName,
+              email: currentUser.email,
+              role: currentUser.role === 'employee' ? 'crew' : currentUser.role,
+              title: currentUser.title,
+              department: currentUser.department,
+              clubId: currentUser.propertyId || 'default-property',
+              clubLabel: programSetting?.clientLabel || 'Client profile',
+              avatarInitials: currentUser.fullName.split(' ').map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase() || 'WF',
+              status: 'active',
+            } : undefined}
             notifications={notifications}
-            onSelectUser={handleSelectUser}
+            onSelectUser={() => {}}
             onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
           />

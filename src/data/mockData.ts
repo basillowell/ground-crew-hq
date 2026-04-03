@@ -105,6 +105,7 @@ export interface Assignment {
   startTime: string;
   duration: number;
   area: string;
+  status?: 'planned' | 'in-progress' | 'completed';
 }
 
 export interface WeatherLocation {
@@ -314,6 +315,8 @@ export interface Property {
   address: string;
   city: string;
   state: string;
+  latitude?: number;
+  longitude?: number;
   acreage: number;
   logoInitials: string;
   color: string;

@@ -69,7 +69,7 @@ export default function MessagingPage() {
     const channel = supabase
       .channel(`messages-live-${authUserQuery.data.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['messages', authUserQuery.data?.id ?? 'anonymous'] });
+        void queryClient.invalidateQueries({ queryKey: ['messages'] });
       })
       .subscribe();
 

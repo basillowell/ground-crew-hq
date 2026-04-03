@@ -27,6 +27,7 @@ interface WorkflowTopBarProps {
   properties: Property[];
   currentPropertyId: string;
   onSelectProperty: (propertyId: string) => void;
+  allowAllProperties?: boolean;
   appUsers: AppUser[];
   currentUser?: AppUser;
   notifications: AppNotification[];
@@ -52,6 +53,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   properties,
   currentPropertyId,
   onSelectProperty,
+  allowAllProperties = false,
   appUsers,
   currentUser,
   notifications,
@@ -62,6 +64,13 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const navigate = useNavigate();
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
+  const selectedProperty = currentPropertyId === 'all'
+    ? null
+    : properties.find((property) => property.id === currentPropertyId) ?? null;
+  const propertyLabel = currentPropertyId === 'all'
+    ? 'All Properties'
+    : selectedProperty?.name ?? 'Select Property';
+  const propertyDotColor = currentPropertyId === 'all' ? '#334155' : selectedProperty?.color ?? '#166534';
 
   return (
     <header className="border-b bg-card px-3 py-2 shrink-0">
@@ -86,6 +95,9 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             <SelectValue placeholder="Select property" />
           </SelectTrigger>
           <SelectContent>
+            {allowAllProperties ? (
+              <SelectItem value="all">All Properties</SelectItem>
+            ) : null}
             {properties.map((entry) => (
               <SelectItem key={entry.id} value={entry.id}>
                 {entry.name}
@@ -93,6 +105,14 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             ))}
           </SelectContent>
         </Select>
+
+        <div className="hidden min-w-[220px] items-center gap-2 rounded-xl border bg-background px-3 py-2 lg:flex">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: propertyDotColor }} />
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Property Context</div>
+            <div className="text-sm font-medium">{propertyLabel}</div>
+          </div>
+        </div>
 
         <div className="min-w-[250px]">
           <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Workflow Date</div>

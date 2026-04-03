@@ -16,8 +16,7 @@ import {
   Building2,
   Smartphone,
 } from 'lucide-react';
-import { memo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { memo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { NavLink } from '@/components/NavLink';
 import {
@@ -32,8 +31,8 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { loadCurrentPropertyId, loadProgramSettings, loadProperties, loadPropertyClassOptions } from '@/lib/dataStore';
-import { supabase } from '@/lib/supabase';
+import { loadProgramSettings, loadProperties, loadPropertyClassOptions } from '@/lib/dataStore';
+import { useAuth } from '@/contexts/AuthContext';
 
 type NavRole = 'employee' | 'admin';
 
@@ -101,25 +100,11 @@ const employeeNavSections: NavSection[] = [
   },
 ] as const;
 
-function resolveNavRoleFromMetadata(authUser?: {
-  app_metadata?: Record<string, unknown>;
-  user_metadata?: Record<string, unknown>;
-} | null): NavRole {
-  const metadataRole = String(
-    authUser?.app_metadata?.role ??
-    authUser?.user_metadata?.role ??
-    authUser?.user_metadata?.appRole ??
-    '',
-  ).toLowerCase();
-
-  return metadataRole === 'admin' ? 'admin' : 'employee';
-}
-
 export const AppSidebarRefined = memo(function AppSidebarRefined() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const queryClient = useQueryClient();
+  const { currentRole, currentPropertyId } = useAuth();
   const programSetting = loadProgramSettings()[0];
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
@@ -127,41 +112,10 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
   const logoUrl = programSetting?.logoUrl;
   const properties = loadProperties();
   const propertyClasses = loadPropertyClassOptions();
-  const currentPropertyId = loadCurrentPropertyId();
   const currentProperty = properties.find((property) => property.id === currentPropertyId);
   const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentProperty?.propertyClassId);
   const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];
-
-  const { data: navRole = 'employee' } = useQuery<NavRole>({
-    queryKey: ['auth-nav-role'],
-    queryFn: async () => {
-      if (!supabase) {
-        return 'employee';
-      }
-
-      const { data } = await supabase.auth.getUser();
-      return resolveNavRoleFromMetadata(data.user);
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  useEffect(() => {
-    if (!supabase) {
-      return;
-    }
-
-    const authListener = supabase?.auth.onAuthStateChange((_event, session) => {
-      queryClient.setQueryData<NavRole>(
-        ['auth-nav-role'],
-        resolveNavRoleFromMetadata(session?.user),
-      );
-    });
-
-    return () => {
-      authListener?.data.subscription.unsubscribe();
-    };
-  }, [queryClient]);
-
+  const navRole: NavRole = currentRole === 'admin' || currentRole === 'manager' ? 'admin' : 'employee';
   const baseSections = navRole === 'admin' ? adminNavSections : employeeNavSections;
   const visibleSections = baseSections
     .map((section) => ({
