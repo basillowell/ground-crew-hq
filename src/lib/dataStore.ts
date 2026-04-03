@@ -301,6 +301,23 @@ function normalizeTaskRequest(request: TaskRequest): TaskRequest {
   };
 }
 
+function normalizeWeatherLocation(location: WeatherLocation): WeatherLocation {
+  return {
+    ...location,
+    propertyId: location.propertyId ?? '',
+    address: location.address ?? '',
+  };
+}
+
+function normalizeWeatherStation(station: WeatherStation): WeatherStation {
+  return {
+    ...station,
+    providerType: station.providerType ?? 'manual',
+    stationCategory: station.stationCategory ?? (station.providerType === 'manual' ? 'manual' : 'regional-grid'),
+    timeZone: station.timeZone ?? '',
+  };
+}
+
 async function replaceRemoteRows<T extends { id?: string }>(table: string, rows: T[]) {
   if (!supabase) return;
   const { error: deleteError } = await supabase.from(table).delete().not('id', 'is', null);
@@ -467,19 +484,19 @@ export function saveChemicalApplicationTankMixItems(value: ChemicalApplicationTa
 }
 
 export function loadWeatherLocations() {
-  return collections.weatherLocations.loadLocal();
+  return collections.weatherLocations.loadLocal().map(normalizeWeatherLocation);
 }
 
 export function saveWeatherLocations(value: WeatherLocation[]) {
-  syncCollection(collections.weatherLocations, value);
+  syncCollection(collections.weatherLocations, value.map(normalizeWeatherLocation));
 }
 
 export function loadWeatherStations() {
-  return collections.weatherStations.loadLocal();
+  return collections.weatherStations.loadLocal().map(normalizeWeatherStation);
 }
 
 export function saveWeatherStations(value: WeatherStation[]) {
-  syncCollection(collections.weatherStations, value);
+  syncCollection(collections.weatherStations, value.map(normalizeWeatherStation));
 }
 
 export function loadChemicalProducts() {

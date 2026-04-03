@@ -10,14 +10,18 @@ import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import {
   type ManualRainfallEntry,
+  type Property,
   type ProgramSettings,
   type WeatherDailyLog,
   type WeatherLocation,
   type WeatherStation,
+  type WeatherStationSuggestion,
   type WorkLocation,
 } from '@/data/seedData';
 import {
+  loadCurrentPropertyId,
   loadManualRainfallEntries,
+  loadProperties,
   loadProgramSettings,
   loadWeatherDailyLogs,
   loadWeatherLocations,
@@ -29,7 +33,7 @@ import {
   saveWeatherStations,
 } from '@/lib/dataStore';
 import { toast } from '@/components/ui/sonner';
-import { fetchPrimaryStationSnapshot } from '@/lib/weatherProviders';
+import { fetchPrimaryStationSnapshot, fetchWeatherStationSuggestions, type GeocodeResult } from '@/lib/weatherProviders';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -58,6 +62,8 @@ function makeId(prefix: string) {
 }
 
 export default function WeatherPage() {
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [currentPropertyId, setCurrentPropertyId] = useState('');
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const [weatherStations, setWeatherStations] = useState<WeatherStation[]>([]);
   const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
@@ -74,11 +80,19 @@ export default function WeatherPage() {
   const [customAreaName, setCustomAreaName] = useState('');
   const [refreshTick, setRefreshTick] = useState(0);
   const [geoLoadingStationId, setGeoLoadingStationId] = useState<string | null>(null);
+  const [stationSearchQuery, setStationSearchQuery] = useState('');
+  const [discoveryAnchor, setDiscoveryAnchor] = useState<GeocodeResult | null>(null);
+  const [stationSuggestions, setStationSuggestions] = useState<WeatherStationSuggestion[]>([]);
+  const [stationSearchStatus, setStationSearchStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
   useEffect(() => {
     const locations = loadWeatherLocations();
     const stations = loadWeatherStations();
     const opsLocations = loadWorkLocations();
+    const propertyList = loadProperties();
+    const activePropertyId = loadCurrentPropertyId();
+    setProperties(propertyList);
+    setCurrentPropertyId(activePropertyId);
     setWeatherLocations(locations);
     setWeatherStations(stations);
     setWorkLocations(opsLocations);
@@ -90,6 +104,7 @@ export default function WeatherPage() {
   }, []);
 
   const selectedLocation = weatherLocations.find((location) => location.id === selectedLocationId) ?? weatherLocations[0];
+  const selectedProperty = properties.find((property) => property.id === (selectedLocation?.propertyId || currentPropertyId));
   const locationStations = weatherStations
     .filter((station) => station.locationId === selectedLocationId)
     .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary));
@@ -126,7 +141,7 @@ export default function WeatherPage() {
         return;
       }
 
-      if (primaryStation.providerType !== 'open-meteo') {
+      if (primaryStation.providerType === 'manual' || primaryStation.providerType === 'davis') {
         setLiveLog(null);
         setLiveStatus('idle');
         return;
@@ -159,6 +174,93 @@ export default function WeatherPage() {
 
   function refreshLiveWeather() {
     setRefreshTick((current) => current + 1);
+  }
+
+  async function searchStationsByAddress(queryOverride?: string) {
+    const query = (queryOverride ?? stationSearchQuery).trim();
+    if (!query) return;
+    setStationSearchStatus('loading');
+    try {
+      const result = await fetchWeatherStationSuggestions({ query });
+      setDiscoveryAnchor(result.anchor);
+      setStationSuggestions(result.suggestions);
+      setStationSearchStatus('ready');
+      if (!result.anchor) {
+        toast('No station suggestions found', {
+          description: 'Try a more specific address or property name.',
+        });
+      }
+    } catch {
+      setStationSearchStatus('error');
+      toast('Station lookup failed', {
+        description: 'The live station search could not complete. Please try again or use current location.',
+      });
+    }
+  }
+
+  async function searchStationsByCurrentLocation() {
+    if (!navigator.geolocation) {
+      toast('Location unavailable', {
+        description: 'This browser does not support device geolocation.',
+      });
+      return;
+    }
+    setStationSearchStatus('loading');
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000,
+        });
+      });
+      const result = await fetchWeatherStationSuggestions({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+      setDiscoveryAnchor(result.anchor);
+      setStationSuggestions(result.suggestions);
+      setStationSearchStatus('ready');
+    } catch {
+      setStationSearchStatus('error');
+      toast('Location lookup failed', {
+        description: 'Allow location access or search by address to find nearby live stations.',
+      });
+    }
+  }
+
+  function addSuggestedStation(suggestion: WeatherStationSuggestion) {
+    if (!selectedLocation) return;
+    const nextLocations = weatherLocations.map((location) =>
+      location.id === selectedLocation.id
+        ? {
+            ...location,
+            address: location.address || discoveryAnchor?.label || selectedProperty?.address || '',
+            latitude: location.latitude ?? discoveryAnchor?.latitude ?? suggestion.latitude,
+            longitude: location.longitude ?? discoveryAnchor?.longitude ?? suggestion.longitude,
+          }
+        : location,
+    );
+    const nextStation: WeatherStation = {
+      id: makeId('ws'),
+      locationId: selectedLocation.id,
+      name: suggestion.name,
+      provider: suggestion.provider,
+      providerType: suggestion.providerType,
+      stationCode: suggestion.stationCode,
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+      timeZone: suggestion.timeZone,
+      stationCategory: suggestion.stationCategory,
+      distanceMiles: suggestion.distanceMiles,
+      isPrimary: locationStations.length === 0,
+      status: 'online',
+    };
+    const nextStations = [...weatherStations, nextStation];
+    persistWeatherSetup(nextLocations, nextStations);
+    toast('Suggested station added', {
+      description: `${suggestion.name} is now available for ${selectedLocation.name}.`,
+    });
   }
 
   async function useCurrentLocationForStation(stationId: string) {
@@ -212,12 +314,15 @@ export default function WeatherPage() {
   function addWeatherAreaFromLocation() {
     const source = workLocations.find((location) => location.id === selectedWorkLocationId);
     if (!source) return;
+    const sourceProperty = properties.find((property) => property.id === source.propertyId);
 
     const nextLocation: WeatherLocation = {
       id: makeId('wl'),
       name: source.name,
-      property: programSetting?.organizationName ?? 'Club Property',
+      property: source.propertyName || sourceProperty?.name || programSetting?.organizationName || 'Club Property',
+      propertyId: source.propertyId,
       area: source.name,
+      address: sourceProperty ? `${sourceProperty.address}, ${sourceProperty.city}, ${sourceProperty.state}` : '',
     };
 
     const nextLocations = [...weatherLocations, nextLocation];
@@ -229,12 +334,15 @@ export default function WeatherPage() {
   function addCustomWeatherArea() {
     const trimmed = customAreaName.trim();
     if (!trimmed) return;
+    const baseProperty = properties.find((property) => property.id === currentPropertyId) ?? properties[0];
 
     const nextLocation: WeatherLocation = {
       id: makeId('wl'),
       name: trimmed,
-      property: programSetting?.organizationName ?? 'Club Property',
+      property: baseProperty?.name || programSetting?.organizationName || 'Club Property',
+      propertyId: baseProperty?.id,
       area: trimmed,
+      address: baseProperty ? `${baseProperty.address}, ${baseProperty.city}, ${baseProperty.state}` : '',
     };
 
     const nextLocations = [...weatherLocations, nextLocation];
@@ -355,7 +463,7 @@ export default function WeatherPage() {
     <div className="p-4 max-w-7xl mx-auto space-y-4">
       <PageHeader
         title="Weather"
-        subtitle="Station-based and manual weather tracking by property, area, and date."
+        subtitle={selectedProperty ? `Real-time station discovery and rainfall tracking for ${selectedProperty.name}.` : 'Station-based and manual weather tracking by property, area, and date.'}
         badge={<Badge variant="secondary">{weatherLocations.length} locations</Badge>}
         action={{ label: 'Manual Rainfall', onClick: () => openDialog('rainfall') }}
       >
@@ -410,10 +518,12 @@ export default function WeatherPage() {
           </Card>
           {weatherLocations.map((location) => {
             const primaryStation = weatherStations.find((station) => station.locationId === location.id && station.isPrimary);
+            const locationProperty = properties.find((property) => property.id === location.propertyId);
             return (
               <Card
                 key={location.id}
-                className={`cursor-pointer p-4 transition-colors ${selectedLocationId === location.id ? 'border-primary/40 bg-accent/40' : 'hover:bg-muted/30'}`}
+                className={`cursor-pointer p-4 transition-colors ${selectedLocationId === location.id ? 'bg-accent/40' : 'hover:bg-muted/30'}`}
+                style={selectedLocationId === location.id && locationProperty?.color ? { borderColor: `${locationProperty.color}66` } : undefined}
                 onClick={() => setSelectedLocationId(location.id)}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -467,6 +577,22 @@ export default function WeatherPage() {
 
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
                 <div className="space-y-4">
+                  {selectedProperty ? (
+                    <div
+                      className="rounded-2xl border bg-muted/20 p-4"
+                      style={{ borderColor: `${selectedProperty.color}55` }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" style={{ borderColor: selectedProperty.color, color: selectedProperty.color }}>
+                          {selectedProperty.shortName}
+                        </Badge>
+                        <span className="text-sm font-medium">{selectedProperty.name}</span>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Use this property’s address and current location to find the nearest live stations and improve rainfall accuracy for agronomic decisions.
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Area Name</label>
@@ -474,12 +600,32 @@ export default function WeatherPage() {
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Property</label>
-                      <Input className="mt-1" value={selectedLocation.property} onChange={(event) => updateSelectedLocation({ property: event.target.value })} />
+                      <select
+                        className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={selectedLocation.propertyId || ''}
+                        onChange={(event) => {
+                          const property = properties.find((entry) => entry.id === event.target.value);
+                          updateSelectedLocation({
+                            propertyId: property?.id,
+                            property: property?.name || selectedLocation.property,
+                            address: property ? `${property.address}, ${property.city}, ${property.state}` : selectedLocation.address,
+                          });
+                        }}
+                      >
+                        <option value="">No property linked</option>
+                        {properties.map((property) => (
+                          <option key={property.id} value={property.id}>{property.name}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Coverage Zone</label>
                     <Input className="mt-1" value={selectedLocation.area} onChange={(event) => updateSelectedLocation({ area: event.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Address / Search Anchor</label>
+                    <Input className="mt-1" value={selectedLocation.address ?? ''} onChange={(event) => updateSelectedLocation({ address: event.target.value })} placeholder="Property or area address" />
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-4">
                     <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Live Source</p>
@@ -492,6 +638,68 @@ export default function WeatherPage() {
                       {liveStatus === 'error' && 'Live fetch failed, so the page is falling back to stored history or manual override.'}
                       {liveStatus === 'idle' && 'Use an online Open-Meteo station with coordinates for live data.'}
                     </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold">Find Nearby Live Stations</p>
+                        <p className="text-xs text-muted-foreground">Search by property address or use current location to find the best station options for rainfall monitoring.</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        value={stationSearchQuery}
+                        onChange={(event) => setStationSearchQuery(event.target.value)}
+                        placeholder={selectedProperty ? `${selectedProperty.address}, ${selectedProperty.city}` : 'Search by address'}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => void searchStationsByAddress(stationSearchQuery || selectedLocation.address || `${selectedProperty?.address ?? ''} ${selectedProperty?.city ?? ''}`)}
+                      >
+                        Search
+                      </Button>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <Button size="sm" variant="outline" className="gap-1" onClick={() => void searchStationsByCurrentLocation()}>
+                        <Crosshair className="h-3.5 w-3.5" /> Use Current Location
+                      </Button>
+                      {selectedProperty?.address ? (
+                        <Button size="sm" variant="outline" onClick={() => void searchStationsByAddress(`${selectedProperty.address}, ${selectedProperty.city}, ${selectedProperty.state}`)}>
+                          Search Property Address
+                        </Button>
+                      ) : null}
+                    </div>
+                    {discoveryAnchor ? (
+                      <div className="mt-3 rounded-xl border bg-background/70 p-3 text-xs text-muted-foreground">
+                        Anchor: {discoveryAnchor.label}
+                      </div>
+                    ) : null}
+                    {stationSearchStatus === 'loading' ? <p className="mt-3 text-sm text-muted-foreground">Searching live station candidates…</p> : null}
+                    {stationSuggestions.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {stationSuggestions.map((suggestion, index) => (
+                          <div key={suggestion.id} className="rounded-xl border bg-background/80 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-sm font-medium">{suggestion.name}</div>
+                                  <Badge variant="outline">{suggestion.provider}</Badge>
+                                  {index === 0 ? <Badge>Best fit</Badge> : null}
+                                </div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  {suggestion.provider} · {suggestion.reason}
+                                  {typeof suggestion.distanceMiles === 'number' ? ` · ${suggestion.distanceMiles} mi` : ''}
+                                </div>
+                              </div>
+                              <Button size="sm" variant="outline" onClick={() => addSuggestedStation(suggestion)}>
+                                Add Station
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

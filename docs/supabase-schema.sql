@@ -118,7 +118,11 @@ create table if not exists public.weather_locations (
   id text primary key,
   name text not null,
   property text not null,
-  area text not null
+  "propertyId" text,
+  area text not null,
+  address text not null default '',
+  latitude numeric,
+  longitude numeric
 );
 
 create table if not exists public.weather_stations (
@@ -131,9 +135,19 @@ create table if not exists public.weather_stations (
   latitude numeric,
   longitude numeric,
   "timeZone" text not null default '',
+  "stationCategory" text not null default 'manual',
+  "distanceMiles" numeric,
   "isPrimary" boolean not null default false,
   status text not null
 );
+
+alter table public.weather_locations add column if not exists "propertyId" text;
+alter table public.weather_locations add column if not exists address text not null default '';
+alter table public.weather_locations add column if not exists latitude numeric;
+alter table public.weather_locations add column if not exists longitude numeric;
+
+alter table public.weather_stations add column if not exists "stationCategory" text not null default 'manual';
+alter table public.weather_stations add column if not exists "distanceMiles" numeric;
 
 create table if not exists public.weather_daily_logs (
   id text primary key,

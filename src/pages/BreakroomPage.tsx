@@ -103,14 +103,21 @@ export default function BreakroomPage() {
     [dayAssignments, scheduledEmployees, tasks],
   );
 
-  const latestWeatherLog = useMemo(
-    () => [...weatherLogs].filter((log) => log.date <= boardDate).sort((left, right) => right.date.localeCompare(left.date))[0],
-    [boardDate, weatherLogs],
+  const weatherLocationsForProperty = useMemo(
+    () => weatherLocations.filter((location) => !propertyId || location.propertyId === propertyId),
+    [propertyId, weatherLocations],
   );
 
+  const latestWeatherLog = useMemo(() => {
+    const allowedLocationIds = new Set(weatherLocationsForProperty.map((location) => location.id));
+    return [...weatherLogs]
+      .filter((log) => log.date <= boardDate && (!propertyId || allowedLocationIds.has(log.locationId)))
+      .sort((left, right) => right.date.localeCompare(left.date))[0];
+  }, [boardDate, propertyId, weatherLocationsForProperty, weatherLogs]);
+
   const weatherLocation = latestWeatherLog
-    ? weatherLocations.find((location) => location.id === latestWeatherLog.locationId) ?? weatherLocations[0]
-    : weatherLocations[0];
+    ? weatherLocations.find((location) => location.id === latestWeatherLog.locationId) ?? weatherLocationsForProperty[0] ?? weatherLocations[0]
+    : weatherLocationsForProperty[0] ?? weatherLocations[0];
 
   const boardNotes = useMemo(
     () => notes.filter((note) => note.date === boardDate || note.type === 'general').slice(0, 6),

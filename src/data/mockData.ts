@@ -105,7 +105,11 @@ export interface WeatherLocation {
   id: string;
   name: string;
   property: string;
+  propertyId?: string;
   area: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface WeatherStation {
@@ -113,13 +117,29 @@ export interface WeatherStation {
   locationId: string;
   name: string;
   provider: string;
-  providerType?: 'manual' | 'open-meteo' | 'davis' | 'noaa';
+  providerType?: 'manual' | 'open-meteo' | 'davis' | 'noaa' | 'airport';
   stationCode: string;
   latitude?: number;
   longitude?: number;
   timeZone?: string;
+  stationCategory?: 'property' | 'airport' | 'regional-grid' | 'manual';
+  distanceMiles?: number;
   isPrimary: boolean;
   status: 'online' | 'offline';
+}
+
+export interface WeatherStationSuggestion {
+  id: string;
+  name: string;
+  provider: string;
+  providerType: 'open-meteo' | 'noaa' | 'airport';
+  stationCode: string;
+  latitude: number;
+  longitude: number;
+  timeZone: string;
+  stationCategory: 'airport' | 'regional-grid';
+  distanceMiles?: number;
+  reason: string;
 }
 
 export interface WeatherDailyLog {
@@ -606,16 +626,16 @@ export const reportCategories = [
 ];
 
 export const weatherLocations: WeatherLocation[] = [
-  { id: 'wl1', name: 'North Course', property: 'Ground Crew HQ', area: 'Greens + Fairways' },
-  { id: 'wl2', name: 'South Course', property: 'Ground Crew HQ', area: 'Practice + Tees' },
-  { id: 'wl3', name: 'Clubhouse Grounds', property: 'Ground Crew HQ', area: 'Landscape + Entry' },
+  { id: 'wl1', name: 'North Course', property: 'Ground Crew HQ', propertyId: 'prop-1', area: 'Greens + Fairways', address: '1200 Championship Dr, Scottsdale, AZ', latitude: 35.7796, longitude: -78.6382 },
+  { id: 'wl2', name: 'South Course', property: 'Ground Crew HQ', propertyId: 'prop-1', area: 'Practice + Tees', address: '1200 Championship Dr, Scottsdale, AZ', latitude: 35.7688, longitude: -78.6484 },
+  { id: 'wl3', name: 'Clubhouse Grounds', property: 'Ground Crew HQ', propertyId: 'prop-1', area: 'Landscape + Entry', address: '1200 Championship Dr, Scottsdale, AZ', latitude: 35.7762, longitude: -78.6328 },
 ];
 
 export const weatherStations: WeatherStation[] = [
-  { id: 'ws1', locationId: 'wl1', name: 'North Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'NC-01', latitude: 35.7796, longitude: -78.6382, timeZone: 'America/New_York', isPrimary: true, status: 'online' },
-  { id: 'ws2', locationId: 'wl1', name: 'North Backup', provider: 'Manual Feed', providerType: 'manual', stationCode: 'NC-ALT', latitude: 35.7815, longitude: -78.6401, timeZone: 'America/New_York', isPrimary: false, status: 'online' },
-  { id: 'ws3', locationId: 'wl2', name: 'South Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'SC-01', latitude: 35.7688, longitude: -78.6484, timeZone: 'America/New_York', isPrimary: true, status: 'offline' },
-  { id: 'ws4', locationId: 'wl3', name: 'Clubhouse Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'CH-01', latitude: 35.7762, longitude: -78.6328, timeZone: 'America/New_York', isPrimary: true, status: 'online' },
+  { id: 'ws1', locationId: 'wl1', name: 'North Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'NC-01', latitude: 35.7796, longitude: -78.6382, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'online' },
+  { id: 'ws2', locationId: 'wl1', name: 'North Backup', provider: 'Manual Feed', providerType: 'manual', stationCode: 'NC-ALT', latitude: 35.7815, longitude: -78.6401, timeZone: 'America/New_York', stationCategory: 'manual', isPrimary: false, status: 'online' },
+  { id: 'ws3', locationId: 'wl2', name: 'South Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'SC-01', latitude: 35.7688, longitude: -78.6484, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'offline' },
+  { id: 'ws4', locationId: 'wl3', name: 'Clubhouse Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'CH-01', latitude: 35.7762, longitude: -78.6328, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'online' },
 ];
 
 export const weatherDailyLogs: WeatherDailyLog[] = [
