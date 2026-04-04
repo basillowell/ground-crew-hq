@@ -26,6 +26,7 @@ type AuthContextValue = {
   currentPropertyId: string;
   setCurrentPropertyId: (propertyId: string) => void;
   signOut: () => Promise<void>;
+  authDebugMessage: string;
   isPlanActive: () => boolean;
   isAdmin: boolean;
   isManager: boolean;
@@ -60,8 +61,17 @@ type OrganizationRow = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
-  if (!supabase || !user) return null;
+function getSupabaseProjectLabel() {
+  try {
+    const url = new URL(import.meta.env.VITE_SUPABASE_URL ?? '');
+    return url.hostname;
+  } catch {
+    return 'unknown-supabase-project';
+  }
+}
+
+async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfile | null; debugMessage: string }> {
+  if (!supabase || !user) return { profile: null, debugMessage: '' };
 
   const { data, error } = await supabase
     .from('app_users')
@@ -70,7 +80,10 @@ async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
     .maybeSingle();
 
   if (error || !data) {
-    return null;
+    return {
+      profile: null,
+      debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but no app user profile was found for ${user.email ?? user.id}.`,
+    };
   }
 
   const row = data as AppUserRow;
@@ -80,6 +93,12 @@ async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
     .eq('id', row.employee_id)
     .maybeSingle();
   const employee = (employeeData as EmployeeRow | null) ?? null;
+  if (!employee) {
+    return {
+      profile: null,
+      debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked employee record ${row.employee_id} is missing.`,
+    };
+  }
 
   const { data: organizationData } = await supabase
     .from('organizations')
@@ -87,21 +106,30 @@ async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
     .eq('id', row.org_id)
     .maybeSingle();
   const organization = (organizationData as OrganizationRow | null) ?? null;
+  if (!organization) {
+    return {
+      profile: null,
+      debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked organization ${row.org_id} is missing.`,
+    };
+  }
 
   return {
-    authUser: user,
-    appUserId: row.id,
-    employeeId: row.employee_id,
-    orgId: row.org_id,
-    role: row.role,
-    status: row.status,
-    subscriptionStatus: organization?.subscription_status ?? 'trialing',
-    department: row.department ?? employee?.department ?? 'Maintenance',
-    propertyId: employee?.property_id ?? '',
-    fullName: employee ? `${employee.first_name} ${employee.last_name}`.trim() : (user.email ?? 'WorkForce User'),
-    title: employee?.role ?? row.role,
-    email: employee?.email ?? user.email ?? '',
-    phone: employee?.phone ?? '',
+    profile: {
+      authUser: user,
+      appUserId: row.id,
+      employeeId: row.employee_id,
+      orgId: row.org_id,
+      role: row.role,
+      status: row.status,
+      subscriptionStatus: organization.subscription_status ?? 'trialing',
+      department: row.department ?? employee.department ?? 'Maintenance',
+      propertyId: employee.property_id ?? '',
+      fullName: `${employee.first_name} ${employee.last_name}`.trim() || (user.email ?? 'WorkForce User'),
+      title: employee.role ?? row.role,
+      email: employee.email ?? user.email ?? '',
+      phone: employee.phone ?? '',
+    },
+    debugMessage: '',
   };
 }
 
@@ -109,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<AuthProfile | null>(null);
   const [currentPropertyId, setCurrentPropertyIdState] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [authDebugMessage, setAuthDebugMessage] = useState('');
 
   useEffect(() => {
     if (!supabase) {
@@ -121,9 +150,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function hydrateAuth() {
       setIsLoading(true);
       const { data } = await supabase.auth.getUser();
-      const profile = await loadAuthProfile(data.user);
+      const { profile, debugMessage } = await loadAuthProfile(data.user);
       if (!mounted) return;
       setCurrentUser(profile);
+      setAuthDebugMessage(debugMessage);
       setCurrentPropertyIdState((current) => {
         if (!profile) return '';
         if (current) return current;
@@ -138,9 +168,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted) {
         setIsLoading(true);
       }
-      const profile = await loadAuthProfile(session?.user ?? null);
+      const { profile, debugMessage } = await loadAuthProfile(session?.user ?? null);
       if (!mounted) return;
       setCurrentUser(profile);
+      setAuthDebugMessage(debugMessage);
       setCurrentPropertyIdState((current) => {
         if (!profile) return '';
         if (current) return current;
@@ -167,14 +198,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         setCurrentUser(null);
         setCurrentPropertyIdState('');
+        setAuthDebugMessage('');
       },
+      authDebugMessage,
       isPlanActive: () => ['active', 'trialing'].includes(currentUser?.subscriptionStatus ?? ''),
       isAdmin: currentRole === 'admin',
       isManager: currentRole === 'manager',
       isEmployee: currentRole === 'employee',
       isLoading,
     };
-  }, [currentPropertyId, currentUser, isLoading]);
+  }, [authDebugMessage, currentPropertyId, currentUser, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

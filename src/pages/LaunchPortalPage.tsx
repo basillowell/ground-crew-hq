@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
-  const { currentUser, isLoading } = useAuth();
+  const { currentUser, isLoading, authDebugMessage } = useAuth();
   const programSettingsQuery = useProgramSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -137,6 +137,11 @@ export default function LaunchPortalPage() {
               {errorMessage ? (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-3 text-sm text-destructive">
                   {errorMessage}
+                </div>
+              ) : null}
+              {!errorMessage && authDebugMessage ? (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+                  {authDebugMessage}
                 </div>
               ) : null}
               <Button className="w-full gap-2" disabled={isSubmitting || !email || !password} type="submit">
