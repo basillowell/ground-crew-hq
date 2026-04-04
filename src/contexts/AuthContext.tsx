@@ -40,20 +40,22 @@ type AppUserRow = {
   role: AuthRole;
   department: string | null;
   status: string;
-  organizations: {
-    id: string;
-    subscription_status: string;
-  } | null;
-  employees: {
-    id: string;
-    property_id: string;
-    first_name: string;
-    last_name: string;
-    role: string;
-    email: string | null;
-    phone: string | null;
-    department: string;
-  } | null;
+};
+
+type EmployeeRow = {
+  id: string;
+  property_id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  email: string | null;
+  phone: string | null;
+  department: string;
+};
+
+type OrganizationRow = {
+  id: string;
+  subscription_status: string;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -63,7 +65,7 @@ async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
 
   const { data, error } = await supabase
     .from('app_users')
-    .select('id, employee_id, org_id, role, department, status, organizations(id, subscription_status), employees(id, property_id, first_name, last_name, role, email, phone, department)')
+    .select('id, employee_id, org_id, role, department, status')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -72,7 +74,19 @@ async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
   }
 
   const row = data as AppUserRow;
-  const employee = row.employees;
+  const { data: employeeData } = await supabase
+    .from('employees')
+    .select('id, property_id, first_name, last_name, role, email, phone, department')
+    .eq('id', row.employee_id)
+    .maybeSingle();
+  const employee = (employeeData as EmployeeRow | null) ?? null;
+
+  const { data: organizationData } = await supabase
+    .from('organizations')
+    .select('id, subscription_status')
+    .eq('id', row.org_id)
+    .maybeSingle();
+  const organization = (organizationData as OrganizationRow | null) ?? null;
 
   return {
     authUser: user,
@@ -81,7 +95,7 @@ async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
     orgId: row.org_id,
     role: row.role,
     status: row.status,
-    subscriptionStatus: row.organizations?.subscription_status ?? 'trialing',
+    subscriptionStatus: organization?.subscription_status ?? 'trialing',
     department: row.department ?? employee?.department ?? 'Maintenance',
     propertyId: employee?.property_id ?? '',
     fullName: employee ? `${employee.first_name} ${employee.last_name}`.trim() : (user.email ?? 'WorkForce User'),
