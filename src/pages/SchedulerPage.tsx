@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import type { Employee, ScheduleEntry } from '@/data/seedData';
+import type { ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -8,12 +8,11 @@ import { Plus, Copy, Download, Search, Filter, CalendarDays, CloudSun, FlaskConi
 import { ScheduleTemplates } from '@/components/scheduler/ScheduleTemplates';
 import { Input } from '@/components/ui/input';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
-import { type ApplicationArea, type ChemicalApplicationLog, type WeatherDailyLog, type WeatherLocation } from '@/data/seedData';
-import { DATA_STORE_UPDATED_EVENT, loadApplicationAreas, loadChemicalApplicationLogs, loadWeatherDailyLogs, loadWeatherLocations } from '@/lib/dataStore';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEmployees } from '@/lib/supabase-queries';
+import { useOperations } from '@/contexts/OperationsContext';
+import { useApplicationAreas, useChemicalApplicationLogsAll, useEmployees, useWeatherDailyLogs, useWeatherLocations } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
 
 function toDateKey(date: Date) {
@@ -54,23 +53,23 @@ const statusColors: Record<string, string> = {
 
 export default function SchedulerPage() {
   const queryClient = useQueryClient();
-  const { currentPropertyId, currentUser, isAdmin, isManager } = useAuth();
-  const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
+  const { currentPropertyId, currentUser } = useAuth();
+  const { currentDate } = useOperations();
   const [search, setSearch] = useState('');
-  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
-  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
-  const [applicationLogs, setApplicationLogs] = useState<ChemicalApplicationLog[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const weekDays = useMemo(() => buildWeekDays(currentDate), [currentDate]);
   const today = useMemo(() => toDateKey(new Date()), []);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
-  const employeesQuery = useEmployees(propertyScope);
+  const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
+  const applicationAreasQuery = useApplicationAreas();
+  const weatherLogsQuery = useWeatherDailyLogs();
+  const weatherLocationsQuery = useWeatherLocations();
+  const applicationLogsQuery = useChemicalApplicationLogsAll();
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
-      queryKey: ['schedule-entries', day.date, propertyScope ?? 'all'],
+      queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
       queryFn: async () => {
         if (!supabase) return [] as ScheduleEntry[];
         let query = supabase
@@ -80,6 +79,9 @@ export default function SchedulerPage() {
           .order('shift_start');
         if (propertyScope && propertyScope !== 'all') {
           query = query.eq('property_id', propertyScope);
+        }
+        if (currentUser?.orgId) {
+          query = query.eq('org_id', currentUser.orgId);
         }
         const { data, error } = await query;
         if (error) throw error;
@@ -96,6 +98,10 @@ export default function SchedulerPage() {
     })),
   });
   const employeeList = employeesQuery.data ?? [];
+  const applicationAreas = applicationAreasQuery.data ?? [];
+  const weatherLogs = weatherLogsQuery.data ?? [];
+  const weatherLocations = weatherLocationsQuery.data ?? [];
+  const applicationLogs = applicationLogsQuery.data ?? [];
   const scheduleList = useMemo(
     () => weekScheduleQueries.flatMap((query) => query.data ?? []),
     [weekScheduleQueries],
@@ -108,30 +114,6 @@ export default function SchedulerPage() {
     shiftEnd: '13:30',
     status: 'scheduled' as ScheduleEntry['status'],
   });
-
-  useEffect(() => {
-    const refresh = () => {
-      setApplicationAreas(loadApplicationAreas());
-      setWeatherLogs(loadWeatherDailyLogs());
-      setWeatherLocations(loadWeatherLocations());
-      setApplicationLogs(loadChemicalApplicationLogs());
-    };
-
-    const handleOperationsContext = (event: Event) => {
-      const detail = (event as CustomEvent<{ date?: string }>).detail;
-      if (detail?.date) {
-        setCurrentDate(new Date(`${detail.date}T12:00:00`));
-      }
-    };
-
-    refresh();
-    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-    window.addEventListener('operations-context-updated', handleOperationsContext as EventListener);
-    return () => {
-      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-      window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
-    };
-  }, []);
 
   useEffect(() => {
     const firstActiveEmployeeId = employeeList.find((employee) => employee.status === 'active')?.id ?? '';

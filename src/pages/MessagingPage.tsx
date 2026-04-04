@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Employee } from '@/data/seedData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,8 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Send, Mail, Phone, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { initializeDataStore, loadEmployees } from '@/lib/dataStore';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { useEmployees } from '@/lib/supabase-queries';
 
 type MessageRecord = {
   id: string;
@@ -27,15 +27,10 @@ export default function MessagingPage() {
   const [search, setSearch] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentPropertyId, currentUser } = useAuth();
+  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
 
-  const employeesQuery = useQuery<Employee[]>({
-    queryKey: ['messaging-employees'],
-    queryFn: async () => {
-      await initializeDataStore();
-      return loadEmployees();
-    },
-    staleTime: 1000 * 60 * 10,
-  });
+  const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
 
   const authUserQuery = useQuery({
     queryKey: ['messaging-auth-user'],

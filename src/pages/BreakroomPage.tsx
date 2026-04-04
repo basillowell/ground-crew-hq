@@ -1,65 +1,57 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { PageHeader, AvatarInitials } from '@/components/shared';
 import { ClipboardList, CloudSun, MapPin, RefreshCcw, Users } from 'lucide-react';
-import type { Assignment, Employee, Note, ScheduleEntry, Task, WeatherDailyLog, WeatherLocation } from '@/data/seedData';
-import {
-  DATA_STORE_UPDATED_EVENT,
-  loadAssignments,
-  loadEmployees,
-  loadNotes,
-  loadScheduleEntries,
-  loadTasks,
-  loadWeatherDailyLogs,
-  loadWeatherLocations,
-} from '@/lib/dataStore';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOperations } from '@/contexts/OperationsContext';
+import {
+  useAssignments,
+  useEmployees,
+  useNotes,
+  useScheduleEntries,
+  useTasks,
+  useWeatherDailyLogs,
+  useWeatherLocations,
+} from '@/lib/supabase-queries';
 
-function defaultBoardDate() {
-  return new Date().toISOString().slice(0, 10);
+function toDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
 export default function BreakroomPage() {
-  const [boardDate, setBoardDate] = useState(defaultBoardDate());
-  const [department, setDepartment] = useState('Maintenance');
-  const [propertyId, setPropertyId] = useState('');
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
-  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
-  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
+  const queryClient = useQueryClient();
+  const { currentPropertyId, currentUser } = useAuth();
+  const { currentDate, department } = useOperations();
+  const boardDate = toDateKey(currentDate);
+  const propertyId = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
+  const employees = useEmployees(propertyId, currentUser?.orgId).data ?? [];
+  const tasks = useTasks(propertyId, currentUser?.orgId).data ?? [];
+  const assignments = useAssignments(boardDate, propertyId, currentUser?.orgId).data ?? [];
+  const notes = useNotes(propertyId, currentUser?.orgId).data ?? [];
+  const scheduleEntries = useScheduleEntries(boardDate, propertyId, currentUser?.orgId).data ?? [];
+  const weatherLogs = useWeatherDailyLogs().data ?? [];
+  const weatherLocations = useWeatherLocations().data ?? [];
 
   useEffect(() => {
-    const refresh = () => {
-      setEmployees(loadEmployees());
-      setTasks(loadTasks());
-      setAssignments(loadAssignments());
-      setNotes(loadNotes());
-      setScheduleEntries(loadScheduleEntries());
-      setWeatherLogs(loadWeatherDailyLogs());
-      setWeatherLocations(loadWeatherLocations());
-    };
+    const intervalId = window.setInterval(() => {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['employees'] }),
+        queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['notes'] }),
+        queryClient.invalidateQueries({ queryKey: ['schedule-entries'] }),
+        queryClient.invalidateQueries({ queryKey: ['weather-daily-logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['weather-locations'] }),
+      ]);
+    }, 30000);
 
-    const handleContext = (event: Event) => {
-      const detail = (event as CustomEvent<{ department?: string; date?: string; propertyId?: string }>).detail;
-      if (detail?.department) setDepartment(detail.department);
-      if (detail?.date) setBoardDate(detail.date);
-      if (detail?.propertyId !== undefined) setPropertyId(detail.propertyId);
-    };
-
-    refresh();
-    const intervalId = window.setInterval(refresh, 30000);
-    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-    window.addEventListener('operations-context-updated', handleContext as EventListener);
     return () => {
       window.clearInterval(intervalId);
-      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-      window.removeEventListener('operations-context-updated', handleContext as EventListener);
     };
-  }, []);
+  }, [queryClient]);
 
   const scheduledEmployees = useMemo(() => {
     const scheduledIds = new Set(
@@ -71,7 +63,7 @@ export default function BreakroomPage() {
       .filter(
         (employee) =>
           employee.status === 'active' &&
-          (!propertyId || employee.propertyId === propertyId) &&
+          (!propertyId || propertyId === 'all' || employee.propertyId === propertyId) &&
           (!department || department === 'All Departments' || employee.department === department) &&
           scheduledIds.has(employee.id),
       )
@@ -104,14 +96,14 @@ export default function BreakroomPage() {
   );
 
   const weatherLocationsForProperty = useMemo(
-    () => weatherLocations.filter((location) => !propertyId || location.propertyId === propertyId),
+    () => weatherLocations.filter((location) => !propertyId || propertyId === 'all' || location.propertyId === propertyId),
     [propertyId, weatherLocations],
   );
 
   const latestWeatherLog = useMemo(() => {
     const allowedLocationIds = new Set(weatherLocationsForProperty.map((location) => location.id));
     return [...weatherLogs]
-      .filter((log) => log.date <= boardDate && (!propertyId || allowedLocationIds.has(log.locationId)))
+      .filter((log) => log.date <= boardDate && (!propertyId || propertyId === 'all' || allowedLocationIds.has(log.locationId)))
       .sort((left, right) => right.date.localeCompare(left.date))[0];
   }, [boardDate, propertyId, weatherLocationsForProperty, weatherLogs]);
 

@@ -31,8 +31,8 @@ import {
   SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { loadProgramSettings, loadProperties, loadPropertyClassOptions } from '@/lib/dataStore';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProgramSettings, useProperties, usePropertyClassOptions } from '@/lib/supabase-queries';
 
 type NavRole = 'employee' | 'admin';
 
@@ -104,14 +104,14 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { currentRole, currentPropertyId } = useAuth();
-  const programSetting = loadProgramSettings()[0];
+  const { currentRole, currentPropertyId, currentUser } = useAuth();
+  const programSetting = useProgramSettings(currentUser?.orgId).data ?? undefined;
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
   const logoUrl = programSetting?.logoUrl;
-  const properties = loadProperties();
-  const propertyClasses = loadPropertyClassOptions();
+  const properties = useProperties(currentUser?.orgId).data ?? [];
+  const propertyClasses = usePropertyClassOptions().data ?? [];
   const currentProperty = properties.find((property) => property.id === currentPropertyId);
   const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentProperty?.propertyClassId);
   const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];

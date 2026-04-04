@@ -2,7 +2,8 @@ import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus } from 'lucide-react';
-import { loadProgramSettings } from '@/lib/dataStore';
+import { useProgramSettings } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface PageHeaderProps {
   title: string;
@@ -17,7 +18,8 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, badge, action, children }: PageHeaderProps) {
-  const programSetting = loadProgramSettings()[0];
+  const { currentUser } = useAuth();
+  const programSetting = useProgramSettings(currentUser?.orgId).data ?? undefined;
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-3">

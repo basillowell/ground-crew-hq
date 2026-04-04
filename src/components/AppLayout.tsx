@@ -15,6 +15,7 @@ import {
   useWeatherStations,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
+import { OperationsProvider } from '@/contexts/OperationsContext';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -307,9 +308,18 @@ export function AppLayout({ children }: AppLayoutProps) {
             onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
           />
-          <main className="flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,250,248,1))]">
-            {children}
-          </main>
+          <OperationsProvider
+            value={{
+              currentDate,
+              setCurrentDate,
+              department,
+              setDepartment,
+            }}
+          >
+            <main className="flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,250,248,1))]">
+              {children}
+            </main>
+          </OperationsProvider>
         </div>
       </div>
     </SidebarProvider>

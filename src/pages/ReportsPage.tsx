@@ -7,24 +7,25 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   reportCategories,
-  type ApplicationArea,
   type ChemicalApplicationLog,
-  type ChemicalApplicationTankMixItem,
-  type ChemicalProduct,
   type ScheduleEntry,
   type WeatherDailyLog,
-  type WeatherLocation,
 } from '@/data/seedData';
-import {
-  loadApplicationAreas,
-  loadChemicalApplicationLogs,
-  loadChemicalApplicationTankMixItems,
-  loadChemicalProducts,
-  loadWeatherDailyLogs,
-  loadWeatherLocations,
-} from '@/lib/dataStore';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAssignmentsRange, useClockEventsRange, useEmployees, useScheduleEntriesRange, useTasks } from '@/lib/supabase-queries';
+import {
+  useApplicationAreas,
+  useAssignmentsRange,
+  useChemicalApplicationLogsRange,
+  useChemicalApplicationTankMixItems,
+  useChemicalProducts,
+  useClockEventsRange,
+  useEmployees,
+  useScheduleEntriesRange,
+  useTasks,
+  useWeatherDailyLogsByIds,
+  useWeatherDailyLogsRange,
+  useWeatherLocations,
+} from '@/lib/supabase-queries';
 import { computeTimecardSummary } from '@/lib/laborMetrics';
 
 const COLORS = ['hsl(152,55%,38%)', 'hsl(210,80%,52%)', 'hsl(38,92%,50%)', 'hsl(270,60%,55%)', 'hsl(0,0%,55%)'];
@@ -103,12 +104,24 @@ export default function ReportsPage() {
   const assignmentsQuery = useAssignmentsRange(startDate, endDate, propertyId);
   const tasksQuery = useTasks(propertyId);
   const clockEventsRangeQuery = useClockEventsRange(startDate, endDate, propertyId);
-  const [weatherLogs] = useState<WeatherDailyLog[]>(() => loadWeatherDailyLogs());
-  const [weatherLocations] = useState<WeatherLocation[]>(() => loadWeatherLocations());
-  const [applicationLogs] = useState<ChemicalApplicationLog[]>(() => loadChemicalApplicationLogs());
-  const [applicationAreas] = useState<ApplicationArea[]>(() => loadApplicationAreas());
-  const [chemicalProducts] = useState<ChemicalProduct[]>(() => loadChemicalProducts());
-  const [tankMixItems] = useState<ChemicalApplicationTankMixItem[]>(() => loadChemicalApplicationTankMixItems());
+  const applicationLogsQuery = useChemicalApplicationLogsRange(startDate, endDate, propertyId);
+  const applicationLogs = applicationLogsQuery.data ?? [];
+  const refWeatherLogIds = useMemo(
+    () => [...new Set(applicationLogs.map((log) => log.weatherLogId).filter(Boolean) as string[])],
+    [applicationLogs],
+  );
+  const weatherRangeQuery = useWeatherDailyLogsRange(startDate, endDate, propertyId);
+  const weatherByIdQuery = useWeatherDailyLogsByIds(refWeatherLogIds);
+  const weatherLogs = useMemo(() => {
+    const map = new Map<string, WeatherDailyLog>();
+    for (const log of weatherRangeQuery.data ?? []) map.set(log.id, log);
+    for (const log of weatherByIdQuery.data ?? []) map.set(log.id, log);
+    return [...map.values()];
+  }, [weatherByIdQuery.data, weatherRangeQuery.data]);
+  const weatherLocations = useWeatherLocations(propertyId).data ?? [];
+  const applicationAreas = useApplicationAreas(propertyId).data ?? [];
+  const chemicalProducts = useChemicalProducts().data ?? [];
+  const tankMixItems = useChemicalApplicationTankMixItems().data ?? [];
   const employees = employeesQuery.data ?? [];
   const scheduleEntries = scheduleEntriesQuery.data ?? [];
   const assignments = assignmentsQuery.data ?? [];

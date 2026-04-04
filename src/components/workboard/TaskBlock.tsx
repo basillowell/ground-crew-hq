@@ -2,8 +2,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatusChip } from '@/components/StatusChip';
 import type { Task, Assignment } from '@/data/seedData';
-import { loadEquipmentUnits } from '@/lib/dataStore';
 import { Pencil, X } from 'lucide-react';
+import { useEquipmentUnits } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface TaskBlockProps {
   task: Task;
@@ -14,7 +15,9 @@ interface TaskBlockProps {
 }
 
 export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove }: TaskBlockProps) {
-  const equipmentUnits = loadEquipmentUnits();
+  const { currentPropertyId, currentUser } = useAuth();
+  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
+  const equipmentUnits = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
   const equipment = assignment.equipmentId
     ? equipmentUnits.find(u => u.id === assignment.equipmentId)
     : null;

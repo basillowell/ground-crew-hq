@@ -9,7 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Clock, Wrench, CheckCircle2, AlertTriangle, DollarSign, ChevronRight } from 'lucide-react';
 import type { WorkOrder, EquipmentUnit } from '@/data/seedData';
 import { workOrders as seedWorkOrders, equipmentTypes } from '@/data/seedData';
-import { loadEquipmentUnits } from '@/lib/dataStore';
+import { useEquipmentUnits } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
 
 const columns: { key: WorkOrder['status']; label: string; icon: any; color: string }[] = [
   { key: 'open', label: 'Reported', icon: AlertTriangle, color: 'hsl(var(--warning))' },
@@ -58,8 +59,10 @@ function WorkOrderCard({ wo, units, onMoveForward }: { wo: WorkOrder; units: Equ
 }
 
 export function WorkOrderKanban() {
+  const { currentPropertyId, currentUser } = useAuth();
   const [orders, setOrders] = useState<WorkOrder[]>(seedWorkOrders);
-  const [units] = useState(loadEquipmentUnits);
+  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
+  const units = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState({ title: '', description: '', unitId: '', priority: 'medium' as WorkOrder['priority'] });
 
