@@ -1,25 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/shared';
 import {
   Building2,
   Clock,
+  CreditCard,
   GitBranch,
-  GripVertical,
   ListChecks,
   MapPin,
-  Plus,
+  Palette,
+  Plug,
+  Puzzle,
   Settings,
   ShieldCheck,
-  Trash2,
+  UserCog,
   Users,
-  Waves,
+  UsersRound,
 } from 'lucide-react';
+import { ProgramSetupHubPanels } from '@/pages/ProgramSetupHubPanels';
 import { toast } from '@/components/ui/sonner';
 import type { AppUser, DepartmentOption, Employee, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WorkLocation } from '@/data/seedData';
 import {
@@ -66,6 +65,58 @@ const typographyPresets = [
   { id: 'compact-ops', name: 'Compact Ops' },
 ];
 
+const DEFAULT_ENABLED_MODULES = [
+  'command-center',
+  'workboard',
+  'scheduler',
+  'mobile-field',
+  'breakroom',
+  'weather',
+  'applications',
+  'equipment',
+  'safety',
+  'messaging',
+] as const;
+
+const PLAN_LIMITS = { properties: 10, employees: 50, portalUsers: 25 };
+const CURRENT_PLAN_NAME = 'Pro';
+
+export type ActivePage =
+  | 'brand'
+  | 'modules'
+  | 'properties'
+  | 'users'
+  | 'workforce'
+  | 'shifts'
+  | 'billing'
+  | 'integrations';
+
+const NAV_GROUPS: { label: string; items: { id: ActivePage; label: string; icon: typeof Settings }[] }[] = [
+  {
+    label: 'Workspace',
+    items: [
+      { id: 'brand', label: 'Brand & Identity', icon: Palette },
+      { id: 'modules', label: 'Modules & Features', icon: Puzzle },
+      { id: 'properties', label: 'Properties', icon: Building2 },
+    ],
+  },
+  {
+    label: 'People',
+    items: [
+      { id: 'users', label: 'Users & Access', icon: UsersRound },
+      { id: 'workforce', label: 'Workforce Structure', icon: UserCog },
+      { id: 'shifts', label: 'Shift Templates', icon: Clock },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { id: 'billing', label: 'Billing & Plan', icon: CreditCard },
+      { id: 'integrations', label: 'Integrations', icon: Plug },
+    ],
+  },
+];
+
 function makeId(prefix: string) {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? `${prefix}-${crypto.randomUUID()}`
@@ -101,6 +152,9 @@ function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
     primaryColor: settings.primaryColor || '#2f855a',
     accentColor: settings.accentColor || '#d7f5e5',
     sidebarColor: settings.sidebarColor || '#203127',
+    enabledModules:
+      settings.enabledModules && settings.enabledModules.length > 0 ? settings.enabledModules : [...DEFAULT_ENABLED_MODULES],
+    pushNotifications: settings.pushNotifications ?? false,
   };
 }
 
@@ -142,6 +196,9 @@ function FlowCard({
 }
 
 export default function ProgramSetupHubPage() {
+  const [activePage, setActivePage] = useState<ActivePage>('brand');
+  const [propertySheetId, setPropertySheetId] = useState<string | null>(null);
+  const [shiftSheetId, setShiftSheetId] = useState<string | null>(null);
   const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
   const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
   const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
@@ -336,21 +393,22 @@ export default function ProgramSetupHubPage() {
     reader.readAsDataURL(file);
   }
 
-  function handleShellImageUpload(file?: File | null) {
-    if (!file || !programSetting) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      setProgramSetting((current) => (current ? { ...current, shellImageUrl: result } : current));
-      toast('Shell image uploaded', {
-        description: 'The client shell background is now attached to this profile and will save with Program Setup.',
-      });
-    };
-    reader.readAsDataURL(file);
+  function toggleEnabledModule(moduleId: string, enabled: boolean) {
+    setProgramSetting((current) => {
+      if (!current) return current;
+      const set = new Set(current.enabledModules ?? [...DEFAULT_ENABLED_MODULES]);
+      if (enabled) set.add(moduleId);
+      else set.delete(moduleId);
+      return { ...current, enabledModules: [...set] };
+    });
+  }
+
+  function moduleEnabled(id: string) {
+    return (programSetting?.enabledModules ?? [...DEFAULT_ENABLED_MODULES]).includes(id);
   }
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-4">
+    <div className="p-4 max-w-[1600px] mx-auto space-y-4">
       <PageHeader
         title="Program Setup"
         subtitle="Set up the client brand, workforce structure, properties, and labor patterns that feed the rest of the platform."
@@ -405,1139 +463,60 @@ export default function ProgramSetupHubPage() {
         </div>
       </Card>
 
-      <Tabs defaultValue="general">
-        <TabsList className="mb-4 h-auto flex-wrap gap-2 bg-transparent p-0">
-          <TabsTrigger value="general" className="text-xs gap-1 border bg-card px-3 py-2"><Settings className="h-3 w-3" /> Brand + Club Profile</TabsTrigger>
-          <TabsTrigger value="structure" className="text-xs gap-1 border bg-card px-3 py-2"><Users className="h-3 w-3" /> Workforce</TabsTrigger>
-          <TabsTrigger value="users" className="text-xs gap-1 border bg-card px-3 py-2"><ShieldCheck className="h-3 w-3" /> Users + Access</TabsTrigger>
-          <TabsTrigger value="property-classes" className="text-xs gap-1 border bg-card px-3 py-2"><Waves className="h-3 w-3" /> Property Classes</TabsTrigger>
-          <TabsTrigger value="properties" className="text-xs gap-1 border bg-card px-3 py-2"><Building2 className="h-3 w-3" /> Properties</TabsTrigger>
-          <TabsTrigger value="locations" className="text-xs gap-1 border bg-card px-3 py-2"><MapPin className="h-3 w-3" /> Areas + Locations</TabsTrigger>
-          <TabsTrigger value="shifts" className="text-xs gap-1 border bg-card px-3 py-2"><Clock className="h-3 w-3" /> Shift Templates</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview">
-          <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-            <Card className="p-6">
-              <h3 className="font-semibold">What This Page Controls</h3>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium"><Users className="h-4 w-4 text-primary" /> Employee Management</div>
-                  <p className="mt-2 text-sm text-muted-foreground">Departments and crew groups created here feed the roster structure and cleaner filtering on the employee page.</p>
-                </div>
-                <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium"><ListChecks className="h-4 w-4 text-primary" /> Task Management</div>
-                  <p className="mt-2 text-sm text-muted-foreground">Tasks stay in their own module, but the setup hub shows the live catalog count so you know when operations data is healthy.</p>
-                </div>
-                <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium"><Waves className="h-4 w-4 text-primary" /> Weather + Applications</div>
-                  <p className="mt-2 text-sm text-muted-foreground">Locations defined here become anchors for weather areas and chemical application zones.</p>
-                </div>
-                <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium"><Clock className="h-4 w-4 text-primary" /> Scheduler + Workflow</div>
-                  <p className="mt-2 text-sm text-muted-foreground">Shift templates and default department choices reduce repetitive setup and keep labor planning consistent.</p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <h3 className="font-semibold">Live Operational Snapshot</h3>
-              <div className="mt-4 space-y-3">
-                <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Assignments in Workflow</div>
-                  <div className="mt-2 text-3xl font-semibold">{liveCounts.assignments}</div>
-                </div>
-                <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Application Areas</div>
-                  <div className="mt-2 text-3xl font-semibold">{liveCounts.applicationAreas}</div>
-                </div>
-                <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Total Employees</div>
-                  <div className="mt-2 text-3xl font-semibold">{liveCounts.employees}</div>
-                </div>
-                <div className="rounded-2xl border bg-muted/20 p-4">
-                  <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Portal Users</div>
-                  <div className="mt-2 text-3xl font-semibold">{liveCounts.activeAppUsers}</div>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="general">
-          <Card className="p-6 space-y-4">
-            <div className="rounded-2xl border bg-muted/20 p-4">
-              <div className="font-semibold">Brand System</div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Use this section to define the client-facing identity that shows up across the shell, launch screen, and navigation.
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-              <div>
-                <label className="text-sm font-medium">Organization Name</label>
-                <Input
-                  value={programSetting?.organizationName ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, organizationName: event.target.value } : current)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Client App Name</label>
-                <Input
-                  value={programSetting?.appName ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, appName: event.target.value } : current)}
-                  className="mt-1"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">Use the product name each club should see in the browser tab and shell.</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Client / Club Label</label>
-                <Input
-                  value={programSetting?.clientLabel ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, clientLabel: event.target.value } : current)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Navigation Title</label>
-                <Input
-                  value={programSetting?.navigationTitle ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, navigationTitle: event.target.value } : current)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Navigation Subtitle</label>
-                <Input
-                  value={programSetting?.navigationSubtitle ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, navigationSubtitle: event.target.value } : current)}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div>
-                <label className="text-sm font-medium">UI Theme Scheme</label>
-                <select
-                  value={programSetting?.uiThemePreset ?? 'club-emerald'}
-                  onChange={(event) =>
-                    setProgramSetting((current) =>
-                      current ? applyThemePreset(current, event.target.value) : current,
-                    )
-                  }
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  {themePresets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">Choose a fast client theme, then fine-tune colors if needed.</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Typography Scheme</label>
-                <select
-                  value={programSetting?.fontThemePreset ?? 'modern-sans'}
-                  onChange={(event) =>
-                    setProgramSetting((current) =>
-                      current ? { ...current, fontThemePreset: event.target.value } : current,
-                    )
-                  }
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  {typographyPresets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">Choose how headings and body text should feel across the app shell.</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Logo Initials</label>
-                <Input
-                  value={programSetting?.logoInitials ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, logoInitials: event.target.value.toUpperCase().slice(0, 3) } : current)}
-                  className="mt-1"
-                />
-              </div>
-              <div className="sm:col-span-2 xl:col-span-2">
-                <label className="text-sm font-medium">Logo Image URL</label>
-                <Input
-                  value={programSetting?.logoUrl ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, logoUrl: event.target.value } : current)}
-                  placeholder="https://your-club.com/logo.png"
-                  className="mt-1"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Use a square PNG or SVG URL. If blank, the app falls back to logo initials.
-                </p>
-              </div>
-              <div className="xl:col-span-2">
-                <label className="text-sm font-medium">Upload Logo File</label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  className="mt-1"
-                  onChange={(event) => handleLogoUpload(event.target.files?.[0] ?? null)}
-                />
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => setProgramSetting((current) => current ? { ...current, logoUrl: '' } : current)}
-                  >
-                    Clear Logo
-                  </Button>
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <div className="xl:col-span-2">
-                <label className="text-sm font-medium">Shell Background Image URL</label>
-                <Input
-                  value={programSetting?.shellImageUrl ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, shellImageUrl: event.target.value } : current)}
-                  placeholder="https://your-club.com/clubhouse-hero.jpg"
-                  className="mt-1"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  This creates the branded hero ribbon across the app shell. Use a wide landscape image for best results.
-                </p>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Upload Shell Image</label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  className="mt-1"
-                  onChange={(event) => handleShellImageUpload(event.target.files?.[0] ?? null)}
-                />
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => setProgramSetting((current) => current ? { ...current, shellImageUrl: '' } : current)}
-                  >
-                    Clear Shell Image
-                  </Button>
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <div>
-                <label className="text-sm font-medium">Primary Color</label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={programSetting?.primaryColor ?? '#2f855a'}
-                    onChange={(event) => setProgramSetting((current) => current ? { ...current, primaryColor: event.target.value } : current)}
-                    className="h-10 w-12 rounded border bg-transparent"
-                  />
-                  <Input
-                    value={programSetting?.primaryColor ?? ''}
-                    onChange={(event) => setProgramSetting((current) => current ? { ...current, primaryColor: event.target.value } : current)}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Accent Color</label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={programSetting?.accentColor ?? '#d7f5e5'}
-                    onChange={(event) => setProgramSetting((current) => current ? { ...current, accentColor: event.target.value } : current)}
-                    className="h-10 w-12 rounded border bg-transparent"
-                  />
-                  <Input
-                    value={programSetting?.accentColor ?? ''}
-                    onChange={(event) => setProgramSetting((current) => current ? { ...current, accentColor: event.target.value } : current)}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Sidebar Color</label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={programSetting?.sidebarColor ?? '#203127'}
-                    onChange={(event) => setProgramSetting((current) => current ? { ...current, sidebarColor: event.target.value } : current)}
-                    className="h-10 w-12 rounded border bg-transparent"
-                  />
-                  <Input
-                    value={programSetting?.sidebarColor ?? ''}
-                    onChange={(event) => setProgramSetting((current) => current ? { ...current, sidebarColor: event.target.value } : current)}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div>
-                <label className="text-sm font-medium">Default Department</label>
-                <select
-                  value={programSetting?.defaultDepartment ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, defaultDepartment: event.target.value } : current)}
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  {departmentOptions.map((department) => (
-                    <option key={department.id} value={department.name}>{department.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Time Zone</label>
-                <Input
-                  value={programSetting?.timeZone ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, timeZone: event.target.value } : current)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Fiscal Year Start</label>
-                <Input
-                  value={programSetting?.fiscalYearStart ?? ''}
-                  onChange={(event) => setProgramSetting((current) => current ? { ...current, fiscalYearStart: event.target.value } : current)}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-              <div className="rounded-2xl border bg-card/90 p-4 shadow-sm">
-                <div className="text-sm font-semibold">Brand Preview</div>
-                <div className="mt-4 rounded-3xl p-4 text-white" style={{ backgroundColor: programSetting?.sidebarColor || '#203127' }}>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 font-semibold shadow-sm" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
-                      {programSetting?.logoUrl ? (
-                        <img
-                          src={programSetting.logoUrl}
-                          alt={`${programSetting.organizationName || 'Client'} logo`}
-                          className="h-12 w-12 rounded-xl object-contain"
-                        />
-                      ) : (
-                        (programSetting?.logoInitials || 'WF').slice(0, 2)
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-base font-semibold">{programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App'}</div>
-                      <div className="text-xs text-white/75">{programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations platform'}</div>
-                    </div>
-                  </div>
-                  <div className="mt-4 rounded-2xl px-3 py-2 text-sm font-medium shadow-sm" style={{ backgroundColor: programSetting?.primaryColor || '#2f855a' }}>
-                    {programSetting?.clientLabel || programSetting?.organizationName || 'Client label'}
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-2xl border bg-muted/20 p-4">
-                <div className="font-semibold">Live Branding Impact</div>
-                <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-                  <p>App name and client label update the browser title, launch experience, and shell identity.</p>
-                  <p>Logo, typography, and shell imagery help each client feel distinct without custom code.</p>
-                  <p>Theme presets and color controls let you move quickly, then fine-tune if the client wants more ownership of the look.</p>
-                </div>
-              </div>
-            </div>
-            <div className="rounded-2xl border bg-muted/20 p-4">
-              <div className="font-semibold">Client Theme Direction</div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Capture the client’s own input here so the branding can evolve beyond presets and stay tied to the club’s real visual expectations.
-              </p>
-              <textarea
-                value={programSetting?.themeNotes ?? ''}
-                onChange={(event) => setProgramSetting((current) => current ? { ...current, themeNotes: event.target.value } : current)}
-                className="mt-3 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="Example: We want a more premium coastal-club feel, larger crest treatment, calmer neutrals, and less dashboard green."
-              />
-            </div>
-            <div className="grid gap-3 lg:grid-cols-3">
-              <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-4">
-                <div>
-                  <div className="text-sm font-medium">Enable Mobile App</div>
-                  <div className="text-xs text-muted-foreground">Allow field crews to access via mobile.</div>
-                </div>
-                <Switch
-                  checked={programSetting?.enableMobileApp ?? false}
-                  onCheckedChange={(checked) => setProgramSetting((current) => current ? { ...current, enableMobileApp: checked } : current)}
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-4">
-                <div>
-                  <div className="text-sm font-medium">Overtime Tracking</div>
-                  <div className="text-xs text-muted-foreground">Track weekly overtime hours automatically.</div>
-                </div>
-                <Switch
-                  checked={programSetting?.overtimeTracking ?? false}
-                  onCheckedChange={(checked) => setProgramSetting((current) => current ? { ...current, overtimeTracking: checked } : current)}
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-4">
-                <div>
-                  <div className="text-sm font-medium">Equipment QR Codes</div>
-                  <div className="text-xs text-muted-foreground">Enable QR scanning for equipment check-in.</div>
-                </div>
-                <Switch
-                  checked={programSetting?.equipmentQrCodes ?? false}
-                  onCheckedChange={(checked) => setProgramSetting((current) => current ? { ...current, equipmentQrCodes: checked } : current)}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button onClick={saveGeneralSettings}>Save Club Profile</Button>
-            </div>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="structure">
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">Departments</div>
-                  <p className="text-xs text-muted-foreground">Feeds the top bar, employee roster, and scheduling context.</p>
-                </div>
-                <Button size="sm" className="gap-1 text-xs" onClick={() => setDepartmentOptions((current) => [...current, { id: makeId('dep'), name: `Department ${current.length + 1}` }])}>
-                  <Plus className="h-3 w-3" /> Add Department
-                </Button>
-              </div>
-              <div className="mt-4 space-y-2">
-                {departmentOptions.map((department) => (
-                  <div key={department.id} className="flex items-center gap-3 rounded-xl border p-3">
-                    <GripVertical className="h-4 w-4 text-muted-foreground/40" />
-                    <Input
-                      value={department.name}
-                      onChange={(event) => setDepartmentOptions((current) => current.map((entry) => entry.id === department.id ? { ...entry, name: event.target.value } : entry))}
-                      className="h-8 flex-1"
-                    />
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setDepartmentOptions((current) => current.filter((entry) => entry.id !== department.id))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">Crew Groups</div>
-                  <p className="text-xs text-muted-foreground">Helps employees, workflow routing, and breakroom organization stay consistent.</p>
-                </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() => setGroupOptions((current) => [...current, { id: makeId('grp'), name: `Group ${current.length + 1}`, color: '#2f855a' }])}
-                >
-                  <Plus className="h-3 w-3" /> Add Group
-                </Button>
-              </div>
-              <div className="mt-4 space-y-2">
-                {groupOptions.map((group) => (
-                  <div key={group.id} className="flex items-center gap-3 rounded-xl border p-3">
-                    <GripVertical className="h-4 w-4 text-muted-foreground/40" />
-                    <input
-                      type="color"
-                      value={group.color}
-                      onChange={(event) => setGroupOptions((current) => current.map((entry) => entry.id === group.id ? { ...entry, color: event.target.value } : entry))}
-                      className="h-8 w-10 rounded border bg-transparent"
-                    />
-                    <Input
-                      value={group.name}
-                      onChange={(event) => setGroupOptions((current) => current.map((entry) => entry.id === group.id ? { ...entry, name: event.target.value } : entry))}
-                      className="h-8 flex-1"
-                    />
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setGroupOptions((current) => current.filter((entry) => entry.id !== group.id))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-          <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">Role Options</div>
-                  <p className="text-xs text-muted-foreground">Employee roles should be selected from setup instead of typed differently across the roster.</p>
-                </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() => setRoleOptions((current) => [...current, { id: makeId('role'), name: `Role ${current.length + 1}` }])}
-                >
-                  <Plus className="h-3 w-3" /> Add Role
-                </Button>
-              </div>
-              <div className="mt-4 space-y-2">
-                {roleOptions.map((role) => (
-                  <div key={role.id} className="flex items-center gap-3 rounded-xl border p-3">
-                    <GripVertical className="h-4 w-4 text-muted-foreground/40" />
-                    <Input
-                      value={role.name}
-                      onChange={(event) => setRoleOptions((current) => current.map((entry) => entry.id === role.id ? { ...entry, name: event.target.value } : entry))}
-                      className="h-8 flex-1"
-                    />
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setRoleOptions((current) => current.filter((entry) => entry.id !== role.id))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">Language Options</div>
-                  <p className="text-xs text-muted-foreground">Use shared language choices so employee communication settings stay consistent in scheduling and breakroom views.</p>
-                </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() => setLanguageOptions((current) => [...current, { id: makeId('lang'), name: `Language ${current.length + 1}` }])}
-                >
-                  <Plus className="h-3 w-3" /> Add Language
-                </Button>
-              </div>
-              <div className="mt-4 space-y-2">
-                {languageOptions.map((language) => (
-                  <div key={language.id} className="flex items-center gap-3 rounded-xl border p-3">
-                    <GripVertical className="h-4 w-4 text-muted-foreground/40" />
-                    <Input
-                      value={language.name}
-                      onChange={(event) => setLanguageOptions((current) => current.map((entry) => entry.id === language.id ? { ...entry, name: event.target.value } : entry))}
-                      className="h-8 flex-1"
-                    />
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setLanguageOptions((current) => current.filter((entry) => entry.id !== language.id))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <Button onClick={saveStructures}>Save Workforce Structure</Button>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="users">
-          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">Client Portal Users</div>
-                  <p className="text-xs text-muted-foreground">These accounts enter the app, receive alerts, and carry admin, manager, or supervisor access.</p>
-                </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() =>
-                    setAppUsers((current) => [
-                      ...current,
-                      {
-                        id: makeId('user'),
-                        fullName: `New User ${current.length + 1}`,
-                        email: '',
-                        role: 'manager',
-                        title: 'Operations Manager',
-                        department: programSetting?.defaultDepartment || departmentOptions[0]?.name || 'Maintenance',
-                        clubId: slugifyClubId(programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'),
-                        clubLabel: programSetting?.clientLabel || programSetting?.organizationName || 'Client profile',
-                        avatarInitials: 'NU',
-                        status: 'active',
-                      },
-                    ])
-                  }
-                >
-                  <Plus className="h-3 w-3" /> Add User
-                </Button>
-              </div>
-              <div className="mt-4 space-y-3">
-                {appUsers.map((user) => (
-                  <div key={user.id} className="rounded-2xl border p-4">
-                    <div className="grid gap-3 lg:grid-cols-[1.2fr_1.2fr_0.8fr_0.8fr_0.9fr_auto]">
-                      <Input
-                        value={user.fullName}
-                        onChange={(event) =>
-                          setAppUsers((current) =>
-                            current.map((entry) => (entry.id === user.id ? { ...entry, fullName: event.target.value } : entry)),
-                          )
-                        }
-                        placeholder="Full name"
-                        className="h-9"
-                      />
-                      <Input
-                        value={user.email}
-                        onChange={(event) =>
-                          setAppUsers((current) =>
-                            current.map((entry) => (entry.id === user.id ? { ...entry, email: event.target.value } : entry)),
-                          )
-                        }
-                        placeholder="Email"
-                        className="h-9"
-                      />
-                      <select
-                        value={user.role}
-                        onChange={(event) =>
-                          setAppUsers((current) =>
-                            current.map((entry) =>
-                              entry.id === user.id
-                                ? { ...entry, role: event.target.value as AppUser['role'] }
-                                : entry,
-                            ),
-                          )
-                        }
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        <option value="admin">Admin</option>
-                        <option value="manager">Manager</option>
-                        <option value="supervisor">Supervisor</option>
-                        <option value="crew">Crew</option>
-                      </select>
-                      <select
-                        value={user.department}
-                        onChange={(event) =>
-                          setAppUsers((current) =>
-                            current.map((entry) => (entry.id === user.id ? { ...entry, department: event.target.value } : entry)),
-                          )
-                        }
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        {departmentOptions.map((department) => (
-                          <option key={department.id} value={department.name}>{department.name}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={user.status}
-                        onChange={(event) =>
-                          setAppUsers((current) =>
-                            current.map((entry) =>
-                              entry.id === user.id
-                                ? { ...entry, status: event.target.value as AppUser['status'] }
-                                : entry,
-                            ),
-                          )
-                        }
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                        onClick={() => setAppUsers((current) => current.filter((entry) => entry.id !== user.id))}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_0.6fr_1fr]">
-                      <Input
-                        value={user.title}
-                        onChange={(event) =>
-                          setAppUsers((current) =>
-                            current.map((entry) => (entry.id === user.id ? { ...entry, title: event.target.value } : entry)),
-                          )
-                        }
-                        placeholder="Title"
-                        className="h-9"
-                      />
-                      <Input
-                        value={user.avatarInitials}
-                        onChange={(event) =>
-                          setAppUsers((current) =>
-                            current.map((entry) =>
-                              entry.id === user.id
-                                ? { ...entry, avatarInitials: event.target.value.toUpperCase().slice(0, 3) }
-                                : entry,
-                            ),
-                          )
-                        }
-                        placeholder="Initials"
-                        className="h-9"
-                      />
-                      <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                        <div className="font-medium text-foreground">{user.clubLabel || programSetting?.clientLabel || 'Client profile'}</div>
-                        <div className="mt-1">Launch, notifications, and top-bar switching all use this client user list.</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <Button onClick={savePortalUsers}>Save Portal Users</Button>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="font-semibold">Access Model</div>
-              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <p>Portal users are separate from employees. Employees do the work; portal users manage the work.</p>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Launch</div>
-                  <p className="mt-1 text-xs">Only active users should be able to enter the workspace.</p>
-                </div>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Roles</div>
-                  <p className="mt-1 text-xs">Admin, manager, and supervisor access should be assigned here, not improvised elsewhere in the app.</p>
-                </div>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Alerts</div>
-                  <p className="mt-1 text-xs">Role-aware notifications get cleaner once this list reflects the real operating team for each client.</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="property-classes">
-          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">Property Class Master Options</div>
-                  <p className="text-xs text-muted-foreground">Define reusable property blueprints so each club can show only the modules it actually needs.</p>
-                </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() =>
-                    setPropertyClasses((current) => [
-                      ...current,
-                      {
-                        id: makeId('pclass'),
-                        name: `Property Class ${current.length + 1}`,
-                        description: '',
-                        enabledModules: ['command-center', 'workflow', 'breakroom', 'reports'],
-                      },
-                    ])
-                  }
-                >
-                  <Plus className="h-3 w-3" /> Add Class
-                </Button>
-              </div>
-              <div className="mt-4 space-y-3">
-                {propertyClasses.map((propertyClass) => (
-                  <div key={propertyClass.id} className="rounded-2xl border p-4">
-                    <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
-                      <Input
-                        value={propertyClass.name}
-                        onChange={(event) => setPropertyClasses((current) => current.map((entry) => entry.id === propertyClass.id ? { ...entry, name: event.target.value } : entry))}
-                        className="h-9"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                        onClick={() => setPropertyClasses((current) => current.filter((entry) => entry.id !== propertyClass.id))}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <Input
-                      value={propertyClass.description}
-                      onChange={(event) => setPropertyClasses((current) => current.map((entry) => entry.id === propertyClass.id ? { ...entry, description: event.target.value } : entry))}
-                      placeholder="Describe when this property class should be used"
-                      className="mt-3 h-9"
-                    />
-                    <div className="mt-4 grid gap-2 md:grid-cols-2">
-                      {['command-center', 'workflow', 'breakroom', 'weather', 'applications', 'reports', 'field', 'equipment'].map((moduleId) => {
-                        const enabled = propertyClass.enabledModules.includes(moduleId);
-                        return (
-                          <label key={moduleId} className="flex items-center justify-between rounded-xl border bg-muted/20 px-3 py-2 text-sm">
-                            <span className="capitalize">{moduleId.replace('-', ' ')}</span>
-                            <Switch
-                              checked={enabled}
-                              onCheckedChange={(checked) =>
-                                setPropertyClasses((current) =>
-                                  current.map((entry) =>
-                                    entry.id === propertyClass.id
-                                      ? {
-                                          ...entry,
-                                          enabledModules: checked
-                                            ? [...entry.enabledModules, moduleId]
-                                            : entry.enabledModules.filter((value) => value !== moduleId),
-                                        }
-                                      : entry,
-                                  ),
-                                )
-                              }
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <Button onClick={savePropertyClassesTab}>Save Property Classes</Button>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="font-semibold">Class Usage</div>
-              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <p>Property classes act as reusable blueprints for how different sites use the platform.</p>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Site Type</div>
-                  <p className="mt-1 text-xs">A golf course may need weather and applications while a resort may emphasize workflow, reporting, and guest-area work.</p>
-                </div>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Scalability</div>
-                  <p className="mt-1 text-xs">Tie each property to a class so the app can prioritize the right modules without making every client see the same stack.</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="properties">
-          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">Managed Properties</div>
-                  <p className="text-xs text-muted-foreground">These are the properties shown in Command Center and used to scope Workflow routing.</p>
-                </div>
-                <Button
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() =>
-                    setProperties((current) => [
-                      ...current,
-                      {
-                        id: makeId('prop'),
-                        name: `Property ${current.length + 1}`,
-                        shortName: `P${current.length + 1}`,
-                        type: 'golf-course',
-                        address: '',
-                        city: '',
-                        state: '',
-                        latitude: undefined,
-                        longitude: undefined,
-                        acreage: 18,
-                        logoInitials: 'PR',
-                        color: '#2f855a',
-                        status: 'active',
-                      },
-                    ])
-                  }
-                >
-                  <Plus className="h-3 w-3" /> Add Property
-                </Button>
-              </div>
-              <div className="mt-4 space-y-3">
-                {properties.map((property) => (
-                  <div key={property.id} className="rounded-2xl border p-4">
-                    <div className="grid gap-3 lg:grid-cols-[1.2fr_0.7fr_0.8fr_auto]">
-                      <Input value={property.name} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, name: event.target.value } : entry))} className="h-9" />
-                      <Input value={property.shortName} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, shortName: event.target.value } : entry))} className="h-9" />
-                      <div>
-                        <Input
-                          list={`property-type-options-${property.id}`}
-                          value={property.type}
-                          onChange={(event) =>
-                            setProperties((current) =>
-                              current.map((entry) => (entry.id === property.id ? { ...entry, type: event.target.value } : entry)),
-                            )
-                          }
-                          className="h-9"
-                          placeholder="Property type label"
-                        />
-                        <datalist id={`property-type-options-${property.id}`}>
-                          <option value="Golf Course" />
-                          <option value="Polo Club" />
-                          <option value="Athletic Field" />
-                          <option value="Resort" />
-                          <option value="Estate" />
-                          <option value="Municipal Grounds" />
-                        </datalist>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-9 px-2 text-xs text-muted-foreground"
-                          onClick={() =>
-                            setProperties((current) =>
-                              current.map((entry) => (entry.id === property.id ? { ...entry, status: 'paused' } : entry)),
-                            )
-                          }
-                        >
-                          Archive
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => {
-                        const confirmed = window.confirm(`Delete ${property.name}? This only removes the property record. Reassign linked employees and locations first.`);
-                        if (!confirmed) return;
-                        setProperties((current) => current.filter((entry) => entry.id !== property.id));
-                        }}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_0.9fr_0.4fr_0.5fr_0.6fr_0.5fr]">
-                      <Input value={property.address} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, address: event.target.value } : entry))} placeholder="Address" className="h-9" />
-                      <Input value={property.city} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, city: event.target.value } : entry))} placeholder="City" className="h-9" />
-                      <Input value={property.state} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, state: event.target.value } : entry))} placeholder="ST" className="h-9" />
-                      <Input value={String(property.acreage)} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, acreage: Number(event.target.value || 0) } : entry))} placeholder="Acres" className="h-9" />
-                      <Input value={property.logoInitials} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, logoInitials: event.target.value.toUpperCase().slice(0, 3) } : entry))} placeholder="Logo" className="h-9" />
-                      <select value={property.status} onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, status: event.target.value as Property['status'] } : entry))} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
-                        <option value="active">Active</option>
-                        <option value="onboarding">Onboarding</option>
-                        <option value="paused">Paused</option>
-                      </select>
-                    </div>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
-                      <Input
-                        value={property.latitude ?? ''}
-                        onChange={(event) =>
-                          setProperties((current) =>
-                            current.map((entry) =>
-                              entry.id === property.id
-                                ? { ...entry, latitude: event.target.value ? Number(event.target.value) : undefined }
-                                : entry,
-                            ),
-                          )
-                        }
-                        placeholder="Latitude"
-                        className="h-9"
-                      />
-                      <Input
-                        value={property.longitude ?? ''}
-                        onChange={(event) =>
-                          setProperties((current) =>
-                            current.map((entry) =>
-                              entry.id === property.id
-                                ? { ...entry, longitude: event.target.value ? Number(event.target.value) : undefined }
-                                : entry,
-                            ),
-                          )
-                        }
-                        placeholder="Longitude"
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1.2fr]">
-                      <select
-                        value={property.propertyClassId || ''}
-                        onChange={(event) => setProperties((current) => current.map((entry) => entry.id === property.id ? { ...entry, propertyClassId: event.target.value || undefined } : entry))}
-                        className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        <option value="">No property class</option>
-                        {propertyClasses.map((propertyClass) => (
-                          <option key={propertyClass.id} value={propertyClass.id}>{propertyClass.name}</option>
-                        ))}
-                      </select>
-                      <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                        {(propertyClasses.find((entry) => entry.id === property.propertyClassId)?.enabledModules || []).join(' · ') || 'Assign a property class to define which modules this property should emphasize.'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <Button onClick={savePropertiesTab}>Save Properties</Button>
-              </div>
-            </Card>
-
-            <div className="space-y-4">
-              <Card className="p-6">
-                <div className="font-semibold">Property Setup Notes</div>
-                <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                  <p>These saved properties drive Command Center, Workflow scoping, weather, and scheduling context.</p>
-                  <div className="rounded-xl border bg-muted/20 p-4">
-                    <div className="font-medium text-foreground">Workflow Routing</div>
-                    <p className="mt-1 text-xs">Selecting a property in Command Center should move managers straight into the correct property workflow.</p>
-                  </div>
-                  <div className="rounded-xl border bg-muted/20 p-4">
-                    <div className="font-medium text-foreground">Employee Assignment</div>
-                    <p className="mt-1 text-xs">Keep employee and location assignment aligned here so planning stays scoped correctly.</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-semibold">Employee Property Assignment</div>
-                    <p className="text-xs text-muted-foreground">Assign each employee to the property they primarily work from so Command Center and Workflow scope correctly.</p>
-                  </div>
-                  <Badge variant="outline">{employees.length} employees</Badge>
-                </div>
-                <div className="mt-4 space-y-2">
-                  {employees.map((employee) => (
-                    <div key={employee.id} className="grid gap-2 rounded-xl border p-3 md:grid-cols-[1.2fr_0.9fr_0.9fr]">
-                      <div>
-                        <div className="text-sm font-medium">{employee.firstName} {employee.lastName}</div>
-                        <div className="text-xs text-muted-foreground">{employee.department} · {employee.role}</div>
-                      </div>
-                      <select
-                        value={employee.propertyId || ''}
-                        onChange={(event) =>
-                          setEmployees((current) =>
-                            current.map((entry) => (entry.id === employee.id ? { ...entry, propertyId: event.target.value || undefined } : entry)),
-                          )
-                        }
-                        className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        <option value="">No property assigned</option>
-                        {properties.map((property) => (
-                          <option key={property.id} value={property.id}>{property.name}</option>
-                        ))}
-                      </select>
-                      <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                        {(properties.find((property) => property.id === employee.propertyId)?.shortName || 'Unassigned')} primary property
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="locations">
-          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-            <Card className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">Operational Locations</div>
-                  <p className="text-xs text-muted-foreground">These locations ripple into weather setup, application areas, notes, and planning views.</p>
-                </div>
-                <Button size="sm" className="gap-1 text-xs" onClick={() => setWorkLocations((current) => [...current, { id: makeId('loc'), name: `Location ${current.length + 1}`, propertyId: properties[0]?.id, propertyName: properties[0]?.name }])}>
-                  <Plus className="h-3 w-3" /> Add Location
-                </Button>
-              </div>
-              <div className="mt-4 space-y-2">
-                {workLocations.map((location) => (
-                  <div key={location.id} className="flex items-center gap-3 rounded-xl border p-3">
-                    <GripVertical className="h-4 w-4 text-muted-foreground/40" />
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={location.name}
-                      onChange={(event) => setWorkLocations((current) => current.map((entry) => entry.id === location.id ? { ...entry, name: event.target.value } : entry))}
-                      className="h-8 flex-1"
-                    />
-                    <select
-                      value={location.propertyId || ''}
-                      onChange={(event) => {
-                        const property = properties.find((entry) => entry.id === event.target.value);
-                        setWorkLocations((current) => current.map((entry) => entry.id === location.id ? { ...entry, propertyId: event.target.value, propertyName: property?.name } : entry));
-                      }}
-                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    >
-                      <option value="">No property</option>
-                      {properties.map((property) => (
-                        <option key={property.id} value={property.id}>{property.name}</option>
-                      ))}
-                    </select>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setWorkLocations((current) => current.filter((entry) => entry.id !== location.id))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <Button onClick={saveLocations}>Save Locations</Button>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="font-semibold">Location Usage</div>
-              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <p>Locations created here become the shared source for property areas across the system.</p>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Weather</div>
-                  <p className="mt-1 text-xs">Use these saved areas for weather so live and manual data map to the same property structure.</p>
-                </div>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Applications</div>
-                  <p className="mt-1 text-xs">Application zones stay cleaner when they inherit the same property geography.</p>
-                </div>
-                <div className="rounded-xl border bg-muted/20 p-4">
-                  <div className="font-medium text-foreground">Operations</div>
-                  <p className="mt-1 text-xs">Routing, notes, and display communication get less cluttered when the same names are reused everywhere.</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="shifts">
-          <Card className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-semibold">Shift Templates</div>
-                <p className="text-xs text-muted-foreground">Reusable labor patterns that the scheduler can apply without rebuilding each week from scratch.</p>
-              </div>
-              <Button
-                size="sm"
-                className="gap-1 text-xs"
-                onClick={() => setShiftTemplates((current) => [...current, { id: makeId('shift'), name: `Shift ${current.length + 1}`, start: '06:00', end: '14:30', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] }])}
-              >
-                <Plus className="h-3 w-3" /> Add Shift
-              </Button>
-            </div>
-            <div className="mt-4 space-y-3">
-              {shiftTemplates.map((shift) => (
-                <div key={shift.id} className="rounded-xl border p-4">
-                  <div className="grid gap-3 md:grid-cols-[1.4fr_0.7fr_0.7fr]">
-                    <Input
-                      value={shift.name}
-                      onChange={(event) => setShiftTemplates((current) => current.map((entry) => entry.id === shift.id ? { ...entry, name: event.target.value } : entry))}
-                      className="h-9"
-                    />
-                    <Input
-                      value={shift.start}
-                      onChange={(event) => setShiftTemplates((current) => current.map((entry) => entry.id === shift.id ? { ...entry, start: event.target.value } : entry))}
-                      className="h-9"
-                    />
-                    <Input
-                      value={shift.end}
-                      onChange={(event) => setShiftTemplates((current) => current.map((entry) => entry.id === shift.id ? { ...entry, end: event.target.value } : entry))}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {weekDays.map((day) => (
-                      <button
-                        key={day}
-                        type="button"
-                        className={`rounded-full border px-2 py-1 text-[10px] ${shift.days.includes(day) ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground'}`}
-                        onClick={() =>
-                          setShiftTemplates((current) =>
-                            current.map((entry) => {
-                              if (entry.id !== shift.id) return entry;
-                              return {
-                                ...entry,
-                                days: entry.days.includes(day)
-                                  ? entry.days.filter((value) => value !== day)
-                                  : [...entry.days, day],
-                              };
-                            }),
-                          )
-                        }
-                      >
-                        {day}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex justify-end">
-              <Button onClick={saveShiftPlans}>Save Shift Templates</Button>
-            </div>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      <ProgramSetupHubPanels
+        activePage={activePage}
+        setActivePage={setActivePage}
+        propertySheetId={propertySheetId}
+        setPropertySheetId={setPropertySheetId}
+        shiftSheetId={shiftSheetId}
+        setShiftSheetId={setShiftSheetId}
+        programSetting={programSetting}
+        setProgramSetting={setProgramSetting}
+        departmentOptions={departmentOptions}
+        setDepartmentOptions={setDepartmentOptions}
+        groupOptions={groupOptions}
+        setGroupOptions={setGroupOptions}
+        roleOptions={roleOptions}
+        setRoleOptions={setRoleOptions}
+        languageOptions={languageOptions}
+        setLanguageOptions={setLanguageOptions}
+        properties={properties}
+        setProperties={setProperties}
+        propertyClasses={propertyClasses}
+        setPropertyClasses={setPropertyClasses}
+        workLocations={workLocations}
+        setWorkLocations={setWorkLocations}
+        shiftTemplates={shiftTemplates}
+        setShiftTemplates={setShiftTemplates}
+        appUsers={appUsers}
+        setAppUsers={setAppUsers}
+        employees={employees}
+        setEmployees={setEmployees}
+        liveCounts={{
+          employees: liveCounts.employees,
+          activeAppUsers: liveCounts.activeAppUsers,
+          properties: liveCounts.properties,
+        }}
+        saveGeneralSettings={saveGeneralSettings}
+        saveStructures={saveStructures}
+        saveLocations={saveLocations}
+        savePropertiesTab={savePropertiesTab}
+        savePropertyClassesTab={savePropertyClassesTab}
+        saveShiftPlans={saveShiftPlans}
+        savePortalUsers={savePortalUsers}
+        handleLogoUpload={handleLogoUpload}
+        toggleEnabledModule={toggleEnabledModule}
+        moduleEnabled={moduleEnabled}
+        themePresets={themePresets}
+        typographyPresets={typographyPresets}
+        weekDays={weekDays}
+        makeId={makeId}
+        applyThemePreset={applyThemePreset}
+        slugifyClubId={slugifyClubId}
+        navGroups={NAV_GROUPS}
+        planLimits={PLAN_LIMITS}
+        currentPlanName={CURRENT_PLAN_NAME}
+      />
     </div>
   );
 }

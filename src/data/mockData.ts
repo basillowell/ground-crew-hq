@@ -270,6 +270,9 @@ export interface ProgramSettings {
   enableMobileApp: boolean;
   overtimeTracking: boolean;
   equipmentQrCodes: boolean;
+  /** Feature flags for sidebar modules (ids match Program Setup toggles). */
+  enabledModules?: string[];
+  pushNotifications?: boolean;
 }
 
 export interface DepartmentOption {
@@ -481,6 +484,19 @@ export const programSettings: ProgramSettings[] = [
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,
+    enabledModules: [
+      'command-center',
+      'workboard',
+      'scheduler',
+      'mobile-field',
+      'breakroom',
+      'weather',
+      'applications',
+      'equipment',
+      'safety',
+      'messaging',
+    ],
+    pushNotifications: false,
   },
 ];
 
