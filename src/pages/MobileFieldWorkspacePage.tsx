@@ -18,6 +18,32 @@ const MobileFieldMap = lazy(() =>
 );
 
 type ClockAction = 'in' | 'out' | 'break';
+type PendingClockEvent = {
+  employee_id: string;
+  property_id: string;
+  event_type: ClockAction;
+  timestamp: string;
+  location_lat: number | null;
+  location_lng: number | null;
+  localId: string;
+};
+const PENDING_CLOCK_EVENTS_KEY = 'pending-clock-events';
+
+function loadPendingClockEvents() {
+  if (typeof window === 'undefined') return [] as PendingClockEvent[];
+  try {
+    const raw = window.localStorage.getItem(PENDING_CLOCK_EVENTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as PendingClockEvent[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingClockEvents(events: PendingClockEvent[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(PENDING_CLOCK_EVENTS_KEY, JSON.stringify(events));
+}
 
 function MobileFieldSkeleton() {
   return (
@@ -35,6 +61,7 @@ export default function MobileFieldWorkspacePage() {
   const today = new Date().toISOString().slice(0, 10);
   const { currentUser, currentPropertyId } = useAuth();
   const [shouldLoadMap, setShouldLoadMap] = useState(false);
+  const [pendingClockEvents, setPendingClockEvents] = useState<PendingClockEvent[]>(() => loadPendingClockEvents());
 
   const effectivePropertyId =
     currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : currentUser?.propertyId ?? '';
@@ -55,6 +82,52 @@ export default function MobileFieldWorkspacePage() {
     const timeout = window.setTimeout(() => setShouldLoadMap(true), 500);
     return () => window.clearTimeout(timeout);
   }, []);
+
+  useEffect(() => {
+    savePendingClockEvents(pendingClockEvents);
+  }, [pendingClockEvents]);
+
+  async function syncPendingClockEvents(showSuccessToast = false) {
+    if (!supabase || pendingClockEvents.length === 0) return;
+
+    let remaining = [...pendingClockEvents];
+
+    for (const event of pendingClockEvents) {
+      const { error } = await supabase.from('clock_events').insert({
+        employee_id: event.employee_id,
+        property_id: event.property_id,
+        event_type: event.event_type,
+        timestamp: event.timestamp,
+        location_lat: event.location_lat,
+        location_lng: event.location_lng,
+      });
+
+      if (!error) {
+        remaining = remaining.filter((item) => item.localId !== event.localId);
+      }
+    }
+
+    setPendingClockEvents(remaining);
+
+    if (remaining.length !== pendingClockEvents.length) {
+      await queryClient.invalidateQueries({ queryKey: ['clock-events'] });
+    }
+
+    if (showSuccessToast && remaining.length === 0 && pendingClockEvents.length > 0) {
+      toast.success('Pending clock events synced');
+    }
+  }
+
+  useEffect(() => {
+    void syncPendingClockEvents();
+    const handleOnline = () => {
+      void syncPendingClockEvents(true);
+    };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [pendingClockEvents.length, queryClient]);
 
   useEffect(() => {
     if (!supabase || !currentUser?.employeeId) return;
@@ -169,20 +242,33 @@ export default function MobileFieldWorkspacePage() {
     }
 
     const coordinates = locationQuery.data?.ok ? locationQuery.data.data : null;
-    const { error } = await supabase.from('clock_events').insert({
+    const pendingEvent: PendingClockEvent = {
       employee_id: currentEmployee.id,
       property_id: effectivePropertyId,
       event_type: eventType,
       timestamp: new Date().toISOString(),
       location_lat: coordinates?.latitude ?? null,
       location_lng: coordinates?.longitude ?? null,
+      localId: crypto.randomUUID(),
+    };
+
+    setPendingClockEvents((current) => [...current, pendingEvent]);
+
+    const { error } = await supabase.from('clock_events').insert({
+      employee_id: currentEmployee.id,
+      property_id: effectivePropertyId,
+      event_type: eventType,
+      timestamp: pendingEvent.timestamp,
+      location_lat: pendingEvent.location_lat,
+      location_lng: pendingEvent.location_lng,
     });
 
     if (error) {
-      toast.error('Clock event could not be saved.');
+      toast('Saved locally - will sync when connected');
       return;
     }
 
+    setPendingClockEvents((current) => current.filter((item) => item.localId !== pendingEvent.localId));
     toast.success(eventType === 'in' ? 'Clocked in' : eventType === 'out' ? 'Clocked out' : 'Break started');
     await queryClient.invalidateQueries({ queryKey: ['clock-events'] });
   }
@@ -233,6 +319,17 @@ export default function MobileFieldWorkspacePage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[430px] flex-col gap-4 px-4 py-5">
+      {pendingClockEvents.length > 0 ? (
+        <Card className="rounded-2xl border-amber-300 bg-amber-50 shadow-sm">
+          <div className="flex items-center justify-between gap-3 p-4">
+            <div className="text-sm font-medium text-amber-950">{pendingClockEvents.length} events pending sync</div>
+            <Button size="sm" variant="outline" className="min-h-11 rounded-2xl text-sm" onClick={() => void syncPendingClockEvents(true)}>
+              Sync
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       <Card className="rounded-3xl border-border/70 bg-card shadow-sm">
         <div className="space-y-4 p-5">
           <div className="flex items-start justify-between gap-3">

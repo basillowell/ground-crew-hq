@@ -8,8 +8,10 @@ type AuthProfile = {
   authUser: User;
   appUserId: string;
   employeeId: string;
+  orgId: string;
   role: AuthRole;
   status: string;
+  subscriptionStatus: string;
   department: string;
   propertyId: string;
   fullName: string;
@@ -24,6 +26,7 @@ type AuthContextValue = {
   currentPropertyId: string;
   setCurrentPropertyId: (propertyId: string) => void;
   signOut: () => Promise<void>;
+  isPlanActive: () => boolean;
   isAdmin: boolean;
   isManager: boolean;
   isEmployee: boolean;
@@ -33,9 +36,14 @@ type AuthContextValue = {
 type AppUserRow = {
   id: string;
   employee_id: string;
+  org_id: string;
   role: AuthRole;
   department: string | null;
   status: string;
+  organizations: {
+    id: string;
+    subscription_status: string;
+  } | null;
   employees: {
     id: string;
     property_id: string;
@@ -55,7 +63,7 @@ async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
 
   const { data, error } = await supabase
     .from('app_users')
-    .select('id, employee_id, role, department, status, employees(id, property_id, first_name, last_name, role, email, phone, department)')
+    .select('id, employee_id, org_id, role, department, status, organizations(id, subscription_status), employees(id, property_id, first_name, last_name, role, email, phone, department)')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -70,8 +78,10 @@ async function loadAuthProfile(user: User | null): Promise<AuthProfile | null> {
     authUser: user,
     appUserId: row.id,
     employeeId: row.employee_id,
+    orgId: row.org_id,
     role: row.role,
     status: row.status,
+    subscriptionStatus: row.organizations?.subscription_status ?? 'trialing',
     department: row.department ?? employee?.department ?? 'Maintenance',
     propertyId: employee?.property_id ?? '',
     fullName: employee ? `${employee.first_name} ${employee.last_name}`.trim() : (user.email ?? 'WorkForce User'),
@@ -141,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentUser(null);
         setCurrentPropertyIdState('');
       },
+      isPlanActive: () => ['active', 'trialing'].includes(currentUser?.subscriptionStatus ?? ''),
       isAdmin: currentRole === 'admin',
       isManager: currentRole === 'manager',
       isEmployee: currentRole === 'employee',

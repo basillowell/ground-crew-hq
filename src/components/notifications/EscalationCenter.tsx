@@ -4,7 +4,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Bell, BellOff, AlertTriangle, AlertCircle, Info, Settings, ChevronRight, Zap } from 'lucide-react';
-import { escalationRules, type EscalationRule } from '@/data/multiPropertyData';
+type EscalationRule = {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  condition: string;
+  message: string;
+  notifyRoles: string[];
+  isActive: boolean;
+};
 
 const severityConfig = {
   critical: { icon: AlertCircle, color: 'text-destructive', bg: 'bg-destructive/10 border-destructive/20', badge: 'destructive' as const },
@@ -21,6 +28,49 @@ interface LiveAlert {
   propertyName: string;
   dismissed: boolean;
 }
+
+const escalationRules: EscalationRule[] = [
+  {
+    id: 'esc-1',
+    severity: 'warning',
+    condition: 'unscheduled crew before next operating day',
+    message: '{count} crew members need shifts for tomorrow',
+    notifyRoles: ['admin', 'manager'],
+    isActive: true,
+  },
+  {
+    id: 'esc-2',
+    severity: 'critical',
+    condition: 'equipment service threshold exceeded',
+    message: 'Equipment unit is overdue for service by {hours}h',
+    notifyRoles: ['admin', 'manager'],
+    isActive: true,
+  },
+  {
+    id: 'esc-3',
+    severity: 'warning',
+    condition: 'rain or gust event near planned spray window',
+    message: 'Rain expected - review spray operations for {property}',
+    notifyRoles: ['admin', 'manager'],
+    isActive: true,
+  },
+  {
+    id: 'esc-4',
+    severity: 'info',
+    condition: 'weather station offline or stale',
+    message: 'Primary weather feed needs review',
+    notifyRoles: ['admin'],
+    isActive: true,
+  },
+  {
+    id: 'esc-5',
+    severity: 'critical',
+    condition: 'scheduled crew without assignments',
+    message: '{count} crew members are scheduled but unassigned',
+    notifyRoles: ['admin', 'manager'],
+    isActive: true,
+  },
+];
 
 const sampleAlerts: LiveAlert[] = [
   { id: 'la-1', ruleId: 'esc-5', message: '3 crew members are scheduled but unassigned', severity: 'critical', timestamp: '7:15 AM', propertyName: 'Ground Crew HQ', dismissed: false },

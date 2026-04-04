@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { Calendar, Download, Droplets, FileText, FlaskConical, MapPin, Play, Printer, Wind } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,30 +8,23 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   reportCategories,
   type ApplicationArea,
-  type Assignment,
   type ChemicalApplicationLog,
   type ChemicalApplicationTankMixItem,
   type ChemicalProduct,
-  type Employee,
   type ScheduleEntry,
-  type Task,
   type WeatherDailyLog,
   type WeatherLocation,
 } from '@/data/seedData';
 import {
-  DATA_STORE_UPDATED_EVENT,
   loadApplicationAreas,
-  loadAssignments,
   loadChemicalApplicationLogs,
   loadChemicalApplicationTankMixItems,
   loadChemicalProducts,
-  loadEmployees,
-  loadScheduleEntries,
-  loadTasks,
   loadWeatherDailyLogs,
   loadWeatherLocations,
 } from '@/lib/dataStore';
-import { useClockEventsRange } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAssignmentsRange, useClockEventsRange, useEmployees, useScheduleEntriesRange, useTasks } from '@/lib/supabase-queries';
 import { computeTimecardSummary } from '@/lib/laborMetrics';
 
 const COLORS = ['hsl(152,55%,38%)', 'hsl(210,80%,52%)', 'hsl(38,92%,50%)', 'hsl(270,60%,55%)', 'hsl(0,0%,55%)'];
@@ -92,7 +85,7 @@ function reportDescription(report: string) {
 }
 
 export default function ReportsPage() {
-  const [propertyId, setPropertyId] = useState('');
+  const { currentPropertyId } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState(reportCategories[4] ?? reportCategories[0]);
   const [selectedReport, setSelectedReport] = useState((reportCategories[4] ?? reportCategories[0]).reports[0]);
   const [endDate, setEndDate] = useState(currentDateIso());
@@ -104,47 +97,22 @@ export default function ReportsPage() {
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [taskFilter, setTaskFilter] = useState('all');
   const [areaFilter, setAreaFilter] = useState('all');
-  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
-  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
-  const [applicationLogs, setApplicationLogs] = useState<ChemicalApplicationLog[]>([]);
-  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
-  const [chemicalProducts, setChemicalProducts] = useState<ChemicalProduct[]>([]);
-  const [tankMixItems, setTankMixItems] = useState<ChemicalApplicationTankMixItem[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const clockEventsRangeQuery = useClockEventsRange(startDate, endDate, propertyId || undefined);
-
-  useEffect(() => {
-    const refresh = () => {
-      setWeatherLogs(loadWeatherDailyLogs());
-      setWeatherLocations(loadWeatherLocations());
-      setApplicationLogs(loadChemicalApplicationLogs());
-      setApplicationAreas(loadApplicationAreas());
-      setChemicalProducts(loadChemicalProducts());
-      setTankMixItems(loadChemicalApplicationTankMixItems());
-      setEmployees(loadEmployees());
-      setScheduleEntries(loadScheduleEntries());
-      setAssignments(loadAssignments());
-      setTasks(loadTasks());
-    };
-
-    const handleContext = (event: Event) => {
-      const detail = (event as CustomEvent<{ propertyId?: string }>).detail;
-      if (detail?.propertyId !== undefined) {
-        setPropertyId(detail.propertyId);
-      }
-    };
-
-    refresh();
-    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-    window.addEventListener('operations-context-updated', handleContext as EventListener);
-    return () => {
-      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-      window.removeEventListener('operations-context-updated', handleContext as EventListener);
-    };
-  }, []);
+  const propertyId = currentPropertyId || 'all';
+  const employeesQuery = useEmployees(propertyId);
+  const scheduleEntriesQuery = useScheduleEntriesRange(startDate, endDate, propertyId);
+  const assignmentsQuery = useAssignmentsRange(startDate, endDate, propertyId);
+  const tasksQuery = useTasks(propertyId);
+  const clockEventsRangeQuery = useClockEventsRange(startDate, endDate, propertyId);
+  const [weatherLogs] = useState<WeatherDailyLog[]>(() => loadWeatherDailyLogs());
+  const [weatherLocations] = useState<WeatherLocation[]>(() => loadWeatherLocations());
+  const [applicationLogs] = useState<ChemicalApplicationLog[]>(() => loadChemicalApplicationLogs());
+  const [applicationAreas] = useState<ApplicationArea[]>(() => loadApplicationAreas());
+  const [chemicalProducts] = useState<ChemicalProduct[]>(() => loadChemicalProducts());
+  const [tankMixItems] = useState<ChemicalApplicationTankMixItem[]>(() => loadChemicalApplicationTankMixItems());
+  const employees = employeesQuery.data ?? [];
+  const scheduleEntries = scheduleEntriesQuery.data ?? [];
+  const assignments = assignmentsQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
 
   const filteredEmployees = useMemo(
     () => employees.filter((employee) => !propertyId || employee.propertyId === propertyId),

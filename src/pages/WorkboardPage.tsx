@@ -17,27 +17,9 @@ import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
 import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type Property, type ScheduleEntry, type Task, type TaskRequest, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
 import { StickyNote, Droplets, CloudSun, MonitorSmartphone, LayoutList, GanttChart } from 'lucide-react';
-import {
-  DATA_STORE_UPDATED_EVENT,
-  initializeDataStore,
-  loadApplicationAreas,
-  loadAssignments,
-  loadChemicalApplicationLogs,
-  loadEmployees,
-  loadEquipmentUnits,
-  loadNotes,
-  loadProperties,
-  loadScheduleEntries,
-  loadTaskRequests,
-  loadTasks,
-  loadWeatherDailyLogs,
-  loadWeatherLocations,
-  loadWorkLocations,
-  saveAssignments,
-  saveNotes,
-  saveTaskRequests,
-} from '@/lib/dataStore';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAssignments, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 
 function defaultBoardDate() {
   return new Date().toISOString().slice(0, 10);
@@ -60,22 +42,94 @@ function makeId(prefix: string) {
     : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function normalizeApplicationArea(row: Record<string, unknown>): ApplicationArea {
+  return {
+    id: String(row.id ?? ''),
+    name: String(row.name ?? ''),
+    property: String(row.property ?? row.propertyName ?? ''),
+    weatherLocationId: String(row.weatherLocationId ?? row.weather_location_id ?? ''),
+  };
+}
+
+function normalizeTaskRequest(row: Record<string, unknown>): TaskRequest {
+  return {
+    id: String(row.id ?? ''),
+    propertyId: String(row.propertyId ?? row.property_id ?? ''),
+    date: String(row.date ?? ''),
+    title: String(row.title ?? ''),
+    taskId: row.taskId ? String(row.taskId) : row.task_id ? String(row.task_id) : undefined,
+    requestedBy: String(row.requestedBy ?? row.requested_by ?? 'Client Request'),
+    requestedByType: (row.requestedByType ?? row.requested_by_type ?? 'client') as TaskRequest['requestedByType'],
+    priority: (row.priority ?? 'medium') as TaskRequest['priority'],
+    status: (row.status ?? 'new') as TaskRequest['status'],
+    preferredLocation: row.preferredLocation ? String(row.preferredLocation) : row.preferred_location ? String(row.preferred_location) : undefined,
+    notes: String(row.notes ?? ''),
+  };
+}
+
+function normalizeWeatherLocation(row: Record<string, unknown>): WeatherLocation {
+  return {
+    id: String(row.id ?? ''),
+    name: String(row.name ?? ''),
+    property: String(row.property ?? row.propertyName ?? ''),
+    propertyId: row.propertyId ? String(row.propertyId) : row.property_id ? String(row.property_id) : undefined,
+    area: String(row.area ?? ''),
+    address: row.address ? String(row.address) : undefined,
+    latitude: typeof row.latitude === 'number' ? row.latitude : undefined,
+    longitude: typeof row.longitude === 'number' ? row.longitude : undefined,
+  };
+}
+
+function normalizeWeatherLog(row: Record<string, unknown>): WeatherDailyLog {
+  return {
+    id: String(row.id ?? ''),
+    locationId: String(row.locationId ?? row.location_id ?? ''),
+    stationId: row.stationId ? String(row.stationId) : row.station_id ? String(row.station_id) : undefined,
+    date: String(row.date ?? ''),
+    capturedAt: row.capturedAt ? String(row.capturedAt) : row.captured_at ? String(row.captured_at) : undefined,
+    currentConditions: String(row.currentConditions ?? row.current_conditions ?? 'Unknown'),
+    forecast: String(row.forecast ?? ''),
+    rainfallTotal: Number(row.rainfallTotal ?? row.rainfall_total ?? 0),
+    temperature: Number(row.temperature ?? 0),
+    humidity: Number(row.humidity ?? 0),
+    wind: Number(row.wind ?? 0),
+    windGust: row.windGust != null ? Number(row.windGust) : row.wind_gust != null ? Number(row.wind_gust) : undefined,
+    et: Number(row.et ?? 0),
+    source: (row.source ?? 'station') as WeatherDailyLog['source'],
+    alerts: Array.isArray(row.alerts) ? row.alerts.map(String) : [],
+    notes: row.notes ? String(row.notes) : undefined,
+  };
+}
+
+function normalizeWorkLocation(row: Record<string, unknown>): WorkLocation {
+  return {
+    id: String(row.id ?? ''),
+    name: String(row.name ?? ''),
+    propertyId: row.propertyId ? String(row.propertyId) : row.property_id ? String(row.property_id) : undefined,
+    propertyName: row.propertyName ? String(row.propertyName) : row.property_name ? String(row.property_name) : undefined,
+  };
+}
+
+function normalizeApplicationLog(row: Record<string, unknown>) {
+  return {
+    id: String(row.id ?? ''),
+    applicationDate: String(row.applicationDate ?? row.application_date ?? ''),
+    startTime: String(row.startTime ?? row.start_time ?? ''),
+    endTime: String(row.endTime ?? row.end_time ?? ''),
+    areaId: String(row.areaId ?? row.area_id ?? ''),
+    agronomicPurpose: String(row.agronomicPurpose ?? row.agronomic_purpose ?? ''),
+    areaTreated: Number(row.areaTreated ?? row.area_treated ?? 0),
+    areaUnit: String(row.areaUnit ?? row.area_unit ?? ''),
+  };
+}
+
 export default function WorkboardPage() {
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const { currentPropertyId, setCurrentPropertyId, currentUser } = useAuth();
   const [boardDate, setBoardDate] = useState(defaultBoardDate());
   const [department, setDepartment] = useState('Maintenance');
-  const [propertyId, setPropertyId] = useState('');
-  const [properties, setProperties] = useState<Property[]>([]);
   const [groupFilter, setGroupFilter] = useState('all');
-  const [employeeList, setEmployeeList] = useState<Employee[]>([]);
-  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
-  const [noteList, setNoteList] = useState<Note[]>([]);
-  const [scheduleList, setScheduleList] = useState<ScheduleEntry[]>([]);
-  const [equipmentList, setEquipmentList] = useState<EquipmentUnit[]>([]);
-  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
-  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
-  const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
-  const [applicationLogs, setApplicationLogs] = useState(loadChemicalApplicationLogs());
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -119,78 +173,114 @@ export default function WorkboardPage() {
   const workflowParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const focusedPropertyId = workflowParams.get('property') || '';
   const focusMode = workflowParams.get('focus') || '';
-  const queryClient = useQueryClient();
+  const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
 
-  const workflowLiveQuery = useQuery<{
-    assignments: Assignment[];
-    taskRequests: TaskRequest[];
-    tasks: Task[];
-  }>({
-    queryKey: ['workflow-live-data', boardDate, propertyId || 'all'],
+  const propertiesQuery = useProperties();
+  const employeesQuery = useEmployees(effectivePropertyId);
+  const assignmentsQuery = useAssignments(boardDate, effectivePropertyId);
+  const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId);
+  const tasksQuery = useTasks(effectivePropertyId);
+  const equipmentQuery = useEquipmentUnits(effectivePropertyId);
+  const notesQuery = useNotes(effectivePropertyId);
+  const taskRequestsQuery = useQuery({
+    queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
     queryFn: async () => {
-      await initializeDataStore();
-      return {
-        assignments: loadAssignments(),
-        taskRequests: loadTaskRequests(),
-        tasks: loadTasks()
-          .filter((task) => task.status === 'active')
-          .sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999) || left.name.localeCompare(right.name)),
-      };
+      if (!supabase) return [] as TaskRequest[];
+      const { data, error } = await supabase.from('task_requests').select('*').eq('date', boardDate);
+      if (error) throw error;
+      const normalized = (data ?? []).map((row) => normalizeTaskRequest(row as Record<string, unknown>));
+      return effectivePropertyId && effectivePropertyId !== 'all'
+        ? normalized.filter((request) => request.propertyId === effectivePropertyId)
+        : normalized;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const applicationAreasQuery = useQuery({
+    queryKey: ['application-areas', effectivePropertyId ?? 'all'],
+    queryFn: async () => {
+      if (!supabase) return [] as ApplicationArea[];
+      const { data, error } = await supabase.from('application_areas').select('*');
+      if (error) return [] as ApplicationArea[];
+      return (data ?? []).map((row) => normalizeApplicationArea(row as Record<string, unknown>));
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const weatherLogsQuery = useQuery({
+    queryKey: ['weather-daily-logs', boardDate],
+    queryFn: async () => {
+      if (!supabase) return [] as WeatherDailyLog[];
+      const { data, error } = await supabase.from('weather_daily_logs').select('*').eq('date', boardDate);
+      if (error) return [] as WeatherDailyLog[];
+      return (data ?? []).map((row) => normalizeWeatherLog(row as Record<string, unknown>));
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const weatherLocationsQuery = useQuery({
+    queryKey: ['weather-locations', effectivePropertyId ?? 'all'],
+    queryFn: async () => {
+      if (!supabase) return [] as WeatherLocation[];
+      const { data, error } = await supabase.from('weather_locations').select('*');
+      if (error) return [] as WeatherLocation[];
+      return (data ?? []).map((row) => normalizeWeatherLocation(row as Record<string, unknown>));
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const workLocationsQuery = useQuery({
+    queryKey: ['work-locations', effectivePropertyId ?? 'all'],
+    queryFn: async () => {
+      if (!supabase) return [] as WorkLocation[];
+      const { data, error } = await supabase.from('work_locations').select('*');
+      if (error) return [] as WorkLocation[];
+      return (data ?? []).map((row) => normalizeWorkLocation(row as Record<string, unknown>));
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const applicationLogsQuery = useQuery({
+    queryKey: ['chemical-application-logs-board', boardDate],
+    queryFn: async () => {
+      if (!supabase) return [] as Array<ReturnType<typeof normalizeApplicationLog>>;
+      const { data, error } = await supabase.from('chemical_application_logs').select('*').eq('applicationDate', boardDate);
+      if (error) return [] as Array<ReturnType<typeof normalizeApplicationLog>>;
+      return (data ?? []).map((row) => normalizeApplicationLog(row as Record<string, unknown>));
     },
     staleTime: 1000 * 60 * 5,
   });
 
-  const assignmentList = workflowLiveQuery.data?.assignments ?? [];
-  const taskRequests = workflowLiveQuery.data?.taskRequests ?? [];
-  const taskList = workflowLiveQuery.data?.tasks ?? [];
+  const properties = propertiesQuery.data ?? [];
+  const employeeList = employeesQuery.data ?? [];
+  const assignmentList = assignmentsQuery.data ?? [];
+  const scheduleList = scheduleQuery.data ?? [];
+  const taskList = useMemo(
+    () => (tasksQuery.data ?? []).filter((task) => task.status === 'active').sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999) || left.name.localeCompare(right.name)),
+    [tasksQuery.data],
+  );
+  const equipmentList = equipmentQuery.data ?? [];
+  const noteList = notesQuery.data ?? [];
+  const taskRequests = taskRequestsQuery.data ?? [];
+  const applicationAreas = applicationAreasQuery.data ?? [];
+  const weatherLogs = weatherLogsQuery.data ?? [];
+  const weatherLocations = weatherLocationsQuery.data ?? [];
+  const workLocations = workLocationsQuery.data ?? [];
+  const applicationLogs = applicationLogsQuery.data ?? [];
 
   useEffect(() => {
-    if (workflowLiveQuery.dataUpdatedAt) {
-      setLastRealtimeRefreshAt(workflowLiveQuery.dataUpdatedAt);
+    if (assignmentsQuery.dataUpdatedAt || taskRequestsQuery.dataUpdatedAt || tasksQuery.dataUpdatedAt) {
+      setLastRealtimeRefreshAt(Math.max(assignmentsQuery.dataUpdatedAt ?? 0, taskRequestsQuery.dataUpdatedAt ?? 0, tasksQuery.dataUpdatedAt ?? 0));
     }
-  }, [workflowLiveQuery.dataUpdatedAt]);
+  }, [assignmentsQuery.dataUpdatedAt, taskRequestsQuery.dataUpdatedAt, tasksQuery.dataUpdatedAt]);
 
   useEffect(() => {
-    const refresh = () => {
-      const storedEmployees = loadEmployees();
-      const storedSchedules = loadScheduleEntries();
-      setEmployeeList(storedEmployees);
-      setApplicationAreas(loadApplicationAreas());
-      setNoteList(loadNotes());
-      setProperties(loadProperties());
-      setScheduleList(storedSchedules);
-      setEquipmentList(loadEquipmentUnits());
-      setWeatherLogs(loadWeatherDailyLogs());
-      setWeatherLocations(loadWeatherLocations());
-      setWorkLocations(loadWorkLocations());
-      setApplicationLogs(loadChemicalApplicationLogs());
-      const firstScheduled =
-        storedSchedules.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??
-        storedEmployees.find((employee) => employee.status === 'active')?.id ??
-        '';
-      setSelectedEmployeeId(firstScheduled);
-      setAssignmentDraft((current) => ({
-        ...current,
-        employeeId: current.employeeId || firstScheduled,
-        taskId: current.taskId || loadTasks()[0]?.id || '',
-      }));
-    };
-
-    const handleOperationsContext = (event: Event) => {
-      const detail = (event as CustomEvent<{ department?: string; date?: string; propertyId?: string }>).detail;
-      if (detail?.department) setDepartment(detail.department);
-      if (detail?.date) setBoardDate(detail.date);
-      if (detail?.propertyId) setPropertyId(detail.propertyId);
-    };
-
-    refresh();
-    window.addEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-    window.addEventListener('operations-context-updated', handleOperationsContext as EventListener);
-    return () => {
-      window.removeEventListener(DATA_STORE_UPDATED_EVENT, refresh as EventListener);
-      window.removeEventListener('operations-context-updated', handleOperationsContext as EventListener);
-    };
-  }, [boardDate]);
+    const firstScheduled =
+      scheduleList.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??
+      employeeList.find((employee) => employee.status === 'active')?.id ??
+      '';
+    setSelectedEmployeeId((current) => current || firstScheduled);
+    setAssignmentDraft((current) => ({
+      ...current,
+      employeeId: current.employeeId || firstScheduled,
+      taskId: current.taskId || taskList[0]?.id || '',
+    }));
+  }, [boardDate, employeeList, scheduleList, taskList]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -198,15 +288,15 @@ export default function WorkboardPage() {
       .channel('workflow-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, () => {
         setLastRealtimeRefreshAt(Date.now());
-        void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
+        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests' }, () => {
         setLastRealtimeRefreshAt(Date.now());
-        void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
+        void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
         setLastRealtimeRefreshAt(Date.now());
-        void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
+        void queryClient.invalidateQueries({ queryKey: ['tasks'] });
       })
       .subscribe();
 
@@ -216,10 +306,10 @@ export default function WorkboardPage() {
   }, [queryClient]);
 
   useEffect(() => {
-    if (focusedPropertyId) {
-      setPropertyId(focusedPropertyId);
+    if (focusedPropertyId && focusedPropertyId !== currentPropertyId) {
+      setCurrentPropertyId(focusedPropertyId);
     }
-  }, [focusedPropertyId]);
+  }, [currentPropertyId, focusedPropertyId, setCurrentPropertyId]);
 
   const groups = useMemo(
     () => [...new Set(employeeList.filter((employee) => employee.status === 'active').map((employee) => employee.group))].sort((left, right) => left.localeCompare(right)),
@@ -235,32 +325,32 @@ export default function WorkboardPage() {
     () =>
       allActiveEmployees.filter(
         (employee) =>
-          (!propertyId || employee.propertyId === propertyId) &&
+          (!effectivePropertyId || effectivePropertyId === 'all' || employee.propertyId === effectivePropertyId) &&
           (!department || department === 'All Departments' || employee.department === department) &&
           (groupFilter === 'all' || employee.group === groupFilter),
       ),
-    [allActiveEmployees, department, groupFilter, propertyId],
+    [allActiveEmployees, department, effectivePropertyId, groupFilter],
   );
 
   const propertyWorkLocations = useMemo(
-    () => workLocations.filter((location) => !propertyId || location.propertyId === propertyId),
-    [propertyId, workLocations],
+    () => workLocations.filter((location) => !effectivePropertyId || effectivePropertyId === 'all' || location.propertyId === effectivePropertyId),
+    [effectivePropertyId, workLocations],
   );
 
   const activeProperty = useMemo(
-    () => properties.find((property) => property.id === propertyId) ?? null,
-    [properties, propertyId],
+    () => properties.find((property) => property.id === effectivePropertyId) ?? null,
+    [effectivePropertyId, properties],
   );
 
   const propertyRequests = useMemo(
     () =>
       taskRequests
-        .filter((request) => (!propertyId || request.propertyId === propertyId) && request.date === boardDate)
+        .filter((request) => (!effectivePropertyId || effectivePropertyId === 'all' || request.propertyId === effectivePropertyId) && request.date === boardDate)
         .sort((left, right) => {
           const priorityOrder = { high: 0, medium: 1, low: 2 } as const;
           return priorityOrder[left.priority] - priorityOrder[right.priority];
         }),
-    [boardDate, propertyId, taskRequests],
+    [boardDate, effectivePropertyId, taskRequests],
   );
 
   const scheduledEmployees = useMemo(() => {
@@ -376,21 +466,6 @@ export default function WorkboardPage() {
   );
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
 
-  function persistAssignments(nextAssignments: Assignment[]) {
-    saveAssignments(nextAssignments);
-    void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
-  }
-
-  function persistNotes(nextNotes: Note[]) {
-    setNoteList(nextNotes);
-    saveNotes(nextNotes);
-  }
-
-  function persistTaskRequests(nextRequests: TaskRequest[]) {
-    saveTaskRequests(nextRequests);
-    void queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
-  }
-
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
@@ -434,33 +509,47 @@ export default function WorkboardPage() {
     setAssignmentDialogOpen(true);
   }
 
-  function saveAssignment() {
-    if (!assignmentDraft.employeeId || !assignmentDraft.taskId) return;
+  async function saveAssignment() {
+    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !assignmentDraft.employeeId || !assignmentDraft.taskId) return;
 
-    const nextAssignment: Assignment = {
-      id: editingAssignmentId ?? makeId('assign'),
-      employeeId: assignmentDraft.employeeId,
-      taskId: assignmentDraft.taskId,
-      equipmentId: assignmentDraft.equipmentId || undefined,
+    const assignmentId = editingAssignmentId ?? makeId('assign');
+    const { error } = await supabase.from('assignments').upsert({
+      id: assignmentId,
+      employee_id: assignmentDraft.employeeId,
+      property_id: effectivePropertyId,
+      task_id: assignmentDraft.taskId,
       date: boardDate,
-      area: assignmentDraft.area,
-      startTime: assignmentDraft.startTime,
+      location: assignmentDraft.area,
+      status: 'planned',
+      start_time: assignmentDraft.startTime,
       duration: Number(assignmentDraft.duration || 0),
-    };
+      equipment_id: assignmentDraft.equipmentId || null,
+    });
 
-    const nextAssignments = editingAssignmentId
-      ? assignmentList.map((assignment) => (assignment.id === editingAssignmentId ? nextAssignment : assignment))
-      : [...assignmentList, nextAssignment];
-    persistAssignments(nextAssignments);
-    if (linkedRequestId) {
-      persistTaskRequests(
-        taskRequests.map((request) =>
-          request.id === linkedRequestId
-            ? { ...request, status: 'assigned', taskId: assignmentDraft.taskId, preferredLocation: assignmentDraft.area }
-            : request,
-        ),
-      );
+    if (error) {
+      toast('Unable to save assignment', { description: error.message });
+      return;
     }
+
+    if (linkedRequestId) {
+      const { error: requestError } = await supabase
+        .from('task_requests')
+        .update({
+          status: 'assigned',
+          task_id: assignmentDraft.taskId,
+          preferred_location: assignmentDraft.area,
+        })
+        .eq('id', linkedRequestId);
+
+      if (requestError) {
+        toast('Assignment saved, but request link was not updated', { description: requestError.message });
+      }
+    }
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+      queryClient.invalidateQueries({ queryKey: ['task-requests'] }),
+    ]);
     setLinkedRequestId(null);
     setEditingAssignmentId(null);
     setAssignmentDialogOpen(false);
@@ -471,27 +560,38 @@ export default function WorkboardPage() {
     });
   }
 
-  function removeAssignment(assignmentId: string) {
-    const nextAssignments = assignmentList.filter((assignment) => assignment.id !== assignmentId);
-    persistAssignments(nextAssignments);
+  async function removeAssignment(assignmentId: string) {
+    if (!supabase) return;
+    const { error } = await supabase.from('assignments').delete().eq('id', assignmentId);
+    if (error) {
+      toast('Unable to remove assignment', { description: error.message });
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
   }
 
-  function saveTaskRequest() {
-    if (!propertyId || !requestDraft.title.trim()) return;
-    const nextRequest: TaskRequest = {
+  async function saveTaskRequest() {
+    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !requestDraft.title.trim()) return;
+    const { error } = await supabase.from('task_requests').insert({
       id: makeId('treq'),
-      propertyId,
+      property_id: effectivePropertyId,
       date: boardDate,
       title: requestDraft.title.trim(),
-      taskId: requestDraft.taskId || undefined,
-      requestedBy: requestDraft.requestedBy.trim() || 'Client Request',
-      requestedByType: requestDraft.requestedByType,
+      task_id: requestDraft.taskId || null,
+      requested_by: requestDraft.requestedBy.trim() || 'Client Request',
+      requested_by_type: requestDraft.requestedByType,
       priority: requestDraft.priority,
       status: 'new',
-      preferredLocation: requestDraft.preferredLocation.trim() || undefined,
+      preferred_location: requestDraft.preferredLocation.trim() || null,
       notes: requestDraft.notes.trim(),
-    };
-    persistTaskRequests([...taskRequests, nextRequest]);
+    });
+
+    if (error) {
+      toast('Unable to save property request', { description: error.message });
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
     setRequestDialogOpen(false);
     toast('Property request added', {
       description: 'This request is now ready for admin review and assignment on the selected workflow board.',
@@ -515,21 +615,26 @@ export default function WorkboardPage() {
     setAssignmentDialogOpen(true);
   }
 
-  function saveNote() {
-    if (!noteDraft.title.trim() || !noteDraft.content.trim()) return;
-    const nextNotes = [
-      {
-        id: `n${Date.now()}`,
-        type: noteDraft.type,
-        title: noteDraft.title.trim(),
-        content: noteDraft.content.trim(),
-        author: noteDraft.author.trim() || 'Operations Admin',
-        date: boardDate,
-        location: noteDraft.location.trim() || undefined,
-      },
-      ...noteList,
-    ];
-    persistNotes(nextNotes);
+  async function saveNote() {
+    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !noteDraft.title.trim() || !noteDraft.content.trim()) return;
+    const { error } = await supabase.from('notes').insert({
+      id: makeId('note'),
+      property_id: effectivePropertyId,
+      type: noteDraft.type,
+      title: noteDraft.title.trim(),
+      content: noteDraft.content.trim(),
+      location: noteDraft.location.trim() || null,
+      created_by: currentUser?.appUserId ?? null,
+      author: noteDraft.author.trim() || 'Operations Admin',
+      date: boardDate,
+    });
+
+    if (error) {
+      toast('Unable to save note', { description: error.message });
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['notes'] });
     setNoteDialogOpen(false);
     setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
   }
