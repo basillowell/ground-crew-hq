@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, isLoading } = useAuth();
   const programSettingsQuery = useProgramSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +26,11 @@ export default function LaunchPortalPage() {
       navigate('/app/dashboard');
     }
   }, [currentUser, navigate]);
+
+  useEffect(() => {
+    if (currentUser || isLoading) return;
+    setIsSubmitting(false);
+  }, [currentUser, isLoading]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -43,11 +48,10 @@ export default function LaunchPortalPage() {
     setIsSubmitting(false);
 
     if (error) {
+      setIsSubmitting(false);
       setErrorMessage(error.message);
       return;
     }
-
-    navigate('/app/dashboard');
   };
 
   const scrollToAccess = () => {

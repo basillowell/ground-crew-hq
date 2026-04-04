@@ -135,6 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void hydrateAuth();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (mounted) {
+        setIsLoading(true);
+      }
       const profile = await loadAuthProfile(session?.user ?? null);
       if (!mounted) return;
       setCurrentUser(profile);
