@@ -27,30 +27,34 @@ export default function LaunchPortalPage() {
     }
   }, [currentUser, navigate]);
 
-  useEffect(() => {
-    if (currentUser || isLoading) return;
-    setIsSubmitting(false);
-  }, [currentUser, isLoading]);
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    console.log('Sign in button clicked, submitting form');
     if (!supabase) {
+      console.error('Supabase is not configured for this environment.');
       setErrorMessage('Supabase is not configured for this environment.');
       return;
     }
 
     setIsSubmitting(true);
     setErrorMessage('');
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setIsSubmitting(false);
+    try {
+      console.log('Calling supabase.auth.signInWithPassword with email:', email);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      console.log('Supabase response:', { error });
 
-    if (error) {
+      if (error) {
+        console.error('Login error:', error);
+        setErrorMessage(error.message);
+      }
+    } catch (err) {
+      console.error('Unexpected error during login:', err);
+      setErrorMessage('An unexpected error occurred. Please try again.');
+    } finally {
       setIsSubmitting(false);
-      setErrorMessage(error.message);
-      return;
     }
   };
 
