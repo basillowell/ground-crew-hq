@@ -21,18 +21,13 @@ import {
   type WeatherStationSuggestion,
   type WorkLocation,
 } from '@/data/seedData';
-import {
-  loadCurrentPropertyId,
-  loadProperties,
-  loadProgramSettings,
-  loadWorkLocations,
-} from '@/lib/dataStore';
 import { toast } from '@/components/ui/sonner';
 import { fetchPrimaryStationSnapshot, fetchStationForecastDetail, fetchWeatherStationSuggestions, type GeocodeResult, type WeatherForecastDetail } from '@/lib/weatherProviders';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather, getWeatherIconMeta } from '@/lib/weather';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProperties, useProgramSettings, useWorkLocations } from '@/lib/supabase-queries';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -63,13 +58,13 @@ function makeId(prefix: string) {
 
 export default function WeatherPage() {
   const queryClient = useQueryClient();
-  const { currentUser } = useAuth();
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [currentPropertyId, setCurrentPropertyId] = useState('');
-  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
-  const [weatherStations, setWeatherStations] = useState<WeatherStation[]>([]);
-  const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
-  const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
+  const { currentUser, currentPropertyId } = useAuth();
+  const propertiesQuery = useProperties(currentUser?.orgId);
+  const properties = propertiesQuery.data ?? [];
+  const programSettingQuery = useProgramSettings(currentUser?.orgId);
+  const programSetting = programSettingQuery.data ?? null;
+  const workLocationsQuery = useWorkLocations();
+  const workLocations = workLocationsQuery.data ?? [];
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [selectedWorkLocationId, setSelectedWorkLocationId] = useState('');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
@@ -91,15 +86,8 @@ export default function WeatherPage() {
   const [browserCoordinates, setBrowserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
-    const opsLocations = loadWorkLocations();
-    const propertyList = loadProperties();
-    const activePropertyId = loadCurrentPropertyId();
-    setProperties(propertyList);
-    setCurrentPropertyId(activePropertyId);
-    setWorkLocations(opsLocations);
-    setProgramSetting(loadProgramSettings()[0] ?? null);
-    setSelectedWorkLocationId(opsLocations[0]?.id ?? '');
-  }, []);
+    setSelectedWorkLocationId(workLocations[0]?.id ?? '');
+  }, [workLocations]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
