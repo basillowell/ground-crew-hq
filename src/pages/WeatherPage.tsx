@@ -121,8 +121,10 @@ export default function WeatherPage() {
     }
   }, [weatherLocationsQuery.data, weatherStationsQuery.data]);
 
-  const selectedLocation = weatherLocations.find((location) => location.id === selectedLocationId) ?? weatherLocations[0];
-  const selectedProperty = properties.find((property) => property.id === (selectedLocation?.propertyId || currentPropertyId));
+  const selectedLocation = weatherLocations.find((location) => location.id === selectedLocationId) ?? weatherLocations[0] ?? null;
+  const selectedProperty = selectedLocation
+    ? properties.find((property) => property.id === (selectedLocation.propertyId || currentPropertyId))
+    : null;
   const selectedPropertyWeatherQuery = useWeather(selectedProperty?.id);
   const locationStations = weatherStations
     .filter((station) => station.locationId === selectedLocationId)
@@ -681,6 +683,14 @@ export default function WeatherPage() {
       { label: 'Traffic Risk', ...trafficRisk },
     ];
   }, [latestLog]);
+
+  if (!selectedLocation) {
+    return (
+      <div className="p-4 max-w-7xl mx-auto text-sm text-muted-foreground">
+        Loading weather setup...
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">

@@ -23,7 +23,7 @@ const MessagingPage = lazy(() => import("./pages/MessagingPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const TasksPage = lazy(() => import("./pages/TasksCatalogPage"));
 const SafetyPage = lazy(() => import("./pages/SafetyPage"));
-const SettingsPage = lazy(() => import("./pages/ProgramSetupHubPage"));
+import ProgramSetupHubPage from "./pages/ProgramSetupHubPage";
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const ApplicationsPage = lazy(() => import("./pages/ApplicationsPage"));
 const MobileFieldPage = lazy(() => import("./pages/MobileFieldWorkspacePage"));
@@ -87,7 +87,7 @@ function AppRoutes() {
           <Route path="reports" element={<ReportsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="safety" element={<SafetyPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="settings" element={<ProgramSetupHubPage />} />
           <Route path="field" element={<MobileFieldPage />} />
         </Routes>
       </AppLayout>

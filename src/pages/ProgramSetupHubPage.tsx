@@ -33,6 +33,17 @@ import { useAppUsers } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import {
+  loadApplicationAreas,
+  loadAssignments,
+  loadEmployees,
+  loadPropertyClassOptions,
+  loadScheduleEntries,
+  loadTasks,
+  loadWeatherLocations,
+  saveEmployees,
+  savePropertyClassOptions,
+} from '@/lib/operationsStorage';
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const themePresets = [
@@ -178,7 +189,7 @@ export default function ProgramSetupHubPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
   const programSettingQuery = useProgramSettings(currentUser?.orgId);
-  const programSetting = programSettingQuery.data ?? null;
+  const programSettingData = programSettingQuery.data ?? null;
   const departmentOptionsQuery = useDepartmentOptions();
   const departmentOptions = departmentOptionsQuery.data ?? [];
   const groupOptionsQuery = useGroupOptions();
@@ -195,11 +206,18 @@ export default function ProgramSetupHubPage() {
   const shiftTemplates = shiftTemplatesQuery.data ?? [];
   const appUsersQuery = useAppUsers(currentUser?.orgId);
   const appUsers = appUsersQuery.data ?? [];
+  const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
   const [activePage, setActivePage] = useState<ActivePage>('brand');
   const [propertySheetId, setPropertySheetId] = useState<string | null>(null);
   const [shiftSheetId, setShiftSheetId] = useState<string | null>(null);
   const [propertyClasses, setPropertyClasses] = useState<PropertyClassOption[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+
+  useEffect(() => {
+    if (programSettingData && !programSetting) {
+      setProgramSetting(withBrandDefaults(programSettingData));
+    }
+  }, [programSettingData, programSetting]);
 
   useEffect(() => {
     setPropertyClasses(loadPropertyClassOptions());

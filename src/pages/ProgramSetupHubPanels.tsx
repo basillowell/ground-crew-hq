@@ -148,7 +148,12 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
     currentPlanName,
   } = props;
 
+  console.log('ProgramSetupHubPanels: activePage =', activePage, 'programSetting =', !!programSetting);
+
+  console.log('ProgramSetupHubPanels: calculating editingProperty, propertySheetId =', propertySheetId);
   const editingProperty = propertySheetId ? properties.find((p) => p.id === propertySheetId) : undefined;
+
+  console.log('ProgramSetupHubPanels: calculating editingShift, shiftSheetId =', shiftSheetId);
   const editingShift = shiftSheetId ? shiftTemplates.find((s) => s.id === shiftSheetId) : undefined;
 
   return (
@@ -327,12 +332,12 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                     <div className="mt-1 flex items-center gap-2">
                       <input
                         type="color"
-                        value={programSetting[key]}
+                        value={programSetting[key] || '#000000'}
                         onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
                         className="h-10 w-12 cursor-pointer rounded border bg-transparent"
                       />
                       <Input
-                        value={programSetting[key]}
+                        value={programSetting[key] || '#000000'}
                         onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
                       />
                     </div>
