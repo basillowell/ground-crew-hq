@@ -21,35 +21,18 @@ import {
 import { ProgramSetupHubPanels } from '@/pages/ProgramSetupHubPanels';
 import { toast } from '@/components/ui/sonner';
 import type { AppUser, DepartmentOption, Employee, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WorkLocation } from '@/data/seedData';
-import {
-  loadLanguageOptions,
-  loadApplicationAreas,
-  loadAppUsers,
-  loadAssignments,
-  loadDepartmentOptions,
-  loadEmployees,
-  loadGroupOptions,
-  loadProperties,
-  loadPropertyClassOptions,
-  loadProgramSettings,
-  loadRoleOptions,
-  loadScheduleEntries,
-  loadShiftTemplates,
-  loadTasks,
-  loadWeatherLocations,
-  loadWorkLocations,
-  saveAppUsers,
-  saveLanguageOptions,
-  saveDepartmentOptions,
-  saveEmployees,
-  saveGroupOptions,
-  saveProperties,
-  savePropertyClassOptions,
-  saveProgramSettings,
-  saveRoleOptions,
-  saveShiftTemplates,
-  saveWorkLocations,
-} from '@/lib/dataStore';
+import { useProgramSettings } from '@/lib/supabase-queries';
+import { useDepartmentOptions } from '@/lib/supabase-queries';
+import { useGroupOptions } from '@/lib/supabase-queries';
+import { useRoleOptions } from '@/lib/supabase-queries';
+import { useLanguageOptions } from '@/lib/supabase-queries';
+import { useShiftTemplates } from '@/lib/supabase-queries';
+import { useWorkLocations } from '@/lib/supabase-queries';
+import { useProperties } from '@/lib/supabase-queries';
+import { useAppUsers } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const themePresets = [
@@ -123,10 +106,6 @@ function makeId(prefix: string) {
     : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function announceProgramSetupUpdate() {
-  window.dispatchEvent(new CustomEvent('program-setup-updated'));
-}
-
 function slugifyClubId(value: string) {
   const slug = value
     .trim()
@@ -196,33 +175,34 @@ function FlowCard({
 }
 
 export default function ProgramSetupHubPage() {
+  const { currentUser } = useAuth();
+  const queryClient = useQueryClient();
+  const programSettingQuery = useProgramSettings(currentUser?.orgId);
+  const programSetting = programSettingQuery.data ?? null;
+  const departmentOptionsQuery = useDepartmentOptions();
+  const departmentOptions = departmentOptionsQuery.data ?? [];
+  const groupOptionsQuery = useGroupOptions();
+  const groupOptions = groupOptionsQuery.data ?? [];
+  const roleOptionsQuery = useRoleOptions();
+  const roleOptions = roleOptionsQuery.data ?? [];
+  const languageOptionsQuery = useLanguageOptions();
+  const languageOptions = languageOptionsQuery.data ?? [];
+  const propertiesQuery = useProperties(currentUser?.orgId);
+  const properties = propertiesQuery.data ?? [];
+  const workLocationsQuery = useWorkLocations();
+  const workLocations = workLocationsQuery.data ?? [];
+  const shiftTemplatesQuery = useShiftTemplates();
+  const shiftTemplates = shiftTemplatesQuery.data ?? [];
+  const appUsersQuery = useAppUsers(currentUser?.orgId);
+  const appUsers = appUsersQuery.data ?? [];
   const [activePage, setActivePage] = useState<ActivePage>('brand');
   const [propertySheetId, setPropertySheetId] = useState<string | null>(null);
   const [shiftSheetId, setShiftSheetId] = useState<string | null>(null);
-  const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
-  const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
-  const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
-  const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
-  const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
   const [propertyClasses, setPropertyClasses] = useState<PropertyClassOption[]>([]);
-  const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
-  const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
-  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   useEffect(() => {
-    const loadedSettings = loadProgramSettings()[0];
-    setProgramSetting(loadedSettings ? withBrandDefaults(loadedSettings) : null);
-    setDepartmentOptions(loadDepartmentOptions());
-    setGroupOptions(loadGroupOptions());
-    setRoleOptions(loadRoleOptions());
-    setLanguageOptions(loadLanguageOptions());
-    setProperties(loadProperties());
     setPropertyClasses(loadPropertyClassOptions());
-    setWorkLocations(loadWorkLocations());
-    setShiftTemplates(loadShiftTemplates());
-    setAppUsers(loadAppUsers());
     setEmployees(loadEmployees());
   }, []);
 
@@ -288,7 +268,7 @@ export default function ProgramSetupHubPage() {
     },
   ];
 
-  function saveGeneralSettings() {
+  async function saveGeneralSettings() {
     if (!programSetting) return;
     const nextSetting = withBrandDefaults(programSetting);
     const nextClubLabel = nextSetting.clientLabel || nextSetting.organizationName || 'Client profile';
@@ -300,36 +280,88 @@ export default function ProgramSetupHubPage() {
     }));
     setProgramSetting(nextSetting);
     setAppUsers(nextUsers);
-    saveProgramSettings([nextSetting]);
-    saveAppUsers(nextUsers);
-    announceProgramSetupUpdate();
+    await supabase.from('program_settings').upsert({
+      ...nextSetting,
+      org_id: currentUser?.orgId,
+    });
+    for (const user of nextUsers) {
+      await supabase.from('app_users').upsert({
+        ...user,
+        org_id: currentUser?.orgId,
+      });
+    }
+    await queryClient.invalidateQueries({ queryKey: ['program-settings'] });
+    await queryClient.invalidateQueries({ queryKey: ['app-users'] });
     toast('Program setup saved', {
       description: `${nextSetting.organizationName} now drives the active club and brand profile.`,
     });
   }
 
-  function saveStructures() {
-    saveDepartmentOptions(departmentOptions);
-    saveGroupOptions(groupOptions);
-    saveRoleOptions(roleOptions);
-    saveLanguageOptions(languageOptions);
-    announceProgramSetupUpdate();
+  async function saveStructures() {
+    for (const dept of departmentOptions) {
+      await supabase.from('department_options').upsert({
+        ...dept,
+        org_id: currentUser?.orgId,
+      });
+    }
+    for (const group of groupOptions) {
+      await supabase.from('group_options').upsert({
+        ...group,
+        org_id: currentUser?.orgId,
+      });
+    }
+    for (const role of roleOptions) {
+      await supabase.from('role_options').upsert({
+        ...role,
+        org_id: currentUser?.orgId,
+      });
+    }
+    for (const lang of languageOptions) {
+      await supabase.from('language_options').upsert({
+        ...lang,
+        org_id: currentUser?.orgId,
+      });
+    }
+    await queryClient.invalidateQueries({ queryKey: ['department-options'] });
+    await queryClient.invalidateQueries({ queryKey: ['group-options'] });
+    await queryClient.invalidateQueries({ queryKey: ['role-options'] });
+    await queryClient.invalidateQueries({ queryKey: ['language-options'] });
     toast('Workforce structure saved', {
       description: 'Departments, crew groups, roles, and languages are now aligned across the app.',
     });
   }
 
-  function saveLocations() {
-    saveWorkLocations(workLocations);
+  async function saveLocations() {
+    for (const loc of workLocations) {
+      await supabase.from('work_locations').upsert({
+        ...loc,
+        org_id: currentUser?.orgId,
+      });
+    }
+    await queryClient.invalidateQueries({ queryKey: ['work-locations'] });
     toast('Locations saved', {
       description: `${workLocations.length} operational locations now feed routing, weather, and application setup.`,
     });
   }
 
-  function savePropertiesTab() {
-    saveProperties(properties);
+  async function savePropertiesTab() {
+    for (const prop of properties) {
+      await supabase.from('properties').upsert({
+        id: prop.id,
+        name: prop.name,
+        address: prop.address ?? null,
+        city: prop.city ?? null,
+        state: prop.state ?? null,
+        zip: prop.zip ?? null,
+        phone: prop.phone ?? null,
+        email: prop.email ?? null,
+        website: prop.website ?? null,
+        property_class_id: prop.propertyClassId ?? null,
+        org_id: currentUser?.orgId,
+      });
+    }
     saveEmployees(employees);
-    announceProgramSetupUpdate();
+    await queryClient.invalidateQueries({ queryKey: ['properties'] });
     toast('Properties saved', {
       description: `${properties.length} properties and ${employees.length} employee property assignments are now aligned across the app.`,
     });
@@ -337,20 +369,25 @@ export default function ProgramSetupHubPage() {
 
   function savePropertyClassesTab() {
     savePropertyClassOptions(propertyClasses);
-    announceProgramSetupUpdate();
     toast('Property classes saved', {
       description: `${propertyClasses.length} master property classes now control which modules each club is set up to use.`,
     });
   }
 
-  function saveShiftPlans() {
-    saveShiftTemplates(shiftTemplates);
+  async function saveShiftPlans() {
+    for (const shift of shiftTemplates) {
+      await supabase.from('shift_templates').upsert({
+        ...shift,
+        org_id: currentUser?.orgId,
+      });
+    }
+    await queryClient.invalidateQueries({ queryKey: ['shift-templates'] });
     toast('Shift templates saved', {
       description: `${shiftTemplates.length} reusable shift plans are ready for scheduling.`,
     });
   }
 
-  function savePortalUsers() {
+  async function savePortalUsers() {
     if (!programSetting) return;
     const nextClubLabel = programSetting.clientLabel || programSetting.organizationName || 'Client profile';
     const nextClubId = slugifyClubId(nextClubLabel);
@@ -373,8 +410,13 @@ export default function ProgramSetupHubPage() {
       clubLabel: nextClubLabel,
     }));
     setAppUsers(nextUsers);
-    saveAppUsers(nextUsers);
-    announceProgramSetupUpdate();
+    for (const user of nextUsers) {
+      await supabase.from('app_users').upsert({
+        ...user,
+        org_id: currentUser?.orgId,
+      });
+    }
+    await queryClient.invalidateQueries({ queryKey: ['app-users'] });
     toast('Portal users saved', {
       description: `${nextUsers.length} client portal profiles are now available from launch and the top bar.`,
     });

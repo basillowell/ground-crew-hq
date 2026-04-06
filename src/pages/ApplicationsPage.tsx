@@ -28,18 +28,10 @@ import {
   type WeatherDailyLog,
   type WeatherLocation,
 } from '@/data/seedData';
-import {
-  loadApplicationAreas,
-  loadChemicalApplicationLogs,
-  loadChemicalApplicationTankMixItems,
-  loadChemicalProducts,
-  loadEmployees,
-  loadEquipmentUnits,
-  loadWeatherDailyLogs,
-  loadWeatherLocations,
-  saveChemicalApplicationLogs,
-  saveChemicalApplicationTankMixItems,
-} from '@/lib/dataStore';
+import { useChemicalApplicationLogsAll, useChemicalProducts, useChemicalApplicationTankMixItems } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 type DraftMixItem = {
   productId: string;
@@ -150,13 +142,15 @@ function buildRestrictedEntry(
 }
 
 export default function ApplicationsPage() {
+  const { currentUser } = useAuth();
+  const queryClient = useQueryClient();
+  const logsQuery = useChemicalApplicationLogsAll();
+  const productsQuery = useChemicalProducts();
+  const mixItemsQuery = useChemicalApplicationTankMixItems();
+  const logs = logsQuery.data ?? [];
+  const chemicalProducts = productsQuery.data ?? [];
+  const mixItems = mixItemsQuery.data ?? [];
   const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
-  const [chemicalProducts, setChemicalProducts] = useState<ChemicalProduct[]>([]);
-  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [equipmentUnits, setEquipmentUnits] = useState<EquipmentUnit[]>([]);
-  const [logs, setLogs] = useState<ChemicalApplicationLog[]>([]);
-  const [mixItems, setMixItems] = useState<ChemicalApplicationTankMixItem[]>([]);
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>(loadWeatherDailyLogs());
   const [filterDate, setFilterDate] = useState('');
   const [filterArea, setFilterArea] = useState('all');
@@ -168,17 +162,13 @@ export default function ApplicationsPage() {
 
   useEffect(() => {
     const loadedAreas = loadApplicationAreas();
-    const loadedProducts = loadChemicalProducts();
     const loadedLocations = loadWeatherLocations();
     const loadedEmployees = loadEmployees();
     const loadedEquipment = loadEquipmentUnits();
     setApplicationAreas(loadedAreas);
-    setChemicalProducts(loadedProducts);
     setWeatherLocations(loadedLocations);
     setEmployees(loadedEmployees);
     setEquipmentUnits(loadedEquipment);
-    setLogs(loadChemicalApplicationLogs());
-    setMixItems(loadChemicalApplicationTankMixItems());
     setWeatherLogs(loadWeatherDailyLogs());
     const loadedWeatherLogs = loadWeatherDailyLogs();
     setWeatherLogs(loadedWeatherLogs);
@@ -192,11 +182,11 @@ export default function ApplicationsPage() {
     setDraftMixItems((current) =>
       current.map((item) => ({
         ...item,
-        productId: item.productId || loadedProducts[0]?.id || '',
-        rateUnit: loadedProducts.find((product) => product.id === item.productId)?.rateUnit ?? loadedProducts[0]?.rateUnit ?? item.rateUnit,
+        productId: item.productId || chemicalProducts[0]?.id || '',
+        rateUnit: chemicalProducts.find((product) => product.id === item.productId)?.rateUnit ?? chemicalProducts[0]?.rateUnit ?? item.rateUnit,
       }))
     );
-  }, []);
+  }, [chemicalProducts]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
@@ -282,7 +272,7 @@ export default function ApplicationsPage() {
     );
   }
 
-  function saveApplication() {
+  async function saveApplication() {
     const logId = `cal-${Date.now()}`;
     const weatherSource = weatherLogs.find((log) => log.id === draft.weatherLogId) ?? snapshotLog;
     const restrictedEntryUntil = buildRestrictedEntry(draft, chemicalProducts, draftMixItems);
@@ -325,24 +315,25 @@ export default function ApplicationsPage() {
       siteConditions: draft.siteConditions,
       notes: draft.notes,
     };
-    const nextLogs = [nextLog, ...logs];
-    const nextMix = [
-      ...draftMixItems.map((item, index) => ({
-        id: `mix-${Date.now()}-${index}`,
-        applicationLogId: logId,
-        productId: item.productId,
-        rateApplied: numberValue(item.rateApplied),
-        rateUnit: item.rateUnit,
-        totalQuantityUsed: numberValue(item.totalQuantityUsed),
-        mixOrder: index + 1,
-      })),
-      ...mixItems,
-    ];
+    const nextMix = draftMixItems.map((item, index) => ({
+      id: `mix-${Date.now()}-${index}`,
+      applicationLogId: logId,
+      productId: item.productId,
+      rateApplied: numberValue(item.rateApplied),
+      rateUnit: item.rateUnit,
+      totalQuantityUsed: numberValue(item.totalQuantityUsed),
+      mixOrder: index + 1,
+    }));
 
-    setLogs(nextLogs);
-    setMixItems(nextMix);
-    saveChemicalApplicationLogs(nextLogs);
-    saveChemicalApplicationTankMixItems(nextMix);
+    await supabase.from('chemical_application_logs').upsert({
+      ...nextLog,
+      org_id: currentUser?.orgId,
+    });
+    for (const mix of nextMix) {
+      await supabase.from('chemical_application_tank_mix_items').upsert(mix);
+    }
+    await queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] });
+    await queryClient.invalidateQueries({ queryKey: ['chemical-application-tank-mix-items'] });
     setDialogOpen(false);
     setDraft({
       ...emptyDraft,

@@ -11,27 +11,10 @@ import type { Column } from '@/components/shared';
 import { Phone, Mail, Plus, Shield, Smartphone, Monitor, Users, UserPlus, Trash2 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import type { AppUser, Employee, Property } from '@/data/seedData';
-import {
-  loadAppUsers,
-  loadAssignments,
-  loadChemicalApplicationLogs,
-  loadDepartmentOptions,
-  loadEmployees,
-  loadEquipmentUnits,
-  loadGroupOptions,
-  loadLanguageOptions,
-  loadProperties,
-  loadRoleOptions,
-  loadScheduleEntries,
-  loadShiftTemplates,
-  loadWorkLocations,
-  saveAppUsers,
-  saveAssignments,
-  saveChemicalApplicationLogs,
-  saveEmployees,
-  saveEquipmentUnits,
-  saveScheduleEntries,
-} from '@/lib/dataStore';
+import { useEmployees } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 function EmployeeDetail({
   employee,
@@ -320,7 +303,10 @@ const columns: Column<Employee>[] = [
 ];
 
 export default function EmployeesPage() {
-  const [employeeList, setEmployeeList] = useState<Employee[]>([]);
+  const { currentUser, currentPropertyId } = useAuth();
+  const queryClient = useQueryClient();
+  const employeesQuery = useEmployees(currentPropertyId, currentUser?.orgId);
+  const employeeList = employeesQuery.data ?? [];
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [departmentOptions, setDepartmentOptions] = useState<{ id: string; name: string }[]>([]);
   const [groupOptions, setGroupOptions] = useState<{ id: string; name: string; color: string }[]>([]);
@@ -356,7 +342,6 @@ export default function EmployeesPage() {
   });
 
   useEffect(() => {
-    setEmployeeList(loadEmployees());
     setAppUsers(loadAppUsers());
     const nextDepartments = loadDepartmentOptions();
     const nextGroups = loadGroupOptions();
@@ -434,9 +419,22 @@ export default function EmployeesPage() {
     };
   }, [selected, employeeList]);
 
-  function persist(nextEmployees: Employee[]) {
-    setEmployeeList(nextEmployees);
-    saveEmployees(nextEmployees);
+  async function persist(nextEmployees: Employee[]) {
+    for (const emp of nextEmployees) {
+      await supabase.from('employees').upsert({
+        id: emp.id,
+        first_name: emp.firstName,
+        last_name: emp.lastName,
+        role: emp.role,
+        department: emp.department,
+        status: emp.status,
+        phone: emp.phone ?? null,
+        email: emp.email ?? null,
+        property_id: emp.propertyId ?? currentPropertyId,
+        org_id: currentUser?.orgId,
+      })
+    }
+    await queryClient.invalidateQueries({ queryKey: ['employees'] })
   }
 
   function buildDefaultDraft() {
@@ -466,7 +464,7 @@ export default function EmployeesPage() {
     setDialogOpen(true);
   }
 
-  function handleAddEmployee() {
+  async function handleAddEmployee() {
     if (!draft.firstName.trim() || !draft.lastName.trim()) return;
 
     const nextEmployee: Employee = {
@@ -493,22 +491,22 @@ export default function EmployeesPage() {
       appRole: draft.appRole,
     };
 
-    persist([nextEmployee, ...employeeList]);
+    await persist([nextEmployee, ...employeeList]);
     setDialogOpen(false);
     setDraft(buildDefaultDraft());
   }
 
-  function handleStatusToggle(employeeId: string) {
+  async function handleStatusToggle(employeeId: string) {
     const nextEmployees = employeeList.map((employee) =>
       employee.id === employeeId
         ? { ...employee, status: (employee.status === 'active' ? 'inactive' : 'active') as 'active' | 'inactive' }
         : employee,
     );
-    persist(nextEmployees);
+    await persist(nextEmployees);
     setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
   }
 
-  function handleDeleteEmployee(employeeId: string) {
+  async function handleDeleteEmployee(employeeId: string) {
     const employee = employeeList.find((entry) => entry.id === employeeId);
     if (!employee) return;
 
@@ -527,8 +525,8 @@ export default function EmployeesPage() {
     );
     if (!confirmed) return;
 
-    const nextEmployees = employeeList.filter((entry) => entry.id !== employeeId);
-    persist(nextEmployees);
+    await supabase.from('employees').delete().eq('id', employeeId);
+    await queryClient.invalidateQueries({ queryKey: ['employees'] });
     saveScheduleEntries(schedules.filter((entry) => entry.employeeId !== employeeId));
     saveAssignments(assignments.filter((entry) => entry.employeeId !== employeeId));
     saveEquipmentUnits(
@@ -542,9 +540,9 @@ export default function EmployeesPage() {
     });
   }
 
-  function handleSavePortalAccess(employeeId: string, updates: Partial<Employee>) {
+  async function handleSavePortalAccess(employeeId: string, updates: Partial<Employee>) {
     const nextEmployees = employeeList.map((employee) => (employee.id === employeeId ? { ...employee, ...updates } : employee));
-    persist(nextEmployees);
+    await persist(nextEmployees);
     setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
 
     const employee = nextEmployees.find((entry) => entry.id === employeeId);

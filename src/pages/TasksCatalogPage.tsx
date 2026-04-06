@@ -10,7 +10,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { DataTable, PageHeader, SearchFilter } from '@/components/shared';
 import { ArrowDown, ArrowUp, Clock3, Layers3, Pencil, Plus, Tag, Trash2 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
-import { loadTasks, saveTasks } from '@/lib/dataStore';
+import { useTasks } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import type { Task } from '@/data/seedData';
 
 type SortMode = 'priority' | 'name' | 'category' | 'duration-asc' | 'duration-desc';
@@ -66,21 +68,12 @@ function statusBadgeVariant(status: TaskStatus): 'default' | 'secondary' | 'outl
 }
 
 export default function TasksCatalogPage() {
+  const { currentUser, currentPropertyId } = useAuth();
   const queryClient = useQueryClient();
+  const tasksQuery = useTasks(currentPropertyId, currentUser?.orgId);
+  const taskList = tasksQuery.data ?? [];
+  const isLoading = tasksQuery.isLoading;
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
-  const [sortMode, setSortMode] = useState<SortMode>('priority');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [draft, setDraft] = useState<TaskDraft>(defaultDraft);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-
-  const { data: taskList = [], isLoading } = useQuery<Task[]>({
-    queryKey: ['tasks-catalog'],
-    queryFn: async () => loadTasks(),
-    staleTime: 60 * 1000,
-  });
 
   const normalizedTasks = useMemo(
     () => taskList.map((task, index) => normalizeTask(task, index)),
@@ -131,11 +124,22 @@ export default function TasksCatalogPage() {
   const archivedCount = normalizedTasks.filter((task) => task.status === 'archived').length;
   const selectedTasks = normalizedTasks.filter((task) => selectedIds.includes(task.id));
 
-  function persistTasks(nextTasks: Task[]) {
+  async function persistTasks(nextTasks: Task[]) {
     const normalized = nextTasks.map((task, index) => normalizeTask(task, index)).sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999));
     const resequenced = normalized.map((task, index) => ({ ...task, priority: index + 1 }));
-    saveTasks(resequenced);
-    queryClient.setQueryData<Task[]>(['tasks-catalog'], resequenced);
+    for (const task of resequenced) {
+      await supabase.from('tasks').upsert({
+        id: task.id,
+        name: task.name,
+        description: task.notes ?? null,
+        category: task.category,
+        status: task.status ?? 'active',
+        priority: task.priority ?? 1,
+        property_id: currentPropertyId,
+        org_id: currentUser?.orgId,
+      })
+    }
+    await queryClient.invalidateQueries({ queryKey: ['tasks'] })
   }
 
   function openAddDialog() {
@@ -169,7 +173,7 @@ export default function TasksCatalogPage() {
       .filter(Boolean);
   }
 
-  function handleSaveTask() {
+  async function handleSaveTask() {
     if (!draft.name.trim() || !draft.category.trim()) return;
 
     const existing = editingTaskId ? normalizedTasks.find((task) => task.id === editingTaskId) : undefined;
@@ -191,7 +195,7 @@ export default function TasksCatalogPage() {
       ? taskList.map((task) => (task.id === editingTaskId ? nextTask : task))
       : [...taskList, nextTask];
 
-    persistTasks(nextTasks);
+    await persistTasks(nextTasks);
     setDialogOpen(false);
     setDraft(defaultDraft);
     toast(editingTaskId ? 'Task updated' : 'Task added', {
@@ -199,10 +203,10 @@ export default function TasksCatalogPage() {
     });
   }
 
-  function handleDeleteTask(taskId: string) {
+  async function handleDeleteTask(taskId: string) {
     const task = normalizedTasks.find((entry) => entry.id === taskId);
-    const nextTasks = taskList.filter((entry) => entry.id !== taskId);
-    persistTasks(nextTasks);
+    await supabase.from('tasks').delete().eq('id', taskId);
+    await queryClient.invalidateQueries({ queryKey: ['tasks'] });
     setSelectedIds((current) => current.filter((id) => id !== taskId));
     toast('Task deleted', {
       description: task ? `${task.name} has been removed from the task catalog.` : 'Task removed.',
@@ -217,31 +221,35 @@ export default function TasksCatalogPage() {
     setSelectedIds(checked ? filteredTasks.map((task) => task.id) : []);
   }
 
-  function applyBulkStatus(status: TaskStatus) {
+  async function applyBulkStatus(status: TaskStatus) {
     if (selectedIds.length === 0) return;
-    persistTasks(taskList.map((task) => (selectedIds.includes(task.id) ? { ...task, status } : task)));
+    const nextTasks = taskList.map((task) => (selectedIds.includes(task.id) ? { ...task, status } : task));
+    await persistTasks(nextTasks);
     toast('Tasks updated', {
       description: `${selectedIds.length} task${selectedIds.length === 1 ? '' : 's'} moved to ${status}.`,
     });
   }
 
-  function bulkDeleteSelected() {
+  async function bulkDeleteSelected() {
     if (selectedIds.length === 0) return;
-    persistTasks(taskList.filter((task) => !selectedIds.includes(task.id)));
+    for (const taskId of selectedIds) {
+      await supabase.from('tasks').delete().eq('id', taskId);
+    }
+    await queryClient.invalidateQueries({ queryKey: ['tasks'] });
     toast('Tasks deleted', {
       description: `${selectedIds.length} task${selectedIds.length === 1 ? '' : 's'} removed from the catalog.`,
     });
     setSelectedIds([]);
   }
 
-  function moveTask(taskId: string, direction: 'up' | 'down') {
+  async function moveTask(taskId: string, direction: 'up' | 'down') {
     const ordered = [...normalizedTasks].sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999));
     const index = ordered.findIndex((task) => task.id === taskId);
     if (index < 0) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= ordered.length) return;
     [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
-    persistTasks(ordered);
+    await persistTasks(ordered);
   }
 
   const allFilteredSelected = filteredTasks.length > 0 && filteredTasks.every((task) => selectedIds.includes(task.id));

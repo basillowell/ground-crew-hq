@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CloudSun, Crosshair, Droplets, MapPin, PencilLine, Plus, Radar, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -23,22 +23,16 @@ import {
 } from '@/data/seedData';
 import {
   loadCurrentPropertyId,
-  loadManualRainfallEntries,
   loadProperties,
   loadProgramSettings,
-  loadWeatherDailyLogs,
-  loadWeatherLocations,
-  loadWeatherStations,
   loadWorkLocations,
-  saveManualRainfallEntries,
-  saveWeatherDailyLogs,
-  saveWeatherLocations,
-  saveWeatherStations,
 } from '@/lib/dataStore';
 import { toast } from '@/components/ui/sonner';
 import { fetchPrimaryStationSnapshot, fetchStationForecastDetail, fetchWeatherStationSuggestions, type GeocodeResult, type WeatherForecastDetail } from '@/lib/weatherProviders';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather, getWeatherIconMeta } from '@/lib/weather';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -68,6 +62,8 @@ function makeId(prefix: string) {
 }
 
 export default function WeatherPage() {
+  const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
   const [properties, setProperties] = useState<Property[]>([]);
   const [currentPropertyId, setCurrentPropertyId] = useState('');
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
@@ -95,21 +91,14 @@ export default function WeatherPage() {
   const [browserCoordinates, setBrowserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
-    const locations = loadWeatherLocations();
-    const stations = loadWeatherStations();
     const opsLocations = loadWorkLocations();
     const propertyList = loadProperties();
     const activePropertyId = loadCurrentPropertyId();
     setProperties(propertyList);
     setCurrentPropertyId(activePropertyId);
-    setWeatherLocations(locations);
-    setWeatherStations(stations);
     setWorkLocations(opsLocations);
     setProgramSetting(loadProgramSettings()[0] ?? null);
-    setSelectedLocationId((current) => current || locations[0]?.id || '');
     setSelectedWorkLocationId(opsLocations[0]?.id ?? '');
-    setWeatherLogs(loadWeatherDailyLogs());
-    setRainEntries(loadManualRainfallEntries());
   }, []);
 
   useEffect(() => {
@@ -390,11 +379,26 @@ export default function WeatherPage() {
     }
   }
 
-  function persistWeatherSetup(nextLocations: WeatherLocation[], nextStations: WeatherStation[]) {
+  async function persistWeatherSetup(nextLocations: WeatherLocation[], nextStations: WeatherStation[]) {
     setWeatherLocations(nextLocations);
     setWeatherStations(nextStations);
-    saveWeatherLocations(nextLocations);
-    saveWeatherStations(nextStations);
+    if (currentUser?.orgId) {
+      await supabase.from('weather_locations').upsert(
+        nextLocations.map(location => ({
+          ...location,
+          org_id: currentUser.orgId,
+          property_id: location.propertyId,
+        }))
+      );
+      await supabase.from('weather_stations').upsert(
+        nextStations.map(station => ({
+          ...station,
+          org_id: currentUser.orgId,
+        }))
+      );
+      queryClient.invalidateQueries(['weather-locations']);
+      queryClient.invalidateQueries(['weather-stations']);
+    }
   }
 
   function addWeatherAreaFromLocation() {
@@ -445,8 +449,17 @@ export default function WeatherPage() {
     );
   }
 
-  function saveSelectedLocation() {
-    saveWeatherLocations(weatherLocations);
+  async function saveSelectedLocation() {
+    if (currentUser?.orgId) {
+      await supabase.from('weather_locations').upsert(
+        weatherLocations.map(location => ({
+          ...location,
+          org_id: currentUser.orgId,
+          property_id: location.propertyId,
+        }))
+      );
+      queryClient.invalidateQueries(['weather-locations']);
+    }
     toast('Weather area saved', { description: 'Area naming and property details have been updated.' });
   }
 
@@ -498,12 +511,20 @@ export default function WeatherPage() {
     toast('Station removed', { description: 'Station setup has been updated for this weather area.' });
   }
 
-  function saveStations() {
-    saveWeatherStations(weatherStations);
+  async function saveStations() {
+    if (currentUser?.orgId) {
+      await supabase.from('weather_stations').upsert(
+        weatherStations.map(station => ({
+          ...station,
+          org_id: currentUser.orgId,
+        }))
+      );
+      queryClient.invalidateQueries(['weather-stations']);
+    }
     toast('Stations saved', { description: 'Provider configuration and live-station selection are stored.' });
   }
 
-  function saveEntry() {
+  async function saveEntry() {
     if (dialogMode === 'rainfall') {
       const nextEntry: ManualRainfallEntry = {
         id: `mr-${Date.now()}`,
@@ -515,7 +536,13 @@ export default function WeatherPage() {
       };
       const next = [nextEntry, ...rainEntries];
       setRainEntries(next);
-      saveManualRainfallEntries(next);
+      if (currentUser?.orgId) {
+        await supabase.from('manual_rainfall_entries').insert({
+          ...nextEntry,
+          org_id: currentUser.orgId,
+        });
+        queryClient.invalidateQueries(['manual-rainfall-entries']);
+      }
     } else {
       const nextLog: WeatherDailyLog = {
         id: `wd-${Date.now()}`,
@@ -536,7 +563,13 @@ export default function WeatherPage() {
       };
       const next = [nextLog, ...weatherLogs];
       setWeatherLogs(next);
-      saveWeatherDailyLogs(next);
+      if (currentUser?.orgId) {
+        await supabase.from('weather_daily_logs').insert({
+          ...nextLog,
+          org_id: currentUser.orgId,
+        });
+        queryClient.invalidateQueries(['weather-daily-logs']);
+      }
     }
     setDialogOpen(false);
   }

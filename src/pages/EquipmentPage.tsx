@@ -10,15 +10,21 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { ChevronRight, Plus, Tractor } from 'lucide-react';
-import { loadEmployees, loadEquipmentUnits, loadWorkLocations, saveEquipmentUnits } from '@/lib/dataStore';
+import { useEquipmentUnits } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 const statusMap = { available: 'success', 'in-use': 'info', maintenance: 'warning', 'out-of-service': 'danger' } as const;
 const woStatusMap = { open: 'warning', 'in-progress': 'info', completed: 'success' } as const;
 const prioMap = { low: 'neutral', medium: 'warning', high: 'danger' } as const;
 
 export default function EquipmentPage() {
+  const { currentUser, currentPropertyId } = useAuth();
+  const queryClient = useQueryClient();
+  const equipmentQuery = useEquipmentUnits(currentPropertyId, currentUser?.orgId);
+  const unitList = equipmentQuery.data ?? [];
   const [employeeList, setEmployeeList] = useState<Employee[]>([]);
-  const [unitList, setUnitList] = useState<EquipmentUnit[]>([]);
   const [workLocations, setWorkLocations] = useState<{ id: string; name: string }[]>([]);
   const [selectedType, setSelectedType] = useState(equipmentTypes[0]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -32,11 +38,11 @@ export default function EquipmentPage() {
     hours: '0',
     lastService: '2024-03-01',
     nextService: '2024-04-01',
+    propertyId: '',
   });
 
   useEffect(() => {
     setEmployeeList(loadEmployees());
-    setUnitList(loadEquipmentUnits());
     setWorkLocations(loadWorkLocations());
   }, []);
 
@@ -45,9 +51,20 @@ export default function EquipmentPage() {
   const activeCount = typeUnits.filter((unit) => unit.status === 'available' || unit.status === 'in-use').length;
   const repairCount = typeUnits.filter((unit) => unit.status === 'maintenance' || unit.status === 'out-of-service').length;
 
-  function persistUnits(nextUnits: EquipmentUnit[]) {
-    setUnitList(nextUnits);
-    saveEquipmentUnits(nextUnits);
+  async function persistUnits(nextUnits: EquipmentUnit[]) {
+    for (const unit of nextUnits) {
+      await supabase.from('equipment_units').upsert({
+        id: unit.id,
+        name: unit.unitNumber,
+        type: unit.typeId,
+        status: unit.status,
+        location: unit.location ?? null,
+        last_serviced: unit.lastService ?? null,
+        property_id: unit.propertyId ?? currentPropertyId,
+        org_id: currentUser?.orgId,
+      })
+    }
+    await queryClient.invalidateQueries({ queryKey: ['equipment-units'] })
   }
 
   function openAddUnit() {
@@ -61,6 +78,7 @@ export default function EquipmentPage() {
       hours: '0',
       lastService: '2024-03-01',
       nextService: '2024-04-01',
+      propertyId: currentPropertyId ?? '',
     });
     setDialogOpen(true);
   }
@@ -76,11 +94,12 @@ export default function EquipmentPage() {
       hours: String(unit.hours),
       lastService: unit.lastService,
       nextService: unit.nextService,
+      propertyId: unit.propertyId ?? '',
     });
     setDialogOpen(true);
   }
 
-  function handleSaveUnit() {
+  async function handleSaveUnit() {
     if (!draft.unitNumber.trim()) return;
 
     const nextUnit: EquipmentUnit = {
@@ -93,13 +112,14 @@ export default function EquipmentPage() {
       hours: Number(draft.hours || 0),
       lastService: draft.lastService,
       nextService: draft.nextService,
+      propertyId: draft.propertyId || undefined,
     };
 
     const nextUnits = editingUnitId
       ? unitList.map((unit) => (unit.id === editingUnitId ? nextUnit : unit))
       : [...unitList, nextUnit];
 
-    persistUnits(nextUnits);
+    await persistUnits(nextUnits);
     setDialogOpen(false);
   }
 
