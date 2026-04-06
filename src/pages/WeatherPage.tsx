@@ -237,6 +237,8 @@ export default function WeatherPage() {
 
   function refreshLiveWeather() {
     setRefreshTick((current) => current + 1);
+    void selectedPropertyWeatherQuery.refetch();
+    void liveForecastQuery.refetch();
   }
 
   async function searchStationsByAddress(queryOverride?: string) {
