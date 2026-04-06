@@ -27,7 +27,7 @@ import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo'
 import { useWeather, getWeatherIconMeta } from '@/lib/weather';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProperties, useProgramSettings, useWorkLocations } from '@/lib/supabase-queries';
+import { useProperties, useProgramSettings, useWeatherLocations, useWeatherStations, useWorkLocations } from '@/lib/supabase-queries';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -65,8 +65,12 @@ export default function WeatherPage() {
   const programSetting = programSettingQuery.data ?? null;
   const workLocationsQuery = useWorkLocations();
   const workLocations = workLocationsQuery.data ?? [];
+  const weatherLocationsQuery = useWeatherLocations(currentPropertyId);
+  const weatherStationsQuery = useWeatherStations();
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [selectedWorkLocationId, setSelectedWorkLocationId] = useState('');
+  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
+  const [weatherStations, setWeatherStations] = useState<WeatherStation[]>([]);
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>([]);
   const [rainEntries, setRainEntries] = useState<ManualRainfallEntry[]>([]);
   const [liveLog, setLiveLog] = useState<WeatherDailyLog | null>(null);
@@ -106,6 +110,16 @@ export default function WeatherPage() {
       },
     );
   }, []);
+
+  useEffect(() => {
+    if (weatherLocationsQuery.data) {
+      setWeatherLocations(weatherLocationsQuery.data);
+      setSelectedLocationId((current) => current || weatherLocationsQuery.data[0]?.id || '');
+    }
+    if (weatherStationsQuery.data) {
+      setWeatherStations(weatherStationsQuery.data);
+    }
+  }, [weatherLocationsQuery.data, weatherStationsQuery.data]);
 
   const selectedLocation = weatherLocations.find((location) => location.id === selectedLocationId) ?? weatherLocations[0];
   const selectedProperty = properties.find((property) => property.id === (selectedLocation?.propertyId || currentPropertyId));
