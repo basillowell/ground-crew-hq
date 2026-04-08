@@ -70,6 +70,12 @@ function getSupabaseProjectLabel() {
   }
 }
 
+function timeoutResult<T>(ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    setTimeout(() => resolve(fallback), ms);
+  });
+}
+
 async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfile | null; debugMessage: string }> {
   if (!supabase || !user) return { profile: null, debugMessage: '' };
   try {
@@ -156,8 +162,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function hydrateAuth() {
       setIsLoading(true);
       try {
-        const { data } = await supabase.auth.getUser();
-        const { profile, debugMessage } = await loadAuthProfile(data.user);
+        const sessionResult = await Promise.race([
+          supabase.auth.getSession(),
+          timeoutResult(10000, { data: { session: null } }),
+        ]);
+        const sessionUser = sessionResult.data?.session?.user ?? null;
+        const { profile, debugMessage } = await Promise.race([
+          loadAuthProfile(sessionUser),
+          timeoutResult(10000, {
+            profile: null,
+            debugMessage: `Authentication timed out while connecting to ${getSupabaseProjectLabel()}. Please try again.`,
+          }),
+        ]);
         if (!mounted) return;
         setCurrentUser(profile);
         setAuthDebugMessage(debugMessage);
@@ -185,7 +201,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(true);
       }
       try {
-        const { profile, debugMessage } = await loadAuthProfile(session?.user ?? null);
+        const { profile, debugMessage } = await Promise.race([
+          loadAuthProfile(session?.user ?? null),
+          timeoutResult(10000, {
+            profile: null,
+            debugMessage: `Authentication timed out while connecting to ${getSupabaseProjectLabel()}. Please try again.`,
+          }),
+        ]);
         if (!mounted) return;
         setCurrentUser(profile);
         setAuthDebugMessage(debugMessage);
