@@ -146,6 +146,35 @@ function applyThemePreset(settings: ProgramSettings, presetId: string): ProgramS
   };
 }
 
+function buildDefaultProgramSetting(orgName?: string): ProgramSettings {
+  const normalizedOrgName = orgName?.trim() || 'Ground Crew HQ';
+  return withBrandDefaults({
+    id: makeId('ps'),
+    organizationName: normalizedOrgName,
+    appName: 'WorkForce App',
+    navigationTitle: 'WorkForce App',
+    navigationSubtitle: 'Operations platform',
+    clientLabel: normalizedOrgName,
+    logoInitials: normalizedOrgName.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'WF',
+    logoUrl: '',
+    uiThemePreset: 'club-emerald',
+    themeNotes: '',
+    fontThemePreset: 'modern-sans',
+    shellImageUrl: '',
+    primaryColor: '#2f855a',
+    accentColor: '#d7f5e5',
+    sidebarColor: '#203127',
+    defaultDepartment: 'Maintenance',
+    timeZone: 'Eastern Time (ET)',
+    fiscalYearStart: 'January',
+    enableMobileApp: true,
+    overtimeTracking: true,
+    equipmentQrCodes: true,
+    enabledModules: [...DEFAULT_ENABLED_MODULES],
+    pushNotifications: false,
+  });
+}
+
 export default function ProgramSetupHubPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
@@ -200,10 +229,13 @@ export default function ProgramSetupHubPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   useEffect(() => {
-    if (programSettingData && !programSetting) {
+    if (programSetting || programSettingQuery.isLoading) return;
+    if (programSettingData) {
       setProgramSetting(withBrandDefaults(programSettingData));
+      return;
     }
-  }, [programSettingData, programSetting]);
+    setProgramSetting(buildDefaultProgramSetting(currentUser?.email));
+  }, [currentUser?.email, programSetting, programSettingData, programSettingQuery.isLoading]);
 
   useEffect(() => setDepartmentOptions(departmentOptionsData), [departmentOptionsData]);
   useEffect(() => setGroupOptions(groupOptionsData), [groupOptionsData]);
