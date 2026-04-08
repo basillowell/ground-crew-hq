@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -184,6 +184,10 @@ const GROUP_META: Record<string, string> = {
   'Admin / System': 'Organization controls, permissions, and account governance.',
 };
 
+const CLIENT_FACING_PAGES: ActivePage[] = ['brand', 'properties', 'shifts'];
+const ADMIN_ONLY_PAGES: ActivePage[] = ['modules', 'users', 'workforce', 'billing', 'integrations'];
+type SettingsViewMode = 'client' | 'admin';
+
 function roleBadgeClass(role: AppUser['role']) {
   if (role === 'admin') return 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200';
   if (role === 'manager') return 'border-blue-500/40 bg-blue-500/10 text-blue-800 dark:text-blue-200';
@@ -282,6 +286,19 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
   const editingShift = shiftSheetId ? shiftTemplates.find((s) => s.id === shiftSheetId) : undefined;
   const sectionMeta = SECTION_META[activePage];
   const sectionWorkflow = SECTION_WORKFLOW[activePage];
+  const [viewMode, setViewMode] = useState<SettingsViewMode>('client');
+
+  const visibleNavGroups = useMemo(() => {
+    if (viewMode === 'admin') return navGroups;
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => CLIENT_FACING_PAGES.includes(item.id)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [navGroups, viewMode]);
+
+  const activeIsAdminSection = ADMIN_ONLY_PAGES.includes(activePage);
 
   return (
     <div className="flex min-h-[680px] overflow-hidden rounded-2xl border bg-card shadow-sm">
@@ -289,9 +306,36 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
         <div className="border-b px-4 py-4">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Program Setup</div>
           <div className="mt-1 text-sm font-medium">Workspace Settings Navigator</div>
+          <div className="mt-3 rounded-lg border bg-background/80 p-1">
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('client');
+                  if (ADMIN_ONLY_PAGES.includes(activePage)) setActivePage('brand');
+                }}
+                className={cn(
+                  'rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  viewMode === 'client' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
+                )}
+              >
+                Client View
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('admin')}
+                className={cn(
+                  'rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  viewMode === 'admin' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
+                )}
+              >
+                Admin View
+              </button>
+            </div>
+          </div>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
-          {navGroups.map((group) => (
+          {visibleNavGroups.map((group) => (
             <div key={group.label} className="rounded-xl border bg-background/80 p-2">
               <div className="px-2 pb-2">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{group.label}</div>
@@ -320,13 +364,29 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                         )}
                       />
                       <Icon className="h-4 w-4 shrink-0 opacity-80" />
-                      <span className="leading-tight">{item.label}</span>
+                      <span className="flex items-center gap-2 leading-tight">
+                        {item.label}
+                        {item.id === 'brand' && (
+                          <span className="rounded-full border border-primary-foreground/40 bg-primary-foreground/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary-foreground">
+                            Start
+                          </span>
+                        )}
+                      </span>
                     </button>
                   );
                 })}
               </nav>
             </div>
           ))}
+          {viewMode === 'client' && (
+            <div className="rounded-xl border border-dashed bg-background/80 p-3 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">Advanced settings hidden</div>
+              <p className="mt-1">Switch to Admin View for modules, user access, workforce, billing, and integrations.</p>
+              <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => setViewMode('admin')}>
+                Open admin settings
+              </Button>
+            </div>
+          )}
         </div>
         <div className="border-t p-4">
           <div className="rounded-lg border bg-background/90 p-3 text-xs shadow-sm">
@@ -355,14 +415,20 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <h2 className="mt-1 text-lg font-semibold tracking-tight">{sectionMeta.title}</h2>
               <p className="mt-1 text-xs text-muted-foreground">{sectionMeta.description}</p>
             </div>
-            <Badge variant={sectionMeta.audience === 'Admin / System' ? 'secondary' : 'outline'} className="shrink-0">
-              {sectionMeta.audience}
-            </Badge>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Badge variant="outline">{viewMode === 'client' ? 'Client View' : 'Admin View'}</Badge>
+              <Badge variant={sectionMeta.audience === 'Admin / System' ? 'secondary' : 'outline'}>{sectionMeta.audience}</Badge>
+            </div>
           </div>
         </div>
         <div className="p-6">
+        {viewMode === 'client' && activeIsAdminSection && (
+          <div className="mx-auto mb-4 max-w-5xl rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900">
+            You are viewing an admin section while in Client View. Switch to Admin View for full system configuration context.
+          </div>
+        )}
         {activePage === 'brand' && programSetting && (
-          <div className="mx-auto max-w-5xl space-y-6">
+          <div className="mx-auto max-w-6xl space-y-6">
             <SectionIntro
               title="Brand & Identity"
               audience={sectionMeta.audience}
@@ -370,226 +436,16 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               saveScope={sectionWorkflow.saveScope}
               editPattern={sectionWorkflow.editPattern}
             />
-            <Card className="p-5">
-              <div className="mb-4">
-                <h3 className="text-sm font-semibold">Organization Identity</h3>
-                <p className="text-xs text-muted-foreground">Core naming and workspace labels used across the app.</p>
+
+            <Card className="border-primary/30 p-6 shadow-sm ring-1 ring-primary/10">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold">Live Preview</h3>
+                  <p className="text-xs text-muted-foreground">This updates as you type so admins and clients can validate branding before save.</p>
+                </div>
+                <Badge variant="secondary">Preview-first</Badge>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-sm font-medium">Organization name</label>
-                  <Input
-                    value={programSetting.organizationName}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, organizationName: e.target.value } : c))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Navigation title</label>
-                  <Input
-                    value={programSetting.navigationTitle}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, navigationTitle: e.target.value } : c))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Client label</label>
-                  <Input
-                    value={programSetting.clientLabel}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, clientLabel: e.target.value } : c))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Navigation subtitle</label>
-                  <Input
-                    value={programSetting.navigationSubtitle}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, navigationSubtitle: e.target.value } : c))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Client app name</label>
-                  <Input
-                    value={programSetting.appName}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, appName: e.target.value } : c))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Default department</label>
-                  <select
-                    value={programSetting.defaultDepartment}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, defaultDepartment: e.target.value } : c))}
-                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    {departmentOptions.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Time zone</label>
-                  <Input
-                    value={programSetting.timeZone}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, timeZone: e.target.value } : c))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Fiscal year start</label>
-                  <Input
-                    value={programSetting.fiscalYearStart}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, fiscalYearStart: e.target.value } : c))}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-            </Card>
-
-            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="space-y-6">
-                <Card className="p-5">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-semibold">Theme Presets</h3>
-                    <p className="text-xs text-muted-foreground">Pick a preset as a base, then fine-tune below.</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {themePresets.map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => setProgramSetting((c) => (c ? applyThemePreset(c, preset.id) : c))}
-                        className={cn(
-                          'rounded-xl border p-3 text-left text-xs transition-all',
-                          programSetting.uiThemePreset === preset.id
-                            ? 'border-primary ring-2 ring-primary/20'
-                            : 'hover:border-muted-foreground/30',
-                        )}
-                      >
-                        <div className="font-medium">{preset.name}</div>
-                        <div className="mt-2 flex gap-1">
-                          <span className="h-6 flex-1 rounded-md" style={{ background: preset.primaryColor }} />
-                          <span className="h-6 flex-1 rounded-md" style={{ background: preset.accentColor }} />
-                          <span className="h-6 flex-1 rounded-md" style={{ background: preset.sidebarColor }} />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-4">
-                    <label className="text-sm font-medium">Typography</label>
-                    <select
-                      value={programSetting.fontThemePreset ?? 'modern-sans'}
-                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, fontThemePreset: e.target.value } : c))}
-                      className="mt-1 h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm"
-                    >
-                      {typographyPresets.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </Card>
-
-                <Card className="p-5">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-semibold">Custom Colors</h3>
-                    <p className="text-xs text-muted-foreground">Override preset values for a precise brand match.</p>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    {(['primaryColor', 'accentColor', 'sidebarColor'] as const).map((key) => (
-                      <div key={key}>
-                        <label className="text-sm font-medium capitalize">{key.replace('Color', ' color')}</label>
-                        <div className="mt-1 flex items-center gap-2">
-                          <input
-                            type="color"
-                            value={programSetting[key] || '#000000'}
-                            onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
-                            className="h-10 w-12 cursor-pointer rounded border bg-transparent"
-                          />
-                          <Input
-                            value={programSetting[key] || '#000000'}
-                            onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4">
-                    <label className="text-sm font-medium">Theme notes</label>
-                    <textarea
-                      value={programSetting.themeNotes ?? ''}
-                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, themeNotes: e.target.value } : c))}
-                      className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    />
-                  </div>
-                </Card>
-
-                <Card className="p-5">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-semibold">Logo & Assets</h3>
-                    <p className="text-xs text-muted-foreground">Set logo identity and control client-facing shell visuals.</p>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="text-sm font-medium">Logo initials</label>
-                      <Input
-                        value={programSetting.logoInitials}
-                        onChange={(e) =>
-                          setProgramSetting((c) => (c ? { ...c, logoInitials: e.target.value.toUpperCase().slice(0, 3) } : c))
-                        }
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Logo image URL</label>
-                      <Input
-                        value={programSetting.logoUrl ?? ''}
-                        onChange={(e) => setProgramSetting((c) => (c ? { ...c, logoUrl: e.target.value } : c))}
-                        className="mt-1"
-                        placeholder="https://"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="text-sm font-medium">Upload logo</label>
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        className="mt-1"
-                        onChange={(e) => handleLogoUpload(e.target.files?.[0] ?? null)}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 text-xs"
-                        onClick={() => setProgramSetting((c) => (c ? { ...c, logoUrl: '' } : c))}
-                      >
-                        Clear logo
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between rounded-xl border bg-muted/30 p-4">
-                    <div>
-                      <div className="text-sm font-medium">Mobile app</div>
-                      <p className="text-xs text-muted-foreground">Allow field crews to access via mobile.</p>
-                    </div>
-                    <Switch
-                      checked={programSetting.enableMobileApp}
-                      onCheckedChange={(checked) => setProgramSetting((c) => (c ? { ...c, enableMobileApp: checked } : c))}
-                    />
-                  </div>
-                </Card>
-              </div>
-
-              <Card className="sticky top-24 h-fit p-5">
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold">Live Preview</h3>
-                  <p className="text-xs text-muted-foreground">Preview reflects current edits before saving.</p>
-                </div>
+              <div className="grid gap-4 lg:grid-cols-2">
                 <div
                   className="rounded-2xl border p-5 text-white shadow-inner"
                   style={{ backgroundColor: programSetting.sidebarColor }}
@@ -615,6 +471,238 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                   </div>
                   <div className="mt-4 rounded-lg border border-white/15 bg-white/5 p-3 text-[11px] text-white/75">
                     Theme: {programSetting.uiThemePreset || 'custom'} - Font: {programSetting.fontThemePreset || 'modern-sans'}
+                  </div>
+                </div>
+                <div className="rounded-2xl border bg-muted/20 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Preview Notes</div>
+                  <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
+                    <li>Organization name appears in setup and admin summaries.</li>
+                    <li>Navigation title + subtitle appear in workspace shell.</li>
+                    <li>Client label and theme colors affect the first impression for operators.</li>
+                    <li>Logo initials are used when no uploaded logo is present.</li>
+                  </ul>
+                </div>
+              </div>
+            </Card>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold">1. Organization Identity</h3>
+                  <p className="text-xs text-muted-foreground">Core naming used across setup, users, and property-facing context.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium">Organization name</label>
+                    <Input
+                      value={programSetting.organizationName}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, organizationName: e.target.value } : c))}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Client app name</label>
+                    <Input
+                      value={programSetting.appName}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, appName: e.target.value } : c))}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Client label</label>
+                    <Input
+                      value={programSetting.clientLabel}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, clientLabel: e.target.value } : c))}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Default department</label>
+                    <select
+                      value={programSetting.defaultDepartment}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, defaultDepartment: e.target.value } : c))}
+                      className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {departmentOptions.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold">2. Navigation Labels</h3>
+                  <p className="text-xs text-muted-foreground">Workspace shell labels and time context for daily operations.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium">Navigation title</label>
+                    <Input
+                      value={programSetting.navigationTitle}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, navigationTitle: e.target.value } : c))}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Navigation subtitle</label>
+                    <Input
+                      value={programSetting.navigationSubtitle}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, navigationSubtitle: e.target.value } : c))}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Time zone</label>
+                    <Input
+                      value={programSetting.timeZone}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, timeZone: e.target.value } : c))}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Fiscal year start</label>
+                    <Input
+                      value={programSetting.fiscalYearStart}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, fiscalYearStart: e.target.value } : c))}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-5 lg:col-span-2">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold">3. Theme Presets</h3>
+                  <p className="text-xs text-muted-foreground">Pick a preset base, then refine colors and notes below.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {themePresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setProgramSetting((c) => (c ? applyThemePreset(c, preset.id) : c))}
+                      className={cn(
+                        'rounded-xl border p-3 text-left text-xs transition-all',
+                        programSetting.uiThemePreset === preset.id
+                          ? 'border-primary ring-2 ring-primary/20'
+                          : 'hover:border-muted-foreground/30',
+                      )}
+                    >
+                      <div className="font-medium">{preset.name}</div>
+                      <div className="mt-2 flex gap-1">
+                        <span className="h-6 flex-1 rounded-md" style={{ background: preset.primaryColor }} />
+                        <span className="h-6 flex-1 rounded-md" style={{ background: preset.accentColor }} />
+                        <span className="h-6 flex-1 rounded-md" style={{ background: preset.sidebarColor }} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 max-w-xs">
+                  <label className="text-sm font-medium">Typography</label>
+                  <select
+                    value={programSetting.fontThemePreset ?? 'modern-sans'}
+                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, fontThemePreset: e.target.value } : c))}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {typographyPresets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </Card>
+
+              <Card className="p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold">4. Custom Colors</h3>
+                  <p className="text-xs text-muted-foreground">Override preset colors for exact brand alignment.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {(['primaryColor', 'accentColor', 'sidebarColor'] as const).map((key) => (
+                    <div key={key}>
+                      <label className="text-sm font-medium capitalize">{key.replace('Color', ' color')}</label>
+                      <div className="mt-1 flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={programSetting[key] || '#000000'}
+                          onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
+                          className="h-10 w-12 cursor-pointer rounded border bg-transparent"
+                        />
+                        <Input
+                          value={programSetting[key] || '#000000'}
+                          onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4">
+                  <label className="text-sm font-medium">Theme notes</label>
+                  <textarea
+                    value={programSetting.themeNotes ?? ''}
+                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, themeNotes: e.target.value } : c))}
+                    className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+              </Card>
+
+              <Card className="p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold">5. Logo & Assets</h3>
+                  <p className="text-xs text-muted-foreground">Configure logo identity and upload artwork used in the app shell.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium">Logo initials</label>
+                    <Input
+                      value={programSetting.logoInitials}
+                      onChange={(e) =>
+                        setProgramSetting((c) => (c ? { ...c, logoInitials: e.target.value.toUpperCase().slice(0, 3) } : c))
+                      }
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Logo image URL</label>
+                    <Input
+                      value={programSetting.logoUrl ?? ''}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, logoUrl: e.target.value } : c))}
+                      className="mt-1"
+                      placeholder="https://"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-sm font-medium">Upload logo</label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      className="mt-1"
+                      onChange={(e) => handleLogoUpload(e.target.files?.[0] ?? null)}
+                    />
+                    <div className="mt-3 flex items-center justify-between rounded-xl border bg-muted/30 p-3">
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">Mobile app</div>
+                        <p className="text-xs text-muted-foreground">Allow field crews to access via mobile.</p>
+                      </div>
+                      <Switch
+                        checked={programSetting.enableMobileApp}
+                        onCheckedChange={(checked) => setProgramSetting((c) => (c ? { ...c, enableMobileApp: checked } : c))}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 text-xs"
+                      onClick={() => setProgramSetting((c) => (c ? { ...c, logoUrl: '' } : c))}
+                    >
+                      Clear logo
+                    </Button>
                   </div>
                 </div>
               </Card>
