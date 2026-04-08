@@ -81,7 +81,7 @@ const NAV_GROUPS: { label: string; items: { id: ActivePage; label: string; icon:
     label: 'Client Operations',
     items: [
       { id: 'brand', label: 'Brand & Identity', icon: Palette },
-      { id: 'properties', label: 'Properties', icon: Building2 },
+      { id: 'properties', label: 'Properties & Locations', icon: Building2 },
       { id: 'shifts', label: 'Shift Templates', icon: Clock },
     ],
   },

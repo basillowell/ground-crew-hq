@@ -135,6 +135,50 @@ const SECTION_META: Record<
   },
 };
 
+const SECTION_WORKFLOW: Record<
+  ActivePage,
+  { helper: string; saveScope?: string; editPattern: 'inline' | 'list' | 'mixed' }
+> = {
+  brand: {
+    helper: 'Use this for customer-facing identity. Keep edits focused on naming, colors, and logo before publishing.',
+    saveScope: 'Brand and identity only',
+    editPattern: 'mixed',
+  },
+  modules: {
+    helper: 'System owners can enable or disable features without touching operational records.',
+    saveScope: 'Module toggles and workspace controls',
+    editPattern: 'inline',
+  },
+  properties: {
+    helper: 'Follow the numbered workflow so multi-property setup stays predictable for admins and operators.',
+    saveScope: 'Property records, classes, and location mappings',
+    editPattern: 'list',
+  },
+  users: {
+    helper: 'Portal users control sign-in and permission scope. This is separate from workforce labor structure.',
+    saveScope: 'Portal users, access roles, and account status',
+    editPattern: 'list',
+  },
+  workforce: {
+    helper: 'Workforce structure defines labor taxonomy used across scheduling, assignments, and reporting.',
+    saveScope: 'Departments, groups, roles, and language options',
+    editPattern: 'list',
+  },
+  shifts: {
+    helper: 'Templates are reusable scheduling patterns. Keep names and times standardized for planners.',
+    saveScope: 'Shift templates only',
+    editPattern: 'list',
+  },
+  billing: {
+    helper: 'Billing is account-level visibility for plan limits and subscription controls.',
+    editPattern: 'inline',
+  },
+  integrations: {
+    helper: 'Integrations show connected operational services and readiness status.',
+    editPattern: 'inline',
+  },
+};
+
 const GROUP_META: Record<string, string> = {
   'Client Operations': 'Daily workspace setup used by on-site teams.',
   'Admin / System': 'Organization controls, permissions, and account governance.',
@@ -145,6 +189,41 @@ function roleBadgeClass(role: AppUser['role']) {
   if (role === 'manager') return 'border-blue-500/40 bg-blue-500/10 text-blue-800 dark:text-blue-200';
   if (role === 'crew') return 'border-border bg-muted text-muted-foreground';
   return 'border-violet-500/40 bg-violet-500/10 text-violet-800 dark:text-violet-200';
+}
+
+function SectionIntro({
+  title,
+  audience,
+  helper,
+  saveScope,
+  editPattern,
+}: {
+  title: string;
+  audience: 'Client Operations' | 'Admin / System';
+  helper: string;
+  saveScope?: string;
+  editPattern: 'inline' | 'list' | 'mixed';
+}) {
+  const editPatternLabel = editPattern === 'inline' ? 'Inline edits' : editPattern === 'list' ? 'Editable lists' : 'Mixed workflow';
+  return (
+    <Card className="border-dashed p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold">{title}</h3>
+          <p className="text-xs text-muted-foreground">{helper}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={audience === 'Admin / System' ? 'secondary' : 'outline'}>{audience}</Badge>
+          <Badge variant="outline">{editPatternLabel}</Badge>
+        </div>
+      </div>
+      {saveScope && (
+        <div className="mt-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Save scope:</span> {saveScope}
+        </div>
+      )}
+    </Card>
+  );
 }
 
 export function ProgramSetupHubPanels(props: PanelsProps) {
@@ -202,6 +281,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
   const editingProperty = propertySheetId ? properties.find((p) => p.id === propertySheetId) : undefined;
   const editingShift = shiftSheetId ? shiftTemplates.find((s) => s.id === shiftSheetId) : undefined;
   const sectionMeta = SECTION_META[activePage];
+  const sectionWorkflow = SECTION_WORKFLOW[activePage];
 
   return (
     <div className="flex min-h-[680px] overflow-hidden rounded-2xl border bg-card shadow-sm">
@@ -283,6 +363,13 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
         <div className="p-6">
         {activePage === 'brand' && programSetting && (
           <div className="mx-auto max-w-5xl space-y-6">
+            <SectionIntro
+              title="Brand & Identity"
+              audience={sectionMeta.audience}
+              helper={sectionWorkflow.helper}
+              saveScope={sectionWorkflow.saveScope}
+              editPattern={sectionWorkflow.editPattern}
+            />
             <Card className="p-5">
               <div className="mb-4">
                 <h3 className="text-sm font-semibold">Organization Identity</h3>
@@ -542,10 +629,13 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
 
         {activePage === 'modules' && programSetting && (
           <div className="mx-auto max-w-3xl space-y-8">
-            <div>
-              <h2 className="text-lg font-semibold">Modules &amp; Features</h2>
-              <p className="text-sm text-muted-foreground">Toggle modules and operational controls for this workspace.</p>
-            </div>
+            <SectionIntro
+              title="Modules & Features"
+              audience={sectionMeta.audience}
+              helper={sectionWorkflow.helper}
+              saveScope={sectionWorkflow.saveScope}
+              editPattern={sectionWorkflow.editPattern}
+            />
             {['Core modules', 'Operational'].map((g) => (
               <div key={g}>
                 <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{g}</h3>
@@ -606,6 +696,13 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
 
         {activePage === 'properties' && (
           <div className="mx-auto max-w-6xl space-y-8">
+            <SectionIntro
+              title="Properties & Locations"
+              audience={sectionMeta.audience}
+              helper={sectionWorkflow.helper}
+              saveScope={sectionWorkflow.saveScope}
+              editPattern={sectionWorkflow.editPattern}
+            />
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">1. Property list</h2>
@@ -843,6 +940,13 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
 
         {activePage === 'users' && programSetting && (
           <div className="mx-auto max-w-5xl space-y-8">
+            <SectionIntro
+              title="Users & Access"
+              audience={sectionMeta.audience}
+              helper={sectionWorkflow.helper}
+              saveScope={sectionWorkflow.saveScope}
+              editPattern={sectionWorkflow.editPattern}
+            />
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">Portal accounts (Users &amp; Access)</h2>
@@ -1001,13 +1105,14 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
 
         {activePage === 'workforce' && (
           <div className="mx-auto max-w-4xl space-y-8">
-            <div>
-              <h2 className="text-lg font-semibold">Labor structure (Workforce)</h2>
-              <p className="text-sm text-muted-foreground">
-                Configure departments, groups, workforce roles, and language options used by labor planning.
-              </p>
-              <p className="text-xs text-muted-foreground">This section does not create login accounts.</p>
-            </div>
+            <SectionIntro
+              title="Workforce Structure"
+              audience={sectionMeta.audience}
+              helper={sectionWorkflow.helper}
+              saveScope={sectionWorkflow.saveScope}
+              editPattern={sectionWorkflow.editPattern}
+            />
+            <div className="text-xs text-muted-foreground">This section does not create login accounts.</div>
             <div className="rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Applies to:</span> employee records, labor grouping, scheduling structure, and reports.
             </div>
@@ -1104,6 +1209,13 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
 
         {activePage === 'shifts' && (
           <div className="mx-auto max-w-4xl space-y-6">
+            <SectionIntro
+              title="Shift Templates"
+              audience={sectionMeta.audience}
+              helper={sectionWorkflow.helper}
+              saveScope={sectionWorkflow.saveScope}
+              editPattern={sectionWorkflow.editPattern}
+            />
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">Shift templates</h2>
