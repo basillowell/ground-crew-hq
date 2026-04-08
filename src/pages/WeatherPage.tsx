@@ -116,11 +116,11 @@ export default function WeatherPage() {
   const queryClient = useQueryClient();
   const { currentUser, currentPropertyId } = useAuth();
   const propertiesQuery = useProperties(currentUser?.orgId);
-  const properties = propertiesQuery.data ?? [];
+  const properties = useMemo(() => propertiesQuery.data ?? [], [propertiesQuery.data]);
   const programSettingQuery = useProgramSettings(currentUser?.orgId);
   const programSetting = programSettingQuery.data ?? null;
   const workLocationsQuery = useWorkLocations();
-  const workLocations = workLocationsQuery.data ?? [];
+  const workLocations = useMemo(() => workLocationsQuery.data ?? [], [workLocationsQuery.data]);
   const weatherLocationsQuery = useWeatherLocations(currentPropertyId);
   const weatherStationsQuery = useQuery({
     queryKey: ['weather-stations-full', currentUser?.orgId ?? 'all-orgs'],
@@ -187,14 +187,20 @@ export default function WeatherPage() {
   const [propertyLiveLogs, setPropertyLiveLogs] = useState<Record<string, WeatherDailyLog | null>>({});
   const [selectedForecast, setSelectedForecast] = useState<WeatherForecastDetail | null>(null);
   const [browserCoordinates, setBrowserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [showCharts, setShowCharts] = useState(true);
-  const [showDecisionSupport, setShowDecisionSupport] = useState(true);
-  const [showServiceStrategy, setShowServiceStrategy] = useState(false);
-  const [showManualEntries, setShowManualEntries] = useState(true);
+  const [showHourlyForecast, setShowHourlyForecast] = useState(false);
+  const [showStationManagement, setShowStationManagement] = useState(false);
+  const [showPropertyWeatherCards, setShowPropertyWeatherCards] = useState(true);
+  const [showManualRainfallHistory, setShowManualRainfallHistory] = useState(false);
+  const [showOperationalDecisionCards, setShowOperationalDecisionCards] = useState(true);
+  const [showDetailedDiagnostics, setShowDetailedDiagnostics] = useState(false);
   const [activeTab, setActiveTab] = useState<'daily' | 'manage'>('daily');
 
   useEffect(() => {
-    setSelectedWorkLocationId(workLocations[0]?.id ?? '');
+    setSelectedWorkLocationId((current) => {
+      if (!workLocations.length) return '';
+      if (current && workLocations.some((location) => location.id === current)) return current;
+      return workLocations[0]?.id ?? '';
+    });
   }, [workLocations]);
 
   useEffect(() => {
@@ -272,6 +278,34 @@ export default function WeatherPage() {
     weatherStationsQuery.isError ||
     weatherLogsQuery.isError ||
     rainfallEntriesQuery.isError;
+  const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? null;
+  const liveWeatherCoordinates = useMemo(() => {
+    if (hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude)) {
+      return {
+        latitude: selectedLocationPrimary!.latitude!,
+        longitude: selectedLocationPrimary!.longitude!,
+        label: `${selectedLocationPrimary.name} · ${selectedLocationPrimary.provider}`,
+      };
+    }
+
+    if (hasValidCoordinates(selectedLocation?.latitude, selectedLocation?.longitude)) {
+      return {
+        latitude: selectedLocation!.latitude!,
+        longitude: selectedLocation!.longitude!,
+        label: `${selectedLocation.name} area coordinates`,
+      };
+    }
+
+    if (browserCoordinates) {
+      return {
+        latitude: browserCoordinates.latitude,
+        longitude: browserCoordinates.longitude,
+        label: 'Current device location',
+      };
+    }
+
+    return null;
+  }, [browserCoordinates, selectedLocation, selectedLocationPrimary]);
 
   useEffect(() => {
     let cancelled = false;
@@ -825,7 +859,7 @@ export default function WeatherPage() {
     { label: 'Stations Online', value: `${stationsOnline}/${locationStations.length || 0}`, icon: Radar },
     { label: 'Rainfall Entries', value: locationRain.length, icon: Droplets },
     { label: 'Manual Overrides', value: manualOverrideCount, icon: PencilLine },
-  ]), [locationRain.length, locationStations.length, manualOverrideCount, stationsOnline]);
+  ]), [locationRain.length, locationStations.length, manualOverrideCount, stationsOnline, weatherLocations.length]);
 
   const propertyWeatherCards = useMemo(() => {
     return properties
@@ -849,35 +883,6 @@ export default function WeatherPage() {
       .filter(Boolean) as { property: Property; location: WeatherLocation; station?: WeatherStation; log: WeatherDailyLog | null; recentRain24: number }[];
   }, [properties, propertyLiveLogs, weatherLocations, weatherStations, weatherLogs]);
 
-  const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? null;
-  const liveWeatherCoordinates = useMemo(() => {
-    if (hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude)) {
-      return {
-        latitude: selectedLocationPrimary!.latitude!,
-        longitude: selectedLocationPrimary!.longitude!,
-        label: `${selectedLocationPrimary.name} · ${selectedLocationPrimary.provider}`,
-      };
-    }
-
-    if (hasValidCoordinates(selectedLocation?.latitude, selectedLocation?.longitude)) {
-      return {
-        latitude: selectedLocation!.latitude!,
-        longitude: selectedLocation!.longitude!,
-        label: `${selectedLocation.name} area coordinates`,
-      };
-    }
-
-    if (browserCoordinates) {
-      return {
-        latitude: browserCoordinates.latitude,
-        longitude: browserCoordinates.longitude,
-        label: 'Current device location',
-      };
-    }
-
-    return null;
-  }, [browserCoordinates, selectedLocation, selectedLocationPrimary]);
-
   const liveForecastQuery = useQuery({
     queryKey: ['weather-page-open-meteo', selectedLocationId, liveWeatherCoordinates?.latitude, liveWeatherCoordinates?.longitude],
     enabled: Boolean(liveWeatherCoordinates),
@@ -890,7 +895,7 @@ export default function WeatherPage() {
         longitude: liveWeatherCoordinates!.longitude,
       }),
   });
-  const liveForecastHours = liveForecastQuery.data?.hourly ?? [];
+  const liveForecastHours = useMemo(() => liveForecastQuery.data?.hourly ?? [], [liveForecastQuery.data?.hourly]);
 
   const fallbackLiveLog = useMemo<WeatherDailyLog | null>(() => {
     if (!selectedLocation || !liveForecastQuery.data) return null;
@@ -929,6 +934,29 @@ export default function WeatherPage() {
       : 'No live source configured';
   const selectedLiveSourceVariant: 'default' | 'secondary' | 'outline' =
     primaryStation ? 'secondary' : liveWeatherCoordinates ? 'outline' : 'outline';
+  const liveStatusLabel =
+    liveStatus === 'ready'
+      ? 'Live feed active'
+      : liveStatus === 'loading'
+        ? 'Refreshing live feed'
+        : liveStatus === 'error'
+          ? 'Live feed degraded'
+          : 'Awaiting live source';
+  const liveStatusBadgeVariant: 'default' | 'secondary' | 'outline' =
+    liveStatus === 'ready' ? 'secondary' : liveStatus === 'error' ? 'default' : 'outline';
+  const latestCaptureLabel = latestLog?.capturedAt
+    ? new Date(latestLog.capturedAt).toLocaleString()
+    : latestLog?.date
+      ? `${latestLog.date} (daily log)`
+      : 'No capture available';
+  const selectedPropertyRainContext = selectedProperty
+    ? propertyWeatherCards.find((entry) => entry.property.id === selectedProperty.id)?.recentRain24 ?? null
+    : null;
+  const forecastConfidenceLabel = primaryStation
+    ? `Driven by primary station ${primaryStation.name}`
+    : liveWeatherCoordinates
+      ? `Fallback from ${liveWeatherCoordinates.label}`
+      : 'No source configured';
   const next8HourRainEstimate = Number(
     liveForecastHours.slice(0, 8).reduce((sum, point) => sum + (Number(point.precipitationProbability ?? 0) / 100) * 0.1, 0).toFixed(2),
   );
@@ -1096,6 +1124,7 @@ export default function WeatherPage() {
                   Live source transparency, short-horizon forecast signals, and decision-ready weather context.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Badge variant={liveStatusBadgeVariant}>{liveStatusLabel}</Badge>
                   <Badge variant={selectedLiveSourceVariant}>Source: {selectedLiveSourceLabel}</Badge>
                   <Badge variant="outline">Area: {selectedLocation.name}</Badge>
                   <Badge variant="outline">Logs: {locationLogs.length}</Badge>
@@ -1119,6 +1148,37 @@ export default function WeatherPage() {
               </div>
             </div>
           </Card>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Live Data Source</p>
+              <p className="mt-2 text-base font-semibold">{selectedLiveSourceLabel}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{forecastConfidenceLabel}</p>
+              <p className="mt-2 text-xs text-muted-foreground">Last capture: {latestCaptureLabel}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Selected Property Context</p>
+              <p className="mt-2 text-base font-semibold">{selectedProperty?.name ?? 'No property selected'}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                24h rainfall context: {selectedPropertyRainContext !== null ? `${selectedPropertyRainContext.toFixed(2)} in` : 'Unavailable'}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Area: {selectedLocation.name} · Station: {selectedLocationPrimary?.name ?? 'Not assigned'}
+              </p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Decision Snapshot</p>
+              <p className="mt-2 text-base font-semibold">
+                Event: {decisionCards[0]?.value ?? 'Undetermined'} · Spray: {decisionCards[1]?.value ?? 'Undetermined'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Traffic risk: {decisionCards[2]?.value ?? 'Undetermined'}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Next 8h rain {next8HourRainEstimate.toFixed(2)} in · Avg wind {next8HourAvgWind !== null ? `${next8HourAvgWind} mph` : '--'}
+              </p>
+            </Card>
+          </div>
 
           <div className="flex items-center justify-between">
             <div>
@@ -1150,22 +1210,30 @@ export default function WeatherPage() {
               </div>
               <Badge variant="outline">Operational Filters</Badge>
             </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>History Charts</span>
-                <Switch checked={showCharts} onCheckedChange={setShowCharts} />
+                <span>Hourly Forecast</span>
+                <Switch checked={showHourlyForecast} onCheckedChange={setShowHourlyForecast} />
               </label>
               <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Decision Support</span>
-                <Switch checked={showDecisionSupport} onCheckedChange={setShowDecisionSupport} />
+                <span>Property Weather Cards</span>
+                <Switch checked={showPropertyWeatherCards} onCheckedChange={setShowPropertyWeatherCards} />
               </label>
               <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Service Strategy</span>
-                <Switch checked={showServiceStrategy} onCheckedChange={setShowServiceStrategy} />
+                <span>Manual Rainfall History</span>
+                <Switch checked={showManualRainfallHistory} onCheckedChange={setShowManualRainfallHistory} />
               </label>
               <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Manual Rain Entries</span>
-                <Switch checked={showManualEntries} onCheckedChange={setShowManualEntries} />
+                <span>Operational Decision Cards</span>
+                <Switch checked={showOperationalDecisionCards} onCheckedChange={setShowOperationalDecisionCards} />
+              </label>
+              <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                <span>Detailed Diagnostics</span>
+                <Switch checked={showDetailedDiagnostics} onCheckedChange={setShowDetailedDiagnostics} />
+              </label>
+              <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                <span>Station Management</span>
+                <Switch checked={showStationManagement} onCheckedChange={setShowStationManagement} />
               </label>
             </div>
           </Card>
@@ -1211,7 +1279,7 @@ export default function WeatherPage() {
               </div>
             ) : liveForecastQuery.data ? (
               <>
-                <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+                <div className={`grid gap-4 ${showHourlyForecast ? 'lg:grid-cols-[0.8fr_1.2fr]' : ''}`}>
                   <div className="rounded-2xl border bg-background/70 p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -1244,26 +1312,28 @@ export default function WeatherPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border bg-background/70 p-5">
-                    <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Hourly Forecast</div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
-                      {(liveForecastHours.length ? liveForecastHours : []).map((point) => {
-                        const pointMeta = getWeatherConditionMeta(point.weatherCode);
-                        const PointIcon = pointMeta.icon;
-                        return (
-                          <div key={point.time} className="rounded-xl bg-muted/25 px-3 py-3 text-center">
-                            <div className="text-[11px] font-medium text-muted-foreground">
-                              {new Date(point.time).toLocaleTimeString([], { hour: 'numeric' })}
+                  {showHourlyForecast ? (
+                    <div className="rounded-2xl border bg-background/70 p-5">
+                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Hourly Forecast</div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
+                        {(liveForecastHours.length ? liveForecastHours : []).map((point) => {
+                          const pointMeta = getWeatherConditionMeta(point.weatherCode);
+                          const PointIcon = pointMeta.icon;
+                          return (
+                            <div key={point.time} className="rounded-xl bg-muted/25 px-3 py-3 text-center">
+                              <div className="text-[11px] font-medium text-muted-foreground">
+                                {new Date(point.time).toLocaleTimeString([], { hour: 'numeric' })}
+                              </div>
+                              <PointIcon className="mx-auto mt-2 h-4 w-4 text-primary" />
+                              <div className="mt-2 text-sm font-semibold">{Math.round(point.temperature)}F</div>
+                              <div className="mt-1 text-[11px] text-muted-foreground">{point.precipitationProbability}% rain</div>
+                              <div className="text-[11px] text-muted-foreground">{Math.round(point.windSpeed)} mph wind</div>
                             </div>
-                            <PointIcon className="mx-auto mt-2 h-4 w-4 text-primary" />
-                            <div className="mt-2 text-sm font-semibold">{Math.round(point.temperature)}F</div>
-                            <div className="mt-1 text-[11px] text-muted-foreground">{point.precipitationProbability}% rain</div>
-                            <div className="text-[11px] text-muted-foreground">{Math.round(point.windSpeed)} mph wind</div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
               </>
             ) : liveForecastQuery.isError ? (
@@ -1290,6 +1360,7 @@ export default function WeatherPage() {
             )}
           </Card>
 
+          {showPropertyWeatherCards ? (
           <Card className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -1348,6 +1419,7 @@ export default function WeatherPage() {
               ))}
             </div>
           </Card>
+          ) : null}
 
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <Card className="p-5">
@@ -1371,6 +1443,7 @@ export default function WeatherPage() {
               </div>
             </Card>
 
+            {showOperationalDecisionCards ? (
             <Card className="p-5">
               <div className="mb-4">
                 <p className="text-sm font-semibold">Decision Cards</p>
@@ -1388,8 +1461,10 @@ export default function WeatherPage() {
                 ))}
               </div>
             </Card>
+            ) : null}
           </div>
 
+          {showManualRainfallHistory ? (
           <Card className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -1416,8 +1491,9 @@ export default function WeatherPage() {
               </div>
             )}
           </Card>
+          ) : null}
 
-          {selectedLocation ? (
+          {selectedLocation && showDetailedDiagnostics ? (
             <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
               <div className="space-y-4">
                 <WeatherSnapshotCard location={selectedLocation} log={latestLog} title="Daily Weather" />
@@ -1529,7 +1605,7 @@ export default function WeatherPage() {
                   </div>
                 </Card>
 
-                {showCharts && (
+                {showDetailedDiagnostics && (
                 <Card className="p-5">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
@@ -1559,7 +1635,7 @@ export default function WeatherPage() {
               </div>
 
               <div className="space-y-4">
-                {showServiceStrategy && (
+                {showDetailedDiagnostics && (
                 <Card className="p-5">
                   <div className="mb-4">
                     <p className="text-sm font-semibold">Forecast Service Strategy</p>
@@ -1578,7 +1654,7 @@ export default function WeatherPage() {
                 </Card>
                 )}
 
-                {showManualEntries && (
+                {showManualRainfallHistory && (
                 <Card className="p-5">
                   <div className="mb-4">
                     <p className="text-sm font-semibold">Recent Rainfall Entries</p>
@@ -1710,20 +1786,6 @@ export default function WeatherPage() {
               </Button>
             </div>
           </Card>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {summaryCards.map((item) => (
-              <Card key={item.label} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
-                    <p className="mt-2 text-2xl font-semibold">{item.value}</p>
-                  </div>
-                  <item.icon className="h-5 w-5 text-primary" />
-                </div>
-              </Card>
-            ))}
-          </div>
 
           {selectedLocation && (
             <Card className="p-5">
@@ -1891,7 +1953,16 @@ export default function WeatherPage() {
                     </div>
                   </div>
 
-                  {locationStations.length === 0 ? (
+                  {!showStationManagement ? (
+                    <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                      Station management is hidden in focused mode.
+                      <div className="mt-2">
+                        <Button size="sm" variant="outline" onClick={() => setShowStationManagement(true)}>
+                          Show Station Manager
+                        </Button>
+                      </div>
+                    </div>
+                  ) : locationStations.length === 0 ? (
                     <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
                       No stations are configured for this area yet.
                     </div>
@@ -1995,108 +2066,6 @@ export default function WeatherPage() {
               </div>
             </Card>
           )}
-
-          {selectedLocation && <WeatherSnapshotCard location={selectedLocation} log={latestLog} />}
-
-          {showCharts && (
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <Card className="p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold">Weather History</p>
-                  <p className="text-xs text-muted-foreground">Rainfall, temperature, and ET by date</p>
-                </div>
-                <Badge variant="outline">{selectedLocation?.name}</Badge>
-              </div>
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={historyData}>
-                  <defs>
-                    <linearGradient id="rain" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--info))" stopOpacity={0.45} />
-                      <stop offset="100%" stopColor="hsl(var(--info))" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="rainfall" stroke="hsl(var(--info))" fill="url(#rain)" />
-                  <Area type="monotone" dataKey="et" stroke="hsl(var(--warning))" fillOpacity={0} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Card>
-
-            <Card className="p-5">
-              <div className="mb-4">
-                <p className="text-sm font-semibold">Temperature Trend</p>
-                <p className="text-xs text-muted-foreground">Daily temperature by weather location</p>
-              </div>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={historyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="temperature" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </Card>
-          </div>
-          )}
-
-          <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-            <Card className="p-5">
-              <div className="mb-4">
-                <p className="text-sm font-semibold">Stations By Location</p>
-                <p className="text-xs text-muted-foreground">Primary station selection, status, and provider</p>
-              </div>
-              <div className="space-y-3">
-                {locationStations.map((station) => (
-                  <div key={station.id} className="rounded-xl border bg-background/70 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">{station.name}</p>
-                        <p className="text-xs text-muted-foreground">{station.provider} · {station.stationCode}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {station.isPrimary && <Badge>Primary</Badge>}
-                        <Badge variant={station.status === 'online' ? 'secondary' : 'outline'}>{station.status}</Badge>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {showManualEntries && (
-            <Card className="p-5">
-              <div className="mb-4">
-                <p className="text-sm font-semibold">Manual Rainfall Entries</p>
-                <p className="text-xs text-muted-foreground">Daily rainfall entries when you need a manual record</p>
-              </div>
-              <div className="space-y-3">
-                {locationRain.length === 0 ? (
-                  <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                    No manual rainfall entries yet.
-                  </div>
-                ) : (
-                  locationRain.map((entry) => (
-                    <div key={entry.id} className="rounded-xl border bg-background/70 px-4 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium">{entry.date}</p>
-                          <p className="text-xs text-muted-foreground">{entry.enteredBy}</p>
-                        </div>
-                        <Badge variant="outline">{entry.rainfallAmount.toFixed(2)} in</Badge>
-                      </div>
-                      {entry.notes && <p className="mt-2 text-xs text-muted-foreground">{entry.notes}</p>}
-                    </div>
-                  ))
-                )}
-              </div>
-            </Card>
-            )}
-          </div>
         </div>
       </div>
         </TabsContent>
