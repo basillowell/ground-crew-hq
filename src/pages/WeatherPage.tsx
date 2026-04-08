@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CloudSun, Crosshair, Droplets, MapPin, PencilLine, Plus, Radar, RefreshCcw, Save, Trash2 } from 'lucide-react';
+import { CloudSun, Crosshair, Droplets, MapPin, MapPinned, PencilLine, Plus, Radar, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -112,6 +112,17 @@ function mapManualRainEntryRow(row: any): ManualRainfallEntry {
   };
 }
 
+function isRecoverableWeatherQueryError(error: unknown) {
+  const code = (error as { code?: string } | null)?.code ?? '';
+  const message = String((error as { message?: string } | null)?.message ?? '').toLowerCase();
+  return (
+    code === '42703' ||
+    code === '42P01' ||
+    (message.includes('column') && message.includes('org_id')) ||
+    (message.includes('relation') && message.includes('does not exist'))
+  );
+}
+
 export default function WeatherPage() {
   const queryClient = useQueryClient();
   const { currentUser, currentPropertyId } = useAuth();
@@ -124,45 +135,80 @@ export default function WeatherPage() {
   const weatherLocationsQuery = useWeatherLocations(currentPropertyId);
   const weatherStationsQuery = useQuery({
     queryKey: ['weather-stations-full', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser?.orgId),
+    enabled: Boolean(currentUser),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('weather_stations')
-        .select('*')
-        .eq('org_id', currentUser!.orgId)
-        .order('name');
-      if (error) throw error;
-      return ((data as any[]) ?? []).map(mapWeatherStationRow);
+      const filteredQuery = currentUser?.orgId
+        ? supabase.from('weather_stations').select('*').eq('org_id', currentUser.orgId).order('name')
+        : supabase.from('weather_stations').select('*').order('name');
+      const filteredResult = await filteredQuery;
+      if (!filteredResult.error) {
+        return ((filteredResult.data as any[]) ?? []).map(mapWeatherStationRow);
+      }
+      if (!isRecoverableWeatherQueryError(filteredResult.error)) throw filteredResult.error;
+      if ((filteredResult.error as { code?: string } | null)?.code === '42P01') return [];
+
+      const fallbackResult = await supabase.from('weather_stations').select('*').order('name');
+      if (fallbackResult.error) {
+        if ((fallbackResult.error as { code?: string } | null)?.code === '42P01') return [];
+        throw fallbackResult.error;
+      }
+      return ((fallbackResult.data as any[]) ?? []).map(mapWeatherStationRow);
     },
     staleTime: 1000 * 60 * 5,
   });
   const weatherLogsQuery = useQuery({
     queryKey: ['weather-daily-logs-page', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser?.orgId),
+    enabled: Boolean(currentUser),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('weather_daily_logs')
-        .select('*')
-        .eq('org_id', currentUser!.orgId)
-        .order('date', { ascending: false })
-        .limit(180);
-      if (error) throw error;
-      return ((data as any[]) ?? []).map(mapWeatherDailyLogRow);
+      const filteredQuery = currentUser?.orgId
+        ? supabase
+            .from('weather_daily_logs')
+            .select('*')
+            .eq('org_id', currentUser.orgId)
+            .order('date', { ascending: false })
+            .limit(180)
+        : supabase.from('weather_daily_logs').select('*').order('date', { ascending: false }).limit(180);
+      const filteredResult = await filteredQuery;
+      if (!filteredResult.error) {
+        return ((filteredResult.data as any[]) ?? []).map(mapWeatherDailyLogRow);
+      }
+      if (!isRecoverableWeatherQueryError(filteredResult.error)) throw filteredResult.error;
+      if ((filteredResult.error as { code?: string } | null)?.code === '42P01') return [];
+
+      const fallbackResult = await supabase.from('weather_daily_logs').select('*').order('date', { ascending: false }).limit(180);
+      if (fallbackResult.error) {
+        if ((fallbackResult.error as { code?: string } | null)?.code === '42P01') return [];
+        throw fallbackResult.error;
+      }
+      return ((fallbackResult.data as any[]) ?? []).map(mapWeatherDailyLogRow);
     },
     staleTime: 1000 * 60 * 2,
   });
   const rainfallEntriesQuery = useQuery({
     queryKey: ['manual-rainfall-entries-page', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser?.orgId),
+    enabled: Boolean(currentUser),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('manual_rainfall_entries')
-        .select('*')
-        .eq('org_id', currentUser!.orgId)
-        .order('date', { ascending: false })
-        .limit(180);
-      if (error) throw error;
-      return ((data as any[]) ?? []).map(mapManualRainEntryRow);
+      const filteredQuery = currentUser?.orgId
+        ? supabase
+            .from('manual_rainfall_entries')
+            .select('*')
+            .eq('org_id', currentUser.orgId)
+            .order('date', { ascending: false })
+            .limit(180)
+        : supabase.from('manual_rainfall_entries').select('*').order('date', { ascending: false }).limit(180);
+      const filteredResult = await filteredQuery;
+      if (!filteredResult.error) {
+        return ((filteredResult.data as any[]) ?? []).map(mapManualRainEntryRow);
+      }
+      if (!isRecoverableWeatherQueryError(filteredResult.error)) throw filteredResult.error;
+      if ((filteredResult.error as { code?: string } | null)?.code === '42P01') return [];
+
+      const fallbackResult = await supabase.from('manual_rainfall_entries').select('*').order('date', { ascending: false }).limit(180);
+      if (fallbackResult.error) {
+        if ((fallbackResult.error as { code?: string } | null)?.code === '42P01') return [];
+        throw fallbackResult.error;
+      }
+      return ((fallbackResult.data as any[]) ?? []).map(mapManualRainEntryRow);
     },
     staleTime: 1000 * 60 * 2,
   });
@@ -187,12 +233,13 @@ export default function WeatherPage() {
   const [propertyLiveLogs, setPropertyLiveLogs] = useState<Record<string, WeatherDailyLog | null>>({});
   const [selectedForecast, setSelectedForecast] = useState<WeatherForecastDetail | null>(null);
   const [browserCoordinates, setBrowserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [showHourlyForecast, setShowHourlyForecast] = useState(false);
+  const [showHourlyForecast, setShowHourlyForecast] = useState(true);
   const [showStationManagement, setShowStationManagement] = useState(false);
   const [showPropertyWeatherCards, setShowPropertyWeatherCards] = useState(true);
   const [showManualRainfallHistory, setShowManualRainfallHistory] = useState(false);
   const [showOperationalDecisionCards, setShowOperationalDecisionCards] = useState(true);
   const [showDetailedDiagnostics, setShowDetailedDiagnostics] = useState(false);
+  const [showOperationsControls, setShowOperationsControls] = useState(false);
   const [activeTab, setActiveTab] = useState<'daily' | 'manage'>('daily');
 
   useEffect(() => {
@@ -224,7 +271,6 @@ export default function WeatherPage() {
   useEffect(() => {
     if (weatherLocationsQuery.data) {
       setWeatherLocations(weatherLocationsQuery.data);
-      setSelectedLocationId((current) => current || weatherLocationsQuery.data[0]?.id || '');
     }
     if (weatherStationsQuery.data) {
       setWeatherStations(weatherStationsQuery.data);
@@ -237,23 +283,57 @@ export default function WeatherPage() {
     }
   }, [rainfallEntriesQuery.data, weatherLocationsQuery.data, weatherLogsQuery.data, weatherStationsQuery.data]);
 
-  const selectedLocation = weatherLocations.find((location) => location.id === selectedLocationId) ?? weatherLocations[0] ?? null;
+  const currentProperty = properties.find((property) => property.id === currentPropertyId) ?? null;
+
+  function resolveLocationForProperty(property: Property | null | undefined) {
+    if (!property) return null;
+    const byPropertyId = weatherLocations.find((location) => location.propertyId === property.id);
+    if (byPropertyId) return byPropertyId;
+    const propertyName = property.name.trim().toLowerCase();
+    const byPropertyName = weatherLocations.find((location) => (location.property ?? '').trim().toLowerCase() === propertyName);
+    return byPropertyName ?? null;
+  }
+
+  const selectedLocation = useMemo(() => {
+    const bySelection = weatherLocations.find((location) => location.id === selectedLocationId);
+    if (bySelection) return bySelection;
+    const byCurrentProperty = resolveLocationForProperty(currentProperty);
+    if (byCurrentProperty) return byCurrentProperty;
+    return weatherLocations[0] ?? null;
+  }, [currentProperty, selectedLocationId, weatherLocations]);
+
+  useEffect(() => {
+    if (!weatherLocations.length) {
+      if (selectedLocationId) setSelectedLocationId('');
+      return;
+    }
+    if (selectedLocation && selectedLocation.id !== selectedLocationId) {
+      setSelectedLocationId(selectedLocation.id);
+      return;
+    }
+    if (!selectedLocationId) {
+      setSelectedLocationId(selectedLocation?.id ?? weatherLocations[0]?.id ?? '');
+    }
+  }, [selectedLocation, selectedLocationId, weatherLocations]);
+
   const selectedProperty = selectedLocation
-    ? properties.find((property) => property.id === (selectedLocation.propertyId || currentPropertyId))
-    : null;
+    ? properties.find((property) => property.id === selectedLocation.propertyId) ??
+      properties.find((property) => property.name.trim().toLowerCase() === (selectedLocation.property ?? '').trim().toLowerCase()) ??
+      currentProperty
+    : currentProperty;
   const selectedPropertyWeatherQuery = useWeather(selectedProperty?.id);
   const locationStations = weatherStations
-    .filter((station) => station.locationId === selectedLocationId)
+    .filter((station) => station.locationId === (selectedLocation?.id ?? selectedLocationId))
     .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary));
   const primaryStation = locationStations.find((station) => station.isPrimary) ?? locationStations[0];
   const selectedPropertyWeatherMeta = getWeatherIconMeta(selectedPropertyWeatherQuery.data?.current.weatherCode);
   const SelectedPropertyWeatherIcon = selectedPropertyWeatherMeta.icon;
   const locationLogs = weatherLogs
-    .filter((log) => log.locationId === selectedLocationId)
+    .filter((log) => log.locationId === (selectedLocation?.id ?? selectedLocationId))
     .sort((left, right) => left.date.localeCompare(right.date));
   const latestStoredLog = [...locationLogs].sort((left, right) => right.date.localeCompare(left.date))[0];
   const locationRain = rainEntries
-    .filter((entry) => entry.locationId === selectedLocationId)
+    .filter((entry) => entry.locationId === (selectedLocation?.id ?? selectedLocationId))
     .sort((left, right) => right.date.localeCompare(left.date));
   const availableWorkLocations = workLocations.filter(
     (location) => !weatherLocations.some((weatherLocation) => weatherLocation.area === location.name),
@@ -268,6 +348,9 @@ export default function WeatherPage() {
 
   const stationsOnline = locationStations.filter((station) => station.status === 'online').length;
   const manualOverrideCount = locationLogs.filter((log) => log.source === 'manual-override').length;
+  const scopedLocationIds = new Set(weatherLocations.map((location) => location.id));
+  const scopedStationCount = weatherStations.filter((station) => scopedLocationIds.has(station.locationId)).length;
+  const isWeatherSetupIncomplete = weatherLocations.length === 0 || scopedStationCount === 0;
   const isInitialWeatherSetupLoading =
     weatherLocationsQuery.isLoading ||
     weatherStationsQuery.isLoading ||
@@ -278,6 +361,22 @@ export default function WeatherPage() {
     weatherStationsQuery.isError ||
     weatherLogsQuery.isError ||
     rainfallEntriesQuery.isError;
+  const weatherSetupErrorMessage =
+    (weatherLocationsQuery.error as { message?: string } | null)?.message ||
+    (weatherStationsQuery.error as { message?: string } | null)?.message ||
+    (weatherLogsQuery.error as { message?: string } | null)?.message ||
+    (rainfallEntriesQuery.error as { message?: string } | null)?.message ||
+    'Unknown weather query failure.';
+  const weatherQueryErrors = useMemo(
+    () =>
+      [
+        (weatherLocationsQuery.error as { message?: string } | null)?.message,
+        (weatherStationsQuery.error as { message?: string } | null)?.message,
+        (weatherLogsQuery.error as { message?: string } | null)?.message,
+        (rainfallEntriesQuery.error as { message?: string } | null)?.message,
+      ].filter(Boolean) as string[],
+    [rainfallEntriesQuery.error, weatherLocationsQuery.error, weatherLogsQuery.error, weatherStationsQuery.error],
+  );
   const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? null;
   const liveWeatherCoordinates = useMemo(() => {
     if (hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude)) {
@@ -370,8 +469,8 @@ export default function WeatherPage() {
           ? primaryStation
           : liveWeatherCoordinates
             ? {
-                id: `forecast-${selectedLocationId || 'none'}`,
-                locationId: selectedLocationId || '',
+                id: `forecast-${selectedLocation?.id || 'none'}`,
+                locationId: selectedLocation?.id || '',
                 name: 'Area Forecast Fallback',
                 provider: 'Open-Meteo',
                 providerType: 'open-meteo',
@@ -401,7 +500,7 @@ export default function WeatherPage() {
     return () => {
       cancelled = true;
     };
-  }, [liveWeatherCoordinates, primaryStation, refreshTick, selectedLocationId]);
+  }, [liveWeatherCoordinates, primaryStation, refreshTick, selectedLocation?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -740,26 +839,48 @@ export default function WeatherPage() {
     toast('Weather area saved', { description: 'Area naming and property details have been updated.' });
   }
 
-  function addStation() {
-    if (!selectedLocation) return;
-
+  function addStationForLocation(locationId: string) {
+    const targetLocation = weatherLocations.find((location) => location.id === locationId);
+    if (!targetLocation) return;
+    const targetLocationStations = weatherStations.filter((station) => station.locationId === locationId);
     const nextStation: WeatherStation = {
       id: makeId('ws'),
-      locationId: selectedLocation.id,
-      name: `${selectedLocation.name} Station`,
+      locationId,
+      name: `${targetLocation.name} Station`,
       provider: 'Open-Meteo',
       providerType: 'open-meteo',
-      stationCode: `${selectedLocation.id.toUpperCase()}-${locationStations.length + 1}`,
+      stationCode: `${locationId.toUpperCase()}-${targetLocationStations.length + 1}`,
       latitude: 35.78,
       longitude: -78.64,
       timeZone: 'America/New_York',
-      isPrimary: locationStations.length === 0,
+      isPrimary: targetLocationStations.length === 0,
       status: 'online',
     };
 
     const nextStations = [...weatherStations, nextStation];
     persistWeatherSetup(weatherLocations, nextStations);
     toast('Station added', { description: 'Set the coordinates and provider, then save stations.' });
+  }
+
+  function addStation() {
+    if (!selectedLocation) return;
+    addStationForLocation(selectedLocation.id);
+  }
+
+  function addFirstStationFromSetup() {
+    if (selectedLocation) {
+      addStationForLocation(selectedLocation.id);
+      setActiveTab('manage');
+      return;
+    }
+    const fallbackLocation = weatherLocations[0];
+    if (!fallbackLocation) {
+      createStarterWeatherArea();
+      return;
+    }
+    setSelectedLocationId(fallbackLocation.id);
+    addStationForLocation(fallbackLocation.id);
+    setActiveTab('manage');
   }
 
   function updateStation(stationId: string, patch: Partial<WeatherStation>) {
@@ -864,9 +985,7 @@ export default function WeatherPage() {
   const propertyWeatherCards = useMemo(() => {
     return properties
       .map((property) => {
-        const location =
-          weatherLocations.find((item) => item.propertyId === property.id) ??
-          weatherLocations.find((item) => item.property === property.name);
+        const location = resolveLocationForProperty(property);
         if (!location) return null;
         const stations = weatherStations
           .filter((station) => station.locationId === location.id)
@@ -884,7 +1003,7 @@ export default function WeatherPage() {
   }, [properties, propertyLiveLogs, weatherLocations, weatherStations, weatherLogs]);
 
   const liveForecastQuery = useQuery({
-    queryKey: ['weather-page-open-meteo', selectedLocationId, liveWeatherCoordinates?.latitude, liveWeatherCoordinates?.longitude],
+    queryKey: ['weather-page-open-meteo', selectedLocation?.id ?? 'none', liveWeatherCoordinates?.latitude, liveWeatherCoordinates?.longitude],
     enabled: Boolean(liveWeatherCoordinates),
     staleTime: 1000 * 60 * 30,
     retry: 1,
@@ -1033,6 +1152,60 @@ export default function WeatherPage() {
     ];
   }, [latestLog]);
 
+  if (isWeatherSetupIncomplete && !isInitialWeatherSetupLoading && !hasWeatherSetupError) {
+    const noAreasExist = weatherLocations.length === 0;
+    const noStationsExist = scopedStationCount === 0;
+    return (
+      <div className="p-4 max-w-7xl mx-auto">
+        <Card className="p-6 text-sm space-y-4">
+          <div>
+            <p className="font-semibold">Weather setup is not complete yet.</p>
+            <p className="mt-1 text-muted-foreground">
+              {noAreasExist
+                ? 'Create your first weather area so live conditions and forecasts can load.'
+                : noStationsExist
+                  ? 'Add your first station for this property so a primary source can drive live weather.'
+                  : 'Complete setup to continue.'}
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <Button size="sm" className="gap-1" onClick={createStarterWeatherArea}>
+              <Plus className="h-3.5 w-3.5" /> Create Area from Property
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1"
+              onClick={addWeatherAreaFromLocation}
+              disabled={!selectedWorkLocationId || availableWorkLocations.length === 0}
+            >
+              <MapPinned className="h-3.5 w-3.5" /> Add Area from Work Location
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => void applyDeviceLocationFallback()}>
+              <Crosshair className="h-3.5 w-3.5" /> Use Device Location
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1" onClick={addFirstStationFromSetup}>
+              <Radar className="h-3.5 w-3.5" /> Add First Station
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <Input
+              value={customAreaName}
+              onChange={(event) => setCustomAreaName(event.target.value)}
+              placeholder="Create a custom weather area (e.g., Tournament Grounds)"
+            />
+            <Button size="sm" variant="outline" className="gap-1" onClick={addCustomWeatherArea}>
+              <Plus className="h-3.5 w-3.5" /> Create Custom Area
+            </Button>
+          </div>
+          {!selectedWorkLocationId && availableWorkLocations.length > 0 ? (
+            <p className="text-xs text-muted-foreground">Pick a work location in Weather Management to enable one-click area import.</p>
+          ) : null}
+        </Card>
+      </div>
+    );
+  }
+
   if (!selectedLocation) {
     if (isInitialWeatherSetupLoading) {
       return (
@@ -1048,7 +1221,10 @@ export default function WeatherPage() {
         <div className="p-4 max-w-7xl mx-auto">
           <Card className="p-6 text-sm">
             <p className="font-semibold">Weather setup could not load.</p>
-            <p className="mt-1 text-muted-foreground">Try refreshing weather data or checking Supabase connectivity.</p>
+            <p className="mt-1 text-muted-foreground">
+              A weather setup query failed. Check Supabase connectivity and retry.
+            </p>
+            <p className="mt-2 rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">{weatherSetupErrorMessage}</p>
             <Button className="mt-4" size="sm" variant="outline" onClick={refreshLiveWeather}>
               Retry
             </Button>
@@ -1203,39 +1379,46 @@ export default function WeatherPage() {
           </div>
 
           <Card className="p-4">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold">View Controls</p>
-                <p className="text-xs text-muted-foreground">Show only the weather sections your team needs right now.</p>
+                <p className="text-xs text-muted-foreground">Default view is operations-focused. Open advanced controls only when needed.</p>
               </div>
-              <Badge variant="outline">Operational Filters</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">Operational Filters</Badge>
+                <Button size="sm" variant="outline" onClick={() => setShowOperationsControls((current) => !current)}>
+                  {showOperationsControls ? 'Hide Controls' : 'Show Controls'}
+                </Button>
+              </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Hourly Forecast</span>
-                <Switch checked={showHourlyForecast} onCheckedChange={setShowHourlyForecast} />
-              </label>
-              <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Property Weather Cards</span>
-                <Switch checked={showPropertyWeatherCards} onCheckedChange={setShowPropertyWeatherCards} />
-              </label>
-              <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Manual Rainfall History</span>
-                <Switch checked={showManualRainfallHistory} onCheckedChange={setShowManualRainfallHistory} />
-              </label>
-              <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Operational Decision Cards</span>
-                <Switch checked={showOperationalDecisionCards} onCheckedChange={setShowOperationalDecisionCards} />
-              </label>
-              <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Detailed Diagnostics</span>
-                <Switch checked={showDetailedDiagnostics} onCheckedChange={setShowDetailedDiagnostics} />
-              </label>
-              <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                <span>Station Management</span>
-                <Switch checked={showStationManagement} onCheckedChange={setShowStationManagement} />
-              </label>
-            </div>
+            {showOperationsControls ? (
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Hourly Forecast</span>
+                  <Switch checked={showHourlyForecast} onCheckedChange={setShowHourlyForecast} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Property Weather Cards</span>
+                  <Switch checked={showPropertyWeatherCards} onCheckedChange={setShowPropertyWeatherCards} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Manual Rainfall History</span>
+                  <Switch checked={showManualRainfallHistory} onCheckedChange={setShowManualRainfallHistory} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Operational Decision Cards</span>
+                  <Switch checked={showOperationalDecisionCards} onCheckedChange={setShowOperationalDecisionCards} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Detailed Diagnostics</span>
+                  <Switch checked={showDetailedDiagnostics} onCheckedChange={setShowDetailedDiagnostics} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Station Management</span>
+                  <Switch checked={showStationManagement} onCheckedChange={setShowStationManagement} />
+                </label>
+              </div>
+            ) : null}
           </Card>
 
           <Card className="p-5">
@@ -1687,7 +1870,71 @@ export default function WeatherPage() {
           ) : null}
         </TabsContent>
 
-        <TabsContent value="manage">
+        <TabsContent value="manage" className="space-y-4">
+      <Card className="p-5">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Weather Management</p>
+            <h2 className="mt-1 text-xl font-semibold">Areas, Stations, and Manual Fallback</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Configure weather areas, choose primary stations, and maintain manual weather continuity.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{weatherLocations.length} areas</Badge>
+            <Badge variant="outline">{weatherStations.length} stations</Badge>
+          </div>
+        </div>
+      </Card>
+      <Card className="p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">Setup Diagnostics</p>
+            <p className="text-xs text-muted-foreground">Troubleshooting details for weather setup resolution and query health.</p>
+          </div>
+          <Badge variant="outline">Management Only</Badge>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs">
+            <div className="text-muted-foreground">Selected Property</div>
+            <div className="mt-1 font-medium">{selectedProperty?.name ?? 'Unresolved'}</div>
+            <div className="text-muted-foreground">{selectedProperty?.id ?? 'No property id'}</div>
+          </div>
+          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs">
+            <div className="text-muted-foreground">Resolved Weather Area</div>
+            <div className="mt-1 font-medium">{selectedLocation?.name ?? 'Unresolved'}</div>
+            <div className="text-muted-foreground">{selectedLocation?.id ?? 'No area id'}</div>
+          </div>
+          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs">
+            <div className="text-muted-foreground">Stations in Area</div>
+            <div className="mt-1 font-medium">{locationStations.length}</div>
+            <div className="text-muted-foreground">
+              Primary: {selectedLocationPrimary ? selectedLocationPrimary.name : 'Not set'}
+            </div>
+          </div>
+          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs">
+            <div className="text-muted-foreground">Live Forecast Coordinates</div>
+            <div className="mt-1 font-medium">{liveWeatherCoordinates ? 'Available' : 'Missing'}</div>
+            <div className="text-muted-foreground">
+              {liveWeatherCoordinates ? `${liveWeatherCoordinates.latitude}, ${liveWeatherCoordinates.longitude}` : 'No resolved coordinates'}
+            </div>
+          </div>
+          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs md:col-span-2 xl:col-span-2">
+            <div className="text-muted-foreground">Query Errors</div>
+            {weatherQueryErrors.length > 0 ? (
+              <ul className="mt-1 space-y-1">
+                {weatherQueryErrors.map((message, index) => (
+                  <li key={`${message}-${index}`} className="font-medium text-foreground/90">
+                    {message}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-1 font-medium text-foreground/90">No active weather query errors.</div>
+            )}
+          </div>
+        </div>
+      </Card>
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="space-y-3">
           <Card className="p-4 space-y-3">
