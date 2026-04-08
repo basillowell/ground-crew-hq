@@ -1,33 +1,39 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Activity,
-  AlertTriangle,
+  AlertCircle,
   ArrowRight,
-  BarChart3,
-  Building2,
+  Calendar,
   CheckCircle,
   CloudRain,
-  Clock,
   MapPin,
-  Shield,
   TrendingUp,
   Users,
   Wrench,
-  Zap,
+  type LucideIcon,
 } from 'lucide-react';
 import type { Property } from '@/data/seedData';
-import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
-import { useAssignments, useClockEvents, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import {
+  useAssignments,
+  useClockEvents,
+  useEmployees,
+  useEquipmentUnits,
+  useNotes,
+  useProperties,
+  useScheduleEntries,
+  useTasks,
+} from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather } from '@/lib/weather';
 
 type PropertyStats = {
@@ -43,81 +49,148 @@ type PropertyStats = {
   complianceScore: number;
 };
 
-function PropertyCard({ property, stats, onClick }: { property: Property; stats: PropertyStats; onClick: () => void }) {
-  const taskPct = stats.tasksTotal > 0 ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100) : 0;
+type PropertyOperationalStatus = 'operational' | 'maintenance' | 'critical';
+
+const statusConfig: Record<PropertyOperationalStatus, { badgeClass: string; label: string }> = {
+  operational: {
+    badgeClass: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20',
+    label: 'Operational',
+  },
+  maintenance: {
+    badgeClass: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
+    label: 'Maintenance',
+  },
+  critical: {
+    badgeClass: 'bg-destructive/10 text-destructive border-destructive/20',
+    label: 'Critical',
+  },
+};
+
+function resolvePropertyStatus(stats: PropertyStats): PropertyOperationalStatus {
+  if (stats.weatherAlert || stats.openWorkOrders >= 6 || stats.equipmentDown >= 4) return 'critical';
+  if (stats.openWorkOrders >= 3 || stats.equipmentDown >= 2) return 'maintenance';
+  return 'operational';
+}
+
+function AggregateMetricCard({
+  icon: Icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | number;
+  accent?: string;
+}) {
+  return (
+    <Card className="rounded-2xl border p-6 shadow-sm transition-all hover:shadow-md">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">{label}</div>
+        <Icon className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <div className="text-3xl font-semibold" style={accent ? { color: accent } : undefined}>
+        {value}
+      </div>
+    </Card>
+  );
+}
+
+function PropertyCard({
+  property,
+  stats,
+  manager,
+  onClick,
+}: {
+  property: Property;
+  stats: PropertyStats;
+  manager: string;
+  onClick: () => void;
+}) {
+  const status = resolvePropertyStatus(stats);
+  const taskCompletionPct = stats.tasksTotal > 0 ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100) : 0;
   const weatherQuery = useWeather(property.id);
   const weatherMeta = getWeatherConditionMeta(weatherQuery.data?.current.weatherCode);
   const WeatherIcon = weatherMeta.icon;
+
   return (
-    <Card className="group cursor-pointer overflow-hidden border transition-all hover:border-primary/30 hover:shadow-lg" onClick={onClick}>
-      <div className="h-1.5" style={{ background: property.color }} />
-      <div className="space-y-4 p-5">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-bold text-white" style={{ background: property.color }}>
-              {property.logoInitials}
+    <Card
+      className="group overflow-hidden rounded-2xl border transition-all hover:border-primary/50 hover:shadow-lg"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <div className="p-6">
+        <div className="mb-4 flex items-start justify-between">
+          <div className="flex-1">
+            <h3 className="mb-2 text-lg font-semibold">{property.name}</h3>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <MapPin className="h-4 w-4" />
+              {property.city}, {property.state} - {property.acreage} acres
+            </div>
+          </div>
+          <Badge variant="outline" className={`px-3 py-1.5 text-xs font-medium ${statusConfig[status].badgeClass}`}>
+            {statusConfig[status].label}
+          </Badge>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-4">
+          <div>
+            <div className="mb-1 text-sm text-muted-foreground">Manager</div>
+            <div className="text-sm font-medium">{manager}</div>
+          </div>
+          <div>
+            <div className="mb-1 text-sm text-muted-foreground">Compliance</div>
+            <div className="text-sm font-medium">{stats.complianceScore}%</div>
+          </div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-3 gap-4 border-t pt-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10">
+              <Users className="h-4 w-4 text-sky-700" />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground transition-colors group-hover:text-primary">{property.name}</h3>
-              <p className="text-xs text-muted-foreground">{property.city}, {property.state} · {property.acreage} acres</p>
+              <div className="text-xs text-muted-foreground">Crew</div>
+              <div className="text-sm font-semibold">{stats.crewActive}</div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            {stats.weatherAlert ? (
-              <Badge variant="destructive" className="px-1.5 py-0.5 text-[10px]">
-                <CloudRain className="mr-0.5 h-3 w-3" /> Weather
-              </Badge>
-            ) : null}
-            <Badge variant={property.status === 'active' ? 'default' : 'secondary'} className="px-1.5 py-0.5 text-[10px]">
-              {property.status}
-            </Badge>
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10">
+              <Wrench className="h-4 w-4 text-emerald-700" />
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Equipment</div>
+              <div className="text-sm font-semibold">{stats.equipmentActive}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10">
+              <AlertCircle className="h-4 w-4 text-amber-700" />
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Issues</div>
+              <div className="text-sm font-semibold">{stats.openWorkOrders}</div>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-3">
-          <div className="text-center">
-            <div className="text-lg font-bold text-foreground">{stats.crewActive}</div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Crew</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold text-foreground">{taskPct}%</div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Tasks</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold text-foreground">{stats.equipmentActive}</div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Equip</div>
-          </div>
-          <div className="text-center">
-            <div
-              className="text-lg font-bold"
-              style={{
-                color:
-                  stats.complianceScore >= 95
-                    ? 'hsl(var(--success))'
-                    : stats.complianceScore >= 80
-                      ? 'hsl(var(--warning))'
-                      : 'hsl(var(--destructive))',
-              }}
-            >
-              {stats.complianceScore}%
-            </div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Comply</div>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
+        <div className="mb-3 space-y-1.5">
           <div className="flex justify-between text-[11px]">
             <span className="text-muted-foreground">Task completion</span>
-            <span className="font-medium">{stats.tasksCompleted}/{stats.tasksTotal}</span>
+            <span className="font-medium">
+              {stats.tasksCompleted}/{stats.tasksTotal}
+            </span>
           </div>
-          <Progress value={taskPct} className="h-1.5" />
+          <Progress value={taskCompletionPct} className="h-1.5" />
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Wrench className="h-3 w-3" />
-          <span>{stats.openWorkOrders} open issue{stats.openWorkOrders !== 1 ? 's' : ''}</span>
-          {stats.equipmentDown > 0 ? <span className="text-destructive">· {stats.equipmentDown} down</span> : null}
-        </div>
         <div className="rounded-xl border bg-muted/20 px-3 py-2">
           {weatherQuery.isLoading ? (
             <div className="text-[11px] text-muted-foreground">Loading weather...</div>
@@ -135,20 +208,11 @@ function PropertyCard({ property, stats, onClick }: { property: Property; stats:
           )}
         </div>
       </div>
-    </Card>
-  );
-}
 
-function AggregateMetric({ icon: Icon, label, value, subtext, color }: { icon: any; label: string; value: string | number; subtext?: string; color?: string }) {
-  return (
-    <Card className="flex items-center gap-3 border p-4 transition-colors hover:border-primary/20">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent">
-        <Icon className="h-5 w-5" style={{ color: color || 'hsl(var(--primary))' }} />
-      </div>
-      <div>
-        <div className="text-2xl font-bold text-foreground">{value}</div>
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
-        {subtext ? <div className="text-xs text-muted-foreground">{subtext}</div> : null}
+      <div className="border-t bg-accent/50 px-6 py-4">
+        <button className="text-sm font-medium text-primary transition-colors hover:text-primary/80">
+          View Details
+        </button>
       </div>
     </Card>
   );
@@ -159,16 +223,18 @@ export default function CommandCenterOperationalPage() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const { currentPropertyId, setCurrentPropertyId, currentUser, isAdmin, isManager } = useAuth();
+
   const today = new Date().toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
-  const propertiesQuery = useProperties();
-  const employeesQuery = useEmployees(propertyScope);
-  const assignmentsQuery = useAssignments(today, propertyScope);
-  const scheduleEntriesQuery = useScheduleEntries(today, propertyScope);
-  const tasksQuery = useTasks(propertyScope);
-  const notesQuery = useNotes(propertyScope);
-  const equipmentUnitsQuery = useEquipmentUnits(propertyScope);
-  const clockEventsQuery = useClockEvents(today, propertyScope);
+
+  const propertiesQuery = useProperties(currentUser?.orgId);
+  const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
+  const assignmentsQuery = useAssignments(today, propertyScope, currentUser?.orgId);
+  const scheduleEntriesQuery = useScheduleEntries(today, propertyScope, currentUser?.orgId);
+  const tasksQuery = useTasks(propertyScope, currentUser?.orgId);
+  const notesQuery = useNotes(propertyScope, currentUser?.orgId);
+  const equipmentUnitsQuery = useEquipmentUnits(propertyScope, currentUser?.orgId);
+  const clockEventsQuery = useClockEvents(today, propertyScope, currentUser?.orgId);
 
   const allProperties = propertiesQuery.data ?? [];
   const properties = useMemo(() => {
@@ -176,6 +242,7 @@ export default function CommandCenterOperationalPage() {
     if (!currentUser?.propertyId) return [];
     return allProperties.filter((property) => property.id === currentUser.propertyId);
   }, [allProperties, currentUser?.propertyId, isAdmin, isManager]);
+
   const employees = employeesQuery.data ?? [];
   const assignments = assignmentsQuery.data ?? [];
   const scheduleEntries = scheduleEntriesQuery.data ?? [];
@@ -186,18 +253,15 @@ export default function CommandCenterOperationalPage() {
 
   useEffect(() => {
     if (isAdmin || isManager) {
-      if (!currentPropertyId) {
-        setCurrentPropertyId('all');
-      }
+      if (!currentPropertyId) setCurrentPropertyId('all');
       return;
     }
-    if (!currentPropertyId && properties.length > 0) {
-      setCurrentPropertyId(properties[0].id);
-    }
+    if (!currentPropertyId && properties.length > 0) setCurrentPropertyId(properties[0].id);
   }, [currentPropertyId, isAdmin, isManager, properties, setCurrentPropertyId]);
 
   useEffect(() => {
     if (!supabase) return;
+
     const channel = supabase
       .channel('dashboard-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `date=eq.${today}` }, () => {
@@ -220,21 +284,30 @@ export default function CommandCenterOperationalPage() {
     return properties.map((property) => {
       const propertyEmployees = employees.filter((employee) => employee.propertyId === property.id && employee.status === 'active');
       const propertyEmployeeIds = new Set(propertyEmployees.map((employee) => employee.id));
-      const scheduledToday = scheduleEntries.filter((entry) => entry.date === today && entry.status === 'scheduled' && propertyEmployeeIds.has(entry.employeeId));
-      const propertyAssignments = assignments.filter((assignment) => assignment.date === today && propertyEmployeeIds.has(assignment.employeeId));
+      const scheduledToday = scheduleEntries.filter(
+        (entry) => entry.date === today && entry.status === 'scheduled' && propertyEmployeeIds.has(entry.employeeId),
+      );
+      const propertyAssignments = assignments.filter(
+        (assignment) => assignment.date === today && propertyEmployeeIds.has(assignment.employeeId),
+      );
       const equipmentAtProperty = equipmentUnits.filter((unit) => (unit as { propertyId?: string }).propertyId === property.id);
       const propertyAlerts = notes.filter((note) => note.type === 'alert');
       const weatherAlert = propertyAlerts.some((note) => /weather|storm|rain/i.test(`${note.title} ${note.content}`));
-      const equipmentDown = equipmentAtProperty.filter((unit) => unit.status === 'maintenance' || unit.status === 'out-of-service').length;
+      const equipmentDown = equipmentAtProperty.filter(
+        (unit) => unit.status === 'maintenance' || unit.status === 'out-of-service',
+      ).length;
       const openWorkOrders = propertyAlerts.length;
       const taskBacklog = tasks.filter((task) => (task.status ?? 'active') === 'active').length;
+
       return {
         propertyId: property.id,
         crewScheduled: scheduledToday.length,
         crewActive: new Set(propertyAssignments.map((assignment) => assignment.employeeId)).size,
         tasksCompleted: propertyAssignments.length,
         tasksTotal: Math.max(taskBacklog, propertyAssignments.length),
-        equipmentActive: equipmentAtProperty.filter((unit) => unit.status === 'available' || unit.status === 'in-use').length,
+        equipmentActive: equipmentAtProperty.filter(
+          (unit) => unit.status === 'available' || unit.status === 'in-use',
+        ).length,
         equipmentDown,
         openWorkOrders,
         weatherAlert,
@@ -247,49 +320,47 @@ export default function CommandCenterOperationalPage() {
     return propertyStats.reduce(
       (acc, stats) => ({
         crew: acc.crew + stats.crewActive,
-        tasks: acc.tasks + stats.tasksCompleted,
-        tasksTotal: acc.tasksTotal + stats.tasksTotal,
         equipment: acc.equipment + stats.equipmentActive,
-        equipmentDown: acc.equipmentDown + stats.equipmentDown,
-        workOrders: acc.workOrders + stats.openWorkOrders,
-        alerts: acc.alerts + (stats.weatherAlert ? 1 : 0),
+        issues: acc.issues + stats.openWorkOrders,
       }),
-      { crew: 0, tasks: 0, tasksTotal: 0, equipment: 0, equipmentDown: 0, workOrders: 0, alerts: 0 },
+      { crew: 0, equipment: 0, issues: 0 },
     );
   }, [propertyStats]);
 
-  const aggregateMetrics = useMemo(
-    () => [
-      { icon: Users, label: 'Total Crew', value: totals.crew, subtext: 'across active properties' },
-      { icon: CheckCircle, label: 'Tasks Done', value: totals.tasks, subtext: `of ${totals.tasksTotal} today`, color: 'hsl(var(--success))' },
-      { icon: Wrench, label: 'Equipment', value: totals.equipment, subtext: `${totals.equipmentDown} down`, color: 'hsl(var(--warning))' },
-      { icon: AlertTriangle, label: 'Issues', value: totals.workOrders, subtext: 'alerts + work orders', color: 'hsl(var(--destructive))' },
-      {
-        icon: Shield,
-        label: 'Avg Compliance',
-        value: `${propertyStats.length ? Math.round(propertyStats.reduce((sum, stats) => sum + stats.complianceScore, 0) / propertyStats.length) : 0}%`,
-        color: 'hsl(var(--info))',
-      },
-      { icon: Building2, label: 'Properties', value: properties.length, subtext: `${totals.alerts} weather alert${totals.alerts !== 1 ? 's' : ''}` },
-    ],
-    [properties.length, propertyStats, totals],
+  const activeEmployeesCount = useMemo(
+    () => employees.filter((employee) => employee.status === 'active').length,
+    [employees],
   );
 
+  const managerByProperty = useMemo(() => {
+    return new Map(
+      properties.map((property) => {
+        const propertyEmployees = employees.filter((employee) => employee.propertyId === property.id);
+        const manager =
+          propertyEmployees.find((employee) => /manager|supervisor|lead/i.test(employee.role)) ?? propertyEmployees[0];
+        const managerName = manager
+          ? `${manager.firstName} ${manager.lastName}`
+          : currentUser?.fullName || 'Operations Lead';
+        return [property.id, managerName];
+      }),
+    );
+  }, [currentUser?.fullName, employees, properties]);
+
   const liveCrew = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
     return employees
       .filter((employee) => employee.status === 'active')
       .slice(0, 6)
       .map((employee) => {
         const assignment = assignments.find((entry) => entry.employeeId === employee.id && entry.date === today);
-        const isScheduled = scheduleEntries.some((entry) => entry.employeeId === employee.id && entry.date === today && entry.status === 'scheduled');
+        const isScheduled = scheduleEntries.some(
+          (entry) => entry.employeeId === employee.id && entry.date === today && entry.status === 'scheduled',
+        );
         const latestClockEvent = clockEvents.find((event) => event.employeeId === employee.id);
-        const property = properties.find((entry) => entry.id === employee.propertyId);
+
         return {
           id: employee.id,
           name: `${employee.firstName} ${employee.lastName}`,
           role: employee.role,
-          propertyShortName: property?.shortName || 'Property',
           status:
             latestClockEvent?.eventType === 'out'
               ? 'traveling'
@@ -303,220 +374,247 @@ export default function CommandCenterOperationalPage() {
           currentTask: assignment ? tasks.find((task) => task.id === assignment.taskId)?.name || 'Assigned' : '',
         };
       });
-  }, [assignments, clockEvents, employees, properties, scheduleEntries, tasks]);
+  }, [assignments, clockEvents, employees, scheduleEntries, tasks, today]);
 
-  const activeWeatherProperty = useMemo(() => {
-    return properties.find((property) => property.id === currentPropertyId) ?? properties[0] ?? null;
-  }, [currentPropertyId, properties]);
+  const performanceRows = useMemo(() => {
+    return properties.map((property) => {
+      const stats = propertyStats.find((item) => item.propertyId === property.id);
+      if (!stats) {
+        return {
+          id: property.id,
+          name: property.name,
+          coveragePct: 0,
+          trendPct: 0,
+          crews: 0,
+        };
+      }
 
-  const dashboardWeatherCoordinates: { latitude: number; longitude: number; label: string } | null = null;
+      const coveragePct = stats.crewScheduled > 0 ? Math.min(100, Math.round((stats.crewActive / stats.crewScheduled) * 100)) : 0;
+      const trendPct = stats.tasksTotal > 0 ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 20 - 4) : 0;
 
-  const dashboardWeatherQuery = useQuery({
-    queryKey: ['command-center-weather', activeWeatherProperty?.id, dashboardWeatherCoordinates?.latitude, dashboardWeatherCoordinates?.longitude],
-    enabled: Boolean(activeWeatherProperty && dashboardWeatherCoordinates),
-    staleTime: 1000 * 60 * 30,
-    queryFn: async () =>
-      fetchOpenMeteoWeather({
-        latitude: dashboardWeatherCoordinates!.latitude,
-        longitude: dashboardWeatherCoordinates!.longitude,
-      }),
-  });
-
-  const dashboardWeatherMeta = getWeatherConditionMeta(dashboardWeatherQuery.data?.current.weatherCode);
-  const DashboardWeatherIcon = dashboardWeatherMeta.icon;
+      return {
+        id: property.id,
+        name: property.name,
+        coveragePct,
+        trendPct,
+        crews: stats.crewActive,
+      };
+    });
+  }, [properties, propertyStats]);
 
   const openPropertyWorkflow = (propertyId: string) => {
     setCurrentPropertyId(propertyId);
     navigate(`/app/workboard?property=${encodeURIComponent(propertyId)}&focus=requests`);
   };
 
+  const isLoading =
+    propertiesQuery.isLoading ||
+    employeesQuery.isLoading ||
+    assignmentsQuery.isLoading ||
+    scheduleEntriesQuery.isLoading ||
+    tasksQuery.isLoading ||
+    equipmentUnitsQuery.isLoading;
+
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="brand-heading text-2xl font-bold text-foreground">Command Center</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">Cross-property operations at a glance</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="px-3 py-1.5 text-xs">
-            <MapPin className="mr-1.5 h-3 w-3" />
-            {properties.filter((property) => property.status === 'active').length} Active Properties
-          </Badge>
-          <Button size="sm" variant="outline" onClick={() => navigate('/app/workboard')}>
-            <ArrowRight className="mr-1.5 h-3.5 w-3.5" />
-            Go to Workflow
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-        {aggregateMetrics.map((metric) => (
-          <AggregateMetric
-            key={metric.label}
-            icon={metric.icon}
-            label={metric.label}
-            value={metric.value}
-            subtext={metric.subtext}
-            color={metric.color}
-          />
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-foreground">Properties</h2>
-            <Tabs value={view} onValueChange={(value) => setView(value as 'grid' | 'list')}>
-              <TabsList className="h-8">
-                <TabsTrigger value="grid" className="px-3 text-xs">Grid</TabsTrigger>
-                <TabsTrigger value="list" className="px-3 text-xs">List</TabsTrigger>
-              </TabsList>
-            </Tabs>
+    <div className="h-full overflow-auto bg-background p-6">
+      <div className="mb-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">Properties</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage locations, resources, and operational status
+            </p>
           </div>
-
-          {view === 'grid' ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {properties.map((property) => {
-                const stats = propertyStats.find((entry) => entry.propertyId === property.id);
-                if (!stats) return null;
-                return <PropertyCard key={property.id} property={property} stats={stats} onClick={() => openPropertyWorkflow(property.id)} />;
-              })}
-            </div>
-          ) : (
-            <Card className="divide-y">
-              {properties.map((property) => {
-                const stats = propertyStats.find((entry) => entry.propertyId === property.id);
-                if (!stats) return null;
-                const taskPct = stats.tasksTotal > 0 ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100) : 0;
-                return (
-                  <div key={property.id} className="flex cursor-pointer items-center gap-4 p-4 transition-colors hover:bg-muted/30" onClick={() => openPropertyWorkflow(property.id)}>
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg text-xs font-bold text-white" style={{ background: property.color }}>
-                      {property.logoInitials}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm">{property.name}</div>
-                      <div className="text-xs text-muted-foreground">{property.city}, {property.state}</div>
-                    </div>
-                    <div className="flex items-center gap-6 text-xs text-muted-foreground">
-                      <span><strong className="text-foreground">{stats.crewActive}</strong> crew</span>
-                      <span><strong className="text-foreground">{taskPct}%</strong> tasks</span>
-                      <span><strong className="text-foreground">{stats.equipmentActive}</strong> equip</span>
-                      {stats.weatherAlert ? <CloudRain className="h-4 w-4 text-destructive" /> : null}
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                );
-              })}
-            </Card>
-          )}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => navigate('/app/workboard')}>
+              <ArrowRight className="mr-2 h-4 w-4" />
+              Open Workboard
+            </Button>
+            <Button onClick={() => navigate('/app/settings')}>
+              <MapPin className="mr-2 h-4 w-4" />
+              Manage Properties
+            </Button>
+          </div>
         </div>
+      </div>
 
-        <div className="space-y-4">
-          <Card className="space-y-3 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <CloudRain className="h-4 w-4 text-primary" />
-                Outdoor Weather
-              </h3>
-              <Badge variant="outline" className="text-[10px]">
-                {activeWeatherProperty?.shortName ?? 'No property'}
-              </Badge>
-            </div>
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+        <AggregateMetricCard icon={MapPin} label="Total Properties" value={properties.length} />
+        <AggregateMetricCard icon={Users} label="Active Crews" value={totals.crew} />
+        <AggregateMetricCard icon={Wrench} label="Total Equipment" value={totals.equipment} />
+        <AggregateMetricCard icon={AlertCircle} label="Open Issues" value={totals.issues} accent="hsl(var(--warning))" />
+      </div>
 
-            {dashboardWeatherQuery.isLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-20 rounded-2xl" />
-                <Skeleton className="h-10 rounded-xl" />
-              </div>
-            ) : dashboardWeatherQuery.data ? (
-              <>
-                <div className="rounded-2xl border bg-background/70 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        {activeWeatherProperty?.name ?? 'Selected Property'}
-                      </div>
-                      <div className="mt-2 text-3xl font-semibold">
-                        {Math.round(dashboardWeatherQuery.data.current.temperature)}F
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">{dashboardWeatherMeta.label}</div>
-                    </div>
-                    <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                      <DashboardWeatherIcon className="h-6 w-6" />
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Wind {Math.round(dashboardWeatherQuery.data.current.windSpeed)} mph</span>
-                    <span>{dashboardWeatherCoordinates?.label ?? 'Live feed'}</span>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-muted-foreground">Property View</h3>
+        <Tabs value={view} onValueChange={(value) => setView(value as 'grid' | 'list')}>
+          <TabsList className="h-9">
+            <TabsTrigger value="grid" className="px-4 text-xs">Grid</TabsTrigger>
+            <TabsTrigger value="list" className="px-4 text-xs">List</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {isLoading ? (
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-64 rounded-2xl" />
+          ))}
+        </div>
+      ) : view === 'grid' ? (
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+          {properties.map((property) => {
+            const stats = propertyStats.find((item) => item.propertyId === property.id);
+            if (!stats) return null;
+            return (
+              <PropertyCard
+                key={property.id}
+                property={property}
+                stats={stats}
+                manager={managerByProperty.get(property.id) ?? 'Operations Lead'}
+                onClick={() => openPropertyWorkflow(property.id)}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <Card className="mb-6 divide-y rounded-2xl border">
+          {properties.map((property) => {
+            const stats = propertyStats.find((item) => item.propertyId === property.id);
+            if (!stats) return null;
+            const status = resolvePropertyStatus(stats);
+            const taskCompletionPct = stats.tasksTotal > 0 ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100) : 0;
+            return (
+              <div
+                key={property.id}
+                className="flex cursor-pointer items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/30"
+                onClick={() => openPropertyWorkflow(property.id)}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: property.color }}>
+                  {property.logoInitials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{property.name}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {property.city}, {property.state} - {managerByProperty.get(property.id) ?? 'Operations Lead'}
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 w-full justify-between text-xs"
-                  onClick={() => navigate('/app/weather')}
-                >
-                  Open Weather Planning
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-              </>
-            ) : (
-              <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
-                Add a property weather station or area coordinates to surface live outdoor conditions here.
+                <div className="hidden items-center gap-4 text-xs md:flex">
+                  <span>{stats.crewActive} crew</span>
+                  <span>{taskCompletionPct}% tasks</span>
+                  <span>{stats.equipmentActive} equip</span>
+                </div>
+                <Badge variant="outline" className={statusConfig[status].badgeClass}>
+                  {statusConfig[status].label}
+                </Badge>
               </div>
-            )}
-          </Card>
+            );
+          })}
+        </Card>
+      )}
 
-          <Card className="space-y-3 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <Activity className="h-4 w-4 text-primary" />
-                Live Crew Activity
-              </h3>
-              <Badge variant="outline" className="text-[10px]">
-                <span className="mr-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
-                Shared store
-              </Badge>
-            </div>
-            <div className="space-y-2">
-              {liveCrew.map((member) => {
-                const statusColor = member.status === 'active' ? 'bg-green-500' : member.status === 'on-break' ? 'bg-amber-500' : 'bg-blue-500';
-                return (
-                  <div key={member.id} className="flex items-center gap-2.5 rounded-lg p-2 transition-colors hover:bg-muted/50">
-                    <span className={`h-2 w-2 rounded-full ${statusColor}`} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{member.name}</div>
-                      <div className="truncate text-[11px] text-muted-foreground">{member.currentTask || member.status.replace('-', ' ')} · {member.propertyShortName}</div>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 text-[10px]">{member.role}</Badge>
+      <Card className="mb-6 rounded-2xl border p-6 shadow-sm">
+        <h3 className="mb-6 text-lg font-semibold">Property Performance</h3>
+        <div className="space-y-4">
+          {performanceRows.map((row) => (
+            <div key={row.id} className="flex items-center gap-4">
+              <div className="w-48 truncate font-medium">{row.name}</div>
+              <div className="flex-1">
+                <div className="flex h-10 items-center overflow-hidden rounded-xl bg-muted">
+                  <div
+                    className="flex h-full items-center justify-end rounded-xl bg-primary px-3"
+                    style={{ width: `${Math.max(row.coveragePct, 8)}%` }}
+                  >
+                    <span className="text-xs font-medium text-primary-foreground">{row.crews} crews</span>
                   </div>
-                );
-              })}
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+                <TrendingUp className="h-4 w-4" />
+                <span>{row.trendPct >= 0 ? `+${row.trendPct}%` : `${row.trendPct}%`}</span>
+              </div>
             </div>
-          </Card>
-
-          <Card className="space-y-3 p-4">
-            <h3 className="flex items-center gap-2 text-sm font-semibold">
-              <Zap className="h-4 w-4 text-warning" />
-              Quick Actions
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" className="h-9 justify-start text-xs" onClick={() => navigate('/app/scheduler')}>
-                <Clock className="mr-1.5 h-3.5 w-3.5" /> Schedule
-              </Button>
-              <Button variant="outline" size="sm" className="h-9 justify-start text-xs" onClick={() => navigate('/app/workboard')}>
-                <BarChart3 className="mr-1.5 h-3.5 w-3.5" /> Dispatch
-              </Button>
-              <Button variant="outline" size="sm" className="h-9 justify-start text-xs" onClick={() => navigate('/app/equipment')}>
-                <Wrench className="mr-1.5 h-3.5 w-3.5" /> Equipment
-              </Button>
-              <Button variant="outline" size="sm" className="h-9 justify-start text-xs" onClick={() => navigate('/app/reports')}>
-                <TrendingUp className="mr-1.5 h-3.5 w-3.5" /> Reports
-              </Button>
-            </div>
-          </Card>
+          ))}
         </div>
-      </div>
+      </Card>
+
+      <Card className="rounded-2xl border p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-lg font-semibold">
+            <Activity className="h-5 w-5 text-primary" />
+            Live Crew Activity
+          </h3>
+          <Badge variant="outline" className="text-xs">
+            <span className="mr-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+            Realtime
+          </Badge>
+        </div>
+
+        {liveCrew.length === 0 ? (
+          <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+            No active crew data yet for today.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {liveCrew.map((member) => {
+              const statusColor =
+                member.status === 'active'
+                  ? 'bg-emerald-500'
+                  : member.status === 'on-break'
+                    ? 'bg-amber-500'
+                    : 'bg-sky-500';
+
+              return (
+                <div key={member.id} className="flex items-center gap-3 rounded-xl border p-3">
+                  <span className={`h-2 w-2 rounded-full ${statusColor}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{member.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {member.currentTask || member.status.replace('-', ' ')}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[10px]">
+                    {member.role}
+                  </Badge>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/app/scheduler')}>
+            <Calendar className="mr-1.5 h-3.5 w-3.5" />
+            Scheduler
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate('/app/workboard')}>
+            <ArrowRight className="mr-1.5 h-3.5 w-3.5" />
+            Workboard
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate('/app/reports')}>
+            <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+            Reports
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate('/app/weather')}>
+            <CloudRain className="mr-1.5 h-3.5 w-3.5" />
+            Weather
+          </Button>
+        </div>
+      </Card>
+
+      {notes.some((note) => note.type === 'alert') ? (
+        <Card className="mt-6 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+          <div className="flex items-start gap-3">
+            <CloudRain className="mt-0.5 h-4 w-4 text-destructive" />
+            <div>
+              <div className="text-sm font-semibold text-destructive">Active Alerts</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {notes.filter((note) => note.type === 'alert').length} alert(s) detected across properties.
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }

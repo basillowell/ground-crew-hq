@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { PageHeader } from '@/components/shared';
 import {
   Building2,
   Clock,
@@ -178,7 +177,9 @@ function FlowCard({
           <div className="text-sm font-semibold">{title}</div>
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
-        <Badge variant="outline" className="whitespace-nowrap">{metric}</Badge>
+        <Badge variant="outline" className="whitespace-nowrap">
+          {metric}
+        </Badge>
       </div>
       <div className="mt-4 h-2 rounded-full" style={{ background: accent }} />
     </div>
@@ -468,45 +469,38 @@ export default function ProgramSetupHubPage() {
   }
 
   return (
-    <div className="p-4 max-w-[1600px] mx-auto space-y-4">
-      <PageHeader
-        title="Program Setup"
-        subtitle="Set up the client brand, workforce structure, properties, and labor patterns that feed the rest of the platform."
-        badge={<Badge variant="secondary">{programSetting?.organizationName ?? 'Club profile'}</Badge>}
-      />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {overviewStats.slice(0, 4).map((stat) => (
-          <Card key={stat.label} className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{stat.label}</div>
-                <div className="mt-2 text-3xl font-semibold">{stat.value}</div>
-              </div>
-              <div className="rounded-2xl border bg-muted/30 p-3 text-primary">{stat.icon}</div>
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">{stat.helper}</p>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="p-5">
-        <div className="flex items-center gap-2">
-          <GitBranch className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold">How Program Setup Feeds the System</h3>
+    <div className="mx-auto max-w-[1600px] space-y-6 p-6">
+      <div className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">Settings</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Configure your CrewHQ workspace branding, people structure, properties, and account controls.
+            </p>
+          </div>
+          <Badge variant="secondary" className="h-fit">
+            {programSetting?.organizationName ?? 'Club profile'}
+          </Badge>
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-4">
-          <FlowCard
-            title="Club Profile"
-            description="Sets the organization identity, default department, and operational rules used across the shell."
-            metric={`${departmentOptions.length} departments`}
-            accent="linear-gradient(90deg, rgba(22,163,74,0.65), rgba(34,197,94,0.15))"
-          />
-          <FlowCard
-            title="Employees + Groups"
-            description="Crew groups, roles, and languages shape the employee roster, reporting, and assignment context."
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border bg-muted/30 px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Properties</div>
+            <div className="mt-1 text-lg font-semibold">{liveCounts.properties}</div>
+          </div>
+          <div className="rounded-xl border bg-muted/30 px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Portal Users</div>
+            <div className="mt-1 text-lg font-semibold">{liveCounts.activeAppUsers}</div>
+          </div>
+          <div className="rounded-xl border bg-muted/30 px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Active Crew</div>
+            <div className="mt-1 text-lg font-semibold">{liveCounts.activeEmployees}</div>
+          </div>
+        </div>
+      </div>
+      {/*
+
+        
             metric={`${groupOptions.length} groups • ${roleOptions.length} roles`}
-            accent="linear-gradient(90deg, rgba(59,130,246,0.65), rgba(59,130,246,0.15))"
           />
           <FlowCard
             title="Locations + Weather"
@@ -523,6 +517,7 @@ export default function ProgramSetupHubPage() {
         </div>
       </Card>
 
+      */}
       <ProgramSetupHubPanels
         activePage={activePage}
         setActivePage={setActivePage}
