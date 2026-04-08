@@ -49,7 +49,7 @@ export default function MessagingPage() {
       if (!supabase || !authUserQuery.data?.id) return [];
       const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(20);
       if (error || !Array.isArray(data)) return [];
-      return data.filter((message: any) => {
+      return (data as MessageRecord[]).filter((message) => {
         if ('sender_id' in message || 'recipient_id' in message) {
           return message.sender_id === authUserQuery.data?.id || message.recipient_id === authUserQuery.data?.id;
         }

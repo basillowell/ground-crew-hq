@@ -598,7 +598,7 @@ export default function WorkboardPage() {
     });
   }
 
-  function useRequestForAssignment(request: TaskRequest) {
+  function applyRequestToAssignment(request: TaskRequest) {
     setLinkedRequestId(request.id);
     const targetTaskId = request.taskId || taskList[0]?.id || '';
     const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
@@ -763,7 +763,7 @@ export default function WorkboardPage() {
                         </div>
                         {request.notes ? <div className="mt-2 text-xs text-muted-foreground">{request.notes}</div> : null}
                         <div className="mt-3 flex justify-end">
-                          <Button size="sm" onClick={() => useRequestForAssignment(request)} disabled={request.status === 'assigned' || fallbackEligibleEmployees.length === 0}>
+                          <Button size="sm" onClick={() => applyRequestToAssignment(request)} disabled={request.status === 'assigned' || fallbackEligibleEmployees.length === 0}>
                             Assign Need
                           </Button>
                         </div>

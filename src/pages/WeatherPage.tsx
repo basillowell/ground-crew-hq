@@ -344,7 +344,7 @@ export default function WeatherPage() {
     });
   }
 
-  async function useCurrentLocationForStation(stationId: string) {
+  async function setDeviceLocationForStation(stationId: string) {
     if (!navigator.geolocation) {
       toast('Location unavailable', {
         description: 'This browser does not support device geolocation.',
@@ -1394,7 +1394,7 @@ export default function WeatherPage() {
                             size="sm"
                             variant="outline"
                             className="gap-1"
-                            onClick={() => void useCurrentLocationForStation(station.id)}
+                            onClick={() => void setDeviceLocationForStation(station.id)}
                             disabled={geoLoadingStationId === station.id}
                           >
                             <Crosshair className="h-3.5 w-3.5" />
