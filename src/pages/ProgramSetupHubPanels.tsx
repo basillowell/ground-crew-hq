@@ -89,6 +89,57 @@ const MODULE_ROWS: {
   { group: 'Operational', id: 'messaging', title: 'Messaging', description: 'Team messaging between users.' },
 ];
 
+const SECTION_META: Record<
+  ActivePage,
+  { title: string; description: string; audience: 'Client Operations' | 'Admin / System' }
+> = {
+  brand: {
+    title: 'Brand & Identity',
+    description: 'Organization name, navigation labels, theme, and logo preview.',
+    audience: 'Client Operations',
+  },
+  modules: {
+    title: 'Modules & Features',
+    description: 'Enable or disable workspace features and operational controls.',
+    audience: 'Admin / System',
+  },
+  properties: {
+    title: 'Properties & Locations',
+    description: 'Manage properties, classes, locations, and assignment structure.',
+    audience: 'Client Operations',
+  },
+  users: {
+    title: 'Users & Access',
+    description: 'Portal profiles, roles, and access status for the workspace.',
+    audience: 'Admin / System',
+  },
+  workforce: {
+    title: 'Workforce Structure',
+    description: 'Departments, groups, roles, and languages used across the app.',
+    audience: 'Admin / System',
+  },
+  shifts: {
+    title: 'Shift Templates',
+    description: 'Reusable shift patterns for scheduling and labor planning.',
+    audience: 'Client Operations',
+  },
+  billing: {
+    title: 'Billing & Plan',
+    description: 'Subscription details, usage, and plan limits.',
+    audience: 'Admin / System',
+  },
+  integrations: {
+    title: 'Integrations',
+    description: 'Connected services and operational data integrations.',
+    audience: 'Admin / System',
+  },
+};
+
+const GROUP_META: Record<string, string> = {
+  'Client Operations': 'Daily workspace setup used by on-site teams.',
+  'Admin / System': 'Organization controls, permissions, and account governance.',
+};
+
 function roleBadgeClass(role: AppUser['role']) {
   if (role === 'admin') return 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200';
   if (role === 'manager') return 'border-blue-500/40 bg-blue-500/10 text-blue-800 dark:text-blue-200';
@@ -148,22 +199,25 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
     currentPlanName,
   } = props;
 
-  console.log('ProgramSetupHubPanels: activePage =', activePage, 'programSetting =', !!programSetting);
-
-  console.log('ProgramSetupHubPanels: calculating editingProperty, propertySheetId =', propertySheetId);
   const editingProperty = propertySheetId ? properties.find((p) => p.id === propertySheetId) : undefined;
-
-  console.log('ProgramSetupHubPanels: calculating editingShift, shiftSheetId =', shiftSheetId);
   const editingShift = shiftSheetId ? shiftTemplates.find((s) => s.id === shiftSheetId) : undefined;
+  const sectionMeta = SECTION_META[activePage];
 
   return (
-    <div className="flex min-h-[640px] overflow-hidden rounded-xl border bg-card">
-      <aside className="flex w-[220px] shrink-0 flex-col border-r bg-muted/30">
-        <div className="flex-1 space-y-6 overflow-y-auto p-3">
+    <div className="flex min-h-[680px] overflow-hidden rounded-2xl border bg-card shadow-sm">
+      <aside className="flex w-[250px] shrink-0 flex-col border-r bg-muted/25">
+        <div className="border-b px-4 py-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Program Setup</div>
+          <div className="mt-1 text-sm font-medium">Workspace Settings Navigator</div>
+        </div>
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {navGroups.map((group) => (
-            <div key={group.label}>
-              <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{group.label}</div>
-              <nav className="space-y-0.5">
+            <div key={group.label} className="rounded-xl border bg-background/80 p-2">
+              <div className="px-2 pb-2">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{group.label}</div>
+                <div className="mt-1 text-[11px] leading-4 text-muted-foreground">{GROUP_META[group.label] ?? ''}</div>
+              </div>
+              <nav className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const active = activePage === item.id;
@@ -173,10 +227,18 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                       type="button"
                       onClick={() => setActivePage(item.id)}
                       className={cn(
-                        'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
-                        active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'relative flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-sm transition-colors',
+                        active
+                          ? 'border-primary/40 bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/20'
+                          : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground',
                       )}
                     >
+                      <span
+                        className={cn(
+                          'absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r transition-colors',
+                          active ? 'bg-primary-foreground/90' : 'bg-transparent',
+                        )}
+                      />
                       <Icon className="h-4 w-4 shrink-0 opacity-80" />
                       <span className="leading-tight">{item.label}</span>
                     </button>
@@ -186,8 +248,8 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             </div>
           ))}
         </div>
-        <div className="border-t p-3">
-          <div className="rounded-lg border bg-background/80 p-3 text-xs shadow-sm">
+        <div className="border-t p-4">
+          <div className="rounded-lg border bg-background/90 p-3 text-xs shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <Badge variant="secondary" className="font-medium">
                 {currentPlanName}
@@ -205,16 +267,27 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1 overflow-y-auto p-6">
-        {activePage === 'brand' && programSetting && (
-          <div className="mx-auto max-w-4xl space-y-8">
+      <div className="min-w-0 flex-1 overflow-y-auto bg-background/40">
+        <div className="sticky top-0 z-10 border-b bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold">Brand &amp; Identity</h2>
-              <p className="text-sm text-muted-foreground">Organization name, navigation labels, theme, and logo preview.</p>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Settings Section</div>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight">{sectionMeta.title}</h2>
+              <p className="mt-1 text-xs text-muted-foreground">{sectionMeta.description}</p>
             </div>
-
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold">Organization identity</h3>
+            <Badge variant={sectionMeta.audience === 'Admin / System' ? 'secondary' : 'outline'} className="shrink-0">
+              {sectionMeta.audience}
+            </Badge>
+          </div>
+        </div>
+        <div className="p-6">
+        {activePage === 'brand' && programSetting && (
+          <div className="mx-auto max-w-5xl space-y-6">
+            <Card className="p-5">
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold">Organization Identity</h3>
+                <p className="text-xs text-muted-foreground">Core naming and workspace labels used across the app.</p>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium">Organization name</label>
@@ -287,116 +360,153 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                   />
                 </div>
               </div>
-            </section>
+            </Card>
 
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold">Theme</h3>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {themePresets.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => setProgramSetting((c) => (c ? applyThemePreset(c, preset.id) : c))}
-                    className={cn(
-                      'rounded-xl border p-3 text-left text-xs transition-all',
-                      programSetting.uiThemePreset === preset.id ? 'border-primary ring-2 ring-primary/20' : 'hover:border-muted-foreground/30',
-                    )}
-                  >
-                    <div className="font-medium">{preset.name}</div>
-                    <div className="mt-2 flex gap-1">
-                      <span className="h-6 flex-1 rounded-md" style={{ background: preset.primaryColor }} />
-                      <span className="h-6 flex-1 rounded-md" style={{ background: preset.accentColor }} />
-                      <span className="h-6 flex-1 rounded-md" style={{ background: preset.sidebarColor }} />
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div>
-                <label className="text-sm font-medium">Typography</label>
-                <select
-                  value={programSetting.fontThemePreset ?? 'modern-sans'}
-                  onChange={(e) => setProgramSetting((c) => (c ? { ...c, fontThemePreset: e.target.value } : c))}
-                  className="mt-1 h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  {typographyPresets.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                {(['primaryColor', 'accentColor', 'sidebarColor'] as const).map((key) => (
-                  <div key={key}>
-                    <label className="text-sm font-medium capitalize">{key.replace('Color', ' color')}</label>
-                    <div className="mt-1 flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={programSetting[key] || '#000000'}
-                        onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
-                        className="h-10 w-12 cursor-pointer rounded border bg-transparent"
-                      />
+            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-6">
+                <Card className="p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold">Theme Presets</h3>
+                    <p className="text-xs text-muted-foreground">Pick a preset as a base, then fine-tune below.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {themePresets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setProgramSetting((c) => (c ? applyThemePreset(c, preset.id) : c))}
+                        className={cn(
+                          'rounded-xl border p-3 text-left text-xs transition-all',
+                          programSetting.uiThemePreset === preset.id
+                            ? 'border-primary ring-2 ring-primary/20'
+                            : 'hover:border-muted-foreground/30',
+                        )}
+                      >
+                        <div className="font-medium">{preset.name}</div>
+                        <div className="mt-2 flex gap-1">
+                          <span className="h-6 flex-1 rounded-md" style={{ background: preset.primaryColor }} />
+                          <span className="h-6 flex-1 rounded-md" style={{ background: preset.accentColor }} />
+                          <span className="h-6 flex-1 rounded-md" style={{ background: preset.sidebarColor }} />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-4">
+                    <label className="text-sm font-medium">Typography</label>
+                    <select
+                      value={programSetting.fontThemePreset ?? 'modern-sans'}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, fontThemePreset: e.target.value } : c))}
+                      className="mt-1 h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {typographyPresets.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </Card>
+
+                <Card className="p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold">Custom Colors</h3>
+                    <p className="text-xs text-muted-foreground">Override preset values for a precise brand match.</p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {(['primaryColor', 'accentColor', 'sidebarColor'] as const).map((key) => (
+                      <div key={key}>
+                        <label className="text-sm font-medium capitalize">{key.replace('Color', ' color')}</label>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={programSetting[key] || '#000000'}
+                            onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
+                            className="h-10 w-12 cursor-pointer rounded border bg-transparent"
+                          />
+                          <Input
+                            value={programSetting[key] || '#000000'}
+                            onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4">
+                    <label className="text-sm font-medium">Theme notes</label>
+                    <textarea
+                      value={programSetting.themeNotes ?? ''}
+                      onChange={(e) => setProgramSetting((c) => (c ? { ...c, themeNotes: e.target.value } : c))}
+                      className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                </Card>
+
+                <Card className="p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold">Logo & Assets</h3>
+                    <p className="text-xs text-muted-foreground">Set logo identity and control client-facing shell visuals.</p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="text-sm font-medium">Logo initials</label>
                       <Input
-                        value={programSetting[key] || '#000000'}
-                        onChange={(e) => setProgramSetting((c) => (c ? { ...c, [key]: e.target.value } : c))}
+                        value={programSetting.logoInitials}
+                        onChange={(e) =>
+                          setProgramSetting((c) => (c ? { ...c, logoInitials: e.target.value.toUpperCase().slice(0, 3) } : c))
+                        }
+                        className="mt-1"
                       />
                     </div>
+                    <div>
+                      <label className="text-sm font-medium">Logo image URL</label>
+                      <Input
+                        value={programSetting.logoUrl ?? ''}
+                        onChange={(e) => setProgramSetting((c) => (c ? { ...c, logoUrl: e.target.value } : c))}
+                        className="mt-1"
+                        placeholder="https://"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-sm font-medium">Upload logo</label>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        className="mt-1"
+                        onChange={(e) => handleLogoUpload(e.target.files?.[0] ?? null)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 text-xs"
+                        onClick={() => setProgramSetting((c) => (c ? { ...c, logoUrl: '' } : c))}
+                      >
+                        Clear logo
+                      </Button>
+                    </div>
                   </div>
-                ))}
+                  <div className="mt-4 flex items-center justify-between rounded-xl border bg-muted/30 p-4">
+                    <div>
+                      <div className="text-sm font-medium">Mobile app</div>
+                      <p className="text-xs text-muted-foreground">Allow field crews to access via mobile.</p>
+                    </div>
+                    <Switch
+                      checked={programSetting.enableMobileApp}
+                      onCheckedChange={(checked) => setProgramSetting((c) => (c ? { ...c, enableMobileApp: checked } : c))}
+                    />
+                  </div>
+                </Card>
               </div>
-              <div>
-                <label className="text-sm font-medium">Theme notes</label>
-                <textarea
-                  value={programSetting.themeNotes ?? ''}
-                  onChange={(e) => setProgramSetting((c) => (c ? { ...c, themeNotes: e.target.value } : c))}
-                  className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-              </div>
-            </section>
 
-            <section className="grid gap-6 lg:grid-cols-2">
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold">Logo &amp; assets</h3>
-                <div>
-                  <label className="text-sm font-medium">Logo initials</label>
-                  <Input
-                    value={programSetting.logoInitials}
-                    onChange={(e) =>
-                      setProgramSetting((c) => (c ? { ...c, logoInitials: e.target.value.toUpperCase().slice(0, 3) } : c))
-                    }
-                    className="mt-1"
-                  />
+              <Card className="sticky top-24 h-fit p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold">Live Preview</h3>
+                  <p className="text-xs text-muted-foreground">Preview reflects current edits before saving.</p>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Logo image URL</label>
-                  <Input
-                    value={programSetting.logoUrl ?? ''}
-                    onChange={(e) => setProgramSetting((c) => (c ? { ...c, logoUrl: e.target.value } : c))}
-                    className="mt-1"
-                    placeholder="https://"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Upload logo</label>
-                  <Input type="file" accept="image/*" className="mt-1" onChange={(e) => handleLogoUpload(e.target.files?.[0] ?? null)} />
-                  <Button type="button" variant="outline" size="sm" className="mt-2 text-xs" onClick={() => setProgramSetting((c) => (c ? { ...c, logoUrl: '' } : c))}>
-                    Clear logo
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-4">
-                  <div>
-                    <div className="text-sm font-medium">Mobile app</div>
-                    <p className="text-xs text-muted-foreground">Allow field crews to access via mobile.</p>
-                  </div>
-                  <Switch
-                    checked={programSetting.enableMobileApp}
-                    onCheckedChange={(checked) => setProgramSetting((c) => (c ? { ...c, enableMobileApp: checked } : c))}
-                  />
-                </div>
-              </div>
-              <div>
-                <h3 className="mb-3 text-sm font-semibold">Live sidebar preview</h3>
-                <div className="rounded-2xl border p-4 text-white shadow-inner" style={{ backgroundColor: programSetting.sidebarColor }}>
+                <div
+                  className="rounded-2xl border p-5 text-white shadow-inner"
+                  style={{ backgroundColor: programSetting.sidebarColor }}
+                >
                   <div className="flex items-center gap-3">
                     <div
                       className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 text-sm font-semibold shadow-sm"
@@ -416,12 +526,16 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                   <div className="mt-4 rounded-lg px-3 py-2 text-xs font-medium" style={{ backgroundColor: programSetting.primaryColor }}>
                     {programSetting.clientLabel}
                   </div>
+                  <div className="mt-4 rounded-lg border border-white/15 bg-white/5 p-3 text-[11px] text-white/75">
+                    Theme: {programSetting.uiThemePreset || 'custom'} - Font: {programSetting.fontThemePreset || 'modern-sans'}
+                  </div>
                 </div>
-              </div>
-            </section>
+              </Card>
+            </div>
 
-            <div className="flex justify-end">
-              <Button onClick={saveGeneralSettings}>Save changes</Button>
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
+              <p className="text-xs text-muted-foreground">Applies only to Brand and Identity settings.</p>
+              <Button onClick={saveGeneralSettings}>Save brand settings</Button>
             </div>
           </div>
         )}
@@ -483,18 +597,19 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end">
-              <Button onClick={saveGeneralSettings}>Save modules</Button>
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
+              <p className="text-xs text-muted-foreground">Applies only to Modules and Features settings.</p>
+              <Button onClick={saveGeneralSettings}>Save module settings</Button>
             </div>
           </div>
         )}
 
         {activePage === 'properties' && (
-          <div className="mx-auto max-w-5xl space-y-10">
+          <div className="mx-auto max-w-6xl space-y-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold">Properties</h2>
-                <p className="text-sm text-muted-foreground">Sites, classes, work locations, and employee assignment.</p>
+                <h2 className="text-lg font-semibold">1. Property list</h2>
+                <p className="text-sm text-muted-foreground">Guided setup for sites, classes, locations, and workforce assignment.</p>
               </div>
               <Button
                 size="sm"
@@ -559,7 +674,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
 
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Property class master</h3>
+                <h3 className="text-sm font-semibold">2. Property class master</h3>
                 <Button
                   size="sm"
                   variant="outline"
@@ -626,7 +741,8 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                   </Card>
                 ))}
               </div>
-              <div className="flex justify-end">
+              <div className="mt-2 flex items-center justify-between rounded-xl border bg-background/80 p-3">
+                <p className="text-xs text-muted-foreground">Applies only to Property Class templates.</p>
                 <Button variant="secondary" onClick={savePropertyClassesTab}>
                   Save property classes
                 </Button>
@@ -635,7 +751,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
 
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Work locations</h3>
+                <h3 className="text-sm font-semibold">3. Work locations</h3>
                 <Button size="sm" variant="outline" className="gap-1" onClick={() => setWorkLocations((cur) => [...cur, { id: makeId('loc'), name: `Location ${cur.length + 1}`, propertyId: properties[0]?.id, propertyName: properties[0]?.name }])}>
                   <Plus className="h-3 w-3" /> Add location
                 </Button>
@@ -671,7 +787,8 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                   </div>
                 ))}
               </div>
-              <div className="flex justify-end">
+              <div className="mt-2 flex items-center justify-between rounded-xl border bg-background/80 p-3">
+                <p className="text-xs text-muted-foreground">Applies only to Work Location mappings.</p>
                 <Button variant="secondary" onClick={saveLocations}>
                   Save locations
                 </Button>
@@ -679,7 +796,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             </section>
 
             <section>
-              <h3 className="mb-3 text-sm font-semibold">Employee property assignment</h3>
+              <h3 className="mb-3 text-sm font-semibold">4. Employee property assignment</h3>
               <Card className="p-4">
                 <div className="space-y-2">
                   {employees.map((employee) => (
@@ -711,14 +828,15 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             </section>
 
             <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
-              <h3 className="text-sm font-semibold">Usage</h3>
+              <h3 className="text-sm font-semibold">5. Plan usage</h3>
               <UsageBar label="Properties" current={liveCounts.properties} max={planLimits.properties} />
               <UsageBar label="Employees" current={liveCounts.employees} max={planLimits.employees} />
               <UsageBar label="Portal users" current={liveCounts.activeAppUsers} max={planLimits.portalUsers} />
             </section>
 
-            <div className="flex justify-end">
-              <Button onClick={savePropertiesTab}>Save properties</Button>
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
+              <p className="text-xs text-muted-foreground">Applies to property records and employee property assignments.</p>
+              <Button onClick={savePropertiesTab}>Save property settings</Button>
             </div>
           </div>
         )}
@@ -727,8 +845,11 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
           <div className="mx-auto max-w-5xl space-y-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold">Users &amp; Access</h2>
-                <p className="text-sm text-muted-foreground">Portal accounts for admins, managers, and crew.</p>
+                <h2 className="text-lg font-semibold">Portal accounts (Users &amp; Access)</h2>
+                <p className="text-sm text-muted-foreground">
+                  Manage who can sign in, their access role, and account status.
+                </p>
+                <p className="text-xs text-muted-foreground">This controls portal login access, not workforce labor taxonomy.</p>
               </div>
               <Button
                 size="sm"
@@ -751,8 +872,12 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                   ])
                 }
               >
-                <Plus className="h-3.5 w-3.5" /> Add user
+                <Plus className="h-3.5 w-3.5" /> Add portal user
               </Button>
+            </div>
+
+            <div className="rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Applies to:</span> authentication access, role permissions, and portal seat management.
             </div>
 
             <Card className="overflow-hidden">
@@ -867,8 +992,9 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               </Card>
             </div>
 
-            <div className="flex justify-end">
-              <Button onClick={savePortalUsers}>Save users</Button>
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
+              <p className="text-xs text-muted-foreground">Applies only to portal accounts and access roles.</p>
+              <Button onClick={savePortalUsers}>Save portal users</Button>
             </div>
           </div>
         )}
@@ -876,8 +1002,14 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
         {activePage === 'workforce' && (
           <div className="mx-auto max-w-4xl space-y-8">
             <div>
-              <h2 className="text-lg font-semibold">Workforce structure</h2>
-              <p className="text-sm text-muted-foreground">Departments, groups, roles, and languages.</p>
+              <h2 className="text-lg font-semibold">Labor structure (Workforce)</h2>
+              <p className="text-sm text-muted-foreground">
+                Configure departments, groups, workforce roles, and language options used by labor planning.
+              </p>
+              <p className="text-xs text-muted-foreground">This section does not create login accounts.</p>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Applies to:</span> employee records, labor grouping, scheduling structure, and reports.
             </div>
             <div className="grid gap-6 lg:grid-cols-2">
               <Card className="p-4">
@@ -963,7 +1095,8 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                 ))}
               </div>
             </Card>
-            <div className="flex justify-end">
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
+              <p className="text-xs text-muted-foreground">Applies only to departments, groups, roles, and languages.</p>
               <Button onClick={saveStructures}>Save workforce structure</Button>
             </div>
           </div>
@@ -1006,7 +1139,8 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                 </div>
               ))}
             </div>
-            <div className="flex justify-end">
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
+              <p className="text-xs text-muted-foreground">Applies only to shift template definitions.</p>
               <Button onClick={saveShiftPlans}>Save shift templates</Button>
             </div>
           </div>
@@ -1074,6 +1208,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       <Sheet open={!!propertySheetId} onOpenChange={(open) => !open && setPropertySheetId(null)}>
@@ -1200,7 +1335,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
           )}
           <SheetFooter className="mt-8">
             <Button variant="outline" onClick={() => setPropertySheetId(null)}>
-              Close
+              Cancel
             </Button>
             <Button
               onClick={() => {
@@ -1208,7 +1343,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                 setPropertySheetId(null);
               }}
             >
-              Save property
+              Save property details
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -1276,7 +1411,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                 setShiftSheetId(null);
               }}
             >
-              Save template
+              Save shift template
             </Button>
           </SheetFooter>
         </SheetContent>

@@ -1,20 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import {
   Building2,
   Clock,
   CreditCard,
-  GitBranch,
-  ListChecks,
-  MapPin,
   Palette,
   Plug,
   Puzzle,
   Settings,
-  ShieldCheck,
   UserCog,
-  Users,
   UsersRound,
 } from 'lucide-react';
 import { ProgramSetupHubPanels } from '@/pages/ProgramSetupHubPanels';
@@ -84,24 +78,19 @@ export type ActivePage =
 
 const NAV_GROUPS: { label: string; items: { id: ActivePage; label: string; icon: typeof Settings }[] }[] = [
   {
-    label: 'Workspace',
+    label: 'Client Operations',
     items: [
       { id: 'brand', label: 'Brand & Identity', icon: Palette },
-      { id: 'modules', label: 'Modules & Features', icon: Puzzle },
       { id: 'properties', label: 'Properties', icon: Building2 },
-    ],
-  },
-  {
-    label: 'People',
-    items: [
-      { id: 'users', label: 'Users & Access', icon: UsersRound },
-      { id: 'workforce', label: 'Workforce Structure', icon: UserCog },
       { id: 'shifts', label: 'Shift Templates', icon: Clock },
     ],
   },
   {
-    label: 'Account',
+    label: 'Admin / System',
     items: [
+      { id: 'modules', label: 'Modules & Features', icon: Puzzle },
+      { id: 'users', label: 'Users & Access', icon: UsersRound },
+      { id: 'workforce', label: 'Workforce Structure', icon: UserCog },
       { id: 'billing', label: 'Billing & Plan', icon: CreditCard },
       { id: 'integrations', label: 'Integrations', icon: Plug },
     ],
@@ -155,33 +144,6 @@ function applyThemePreset(settings: ProgramSettings, presetId: string): ProgramS
     accentColor: preset.accentColor,
     sidebarColor: preset.sidebarColor,
   };
-}
-
-function FlowCard({
-  title,
-  description,
-  metric,
-  accent,
-}: {
-  title: string;
-  description: string;
-  metric: string;
-  accent: string;
-}) {
-  return (
-    <div className="rounded-2xl border bg-card/90 p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold">{title}</div>
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-        </div>
-        <Badge variant="outline" className="whitespace-nowrap">
-          {metric}
-        </Badge>
-      </div>
-      <div className="mt-4 h-2 rounded-full" style={{ background: accent }} />
-    </div>
-  );
 }
 
 export default function ProgramSetupHubPage() {
@@ -270,45 +232,6 @@ export default function ProgramSetupHubPage() {
       propertyClasses: propertyClasses.length,
     };
   }, [appUsers, assignmentsData, applicationAreasData, employees, properties, propertyClasses, schedulesData, tasksData, weatherLocationsData]);
-
-  const overviewStats = [
-    {
-      label: 'Active Crew',
-      value: liveCounts.activeEmployees,
-      helper: 'Employees available for scheduling and workflow assignment.',
-      icon: <Users className="h-5 w-5" />,
-    },
-    {
-      label: 'Active Tasks',
-      value: liveCounts.activeTasks,
-      helper: 'Operational tasks currently feeding daily assignment.',
-      icon: <ListChecks className="h-5 w-5" />,
-    },
-    {
-      label: 'Locations',
-      value: workLocations.length,
-      helper: 'Work areas that roll into weather, applications, and planning.',
-      icon: <MapPin className="h-5 w-5" />,
-    },
-    {
-      label: 'Shift Templates',
-      value: shiftTemplates.length,
-      helper: 'Reusable labor templates the scheduler can build from.',
-      icon: <Clock className="h-5 w-5" />,
-    },
-    {
-      label: 'Portal Users',
-      value: liveCounts.activeAppUsers,
-      helper: 'Client admins, managers, and supervisors who can enter this workspace.',
-      icon: <ShieldCheck className="h-5 w-5" />,
-    },
-    {
-      label: 'Property Classes',
-      value: liveCounts.propertyClasses,
-      helper: 'Reusable property blueprints that define which modules and workflows each site uses.',
-      icon: <Building2 className="h-5 w-5" />,
-    },
-  ];
 
   async function saveGeneralSettings() {
     if (!programSetting) return;
@@ -554,28 +477,11 @@ export default function ProgramSetupHubPage() {
             <div className="mt-1 text-lg font-semibold">{liveCounts.activeEmployees}</div>
           </div>
         </div>
-      </div>
-      {/*
-
-        
-            metric={`${groupOptions.length} groups • ${roleOptions.length} roles`}
-          />
-          <FlowCard
-            title="Locations + Weather"
-            description="Locations become weather areas, application areas, and routing anchors for the whole property."
-            metric={`${liveCounts.weatherAreas} weather areas`}
-            accent="linear-gradient(90deg, rgba(6,182,212,0.65), rgba(6,182,212,0.15))"
-          />
-          <FlowCard
-            title="Scheduling"
-            description="Shift templates reduce repetitive setup and keep the scheduler aligned with each club’s labor patterns."
-            metric={`${liveCounts.schedules} live shifts`}
-            accent="linear-gradient(90deg, rgba(124,58,237,0.65), rgba(124,58,237,0.15))"
-          />
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Badge variant="outline">Client Operations</Badge>
+          <Badge variant="secondary">Admin / System</Badge>
         </div>
-      </Card>
-
-      */}
+      </div>
       <ProgramSetupHubPanels
         activePage={activePage}
         setActivePage={setActivePage}
