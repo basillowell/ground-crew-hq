@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect } from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
@@ -60,6 +60,52 @@ function RouteFallback() {
   );
 }
 
+class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; message: string }> {
+  state = { hasError: false, message: "" };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, message: error.message || "An unexpected page error occurred." };
+  }
+
+  componentDidCatch(_error: Error, _info: ErrorInfo) {
+    // Intentionally swallow here and render a recoverable UI instead of crashing the session.
+  }
+
+  render() {
+    if (!this.state.hasError) {
+      return this.props.children;
+    }
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(244,247,245,1))] p-4">
+        <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="text-lg font-semibold">Workspace error recovered</div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This page hit an unexpected runtime error. Your session is still valid.
+          </p>
+          <p className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            {this.state.message}
+          </p>
+          <div className="mt-4 flex gap-2">
+            <button
+              className="h-10 rounded-md border px-4 text-sm"
+              onClick={() => window.location.assign("/app/dashboard")}
+            >
+              Go to Dashboard
+            </button>
+            <button
+              className="h-10 rounded-md bg-primary px-4 text-sm text-primary-foreground"
+              onClick={() => window.location.assign("/")}
+            >
+              Return to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
 function AppRoutes() {
   const { currentUser, isLoading } = useAuth();
 
@@ -73,24 +119,26 @@ function AppRoutes() {
 
   return (
     <Suspense fallback={<RouteFallback />}>
-      <AppLayout>
-        <Routes>
-          <Route path="dashboard" element={<CommandCenterPage />} />
-          <Route path="workboard" element={<WorkboardPage />} />
-          <Route path="employees" element={<EmployeesPage />} />
-          <Route path="scheduler" element={<SchedulerPage />} />
-          <Route path="equipment" element={<EquipmentPage />} />
-          <Route path="breakroom" element={<BreakroomPage />} />
-          <Route path="weather" element={<WeatherPage />} />
-          <Route path="applications" element={<ApplicationsPage />} />
-          <Route path="messaging" element={<MessagingPage />} />
-          <Route path="reports" element={<ReportsPage />} />
-          <Route path="tasks" element={<TasksPage />} />
-          <Route path="safety" element={<SafetyPage />} />
-          <Route path="settings" element={<ProgramSetupHubPage />} />
-          <Route path="field" element={<MobileFieldPage />} />
-        </Routes>
-      </AppLayout>
+      <RouteErrorBoundary>
+        <AppLayout>
+          <Routes>
+            <Route path="dashboard" element={<CommandCenterPage />} />
+            <Route path="workboard" element={<WorkboardPage />} />
+            <Route path="employees" element={<EmployeesPage />} />
+            <Route path="scheduler" element={<SchedulerPage />} />
+            <Route path="equipment" element={<EquipmentPage />} />
+            <Route path="breakroom" element={<BreakroomPage />} />
+            <Route path="weather" element={<WeatherPage />} />
+            <Route path="applications" element={<ApplicationsPage />} />
+            <Route path="messaging" element={<MessagingPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="tasks" element={<TasksPage />} />
+            <Route path="safety" element={<SafetyPage />} />
+            <Route path="settings" element={<ProgramSetupHubPage />} />
+            <Route path="field" element={<MobileFieldPage />} />
+          </Routes>
+        </AppLayout>
+      </RouteErrorBoundary>
     </Suspense>
   );
 }

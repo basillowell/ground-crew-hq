@@ -11,7 +11,21 @@ import type { Column } from '@/components/shared';
 import { Phone, Mail, Plus, Shield, Smartphone, Monitor, Users, UserPlus, Trash2 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import type { AppUser, Employee, Property } from '@/data/seedData';
-import { useEmployees } from '@/lib/supabase-queries';
+import {
+  useAppUsers,
+  useAssignments,
+  useChemicalApplicationLogsAll,
+  useDepartmentOptions,
+  useEmployees,
+  useEquipmentUnits,
+  useGroupOptions,
+  useLanguageOptions,
+  useProperties,
+  useRoleOptions,
+  useScheduleEntries,
+  useShiftTemplates,
+  useWorkLocations,
+} from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -305,16 +319,36 @@ const columns: Column<Employee>[] = [
 export default function EmployeesPage() {
   const { currentUser, currentPropertyId } = useAuth();
   const queryClient = useQueryClient();
-  const employeesQuery = useEmployees(currentPropertyId, currentUser?.orgId);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
+
+  const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
+  const appUsersQuery = useAppUsers(currentUser?.orgId);
+  const departmentOptionsQuery = useDepartmentOptions();
+  const groupOptionsQuery = useGroupOptions();
+  const roleOptionsQuery = useRoleOptions();
+  const languageOptionsQuery = useLanguageOptions();
+  const propertiesQuery = useProperties(currentUser?.orgId);
+  const workLocationsQuery = useWorkLocations();
+  const shiftTemplatesQuery = useShiftTemplates();
+  const scheduleEntriesQuery = useScheduleEntries(todayKey, propertyScope, currentUser?.orgId);
+  const assignmentsQuery = useAssignments(todayKey, propertyScope, currentUser?.orgId);
+  const equipmentUnitsQuery = useEquipmentUnits(propertyScope, currentUser?.orgId);
+  const applicationLogsQuery = useChemicalApplicationLogsAll();
+
   const employeeList = employeesQuery.data ?? [];
-  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
-  const [departmentOptions, setDepartmentOptions] = useState<{ id: string; name: string }[]>([]);
-  const [groupOptions, setGroupOptions] = useState<{ id: string; name: string; color: string }[]>([]);
-  const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
-  const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [workLocations, setWorkLocations] = useState<{ id: string; name: string }[]>([]);
-  const [shiftTemplates, setShiftTemplates] = useState<{ id: string; name: string; start: string; end: string; days: string[] }[]>([]);
+  const appUsers = appUsersQuery.data ?? [];
+  const departmentOptions = departmentOptionsQuery.data ?? [];
+  const groupOptions = groupOptionsQuery.data ?? [];
+  const roleOptions = roleOptionsQuery.data ?? [];
+  const languageOptions = languageOptionsQuery.data ?? [];
+  const properties = propertiesQuery.data ?? [];
+  const workLocations = workLocationsQuery.data ?? [];
+  const shiftTemplates = shiftTemplatesQuery.data ?? [];
+  const scheduleEntries = scheduleEntriesQuery.data ?? [];
+  const assignments = assignmentsQuery.data ?? [];
+  const equipmentUnits = equipmentUnitsQuery.data ?? [];
+  const applicationLogs = applicationLogsQuery.data ?? [];
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Employee['status']>('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -342,32 +376,17 @@ export default function EmployeesPage() {
   });
 
   useEffect(() => {
-    setAppUsers(loadAppUsers());
-    const nextDepartments = loadDepartmentOptions();
-    const nextGroups = loadGroupOptions();
-    const nextRoles = loadRoleOptions();
-    const nextLanguages = loadLanguageOptions();
-    const nextProperties = loadProperties();
-    const nextLocations = loadWorkLocations();
-    const nextShiftTemplates = loadShiftTemplates();
-    setDepartmentOptions(nextDepartments);
-    setGroupOptions(nextGroups);
-    setRoleOptions(nextRoles);
-    setLanguageOptions(nextLanguages);
-    setProperties(nextProperties);
-    setWorkLocations(nextLocations);
-    setShiftTemplates(nextShiftTemplates);
     setDraft((current) => ({
       ...current,
-      department: current.department || nextDepartments[0]?.name || '',
-      group: current.group || nextGroups[0]?.name || '',
-      role: current.role || nextRoles[0]?.name || '',
-      language: current.language || nextLanguages[0]?.name || '',
-      propertyId: current.propertyId || nextProperties[0]?.id || '',
-      defaultLocationId: current.defaultLocationId || nextLocations[0]?.id || '',
-      shiftTemplateId: current.shiftTemplateId || nextShiftTemplates[0]?.id || '',
+      department: current.department || departmentOptions[0]?.name || '',
+      group: current.group || groupOptions[0]?.name || '',
+      role: current.role || roleOptions[0]?.name || '',
+      language: current.language || languageOptions[0]?.name || '',
+      propertyId: current.propertyId || properties[0]?.id || '',
+      defaultLocationId: current.defaultLocationId || workLocations[0]?.id || '',
+      shiftTemplateId: current.shiftTemplateId || shiftTemplates[0]?.id || '',
     }));
-  }, []);
+  }, [departmentOptions, groupOptions, roleOptions, languageOptions, properties, workLocations, shiftTemplates]);
 
   const departments = useMemo(
     () => {
@@ -412,12 +431,12 @@ export default function EmployeesPage() {
     }
 
     return {
-      schedules: loadScheduleEntries().filter((entry) => entry.employeeId === selected.id).length,
-      assignments: loadAssignments().filter((assignment) => assignment.employeeId === selected.id).length,
-      equipment: loadEquipmentUnits().filter((unit) => unit.assignedTo === selected.id).length,
-      applications: loadChemicalApplicationLogs().filter((log) => log.applicatorId === selected.id).length,
+      schedules: scheduleEntries.filter((entry) => entry.employeeId === selected.id).length,
+      assignments: assignments.filter((assignment) => assignment.employeeId === selected.id).length,
+      equipment: equipmentUnits.filter((unit) => unit.assignedTo === selected.id).length,
+      applications: applicationLogs.filter((log) => log.applicatorId === selected.id).length,
     };
-  }, [selected, employeeList]);
+  }, [selected, scheduleEntries, assignments, equipmentUnits, applicationLogs]);
 
   async function persist(nextEmployees: Employee[]) {
     for (const emp of nextEmployees) {
@@ -468,7 +487,9 @@ export default function EmployeesPage() {
     if (!draft.firstName.trim() || !draft.lastName.trim()) return;
 
     const nextEmployee: Employee = {
-      id: `e${Date.now()}`,
+      id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `emp-${Date.now()}`,
       firstName: draft.firstName.trim(),
       lastName: draft.lastName.trim(),
       propertyId: draft.propertyId || undefined,
@@ -510,12 +531,7 @@ export default function EmployeesPage() {
     const employee = employeeList.find((entry) => entry.id === employeeId);
     if (!employee) return;
 
-    const schedules = loadScheduleEntries();
-    const assignments = loadAssignments();
-    const equipmentUnits = loadEquipmentUnits();
-    const applicationLogs = loadChemicalApplicationLogs();
-
-    const scheduleCount = schedules.filter((entry) => entry.employeeId === employeeId).length;
+    const scheduleCount = scheduleEntries.filter((entry) => entry.employeeId === employeeId).length;
     const assignmentCount = assignments.filter((entry) => entry.employeeId === employeeId).length;
     const equipmentCount = equipmentUnits.filter((entry) => entry.assignedTo === employeeId).length;
     const applicationCount = applicationLogs.filter((entry) => entry.applicatorId === employeeId).length;
@@ -526,13 +542,21 @@ export default function EmployeesPage() {
     if (!confirmed) return;
 
     await supabase.from('employees').delete().eq('id', employeeId);
-    await queryClient.invalidateQueries({ queryKey: ['employees'] });
-    saveScheduleEntries(schedules.filter((entry) => entry.employeeId !== employeeId));
-    saveAssignments(assignments.filter((entry) => entry.employeeId !== employeeId));
-    saveEquipmentUnits(
-      equipmentUnits.map((unit) => (unit.assignedTo === employeeId ? { ...unit, assignedTo: undefined, status: unit.status === 'in-use' ? 'available' : unit.status } : unit)),
-    );
-    saveChemicalApplicationLogs(applicationLogs.filter((entry) => entry.applicatorId !== employeeId));
+
+    await Promise.allSettled([
+      supabase.from('schedule_entries').delete().eq('employee_id', employeeId),
+      supabase.from('assignments').delete().eq('employee_id', employeeId),
+      supabase.from('chemical_application_logs').delete().eq('applicator_id', employeeId),
+    ]);
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['employees'] }),
+      queryClient.invalidateQueries({ queryKey: ['schedule-entries'] }),
+      queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+      queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] }),
+      queryClient.invalidateQueries({ queryKey: ['equipment-units'] }),
+    ]);
+
     setSelected((current) => (current?.id === employeeId ? null : current));
 
     toast('Employee removed', {
@@ -547,32 +571,25 @@ export default function EmployeesPage() {
 
     const employee = nextEmployees.find((entry) => entry.id === employeeId);
     if (!employee) return;
-    const property = properties.find((entry) => entry.id === employee.propertyId);
-    const mappedUserId = `emp-${employee.id}`;
-    let nextAppUsers = [...appUsers];
 
-    if (employee.portalEnabled && employee.loginEmail) {
-      const mappedUser: AppUser = {
-        id: mappedUserId,
-        fullName: `${employee.firstName} ${employee.lastName}`,
-        email: employee.loginEmail,
-        role: employee.appRole ?? 'crew',
-        title: employee.role,
+    const mappedRole: 'admin' | 'manager' | 'employee' =
+      employee.appRole === 'admin'
+        ? 'admin'
+        : employee.appRole === 'manager' || employee.appRole === 'supervisor'
+          ? 'manager'
+          : 'employee';
+
+    await supabase
+      .from('app_users')
+      .update({
+        role: mappedRole,
         department: employee.department,
-        clubId: employee.propertyId || 'club-1',
-        clubLabel: property?.name || 'Client profile',
-        avatarInitials: `${employee.firstName[0] || ''}${employee.lastName[0] || ''}`.toUpperCase(),
-        status: employee.status,
-      };
-      const existingIndex = nextAppUsers.findIndex((entry) => entry.id === mappedUserId);
-      if (existingIndex >= 0) nextAppUsers[existingIndex] = mappedUser;
-      else nextAppUsers.push(mappedUser);
-    } else {
-      nextAppUsers = nextAppUsers.filter((entry) => entry.id !== mappedUserId);
-    }
+        status: employee.portalEnabled ? 'active' : 'inactive',
+      })
+      .eq('employee_id', employeeId);
 
-    setAppUsers(nextAppUsers);
-    saveAppUsers(nextAppUsers);
+    await queryClient.invalidateQueries({ queryKey: ['app-users'] });
+
     toast('Portal access saved', {
       description: `${employee.firstName} ${employee.lastName} now has updated login and property access settings.`,
     });
