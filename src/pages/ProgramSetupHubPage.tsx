@@ -20,29 +20,27 @@ import {
 import { ProgramSetupHubPanels } from '@/pages/ProgramSetupHubPanels';
 import { toast } from '@/components/ui/sonner';
 import type { AppUser, DepartmentOption, Employee, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WorkLocation } from '@/data/seedData';
-import { useProgramSettings } from '@/lib/supabase-queries';
-import { useDepartmentOptions } from '@/lib/supabase-queries';
-import { useGroupOptions } from '@/lib/supabase-queries';
-import { useRoleOptions } from '@/lib/supabase-queries';
-import { useLanguageOptions } from '@/lib/supabase-queries';
-import { useShiftTemplates } from '@/lib/supabase-queries';
-import { useWorkLocations } from '@/lib/supabase-queries';
-import { useProperties } from '@/lib/supabase-queries';
-import { useAppUsers } from '@/lib/supabase-queries';
+import {
+  useAppUsers,
+  useApplicationAreas,
+  useAssignments,
+  useDepartmentOptions,
+  useEmployees,
+  useGroupOptions,
+  useLanguageOptions,
+  useProgramSettings,
+  useProperties,
+  usePropertyClassOptions,
+  useRoleOptions,
+  useScheduleEntries,
+  useShiftTemplates,
+  useTasks,
+  useWeatherLocations,
+  useWorkLocations,
+} from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import {
-  loadApplicationAreas,
-  loadAssignments,
-  loadEmployees,
-  loadPropertyClassOptions,
-  loadScheduleEntries,
-  loadTasks,
-  loadWeatherLocations,
-  saveEmployees,
-  savePropertyClassOptions,
-} from '@/lib/operationsStorage';
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const themePresets = [
@@ -189,29 +187,54 @@ function FlowCard({
 export default function ProgramSetupHubPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
+  const todayDate = new Date().toISOString().slice(0, 10);
+
   const programSettingQuery = useProgramSettings(currentUser?.orgId);
   const programSettingData = programSettingQuery.data ?? null;
   const departmentOptionsQuery = useDepartmentOptions();
-  const departmentOptions = departmentOptionsQuery.data ?? [];
+  const departmentOptionsData = departmentOptionsQuery.data ?? [];
   const groupOptionsQuery = useGroupOptions();
-  const groupOptions = groupOptionsQuery.data ?? [];
+  const groupOptionsData = groupOptionsQuery.data ?? [];
   const roleOptionsQuery = useRoleOptions();
-  const roleOptions = roleOptionsQuery.data ?? [];
+  const roleOptionsData = roleOptionsQuery.data ?? [];
   const languageOptionsQuery = useLanguageOptions();
-  const languageOptions = languageOptionsQuery.data ?? [];
+  const languageOptionsData = languageOptionsQuery.data ?? [];
   const propertiesQuery = useProperties(currentUser?.orgId);
-  const properties = propertiesQuery.data ?? [];
+  const propertiesData = propertiesQuery.data ?? [];
   const workLocationsQuery = useWorkLocations();
-  const workLocations = workLocationsQuery.data ?? [];
+  const workLocationsData = workLocationsQuery.data ?? [];
   const shiftTemplatesQuery = useShiftTemplates();
-  const shiftTemplates = shiftTemplatesQuery.data ?? [];
+  const shiftTemplatesData = shiftTemplatesQuery.data ?? [];
   const appUsersQuery = useAppUsers(currentUser?.orgId);
-  const appUsers = appUsersQuery.data ?? [];
+  const appUsersData = appUsersQuery.data ?? [];
+  const propertyClassesQuery = usePropertyClassOptions();
+  const propertyClassesData = propertyClassesQuery.data ?? [];
+  const employeesQuery = useEmployees(undefined, currentUser?.orgId);
+  const employeesData = employeesQuery.data ?? [];
+  const tasksQuery = useTasks(undefined, currentUser?.orgId);
+  const tasksData = tasksQuery.data ?? [];
+  const schedulesQuery = useScheduleEntries(todayDate, undefined, currentUser?.orgId);
+  const schedulesData = schedulesQuery.data ?? [];
+  const assignmentsQuery = useAssignments(todayDate, undefined, currentUser?.orgId);
+  const assignmentsData = assignmentsQuery.data ?? [];
+  const weatherLocationsQuery = useWeatherLocations();
+  const weatherLocationsData = weatherLocationsQuery.data ?? [];
+  const applicationAreasQuery = useApplicationAreas();
+  const applicationAreasData = applicationAreasQuery.data ?? [];
+
   const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
   const [activePage, setActivePage] = useState<ActivePage>('brand');
   const [propertySheetId, setPropertySheetId] = useState<string | null>(null);
   const [shiftSheetId, setShiftSheetId] = useState<string | null>(null);
+  const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
+  const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
+  const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
+  const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [propertyClasses, setPropertyClasses] = useState<PropertyClassOption[]>([]);
+  const [workLocations, setWorkLocations] = useState<WorkLocation[]>([]);
+  const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
+  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   useEffect(() => {
@@ -220,33 +243,33 @@ export default function ProgramSetupHubPage() {
     }
   }, [programSettingData, programSetting]);
 
-  useEffect(() => {
-    setPropertyClasses(loadPropertyClassOptions());
-    setEmployees(loadEmployees());
-  }, []);
+  useEffect(() => setDepartmentOptions(departmentOptionsData), [departmentOptionsData]);
+  useEffect(() => setGroupOptions(groupOptionsData), [groupOptionsData]);
+  useEffect(() => setRoleOptions(roleOptionsData), [roleOptionsData]);
+  useEffect(() => setLanguageOptions(languageOptionsData), [languageOptionsData]);
+  useEffect(() => setProperties(propertiesData), [propertiesData]);
+  useEffect(() => setPropertyClasses(propertyClassesData), [propertyClassesData]);
+  useEffect(() => setWorkLocations(workLocationsData), [workLocationsData]);
+  useEffect(() => setShiftTemplates(shiftTemplatesData), [shiftTemplatesData]);
+  useEffect(() => setAppUsers(appUsersData), [appUsersData]);
+  useEffect(() => setEmployees(employeesData), [employeesData]);
 
   const liveCounts = useMemo(() => {
-    const tasks = loadTasks();
-    const schedules = loadScheduleEntries();
-    const assignments = loadAssignments();
-    const weatherAreas = loadWeatherLocations();
-    const applicationAreas = loadApplicationAreas();
-
     return {
       employees: employees.length,
       activeEmployees: employees.filter((employee) => employee.status === 'active').length,
       appUsers: appUsers.length,
       activeAppUsers: appUsers.filter((entry) => entry.status === 'active').length,
-      tasks: tasks.length,
-      activeTasks: tasks.filter((task) => (task.status ?? 'active') === 'active').length,
-      schedules: schedules.length,
-      assignments: assignments.length,
-      weatherAreas: weatherAreas.length,
-      applicationAreas: applicationAreas.length,
+      tasks: tasksData.length,
+      activeTasks: tasksData.filter((task) => (task.status ?? 'active') === 'active').length,
+      schedules: schedulesData.length,
+      assignments: assignmentsData.length,
+      weatherAreas: weatherLocationsData.length,
+      applicationAreas: applicationAreasData.length,
       properties: properties.length,
       propertyClasses: propertyClasses.length,
     };
-  }, [appUsers, employees, properties, propertyClasses]);
+  }, [appUsers, assignmentsData, applicationAreasData, employees, properties, propertyClasses, schedulesData, tasksData, weatherLocationsData]);
 
   const overviewStats = [
     {
@@ -364,33 +387,68 @@ export default function ProgramSetupHubPage() {
   }
 
   async function savePropertiesTab() {
-    for (const prop of properties) {
-      await supabase.from('properties').upsert({
-        id: prop.id,
-        name: prop.name,
-        address: prop.address ?? null,
-        city: prop.city ?? null,
-        state: prop.state ?? null,
-        zip: prop.zip ?? null,
-        phone: prop.phone ?? null,
-        email: prop.email ?? null,
-        website: prop.website ?? null,
-        property_class_id: prop.propertyClassId ?? null,
-        org_id: currentUser?.orgId,
+    try {
+      for (const prop of properties) {
+        await supabase.from('properties').upsert({
+          id: prop.id,
+          org_id: currentUser?.orgId,
+          name: prop.name,
+          short_name: prop.shortName ?? prop.name,
+          logo_initials: prop.logoInitials ?? 'WF',
+          color: prop.color ?? '#2f855a',
+          city: prop.city ?? '',
+          state: prop.state ?? '',
+          latitude: prop.latitude ?? null,
+          longitude: prop.longitude ?? null,
+          acreage: prop.acreage ?? 0,
+          status: prop.status ?? 'active',
+        });
+      }
+      for (const employee of employees) {
+        await supabase.from('employees').upsert({
+          id: employee.id,
+          org_id: currentUser?.orgId,
+          property_id: employee.propertyId,
+          first_name: employee.firstName,
+          last_name: employee.lastName,
+          role: employee.role,
+          department: employee.department,
+          status: employee.status,
+          phone: employee.phone || null,
+          email: employee.email || null,
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: ['properties'] });
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+      toast('Properties saved', {
+        description: `${properties.length} properties and ${employees.length} employee property assignments are now aligned across the app.`,
+      });
+    } catch {
+      toast('Could not save properties', {
+        description: 'Please verify your schema is current and try again.',
       });
     }
-    saveEmployees(employees);
-    await queryClient.invalidateQueries({ queryKey: ['properties'] });
-    toast('Properties saved', {
-      description: `${properties.length} properties and ${employees.length} employee property assignments are now aligned across the app.`,
-    });
   }
 
-  function savePropertyClassesTab() {
-    savePropertyClassOptions(propertyClasses);
-    toast('Property classes saved', {
-      description: `${propertyClasses.length} master property classes now control which modules each club is set up to use.`,
-    });
+  async function savePropertyClassesTab() {
+    try {
+      for (const propertyClass of propertyClasses) {
+        await supabase.from('property_class_options').upsert({
+          id: propertyClass.id,
+          name: propertyClass.name,
+          description: propertyClass.description ?? null,
+          enabledModules: propertyClass.enabledModules ?? [],
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: ['property-class-options'] });
+      toast('Property classes saved', {
+        description: `${propertyClasses.length} master property classes now control which modules each club is set up to use.`,
+      });
+    } catch {
+      toast('Could not save property classes', {
+        description: 'Please verify your schema is current and try again.',
+      });
+    }
   }
 
   async function saveShiftPlans() {
