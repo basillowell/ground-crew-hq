@@ -72,65 +72,71 @@ function getSupabaseProjectLabel() {
 
 async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfile | null; debugMessage: string }> {
   if (!supabase || !user) return { profile: null, debugMessage: '' };
+  try {
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id, employee_id, org_id, role, department, status')
+      .eq('id', user.id)
+      .maybeSingle();
 
-  const { data, error } = await supabase
-    .from('app_users')
-    .select('id, employee_id, org_id, role, department, status')
-    .eq('id', user.id)
-    .maybeSingle();
+    if (error || !data) {
+      return {
+        profile: null,
+        debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but no app user profile was found for ${user.email ?? user.id}.`,
+      };
+    }
 
-  if (error || !data) {
+    const row = data as AppUserRow;
+    const { data: employeeData } = await supabase
+      .from('employees')
+      .select('id, property_id, first_name, last_name, role, email, phone, department')
+      .eq('id', row.employee_id)
+      .maybeSingle();
+    const employee = (employeeData as EmployeeRow | null) ?? null;
+    if (!employee) {
+      return {
+        profile: null,
+        debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked employee record ${row.employee_id} is missing.`,
+      };
+    }
+
+    const { data: organizationData } = await supabase
+      .from('organizations')
+      .select('id, subscription_status')
+      .eq('id', row.org_id)
+      .maybeSingle();
+    const organization = (organizationData as OrganizationRow | null) ?? null;
+    if (!organization) {
+      return {
+        profile: null,
+        debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked organization ${row.org_id} is missing.`,
+      };
+    }
+
+    return {
+      profile: {
+        authUser: user,
+        appUserId: row.id,
+        employeeId: row.employee_id,
+        orgId: row.org_id,
+        role: row.role,
+        status: row.status,
+        subscriptionStatus: organization.subscription_status ?? 'trialing',
+        department: row.department ?? employee.department ?? 'Maintenance',
+        propertyId: employee.property_id ?? '',
+        fullName: `${employee.first_name} ${employee.last_name}`.trim() || (user.email ?? 'WorkForce User'),
+        title: employee.role ?? row.role,
+        email: employee.email ?? user.email ?? '',
+        phone: employee.phone ?? '',
+      },
+      debugMessage: '',
+    };
+  } catch {
     return {
       profile: null,
-      debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but no app user profile was found for ${user.email ?? user.id}.`,
+      debugMessage: `Could not load profile data from ${getSupabaseProjectLabel()}. Please refresh and try again.`,
     };
   }
-
-  const row = data as AppUserRow;
-  const { data: employeeData } = await supabase
-    .from('employees')
-    .select('id, property_id, first_name, last_name, role, email, phone, department')
-    .eq('id', row.employee_id)
-    .maybeSingle();
-  const employee = (employeeData as EmployeeRow | null) ?? null;
-  if (!employee) {
-    return {
-      profile: null,
-      debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked employee record ${row.employee_id} is missing.`,
-    };
-  }
-
-  const { data: organizationData } = await supabase
-    .from('organizations')
-    .select('id, subscription_status')
-    .eq('id', row.org_id)
-    .maybeSingle();
-  const organization = (organizationData as OrganizationRow | null) ?? null;
-  if (!organization) {
-    return {
-      profile: null,
-      debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked organization ${row.org_id} is missing.`,
-    };
-  }
-
-  return {
-    profile: {
-      authUser: user,
-      appUserId: row.id,
-      employeeId: row.employee_id,
-      orgId: row.org_id,
-      role: row.role,
-      status: row.status,
-      subscriptionStatus: organization.subscription_status ?? 'trialing',
-      department: row.department ?? employee.department ?? 'Maintenance',
-      propertyId: employee.property_id ?? '',
-      fullName: `${employee.first_name} ${employee.last_name}`.trim() || (user.email ?? 'WorkForce User'),
-      title: employee.role ?? row.role,
-      email: employee.email ?? user.email ?? '',
-      phone: employee.phone ?? '',
-    },
-    debugMessage: '',
-  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -149,17 +155,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function hydrateAuth() {
       setIsLoading(true);
-      const { data } = await supabase.auth.getUser();
-      const { profile, debugMessage } = await loadAuthProfile(data.user);
-      if (!mounted) return;
-      setCurrentUser(profile);
-      setAuthDebugMessage(debugMessage);
-      setCurrentPropertyIdState((current) => {
-        if (!profile) return '';
-        if (current) return current;
-        return profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId;
-      });
-      setIsLoading(false);
+      try {
+        const { data } = await supabase.auth.getUser();
+        const { profile, debugMessage } = await loadAuthProfile(data.user);
+        if (!mounted) return;
+        setCurrentUser(profile);
+        setAuthDebugMessage(debugMessage);
+        setCurrentPropertyIdState((current) => {
+          if (!profile) return '';
+          if (current) return current;
+          return profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId;
+        });
+      } catch {
+        if (!mounted) return;
+        setCurrentUser(null);
+        setCurrentPropertyIdState('');
+        setAuthDebugMessage(`Could not connect to ${getSupabaseProjectLabel()}. Please try again.`);
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
     }
 
     void hydrateAuth();
@@ -168,16 +184,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted) {
         setIsLoading(true);
       }
-      const { profile, debugMessage } = await loadAuthProfile(session?.user ?? null);
-      if (!mounted) return;
-      setCurrentUser(profile);
-      setAuthDebugMessage(debugMessage);
-      setCurrentPropertyIdState((current) => {
-        if (!profile) return '';
-        if (current) return current;
-        return profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId;
-      });
-      setIsLoading(false);
+      try {
+        const { profile, debugMessage } = await loadAuthProfile(session?.user ?? null);
+        if (!mounted) return;
+        setCurrentUser(profile);
+        setAuthDebugMessage(debugMessage);
+        setCurrentPropertyIdState((current) => {
+          if (!profile) return '';
+          if (current) return current;
+          return profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId;
+        });
+      } catch {
+        if (!mounted) return;
+        setCurrentUser(null);
+        setCurrentPropertyIdState('');
+        setAuthDebugMessage(`Could not connect to ${getSupabaseProjectLabel()}. Please try again.`);
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
     });
 
     return () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { equipmentTypes, workOrders, type Employee, type EquipmentUnit } from '@/data/seedData';
 import { WorkOrderKanban } from '@/components/equipment/WorkOrderKanban';
 import { Card } from '@/components/ui/card';
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { ChevronRight, Plus, Tractor } from 'lucide-react';
-import { useEquipmentUnits } from '@/lib/supabase-queries';
+import { useEmployees, useEquipmentUnits, useWorkLocations } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -22,10 +22,13 @@ const prioMap = { low: 'neutral', medium: 'warning', high: 'danger' } as const;
 export default function EquipmentPage() {
   const { currentUser, currentPropertyId } = useAuth();
   const queryClient = useQueryClient();
-  const equipmentQuery = useEquipmentUnits(currentPropertyId, currentUser?.orgId);
+  const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
+  const equipmentQuery = useEquipmentUnits(propertyScope, currentUser?.orgId);
+  const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
+  const workLocationsQuery = useWorkLocations();
   const unitList = equipmentQuery.data ?? [];
-  const [employeeList, setEmployeeList] = useState<Employee[]>([]);
-  const [workLocations, setWorkLocations] = useState<{ id: string; name: string }[]>([]);
+  const employeeList: Employee[] = employeesQuery.data ?? [];
+  const workLocations = workLocationsQuery.data ?? [];
   const [selectedType, setSelectedType] = useState(equipmentTypes[0]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
@@ -40,11 +43,6 @@ export default function EquipmentPage() {
     nextService: '2024-04-01',
     propertyId: '',
   });
-
-  useEffect(() => {
-    setEmployeeList(loadEmployees());
-    setWorkLocations(loadWorkLocations());
-  }, []);
 
   const typeUnits = useMemo(() => unitList.filter((unit) => unit.typeId === selectedType.id), [selectedType.id, unitList]);
   const typeOrders = workOrders.filter((wo) => typeUnits.some((u) => u.id === wo.unitId));
@@ -74,7 +72,7 @@ export default function EquipmentPage() {
       unitNumber: '',
       status: 'available',
       assignedTo: '',
-      location: loadWorkLocations()[0]?.name ?? 'Shop',
+      location: workLocations[0]?.name ?? 'Shop',
       hours: '0',
       lastService: '2024-03-01',
       nextService: '2024-04-01',
