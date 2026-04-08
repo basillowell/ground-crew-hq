@@ -28,7 +28,16 @@ import {
   type WeatherDailyLog,
   type WeatherLocation,
 } from '@/data/seedData';
-import { useChemicalApplicationLogsAll, useChemicalProducts, useChemicalApplicationTankMixItems } from '@/lib/supabase-queries';
+import {
+  useApplicationAreas,
+  useChemicalApplicationLogsAll,
+  useChemicalApplicationTankMixItems,
+  useChemicalProducts,
+  useEmployees,
+  useEquipmentUnits,
+  useWeatherDailyLogs,
+  useWeatherLocations,
+} from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -142,16 +151,28 @@ function buildRestrictedEntry(
 }
 
 export default function ApplicationsPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, currentPropertyId } = useAuth();
   const queryClient = useQueryClient();
+  const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
+  const orgScope = currentUser?.orgId;
+
+  const applicationAreasQuery = useApplicationAreas(propertyScope);
+  const weatherLocationsQuery = useWeatherLocations(propertyScope);
+  const employeesQuery = useEmployees(propertyScope, orgScope);
+  const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgScope);
+  const weatherLogsQuery = useWeatherDailyLogs();
   const logsQuery = useChemicalApplicationLogsAll();
   const productsQuery = useChemicalProducts();
   const mixItemsQuery = useChemicalApplicationTankMixItems();
+
+  const applicationAreas = applicationAreasQuery.data ?? [];
+  const weatherLocations = weatherLocationsQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
+  const equipmentUnits = equipmentUnitsQuery.data ?? [];
+  const weatherLogs = weatherLogsQuery.data ?? [];
   const logs = logsQuery.data ?? [];
   const chemicalProducts = productsQuery.data ?? [];
   const mixItems = mixItemsQuery.data ?? [];
-  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
-  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLog[]>(loadWeatherDailyLogs());
   const [filterDate, setFilterDate] = useState('');
   const [filterArea, setFilterArea] = useState('all');
   const [filterProduct, setFilterProduct] = useState('all');
@@ -161,32 +182,27 @@ export default function ApplicationsPage() {
   const [draftMixItems, setDraftMixItems] = useState<DraftMixItem[]>([{ ...emptyMixItem }]);
 
   useEffect(() => {
-    const loadedAreas = loadApplicationAreas();
-    const loadedLocations = loadWeatherLocations();
-    const loadedEmployees = loadEmployees();
-    const loadedEquipment = loadEquipmentUnits();
-    setApplicationAreas(loadedAreas);
-    setWeatherLocations(loadedLocations);
-    setEmployees(loadedEmployees);
-    setEquipmentUnits(loadedEquipment);
-    setWeatherLogs(loadWeatherDailyLogs());
-    const loadedWeatherLogs = loadWeatherDailyLogs();
-    setWeatherLogs(loadedWeatherLogs);
+    if (!applicationAreas.length && !employees.length && !equipmentUnits.length && !weatherLogs.length && !chemicalProducts.length) {
+      return;
+    }
     setDraft((current) => ({
       ...current,
-      areaId: loadedAreas[0]?.id ?? current.areaId,
-      applicatorId: loadedEmployees[0]?.id ?? current.applicatorId,
-      equipmentUsedId: loadedEquipment[0]?.id ?? current.equipmentUsedId,
-      weatherLogId: loadedWeatherLogs[0]?.id ?? current.weatherLogId,
+      areaId: current.areaId || applicationAreas[0]?.id || '',
+      applicatorId: current.applicatorId || employees[0]?.id || '',
+      equipmentUsedId: current.equipmentUsedId || equipmentUnits[0]?.id || '',
+      weatherLogId: current.weatherLogId || weatherLogs[0]?.id || '',
     }));
     setDraftMixItems((current) =>
       current.map((item) => ({
         ...item,
         productId: item.productId || chemicalProducts[0]?.id || '',
-        rateUnit: chemicalProducts.find((product) => product.id === item.productId)?.rateUnit ?? chemicalProducts[0]?.rateUnit ?? item.rateUnit,
-      }))
+        rateUnit:
+          chemicalProducts.find((product) => product.id === item.productId)?.rateUnit
+          ?? chemicalProducts[0]?.rateUnit
+          ?? item.rateUnit,
+      })),
     );
-  }, [chemicalProducts]);
+  }, [applicationAreas, employees, equipmentUnits, weatherLogs, chemicalProducts]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {

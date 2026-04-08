@@ -29,9 +29,7 @@ export default function LaunchPortalPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    console.log('Sign in button clicked, submitting form');
     if (!supabase) {
-      console.error('Supabase is not configured for this environment.');
       setErrorMessage('Supabase is not configured for this environment.');
       return;
     }
@@ -39,19 +37,17 @@ export default function LaunchPortalPage() {
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      console.log('Calling supabase.auth.signInWithPassword with email:', email);
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      console.log('Supabase response:', { error });
+      const result = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<{ error: { message: string } }>((resolve) =>
+          setTimeout(() => resolve({ error: { message: 'Sign-in timed out. Please try again.' } }), 15000),
+        ),
+      ]);
 
-      if (error) {
-        console.error('Login error:', error);
-        setErrorMessage(error.message);
+      if (result.error) {
+        setErrorMessage(result.error.message);
       }
-    } catch (err) {
-      console.error('Unexpected error during login:', err);
+    } catch {
       setErrorMessage('An unexpected error occurred. Please try again.');
     } finally {
       setIsSubmitting(false);
