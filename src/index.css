@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 220 20% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 14%;
+
+    --primary: 152 55% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 220 20% 14%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 14% 50%;
+
+    --accent: 152 30% 94%;
+    --accent-foreground: 152 55% 28%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 20% 90%;
+    --input: 214 20% 90%;
+    --ring: 152 55% 38%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 20% 14%;
+    --sidebar-foreground: 210 20% 80%;
+    --sidebar-primary: 152 55% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 20%;
+    --sidebar-accent-foreground: 210 20% 90%;
+    --sidebar-border: 220 15% 22%;
+    --sidebar-ring: 152 55% 48%;
+    --sidebar-muted: 220 15% 30%;
+
+    --success: 152 55% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 80% 52%;
+    --info-foreground: 0 0% 100%;
+
+    --chart-green: 152 55% 38%;
+    --chart-blue: 210 80% 52%;
+    --chart-orange: 25 90% 55%;
+    --chart-red: 0 72% 55%;
+    --chart-purple: 270 60% 55%;
+
+    --brand-body-font: "Inter", "Segoe UI", sans-serif;
+    --brand-heading-font: "Inter", "Segoe UI", sans-serif;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--brand-body-font);
+    background-image:
+      radial-gradient(circle at top, rgba(15, 118, 110, 0.06), transparent 28%),
+      linear-gradient(180deg, rgba(255,255,255,0.98), rgba(244,247,245,1));
+  }
+
+  h1, h2, h3, h4, .brand-heading {
+    font-family: var(--brand-heading-font);
+  }
+}
