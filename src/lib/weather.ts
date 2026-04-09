@@ -31,6 +31,7 @@ async function fetchOpenMeteoPayload(lat: number, lng: number) {
     longitude: String(lng),
     current_weather: 'true',
     hourly: 'temperature_2m,precipitation_probability,windspeed_10m,weathercode',
+    temperature_unit: 'fahrenheit',
     timezone: 'auto',
     forecast_days: '2',
   });

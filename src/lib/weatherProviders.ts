@@ -210,6 +210,7 @@ export async function fetchPrimaryStationSnapshot(
       current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code',
       daily: 'et0_fao_evapotranspiration',
       hourly: 'precipitation',
+      temperature_unit: 'fahrenheit',
       timezone: station.timeZone || 'auto',
       forecast_days: '1',
       past_hours: '24',
@@ -313,6 +314,7 @@ export async function fetchStationForecastDetail(station: WeatherStation): Promi
     latitude: String(station.latitude),
     longitude: String(station.longitude),
     hourly: 'temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,weather_code',
+    temperature_unit: 'fahrenheit',
     timezone: station.timeZone || 'auto',
     forecast_days: '2',
   });

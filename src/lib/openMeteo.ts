@@ -66,6 +66,7 @@ export async function fetchOpenMeteoWeather({
     longitude: String(longitude),
     current_weather: 'true',
     hourly: 'temperature_2m,precipitation_probability,windspeed_10m,weathercode',
+    temperature_unit: 'fahrenheit',
     timezone,
     forecast_days: '2',
   });

@@ -61,6 +61,11 @@ function hasValidCoordinates(latitude?: number, longitude?: number) {
   return typeof latitude === 'number' && Number.isFinite(latitude) && typeof longitude === 'number' && Number.isFinite(longitude);
 }
 
+function isLegacyPlaceholderCoordinates(latitude?: number, longitude?: number) {
+  if (!hasValidCoordinates(latitude, longitude)) return false;
+  return Math.abs((latitude ?? 0) - 35.78) < 0.0001 && Math.abs((longitude ?? 0) - (-78.64)) < 0.0001;
+}
+
 function mapWeatherStationRow(row: any): WeatherStation {
   return {
     id: String(row.id),
@@ -228,6 +233,7 @@ export default function WeatherPage() {
   const [geoLoadingStationId, setGeoLoadingStationId] = useState<string | null>(null);
   const [stationSearchQuery, setStationSearchQuery] = useState('');
   const [discoveryAnchor, setDiscoveryAnchor] = useState<GeocodeResult | null>(null);
+  const [useSearchAnchorAsLiveSource, setUseSearchAnchorAsLiveSource] = useState(false);
   const [stationSuggestions, setStationSuggestions] = useState<WeatherStationSuggestion[]>([]);
   const [stationSearchStatus, setStationSearchStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [propertyLiveLogs, setPropertyLiveLogs] = useState<Record<string, WeatherDailyLog | null>>({});
@@ -379,11 +385,15 @@ export default function WeatherPage() {
   );
   const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? null;
   const liveWeatherCoordinates = useMemo(() => {
-    if (hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude)) {
+    if (
+      hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude) &&
+      !isLegacyPlaceholderCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude)
+    ) {
       return {
         latitude: selectedLocationPrimary!.latitude!,
         longitude: selectedLocationPrimary!.longitude!,
         label: `${selectedLocationPrimary.name} · ${selectedLocationPrimary.provider}`,
+        sourceType: 'primary-station' as const,
       };
     }
 
@@ -392,6 +402,16 @@ export default function WeatherPage() {
         latitude: selectedLocation!.latitude!,
         longitude: selectedLocation!.longitude!,
         label: `${selectedLocation.name} area coordinates`,
+        sourceType: 'area-coordinates' as const,
+      };
+    }
+
+    if (useSearchAnchorAsLiveSource && hasValidCoordinates(discoveryAnchor?.latitude, discoveryAnchor?.longitude)) {
+      return {
+        latitude: discoveryAnchor!.latitude!,
+        longitude: discoveryAnchor!.longitude!,
+        label: `${discoveryAnchor!.label}`,
+        sourceType: 'search-anchor' as const,
       };
     }
 
@@ -400,11 +420,15 @@ export default function WeatherPage() {
         latitude: browserCoordinates.latitude,
         longitude: browserCoordinates.longitude,
         label: 'Current device location',
+        sourceType: 'device-location' as const,
       };
     }
 
     return null;
-  }, [browserCoordinates, selectedLocation, selectedLocationPrimary]);
+  }, [browserCoordinates, discoveryAnchor, selectedLocation, selectedLocationPrimary, useSearchAnchorAsLiveSource]);
+  const isPrimaryStationActiveSource =
+    hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude) &&
+    !isLegacyPlaceholderCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude);
 
   useEffect(() => {
     let cancelled = false;
@@ -580,7 +604,13 @@ export default function WeatherPage() {
     try {
       const result = await fetchWeatherStationSuggestions({ query });
       setDiscoveryAnchor(result.anchor);
+      setUseSearchAnchorAsLiveSource(false);
       setStationSuggestions(result.suggestions);
+      if (result.anchor) {
+        toast('Search anchor ready', {
+          description: `Found ${result.anchor.label}. Apply these coordinates to the area or station to make it the live source.`,
+        });
+      }
       setStationSearchStatus('ready');
       if (!result.anchor) {
         toast('No station suggestions found', {
@@ -616,6 +646,7 @@ export default function WeatherPage() {
         longitude: position.coords.longitude,
       });
       setDiscoveryAnchor(result.anchor);
+      setUseSearchAnchorAsLiveSource(false);
       setStationSuggestions(result.suggestions);
       setStationSearchStatus('ready');
     } catch {
@@ -624,6 +655,63 @@ export default function WeatherPage() {
         description: 'Allow location access or search by address to find nearby live stations.',
       });
     }
+  }
+
+  function activateSearchAnchorAsLiveSource() {
+    if (!discoveryAnchor || !hasValidCoordinates(discoveryAnchor.latitude, discoveryAnchor.longitude)) {
+      toast('Search anchor unavailable', {
+        description: 'Search for an address first to activate search-anchor live weather.',
+      });
+      return;
+    }
+    setUseSearchAnchorAsLiveSource(true);
+    toast('Search anchor live source enabled', {
+      description: `${discoveryAnchor.label} now powers live weather until you apply area or station coordinates.`,
+    });
+  }
+
+  function applyDiscoveryAnchorToSelectedArea() {
+    if (!selectedLocation || !discoveryAnchor || !hasValidCoordinates(discoveryAnchor.latitude, discoveryAnchor.longitude)) {
+      toast('Search anchor unavailable', {
+        description: 'Search for an address first, then apply its coordinates to this weather area.',
+      });
+      return;
+    }
+    updateSelectedLocation({
+      address: discoveryAnchor.label,
+      latitude: discoveryAnchor.latitude,
+      longitude: discoveryAnchor.longitude,
+    });
+    setUseSearchAnchorAsLiveSource(false);
+    toast('Area coordinates updated', {
+      description: `Applied ${discoveryAnchor.label} to ${selectedLocation.name}. Save area to persist.`,
+    });
+  }
+
+  function applyDiscoveryAnchorToPrimaryStation() {
+    if (!discoveryAnchor || !hasValidCoordinates(discoveryAnchor.latitude, discoveryAnchor.longitude)) {
+      toast('Search anchor unavailable', {
+        description: 'Search for an address first, then apply its coordinates to a station.',
+      });
+      return;
+    }
+    const targetStation = selectedLocationPrimary ?? locationStations[0];
+    if (!targetStation) {
+      toast('No station available', {
+        description: 'Add a station first, then apply search-anchor coordinates to that station.',
+      });
+      return;
+    }
+    updateStation(targetStation.id, {
+      latitude: discoveryAnchor.latitude,
+      longitude: discoveryAnchor.longitude,
+      providerType: targetStation.providerType ?? 'open-meteo',
+      status: targetStation.status ?? 'online',
+    });
+    setUseSearchAnchorAsLiveSource(false);
+    toast('Station coordinates updated', {
+      description: `Applied ${discoveryAnchor.label} to ${targetStation.name}. Save stations to persist.`,
+    });
   }
 
   async function applyDeviceLocationFallback() {
@@ -842,7 +930,16 @@ export default function WeatherPage() {
   function addStationForLocation(locationId: string) {
     const targetLocation = weatherLocations.find((location) => location.id === locationId);
     if (!targetLocation) return;
+    const targetProperty = properties.find((property) => property.id === targetLocation.propertyId);
     const targetLocationStations = weatherStations.filter((station) => station.locationId === locationId);
+    const seedLatitude =
+      targetLocation.latitude ??
+      targetProperty?.latitude ??
+      browserCoordinates?.latitude;
+    const seedLongitude =
+      targetLocation.longitude ??
+      targetProperty?.longitude ??
+      browserCoordinates?.longitude;
     const nextStation: WeatherStation = {
       id: makeId('ws'),
       locationId,
@@ -850,8 +947,8 @@ export default function WeatherPage() {
       provider: 'Open-Meteo',
       providerType: 'open-meteo',
       stationCode: `${locationId.toUpperCase()}-${targetLocationStations.length + 1}`,
-      latitude: 35.78,
-      longitude: -78.64,
+      latitude: seedLatitude,
+      longitude: seedLongitude,
       timeZone: 'America/New_York',
       isPrimary: targetLocationStations.length === 0,
       status: 'online',
@@ -1046,13 +1143,30 @@ export default function WeatherPage() {
 
   const liveConditionMeta = getWeatherConditionMeta(liveForecastQuery.data?.current.weatherCode);
   const LiveConditionIcon = liveConditionMeta.icon;
-  const selectedLiveSourceLabel = primaryStation
-    ? `${primaryStation.name} · ${primaryStation.provider}`
-    : liveWeatherCoordinates
-      ? `Fallback · ${liveWeatherCoordinates.label}`
-      : 'No live source configured';
+  const activeLiveSourceTypeLabel =
+    liveWeatherCoordinates?.sourceType === 'primary-station'
+      ? 'Primary Station'
+      : liveWeatherCoordinates?.sourceType === 'area-coordinates'
+        ? 'Area Coordinates'
+        : liveWeatherCoordinates?.sourceType === 'search-anchor'
+          ? 'Search Anchor Coordinates'
+          : liveWeatherCoordinates?.sourceType === 'device-location'
+            ? 'Current Device Location'
+            : 'No live source';
+  const selectedLiveSourceLabel = liveWeatherCoordinates ? liveWeatherCoordinates.label : 'No live source configured';
   const selectedLiveSourceVariant: 'default' | 'secondary' | 'outline' =
-    primaryStation ? 'secondary' : liveWeatherCoordinates ? 'outline' : 'outline';
+    isPrimaryStationActiveSource ? 'secondary' : liveWeatherCoordinates ? 'outline' : 'outline';
+  const activeLiveSourceCoordinatesLabel = liveWeatherCoordinates
+    ? `${liveWeatherCoordinates.latitude.toFixed(4)}, ${liveWeatherCoordinates.longitude.toFixed(4)}`
+    : 'No active coordinates';
+  const liveCurrentTemperatureF =
+    liveForecastQuery.data?.current?.temperature !== undefined
+      ? Math.round(liveForecastQuery.data.current.temperature)
+      : null;
+  const selectedPropertyCurrentTemperatureF =
+    selectedPropertyWeatherQuery.data?.current?.temperature !== undefined
+      ? Math.round(selectedPropertyWeatherQuery.data.current.temperature)
+      : null;
   const liveStatusLabel =
     liveStatus === 'ready'
       ? 'Live feed active'
@@ -1071,8 +1185,8 @@ export default function WeatherPage() {
   const selectedPropertyRainContext = selectedProperty
     ? propertyWeatherCards.find((entry) => entry.property.id === selectedProperty.id)?.recentRain24 ?? null
     : null;
-  const forecastConfidenceLabel = primaryStation
-    ? `Driven by primary station ${primaryStation.name}`
+  const forecastConfidenceLabel = isPrimaryStationActiveSource && selectedLocationPrimary
+    ? `Driven by primary station ${selectedLocationPrimary.name}`
     : liveWeatherCoordinates
       ? `Fallback from ${liveWeatherCoordinates.label}`
       : 'No source configured';
@@ -1301,7 +1415,9 @@ export default function WeatherPage() {
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Badge variant={liveStatusBadgeVariant}>{liveStatusLabel}</Badge>
-                  <Badge variant={selectedLiveSourceVariant}>Source: {selectedLiveSourceLabel}</Badge>
+                  <Badge variant={selectedLiveSourceVariant}>Source Type: {activeLiveSourceTypeLabel}</Badge>
+                  <Badge variant="outline">Source Detail: {selectedLiveSourceLabel}</Badge>
+                  <Badge variant="outline">Active Live Source: {activeLiveSourceCoordinatesLabel}</Badge>
                   <Badge variant="outline">Area: {selectedLocation.name}</Badge>
                   <Badge variant="outline">Logs: {locationLogs.length}</Badge>
                 </div>
@@ -1467,9 +1583,7 @@ export default function WeatherPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current Conditions</div>
-                        <div className="mt-3 text-4xl font-semibold">
-                          {Math.round(liveForecastQuery.data.current.temperature)}F
-                        </div>
+                        <div className="mt-3 text-4xl font-semibold">{liveCurrentTemperatureF !== null ? `${liveCurrentTemperatureF}F` : '--'}</div>
                         <div className="mt-1 text-sm text-muted-foreground">{liveConditionMeta.label}</div>
                         <div className="mt-3 text-xs text-muted-foreground">
                           Wind {Math.round(liveForecastQuery.data.current.windSpeed)} mph
@@ -1478,6 +1592,9 @@ export default function WeatherPage() {
                       <div className="rounded-2xl bg-primary/10 p-3 text-primary">
                         <LiveConditionIcon className="h-8 w-8" />
                       </div>
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Active Live Source: {activeLiveSourceTypeLabel} · {selectedLiveSourceLabel} ({activeLiveSourceCoordinatesLabel})
                     </div>
                     <div className="mt-4 grid gap-2 sm:grid-cols-3">
                       <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
@@ -1575,7 +1692,9 @@ export default function WeatherPage() {
                       {property.shortName}
                     </Badge>
                   </div>
-                  <div className="mt-3 text-3xl font-semibold">{log ? `${Math.round(log.temperature)}F` : '--'}</div>
+                  <div className="mt-3 text-3xl font-semibold">
+                    {log ? `${Math.round(log.temperature)}F` : '--'}
+                  </div>
                   <div className="mt-1 text-xs text-muted-foreground">{station ? `${station.name} - ${station.provider}` : 'No station selected'}</div>
                   <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
                     <div className="rounded-xl bg-muted/30 px-2 py-2">
@@ -1700,7 +1819,9 @@ export default function WeatherPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current Conditions</div>
-                            <div className="mt-2 text-3xl font-semibold">{Math.round(selectedPropertyWeatherQuery.data.current.temperature)}F</div>
+                            <div className="mt-2 text-3xl font-semibold">
+                              {selectedPropertyCurrentTemperatureF !== null ? `${selectedPropertyCurrentTemperatureF}F` : '--'}
+                            </div>
                             <div className="mt-1 text-xs text-muted-foreground">{selectedPropertyWeatherMeta.label}</div>
                           </div>
                           <div className="rounded-2xl bg-primary/10 p-3 text-primary">
@@ -2107,12 +2228,11 @@ export default function WeatherPage() {
                   </div>
                   <div className="rounded-xl border bg-muted/20 p-4">
                     <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Live Source</p>
-                    <p className="mt-2 text-sm font-medium">
-                      {primaryStation ? `${primaryStation.name} · ${primaryStation.provider}` : 'No primary station selected'}
-                    </p>
-                    {!primaryStation && liveWeatherCoordinates ? (
-                      <p className="mt-1 text-xs text-muted-foreground">Fallback: {liveWeatherCoordinates.label}</p>
-                    ) : null}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge variant={selectedLiveSourceVariant}>{activeLiveSourceTypeLabel}</Badge>
+                      <Badge variant="outline">{selectedLiveSourceLabel}</Badge>
+                      <Badge variant="outline">{activeLiveSourceCoordinatesLabel}</Badge>
+                    </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {liveStatus === 'loading' && 'Fetching live station conditions now.'}
                       {liveStatus === 'ready' && 'Live station data is active for this weather area.'}
@@ -2153,7 +2273,27 @@ export default function WeatherPage() {
                     </div>
                     {discoveryAnchor ? (
                       <div className="mt-3 rounded-xl border bg-background/70 p-3 text-xs text-muted-foreground">
-                        Anchor: {discoveryAnchor.label}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">Search Anchor Coordinates</Badge>
+                          <span>{discoveryAnchor.label}</span>
+                          <span>
+                            ({discoveryAnchor.latitude.toFixed(4)}, {discoveryAnchor.longitude.toFixed(4)})
+                          </span>
+                        </div>
+                        <p className="mt-2">
+                          Search anchor is only a helper until you explicitly apply it to area/station coordinates or use it as the live source.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={activateSearchAnchorAsLiveSource}>
+                            Use As Live Source
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={applyDiscoveryAnchorToSelectedArea}>
+                            Apply To Area Coordinates
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={applyDiscoveryAnchorToPrimaryStation} disabled={locationStations.length === 0}>
+                            Apply To Primary Station
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
                     {stationSearchStatus === 'loading' ? <p className="mt-3 text-sm text-muted-foreground">Searching live station candidates…</p> : null}
