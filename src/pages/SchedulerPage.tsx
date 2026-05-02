@@ -98,6 +98,10 @@ export default function SchedulerPage() {
     })),
   });
   const employeeList = employeesQuery.data ?? [];
+  const uniqueEmployees = useMemo(
+    () => Array.from(new Map(employeeList.map((employee) => [employee.id, employee])).values()),
+    [employeeList],
+  );
   const applicationAreas = applicationAreasQuery.data ?? [];
   const weatherLogs = weatherLogsQuery.data ?? [];
   const weatherLocations = weatherLocationsQuery.data ?? [];
@@ -128,13 +132,13 @@ export default function SchedulerPage() {
 
   const activeEmployees = useMemo(
     () =>
-      employeeList.filter(
+      uniqueEmployees.filter(
         (employee) =>
           employee.status === 'active' &&
           (!propertyScope || propertyScope === 'all' || employee.propertyId === propertyScope) &&
           `${employee.firstName} ${employee.lastName} ${employee.group}`.toLowerCase().includes(search.toLowerCase()),
       ),
-    [employeeList, propertyScope, search],
+    [propertyScope, search, uniqueEmployees],
   );
 
   const summary = useMemo(
@@ -186,20 +190,27 @@ export default function SchedulerPage() {
     }
 
     const existing = scheduleList.find((entry) => entry.employeeId === draft.employeeId && entry.date === draft.date);
-    const employee = employeeList.find((entry) => entry.id === draft.employeeId);
-    const propertyId = employee?.propertyId || (propertyScope !== 'all' ? propertyScope : '') || currentUser?.propertyId || '';
+    const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : '';
+    const orgId = currentUser?.orgId ?? '';
+    const normalizedDate =
+      typeof draft.date === 'string' ? draft.date : new Date(draft.date).toISOString().slice(0, 10);
     if (!propertyId) {
       toast.error('Select or assign a property before saving a shift.');
+      return;
+    }
+    if (!orgId) {
+      toast.error('Unable to resolve organization for this shift.');
       return;
     }
     setIsSaving(true);
 
     const payload = {
+      org_id: orgId,
       employee_id: draft.employeeId,
       property_id: propertyId,
-      date: draft.date,
-      shift_start: draft.shiftStart,
-      shift_end: draft.shiftEnd,
+      date: normalizedDate,
+      shift_start: draft.shiftStart.slice(0, 5),
+      shift_end: draft.shiftEnd.slice(0, 5),
       status: draft.status,
     };
 
@@ -229,6 +240,7 @@ export default function SchedulerPage() {
     const sourceDate = weekDays[0]?.date;
     if (!sourceDate) return;
     const inserts: Array<{
+      org_id: string;
       employee_id: string;
       property_id: string;
       date: string;
@@ -245,11 +257,12 @@ export default function SchedulerPage() {
         const exists = scheduleList.find((entry) => entry.employeeId === employee.id && entry.date === date);
         if (!exists) {
           inserts.push({
+            org_id: currentUser?.orgId ?? '',
             employee_id: employee.id,
-            property_id: employee.propertyId || currentUser?.propertyId || '',
+            property_id: currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : employee.propertyId || currentUser?.propertyId || '',
             date,
-            shift_start: base.shiftStart,
-            shift_end: base.shiftEnd,
+            shift_start: base.shiftStart.slice(0, 5),
+            shift_end: base.shiftEnd.slice(0, 5),
             status: base.status,
           });
         }

@@ -58,6 +58,10 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
 }: WorkflowTopBarProps) {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const firstName = (currentUser as { firstName?: string } | null)?.firstName ?? currentUser?.fullName?.split(' ')[0] ?? '';
+  const lastName = (currentUser as { lastName?: string } | null)?.lastName ?? currentUser?.fullName?.split(' ').slice(1).join(' ') ?? '';
+  const displayName = [firstName, lastName].filter(Boolean).join(' ') || currentUser?.fullName || 'WorkForce User';
+  const displayRole = (currentUser?.role || 'admin').toUpperCase();
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
   const selectedProperty = currentPropertyId === 'all'
@@ -144,7 +148,8 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
 
         <div className="hidden text-right xl:block">
           <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Active Profile</div>
-          <div className="text-sm font-medium">{currentUser?.fullName || 'WorkForce User'}</div>
+          <div className="text-sm font-medium">{displayName}</div>
+          <div className="text-[11px] text-muted-foreground">{displayRole}</div>
         </div>
 
         <DropdownMenu>
@@ -194,8 +199,8 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                 </span>
               </div>
               <div className="hidden text-left md:block">
-                <div className="text-xs font-semibold leading-none">{currentUser?.fullName || 'WorkForce User'}</div>
-                <div className="mt-1 text-[11px] text-muted-foreground">{currentUser?.title || 'Launch profile'}</div>
+                <div className="text-xs font-semibold leading-none">{displayName}</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">{displayRole}</div>
               </div>
             </Button>
           </DropdownMenuTrigger>
@@ -204,16 +209,16 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-primary" />
                 <div>
-                  <div>{currentUser?.fullName || 'WorkForce User'}</div>
+                  <div>{displayName}</div>
                   <div className="text-[11px] font-normal text-muted-foreground">
-                    {(currentUser?.role || 'admin').toUpperCase()} · {currentUser?.clubLabel || programSetting?.clientLabel || 'Client profile'}
+                    {displayRole} · {currentUser?.clubLabel || programSetting?.clientLabel || 'Client profile'}
                   </div>
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-              Signed in as {currentUser?.fullName || 'WorkForce User'} ({(currentUser?.role || 'admin').toUpperCase()})
+              Signed in as {displayName} ({displayRole})
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onSignOut} className="gap-2 text-red-600 focus:text-red-700">
@@ -226,3 +231,4 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
     </header>
   );
 });
+

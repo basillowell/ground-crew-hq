@@ -6,14 +6,12 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import type { ProgramSettings } from '@/data/seedData';
 import {
   useAssignments,
-  useChemicalApplicationLogsAll,
   useDepartmentOptions,
   useEmployees,
   useEquipmentUnits,
   useProgramSettings,
   useProperties,
   useScheduleEntries,
-  useWeatherStations,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { OperationsProvider } from '@/contexts/OperationsContext';
@@ -111,72 +109,39 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const [department, setDepartment] = useState('Maintenance');
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, isAdmin, isManager, orgId } = useAuth();
-  const programSettingsQuery = useProgramSettings(orgId);
+  const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, orgId } = useAuth();
+  const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
-  const departmentOptionsQuery = useDepartmentOptions();
+  const deptQuery = useDepartmentOptions();
   const todayKey = currentDate.toISOString().slice(0, 10);
   const employeesQuery = useEmployees(currentPropertyId, orgId);
-  const scheduleEntriesQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
-  const assignmentsQuery = useAssignments(todayKey, currentPropertyId, orgId);
-  const equipmentUnitsQuery = useEquipmentUnits(currentPropertyId, orgId);
-  const weatherStationsQuery = useWeatherStations();
-  const chemicalApplicationLogsQuery = useChemicalApplicationLogsAll();
+  const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId);
+  const assignmentsQuery = useAssignments(todayKey, currentPropertyId);
+  const equipmentQuery = useEquipmentUnits(currentPropertyId, orgId);
 
-  const programSetting = programSettingsQuery.data ?? null;
-  const properties = propertiesQuery.data ?? [];
-  const departmentOptions = departmentOptionsQuery.data?.map((departmentOption) => departmentOption.name) ?? ['Maintenance'];
-  const employees = employeesQuery.data ?? [];
-  const scheduleEntries = scheduleEntriesQuery.data ?? [];
-  const assignments = assignmentsQuery.data ?? [];
-  const equipmentUnits = equipmentUnitsQuery.data ?? [];
-  const weatherStations = weatherStationsQuery.data ?? [];
-  const applicationLogs = chemicalApplicationLogsQuery.data ?? [];
-
-  useEffect(() => {
-    if (isAdmin || isManager) {
-      if (!currentPropertyId) {
-        setCurrentPropertyId('all');
-      }
-      return;
-    }
-    const fallbackProperty = properties.find((entry) => entry.status === 'active') || properties[0] || null;
-    const resolvedProperty = properties.find((entry) => entry.id === currentPropertyId) || fallbackProperty || null;
-    if (resolvedProperty?.id && resolvedProperty.id !== currentPropertyId) {
-      setCurrentPropertyId(resolvedProperty.id);
-    }
-  }, [currentPropertyId, isAdmin, isManager, properties, setCurrentPropertyId]);
-
-  useEffect(() => {
-    setDepartment((currentDepartment) => {
-      if (currentUser?.department) return currentUser.department;
-      if (departmentOptions.includes(currentDepartment)) return currentDepartment;
-      return departmentOptions[0] ?? 'Maintenance';
-    });
-  }, [currentUser?.department, departmentOptions]);
+  const programSetting = programSettingQuery.data ?? null;
 
   useEffect(() => {
     applyBranding(programSetting ?? undefined);
   }, [programSetting]);
 
   const notifications = useMemo(() => {
+    const todayKey = currentDate.toISOString().slice(0, 10);
+    const employees = employeesQuery.data ?? [];
+    const scheduleEntries = scheduleQuery.data ?? [];
+    const assignments = assignmentsQuery.data ?? [];
+    const equipmentUnits = equipmentQuery.data ?? [];
     const activeEmployees = employees.filter((employee) => employee.status === 'active' && employee.department === department);
     const scheduledToday = scheduleEntries.filter(
       (entry) => entry.date === todayKey && entry.status === 'scheduled' && activeEmployees.some((employee) => employee.id === entry.employeeId),
     );
     const assignmentsToday = assignments.filter((entry) => entry.date === todayKey);
-    const primaryStationsOffline = weatherStations.filter((station) => station.isPrimary && station.status === 'offline');
     const equipmentIssues = equipmentUnits.filter((unit) => unit.status === 'maintenance' || unit.status === 'out-of-service');
     const unassignedCrew = scheduledToday.filter(
       (entry) => !assignmentsToday.some((assignment) => assignment.employeeId === entry.employeeId),
     );
     const unscheduledCrew = activeEmployees.filter(
       (employee) => !scheduledToday.some((entry) => entry.employeeId === employee.id),
-    );
-    const complianceGaps = applicationLogs.filter(
-      (log) =>
-        log.applicationDate === todayKey &&
-        (!log.applicatorLicenseNumber || !log.supervisorLicenseNumber || !log.weatherLogId),
     );
 
     const nextNotifications: AppNotification[] = [];
@@ -211,26 +176,6 @@ export function AppLayout({ children }: AppLayoutProps) {
       }
     }
 
-    if (primaryStationsOffline.length > 0) {
-      nextNotifications.push({
-        id: 'weather-station',
-        title: `${primaryStationsOffline.length} primary weather stations are offline`,
-        description: 'Weather should be reviewed or manually overridden before planning applications.',
-        severity: 'warning',
-        route: '/app/weather',
-      });
-    }
-
-    if (complianceGaps.length > 0) {
-      nextNotifications.push({
-        id: 'application-compliance',
-        title: `${complianceGaps.length} application logs are missing compliance fields`,
-        description: 'Finish applicator license, supervisor, or weather linkage before exporting reports.',
-        severity: 'critical',
-        route: '/app/applications',
-      });
-    }
-
     if (nextNotifications.length === 0) {
       nextNotifications.push({
         id: 'all-clear',
@@ -242,7 +187,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
 
     return nextNotifications;
-  }, [applicationLogs, assignments, currentUser?.role, department, employees, equipmentUnits, scheduleEntries, todayKey, weatherStations]);
+  }, [employeesQuery.data, scheduleQuery.data, assignmentsQuery.data, equipmentQuery.data, currentDate, currentUser?.role, department]);
 
   const handleSelectProperty = (propertyId: string) => {
     setCurrentPropertyId(propertyId);
@@ -261,13 +206,13 @@ export function AppLayout({ children }: AppLayoutProps) {
           <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}
-            departments={departmentOptions}
+            departments={deptQuery.data?.map((d) => d.name) ?? ['Maintenance']}
             currentDate={currentDate}
             setCurrentDate={setCurrentDate}
-            properties={properties}
+            properties={propertiesQuery.data ?? []}
             currentPropertyId={currentPropertyId}
             onSelectProperty={handleSelectProperty}
-            allowAllProperties={isAdmin || isManager}
+            allowAllProperties={currentUser?.role === 'admin' || currentUser?.role === 'manager'}
             notifications={notifications}
             onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
