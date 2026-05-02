@@ -3,17 +3,15 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Copy, Download, Search, Filter, CalendarDays, CloudSun, FlaskConical } from 'lucide-react';
-import { ScheduleTemplates } from '@/components/scheduler/ScheduleTemplates';
+import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
-import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOperations } from '@/contexts/OperationsContext';
-import { useApplicationAreas, useChemicalApplicationLogsAll, useEmployees, useWeatherDailyLogs, useWeatherLocations } from '@/lib/supabase-queries';
+import { useEmployees } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
+import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -28,153 +26,129 @@ function startOfWeek(date: Date) {
   return next;
 }
 
+function getWeekStart(date: Date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return d.toISOString().slice(0, 10);
+}
+
 function buildWeekDays(anchorDate: Date) {
   const start = startOfWeek(anchorDate);
-  return Array.from({ length: 7 }, (_, index) => {
+  return Array.from({ length: 7 }, (_, i) => {
     const next = new Date(start);
-    next.setDate(start.getDate() + index);
+    next.setDate(start.getDate() + i);
     return {
-      label: next.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'numeric',
-        day: 'numeric',
-      }),
+      label: next.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
+      short: next.toLocaleDateString('en-US', { weekday: 'short' }),
+      dayNum: next.getDate(),
       date: toDateKey(next),
     };
   });
 }
 
-const statusColors: Record<string, string> = {
-  scheduled: 'bg-primary/10 border-primary/30 text-primary',
-  'day-off': 'bg-muted border-border text-muted-foreground',
-  vacation: 'bg-info/10 border-info/30 text-info',
-  sick: 'bg-destructive/10 border-destructive/30 text-destructive',
+function shiftHours(start: string, end: string): number {
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  return Math.max(0, (eh * 60 + em - (sh * 60 + sm)) / 60);
+}
+
+const STATUS_STYLES: Record<string, { cell: string; label: string }> = {
+  scheduled: { cell: 'bg-primary/10 border-primary/40 text-primary hover:bg-primary/20', label: 'Scheduled' },
+  'day-off': { cell: 'bg-muted border-border text-muted-foreground hover:bg-muted/80', label: 'Day Off' },
+  vacation: { cell: 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/50', label: 'Vacation' },
+  sick: { cell: 'bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/50', label: 'Sick' },
 };
 
 export default function SchedulerPage() {
   const queryClient = useQueryClient();
   const { currentPropertyId, currentUser } = useAuth();
-  const { currentDate } = useOperations();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const weekDays = useMemo(() => buildWeekDays(currentDate), [currentDate]);
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  const weekAnchor = useMemo(() => {
+    const anchor = new Date(`${weekStart}T00:00:00`);
+    return startOfWeek(anchor);
+  }, [weekStart]);
+
+  const weekDays = useMemo(() => buildWeekDays(weekAnchor), [weekAnchor]);
   const today = useMemo(() => toDateKey(new Date()), []);
+  const thisWeekStart = useMemo(() => getWeekStart(new Date()), []);
+
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
-  const applicationAreasQuery = useApplicationAreas();
-  const weatherLogsQuery = useWeatherDailyLogs();
-  const weatherLocationsQuery = useWeatherLocations();
-  const applicationLogsQuery = useChemicalApplicationLogsAll();
+
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
       queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
       queryFn: async () => {
         if (!supabase) return [] as ScheduleEntry[];
-        let query = supabase
-          .from('schedule_entries')
-          .select('*')
-          .eq('date', day.date)
-          .order('shift_start');
-        if (propertyScope && propertyScope !== 'all') {
-          query = query.eq('property_id', propertyScope);
-        }
-        if (currentUser?.orgId) {
-          query = query.eq('org_id', currentUser.orgId);
-        }
+        let query = supabase.from('schedule_entries').select('*').eq('date', day.date).order('shift_start');
+        if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
+        if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
         const { data, error } = await query;
         if (error) throw error;
         return (data ?? []).map((row) => ({
-          id: row.id,
-          employeeId: row.employee_id,
-          date: row.date,
-          shiftStart: String(row.shift_start).slice(0, 5),
-          shiftEnd: String(row.shift_end).slice(0, 5),
-          status: row.status as ScheduleEntry['status'],
+          id: String(row.id),
+          employeeId: String(row.employee_id),
+          date: String(row.date),
+          shiftStart: String(row.shift_start ?? '').slice(0, 5),
+          shiftEnd: String(row.shift_end ?? '').slice(0, 5),
+          status: (row.status ?? 'scheduled') as ScheduleEntry['status'],
         }));
       },
       staleTime: 1000 * 60 * 5,
     })),
   });
+
   const employeeList = employeesQuery.data ?? [];
-  const uniqueEmployees = useMemo(
-    () => Array.from(new Map(employeeList.map((employee) => [employee.id, employee])).values()),
-    [employeeList],
-  );
-  const applicationAreas = applicationAreasQuery.data ?? [];
-  const weatherLogs = weatherLogsQuery.data ?? [];
-  const weatherLocations = weatherLocationsQuery.data ?? [];
-  const applicationLogs = applicationLogsQuery.data ?? [];
-  const scheduleList = useMemo(
-    () => weekScheduleQueries.flatMap((query) => query.data ?? []),
-    [weekScheduleQueries],
-  );
-  const isSchedulerLoading = employeesQuery.isLoading || weekScheduleQueries.some((query) => query.isLoading);
+  const scheduleList = useMemo(() => weekScheduleQueries.flatMap((q) => q.data ?? []), [weekScheduleQueries]);
+  const isLoading = employeesQuery.isLoading || weekScheduleQueries.some((q) => q.isLoading);
+
   const [draft, setDraft] = useState({
     employeeId: '',
-    date: toDateKey(startOfWeek(new Date())),
+    date: toDateKey(weekAnchor),
     shiftStart: '05:00',
     shiftEnd: '13:30',
     status: 'scheduled' as ScheduleEntry['status'],
   });
 
   useEffect(() => {
-    const firstActiveEmployeeId = employeeList.find((employee) => employee.status === 'active')?.id ?? '';
-    setSelectedEmployeeId((current) => (current && employeeList.some((employee) => employee.id === current) ? current : firstActiveEmployeeId));
-    setDraft((current) => ({
-      ...current,
-      employeeId: current.employeeId && employeeList.some((employee) => employee.id === current.employeeId)
-        ? current.employeeId
-        : firstActiveEmployeeId,
+    const firstId = employeeList.find((e) => e.status === 'active')?.id ?? '';
+    setDraft((cur) => ({
+      ...cur,
+      employeeId: cur.employeeId && employeeList.some((e) => e.id === cur.employeeId) ? cur.employeeId : firstId,
     }));
   }, [employeeList]);
 
   const activeEmployees = useMemo(
     () =>
-      uniqueEmployees.filter(
-        (employee) =>
-          employee.status === 'active' &&
-          (!propertyScope || propertyScope === 'all' || employee.propertyId === propertyScope) &&
-          `${employee.firstName} ${employee.lastName} ${employee.group}`.toLowerCase().includes(search.toLowerCase()),
+      employeeList.filter(
+        (e) =>
+          e.status === 'active' &&
+          (!propertyScope || propertyScope === 'all' || e.propertyId === propertyScope) &&
+          `${e.firstName} ${e.lastName} ${e.group} ${e.department}`.toLowerCase().includes(search.toLowerCase()),
       ),
-    [propertyScope, search, uniqueEmployees],
+    [employeeList, propertyScope, search],
   );
 
-  const summary = useMemo(
-    () => {
-      const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
-      const weekEntries = scheduleList.filter(
-        (entry) => activeEmployeeIds.has(entry.employeeId) && weekDays.some((day) => day.date === entry.date),
-      );
-      return {
-        scheduledShifts: weekEntries.filter((entry) => entry.status === 'scheduled').length,
-        dayOffs: weekEntries.filter((entry) => entry.status === 'day-off').length,
-        coverage: new Set(weekEntries.filter((entry) => entry.status === 'scheduled').map((entry) => entry.employeeId)).size,
-      };
-    },
-    [activeEmployees, scheduleList, weekDays],
-  );
-
-  const latestWeatherLog = useMemo(
-    () => [...weatherLogs].sort((left, right) => right.date.localeCompare(left.date))[0],
-    [weatherLogs],
-  );
-
-  const weatherLocation = latestWeatherLog
-    ? weatherLocations.find((location) => location.id === latestWeatherLog.locationId) ?? weatherLocations[0]
-    : weatherLocations[0];
-
-  const weeklyApplications = useMemo(
-    () => applicationLogs.filter((log) => weekDays.some((day) => day.date === log.applicationDate)),
-    [applicationLogs, weekDays],
-  );
+  const summary = useMemo(() => {
+    const ids = new Set(activeEmployees.map((e) => e.id));
+    const entries = scheduleList.filter((e) => ids.has(e.employeeId) && weekDays.some((d) => d.date === e.date));
+    return {
+      scheduled: entries.filter((e) => e.status === 'scheduled').length,
+      dayOff: entries.filter((e) => e.status !== 'scheduled').length,
+      coverage: new Set(entries.filter((e) => e.status === 'scheduled').map((e) => e.employeeId)).size,
+    };
+  }, [activeEmployees, scheduleList, weekDays]);
 
   function openAddShift(employeeId?: string, date?: string) {
-    const targetEmployeeId = employeeId ?? selectedEmployeeId ?? activeEmployees[0]?.id ?? '';
+    const targetEmp = employeeId ?? activeEmployees[0]?.id ?? '';
     setDraft({
-      employeeId: targetEmployeeId,
-      date: date ?? weekDays[0]?.date ?? toDateKey(currentDate),
+      employeeId: targetEmp,
+      date: date ?? weekDays[0]?.date ?? toDateKey(weekAnchor),
       shiftStart: '05:00',
       shiftEnd: '13:30',
       status: 'scheduled',
@@ -182,37 +156,50 @@ export default function SchedulerPage() {
     setDialogOpen(true);
   }
 
+  function openEditShift(employeeId: string, day: { date: string }, entry: ScheduleEntry) {
+    setDraft({
+      employeeId,
+      date: day.date,
+      shiftStart: entry.shiftStart,
+      shiftEnd: entry.shiftEnd,
+      status: entry.status,
+    });
+    setDialogOpen(true);
+  }
+
   async function handleSaveShift() {
-    if (!draft.employeeId || !draft.date) return;
+    if (!draft.employeeId || !draft.date) {
+      toast.error('Select an employee and date before saving.');
+      return;
+    }
     if (!supabase) {
-      toast.error('Supabase is not configured for schedule updates.');
+      toast.error('Database connection not available.');
       return;
     }
 
-    const existing = scheduleList.find((entry) => entry.employeeId === draft.employeeId && entry.date === draft.date);
-    const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : '';
-    const orgId = currentUser?.orgId ?? '';
-    const normalizedDate =
-      typeof draft.date === 'string' ? draft.date : new Date(draft.date).toISOString().slice(0, 10);
-    if (!propertyId) {
-      toast.error('Select or assign a property before saving a shift.');
-      return;
-    }
-    if (!orgId) {
-      toast.error('Unable to resolve organization for this shift.');
-      return;
-    }
+    const employee = employeeList.find((e) => e.id === draft.employeeId);
+    // Resolve propertyId — try employee first, then current filter, then user's property
+    const propertyId =
+      employee?.propertyId ||
+      (propertyScope && propertyScope !== 'all' ? propertyScope : '') ||
+      currentUser?.propertyId ||
+      null;
+
+    const existing = scheduleList.find(
+      (e) => e.employeeId === draft.employeeId && e.date === draft.date,
+    );
+
     setIsSaving(true);
 
-    const payload = {
-      org_id: orgId,
+    const payload: Record<string, unknown> = {
       employee_id: draft.employeeId,
-      property_id: propertyId,
-      date: normalizedDate,
-      shift_start: draft.shiftStart.slice(0, 5),
-      shift_end: draft.shiftEnd.slice(0, 5),
+      date: draft.date,
+      shift_start: draft.shiftStart,
+      shift_end: draft.shiftEnd,
       status: draft.status,
     };
+    if (propertyId) payload.property_id = propertyId;
+    if (currentUser?.orgId) payload.org_id = currentUser.orgId;
 
     const response = existing
       ? await supabase.from('schedule_entries').update(payload).eq('id', existing.id)
@@ -221,9 +208,7 @@ export default function SchedulerPage() {
     setIsSaving(false);
 
     if (response.error) {
-      toast.error('Shift save failed', {
-        description: response.error.message,
-      });
+      toast.error('Shift save failed', { description: response.error.message });
       return;
     }
 
@@ -232,328 +217,371 @@ export default function SchedulerPage() {
     toast.success(existing ? 'Shift updated' : 'Shift added');
   }
 
+  async function handleDeleteShift() {
+    if (!supabase) return;
+    const existing = scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
+    if (!existing) { setDialogOpen(false); return; }
+    const { error } = await supabase.from('schedule_entries').delete().eq('id', existing.id);
+    if (error) { toast.error('Delete failed', { description: error.message }); return; }
+    await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
+    setDialogOpen(false);
+    toast.success('Shift removed');
+  }
+
   async function copyWeek() {
-    if (!supabase) {
-      toast.error('Supabase is not configured for schedule updates.');
-      return;
-    }
+    if (!supabase) { toast.error('Database not available.'); return; }
     const sourceDate = weekDays[0]?.date;
     if (!sourceDate) return;
-    const inserts: Array<{
-      org_id: string;
-      employee_id: string;
-      property_id: string;
-      date: string;
-      shift_start: string;
-      shift_end: string;
-      status: ScheduleEntry['status'];
-    }> = [];
-
-    for (const employee of activeEmployees) {
-      const base = scheduleList.find((entry) => entry.employeeId === employee.id && entry.date === sourceDate);
+    const inserts: Record<string, unknown>[] = [];
+    for (const emp of activeEmployees) {
+      const base = scheduleList.find((e) => e.employeeId === emp.id && e.date === sourceDate);
       if (!base) continue;
-
-      for (const date of weekDays.slice(1).map((day) => day.date)) {
-        const exists = scheduleList.find((entry) => entry.employeeId === employee.id && entry.date === date);
+      for (const day of weekDays.slice(1)) {
+        const exists = scheduleList.find((e) => e.employeeId === emp.id && e.date === day.date);
         if (!exists) {
-          inserts.push({
-            org_id: currentUser?.orgId ?? '',
-            employee_id: employee.id,
-            property_id: currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : employee.propertyId || currentUser?.propertyId || '',
-            date,
-            shift_start: base.shiftStart.slice(0, 5),
-            shift_end: base.shiftEnd.slice(0, 5),
+          const row: Record<string, unknown> = {
+            employee_id: emp.id,
+            date: day.date,
+            shift_start: base.shiftStart,
+            shift_end: base.shiftEnd,
             status: base.status,
-          });
+          };
+          if (emp.propertyId) row.property_id = emp.propertyId;
+          if (currentUser?.orgId) row.org_id = currentUser.orgId;
+          inserts.push(row);
         }
       }
     }
-
     if (inserts.length === 0) {
-      toast.message('Nothing to copy', {
-        description: 'Every remaining day already has an entry for the selected week.',
-      });
+      toast.message('Nothing to copy', { description: 'All days already have entries.' });
       return;
     }
-
     const { error } = await supabase.from('schedule_entries').insert(inserts);
-    if (error) {
-      toast.error('Week copy failed', {
-        description: error.message,
-      });
-      return;
-    }
-
+    if (error) { toast.error('Copy failed', { description: error.message }); return; }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-    toast.success('Week copied', {
-      description: `${inserts.length} shifts added from the first day of the week.`,
-    });
+    toast.success('Week copied', { description: `${inserts.length} shifts added.` });
   }
 
   function exportWeekToCalendar() {
-    const targetEmployeeId = selectedEmployeeId || activeEmployees[0]?.id;
-    const upcomingEntries = scheduleList
-      .filter((entry) => entry.employeeId === targetEmployeeId && entry.date >= today && entry.status === 'scheduled')
-      .sort((left, right) => left.date.localeCompare(right.date));
-
-    const result = exportScheduleEntriesAsICS({
-      filename: 'schedule.ics',
-      scheduleEntries: upcomingEntries,
-      employees: employeeList,
-      title: 'Ground Crew HQ Schedule',
-    });
-
-    if (result.ok) {
-      toast.success(`Calendar export ready`, {
-        description: `${result.data?.eventCount ?? 0} upcoming shifts exported to ${result.data?.filename}.`,
-      });
-    } else {
-      toast.error('Calendar export failed', {
-        description: result.error,
-      });
-    }
+    const emp = activeEmployees[0];
+    if (!emp) return;
+    const entries = scheduleList.filter((e) => e.employeeId === emp.id && e.date >= today && e.status === 'scheduled');
+    const result = exportScheduleEntriesAsICS({ filename: 'schedule.ics', scheduleEntries: entries, employees: employeeList, title: 'Ground Crew HQ Schedule' });
+    if (result.ok) toast.success(`Calendar export ready`, { description: `${result.data?.eventCount ?? 0} shifts exported.` });
+    else toast.error('Export failed', { description: result.error });
   }
 
+  function shiftWeek(direction: -1 | 1) {
+    setWeekStart((prev) => {
+      const next = new Date(`${prev}T00:00:00`);
+      next.setDate(next.getDate() + direction * 7);
+      return getWeekStart(next);
+    });
+  }
+
+  const isEditing = !!scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
+
   return (
-    <div className="p-4">
-      {isSchedulerLoading ? (
-        <div className="grid gap-4 md:grid-cols-3 mb-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="h-32 animate-pulse rounded-3xl border bg-card/70" />
-          ))}
+    <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
+
+      {/* ── Top bar ── */}
+      <div className="border-b bg-card px-5 py-3 flex items-center gap-3 flex-wrap shrink-0">
+        <h1 className="text-lg font-semibold tracking-tight flex-1 min-w-0">Scheduler</h1>
+
+        {/* Week nav */}
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => shiftWeek(-1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium px-2 whitespace-nowrap">
+            {weekDays[0]?.label} – {weekDays[6]?.label}
+          </span>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => shiftWeek(1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          {weekStart !== thisWeekStart ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs ml-1"
+              onClick={() => setWeekStart(thisWeekStart)}
+            >
+              Today
+            </Button>
+          ) : null}
         </div>
-      ) : null}
-      <div className="grid gap-4 md:grid-cols-3 mb-4">
-        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">Scheduled shifts</div>
-          <div className="text-3xl font-semibold">{summary.scheduledShifts}</div>
-          <p className="text-xs text-muted-foreground mt-1">Persistent weekly coverage entries across your active roster.</p>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search crew..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 pl-7 w-40 text-xs"
+            data-testid="input-search-crew"
+          />
         </div>
-        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">Crew covered</div>
-          <div className="text-3xl font-semibold">{summary.coverage}</div>
-          <p className="text-xs text-muted-foreground mt-1">Employees ready to flow into Workboard assignment.</p>
-        </div>
-        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">Day off entries</div>
-          <div className="text-3xl font-semibold">{summary.dayOffs}</div>
-          <p className="text-xs text-muted-foreground mt-1">Track off days, vacation, and exceptions in the same planner.</p>
-        </div>
+
+        <Button size="sm" className="h-8 gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
+          <Plus className="h-3.5 w-3.5" /> Add Shift
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={copyWeek} data-testid="button-copy-week">
+          <Copy className="h-3.5 w-3.5" /> Copy Week
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportWeekToCalendar}>
+          <Download className="h-3.5 w-3.5" /> Export
+        </Button>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] mb-4">
-        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <CloudSun className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Weather Planning Snapshot</h3>
-          </div>
-          {weatherLocation && latestWeatherLog ? (
-            <WeatherSnapshotCard location={weatherLocation} log={latestWeatherLog} compact />
-          ) : (
-            <p className="text-sm text-muted-foreground">No weather log is available for this planning window yet.</p>
-          )}
+
+      {/* ── Stats strip ── */}
+      <div className="border-b bg-muted/30 px-5 py-2 flex items-center gap-5 text-xs shrink-0 flex-wrap">
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          <span><span className="font-semibold text-foreground">{summary.coverage}</span> crew covered this week</span>
         </div>
-        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <FlaskConical className="h-4 w-4 text-chart-orange" />
-            <h3 className="text-sm font-semibold">Application Conflicts and Cues</h3>
-          </div>
-          <div className="space-y-3">
-            <div className="rounded-2xl bg-muted/50 p-3">
-              <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Applications this week</div>
-              <div className="mt-1 text-2xl font-semibold">{weeklyApplications.length}</div>
-            </div>
-            {weeklyApplications.slice(0, 2).map((log) => {
-              const area = applicationAreas.find((entry) => entry.id === log.areaId);
-              return (
-                <div key={log.id} className="rounded-2xl border p-3">
-                  <div className="text-sm font-medium">{area?.name ?? 'Unknown area'}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {log.applicationDate} · {log.startTime} - {log.endTime}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">{log.agronomicPurpose}</div>
-                </div>
-              );
-            })}
-          </div>
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          <span><span className="font-semibold text-foreground">{summary.scheduled}</span> scheduled shifts</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <Coffee className="h-3.5 w-3.5" />
+          <span><span className="font-semibold text-foreground">{summary.dayOff}</span> off/vacation/sick entries</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-muted-foreground ml-auto">
+          <span className="text-[10px] uppercase tracking-wider">
+            {activeEmployees.length} crew{search ? ' (filtered)' : ''}
+          </span>
         </div>
       </div>
 
-      <div className="mb-6">
-        <ScheduleTemplates />
-      </div>
-
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-semibold">Weekly Schedule</h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            Week of {weekDays[0]?.label} through {weekDays[6]?.label}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => openAddShift()}>
-            <Plus className="h-3 w-3" /> Add Shift
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={copyWeek}>
-            <Copy className="h-3 w-3" /> Copy Week
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={exportWeekToCalendar}>
-            <Download className="h-3 w-3" /> Export to Calendar
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => window.print()}>
-            <Download className="h-3 w-3" /> Export PDF
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1"><Filter className="h-3 w-3" /> Filter</Button>
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Search..." value={search} onChange={(event) => setSearch(event.target.value)} className="h-7 pl-7 w-36 text-xs" />
+      {/* ── Weekly schedule grid ── */}
+      <div className="flex-1 overflow-auto">
+        {isLoading ? (
+          <div className="p-4 grid gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-12 animate-pulse rounded-xl border bg-muted/50" />
+            ))}
           </div>
-        </div>
-      </div>
-
-      <Card className="overflow-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="text-left p-3 font-medium text-muted-foreground text-xs sticky left-0 bg-muted/50 min-w-[180px]">Employee</th>
-              {weekDays.map((day) => (
-                <th key={day.date} className="text-center p-3 font-medium text-muted-foreground text-xs min-w-[110px]">{day.label}</th>
-              ))}
-              <th className="text-center p-3 font-medium text-muted-foreground text-xs min-w-[80px]">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {activeEmployees.map(emp => {
-              let totalHours = 0;
-              return (
-                <tr key={emp.id} className="border-b hover:bg-muted/20">
-                  <td className="p-3 sticky left-0 bg-card">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
-                        {emp.firstName[0]}{emp.lastName[0]}
-                      </div>
-                      <div>
-                        <div className="font-medium text-xs">{emp.firstName} {emp.lastName}</div>
-                  <div className="text-[10px] text-muted-foreground">{emp.group || emp.department}</div>
-                      </div>
-                    </div>
-                  </td>
+        ) : (
+          <Card className="rounded-none border-0 border-b">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b bg-muted/40 sticky top-0 z-10">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs sticky left-0 bg-muted/40 min-w-[200px] z-20">
+                    Crew Member
+                  </th>
                   {weekDays.map((day) => {
-                    const entry = scheduleList.find((scheduleEntry) => scheduleEntry.employeeId === emp.id && scheduleEntry.date === day.date);
-                    if (!entry) {
-                      return (
-                        <td key={day.date} className="p-2 text-center">
-                          <button
-                            type="button"
-                            className="h-10 w-full rounded border border-dashed border-border text-[10px] text-muted-foreground"
-                            onClick={() => openAddShift(emp.id, day.date)}
-                          >
-                            Add
-                          </button>
-                        </td>
-                      );
-                    }
-                    if (entry.status === 'scheduled') {
-                      const [startHour, startMinute] = entry.shiftStart.split(':').map(Number);
-                      const [endHour, endMinute] = entry.shiftEnd.split(':').map(Number);
-                      totalHours += (endHour * 60 + endMinute - (startHour * 60 + startMinute)) / 60;
-                    }
+                    const isToday = day.date === today;
                     return (
-                      <td key={day.date} className="p-2">
-                        <button
-                          type="button"
-                          className={`w-full rounded border px-2 py-1.5 text-center text-xs ${statusColors[entry.status] || statusColors.scheduled}`}
-                          onClick={() => {
-                            setDraft({
-                              employeeId: emp.id,
-                              date: day.date,
-                              shiftStart: entry.shiftStart,
-                              shiftEnd: entry.shiftEnd,
-                              status: entry.status,
-                            });
-                            setDialogOpen(true);
-                          }}
-                        >
-                          {entry.status === 'scheduled' ? (
-                            <div className="font-medium">{entry.shiftStart} - {entry.shiftEnd}</div>
-                          ) : (
-                            <div className="capitalize font-medium">{entry.status.replace('-', ' ')}</div>
-                          )}
-                        </button>
-                      </td>
+                      <th
+                        key={day.date}
+                        className={`text-center px-2 py-3 font-medium text-xs min-w-[110px] ${isToday ? 'text-primary' : 'text-muted-foreground'}`}
+                      >
+                        <div className={`text-[10px] uppercase tracking-wider ${isToday ? 'text-primary' : ''}`}>{day.short}</div>
+                        <div className={`text-base font-bold mt-0.5 ${isToday ? 'text-primary' : 'text-foreground'}`}>{day.dayNum}</div>
+                        {isToday && <div className="h-1 w-1 rounded-full bg-primary mx-auto mt-1" />}
+                      </th>
                     );
                   })}
-                  <td className="p-3 text-center font-mono text-xs font-medium">{totalHours.toFixed(1)}h</td>
+                  <th className="text-center px-3 py-3 font-medium text-muted-foreground text-xs min-w-[64px]">Total</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
+              </thead>
+              <tbody>
+                {activeEmployees.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      {search ? `No crew matches "${search}"` : 'No active crew members found.'}
+                    </td>
+                  </tr>
+                ) : (
+                  activeEmployees.map((emp) => {
+                    let weekHours = 0;
+                    return (
+                      <tr key={emp.id} className="border-b hover:bg-muted/20 transition-colors group">
+                        {/* Employee cell */}
+                        <td className="px-4 py-2.5 sticky left-0 bg-card group-hover:bg-muted/20 transition-colors z-10">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                              {emp.firstName[0]}{emp.lastName[0]}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-xs truncate">{emp.firstName} {emp.lastName}</div>
+                              <div className="text-[10px] text-muted-foreground truncate">{emp.group || emp.department}</div>
+                            </div>
+                          </div>
+                        </td>
 
+                        {/* Day cells */}
+                        {weekDays.map((day) => {
+                          const entry = scheduleList.find((s) => s.employeeId === emp.id && s.date === day.date);
+                          const isToday = day.date === today;
+
+                          if (entry?.status === 'scheduled') {
+                            weekHours += shiftHours(entry.shiftStart, entry.shiftEnd);
+                          }
+
+                          if (!entry) {
+                            return (
+                              <td key={day.date} className={`px-2 py-2 text-center ${isToday ? 'bg-primary/5' : ''}`}>
+                                <button
+                                  type="button"
+                                  className="h-11 w-full rounded-lg border border-dashed border-border text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-colors"
+                                  onClick={() => openAddShift(emp.id, day.date)}
+                                  data-testid={`button-add-shift-${emp.id}-${day.date}`}
+                                >
+                                  + Add
+                                </button>
+                              </td>
+                            );
+                          }
+
+                          const style = STATUS_STYLES[entry.status] ?? STATUS_STYLES.scheduled;
+                          return (
+                            <td key={day.date} className={`px-2 py-2 ${isToday ? 'bg-primary/5' : ''}`}>
+                              <button
+                                type="button"
+                                className={`w-full rounded-lg border px-2 py-1.5 text-center text-xs transition-colors ${style.cell}`}
+                                onClick={() => openEditShift(emp.id, day, entry)}
+                                data-testid={`button-edit-shift-${emp.id}-${day.date}`}
+                              >
+                                {entry.status === 'scheduled' ? (
+                                  <>
+                                    <div className="font-semibold text-[11px]">{entry.shiftStart}–{entry.shiftEnd}</div>
+                                    <div className="text-[10px] opacity-70">{shiftHours(entry.shiftStart, entry.shiftEnd).toFixed(1)}h</div>
+                                  </>
+                                ) : (
+                                  <div className="font-medium capitalize">{style.label}</div>
+                                )}
+                              </button>
+                            </td>
+                          );
+                        })}
+
+                        {/* Weekly total */}
+                        <td className="px-3 py-2 text-center">
+                          <span className={`font-mono text-xs font-semibold ${weekHours >= 40 ? 'text-primary' : weekHours > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            {weekHours > 0 ? `${weekHours.toFixed(1)}h` : '—'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </div>
+
+      {/* ── Add / Edit Shift dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />
-              Add or Edit Shift
+              {isEditing ? 'Edit Shift' : 'Add Shift'}
             </DialogTitle>
           </DialogHeader>
+
           <div className="grid grid-cols-2 gap-3">
+            {/* Employee */}
             <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Employee</label>
+              <label className="text-xs text-muted-foreground">Crew member</label>
               <select
                 value={draft.employeeId}
-                onChange={(event) => setDraft({ ...draft, employeeId: event.target.value })}
+                onChange={(e) => setDraft({ ...draft, employeeId: e.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-shift-employee"
               >
-                {activeEmployees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName}
+                {activeEmployees.length === 0 && <option value="">No active crew</option>}
+                {activeEmployees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.firstName} {e.lastName} — {e.group || e.department}
                   </option>
                 ))}
               </select>
             </div>
+
+            {/* Date */}
             <div>
               <label className="text-xs text-muted-foreground">Date</label>
               <select
                 value={draft.date}
-                onChange={(event) => setDraft({ ...draft, date: event.target.value })}
+                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-shift-date"
               >
                 {weekDays.map((day) => (
-                  <option key={day.date} value={day.date}>
-                    {day.label}
-                  </option>
+                  <option key={day.date} value={day.date}>{day.label}</option>
                 ))}
               </select>
             </div>
+
+            {/* Status */}
             <div>
               <label className="text-xs text-muted-foreground">Status</label>
               <select
                 value={draft.status}
-                onChange={(event) => setDraft({ ...draft, status: event.target.value as ScheduleEntry['status'] })}
+                onChange={(e) => setDraft({ ...draft, status: e.target.value as ScheduleEntry['status'] })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-shift-status"
               >
                 <option value="scheduled">Scheduled</option>
-                <option value="day-off">Day off</option>
+                <option value="day-off">Day Off</option>
                 <option value="vacation">Vacation</option>
                 <option value="sick">Sick</option>
               </select>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Shift Start</label>
-              <Input type="time" value={draft.shiftStart} onChange={(event) => setDraft({ ...draft, shiftStart: event.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Shift End</label>
-              <Input type="time" value={draft.shiftEnd} onChange={(event) => setDraft({ ...draft, shiftEnd: event.target.value })} className="mt-1" />
-            </div>
+
+            {/* Times — only show when scheduled */}
+            {draft.status === 'scheduled' && (
+              <>
+                <div>
+                  <label className="text-xs text-muted-foreground">Shift start</label>
+                  <Input
+                    type="time"
+                    value={draft.shiftStart}
+                    onChange={(e) => setDraft({ ...draft, shiftStart: e.target.value })}
+                    className="mt-1"
+                    data-testid="input-shift-start"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Shift end</label>
+                  <Input
+                    type="time"
+                    value={draft.shiftEnd}
+                    onChange={(e) => setDraft({ ...draft, shiftEnd: e.target.value })}
+                    className="mt-1"
+                    data-testid="input-shift-end"
+                  />
+                </div>
+                {draft.shiftStart && draft.shiftEnd && (
+                  <div className="col-span-2">
+                    <div className="rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                      Shift length: <span className="font-semibold text-foreground">{shiftHours(draft.shiftStart, draft.shiftEnd).toFixed(1)} hours</span>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleSaveShift()} disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save Shift'}
-            </Button>
+
+          <div className="flex items-center justify-between pt-2">
+            {isEditing ? (
+              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => void handleDeleteShift()}>
+                Remove shift
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={() => void handleSaveShift()} disabled={isSaving} data-testid="button-save-shift">
+                {isSaving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Shift'}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -122,6 +122,7 @@ function AppRoutes() {
       <RouteErrorBoundary>
         <AppLayout>
           <Routes>
+            <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<CommandCenterPage />} />
             <Route path="workboard" element={<WorkboardPage />} />
             <Route path="employees" element={<EmployeesPage />} />

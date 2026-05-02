@@ -1,9 +1,7 @@
 import {
-  FolderKanban,
   LayoutDashboard,
   Clock,
   Users,
-  ListChecks,
   Wrench,
   Shield,
   BarChart3,
@@ -53,9 +51,7 @@ const adminNavSections: NavSection[] = [
       { title: 'Dashboard', url: '/app/dashboard', icon: Building2, moduleId: 'command-center' },
       { title: 'Workflow', url: '/app/workboard', icon: LayoutDashboard, moduleId: 'workflow' },
       { title: 'Scheduler', url: '/app/scheduler', icon: Clock, moduleId: 'workflow' },
-      { title: 'Breakroom', url: '/app/breakroom', icon: MonitorSmartphone, moduleId: 'breakroom' },
-      { title: 'Weather', url: '/app/weather', icon: CloudSun, moduleId: 'weather' },
-      { title: 'Applications', url: '/app/applications', icon: FlaskConical, moduleId: 'applications' },
+      { title: 'Field', url: '/app/field', icon: Smartphone, moduleId: 'field' },
     ],
   },
   {
@@ -68,10 +64,17 @@ const adminNavSections: NavSection[] = [
     ],
   },
   {
+    title: 'Operations Data',
+    items: [
+      { title: 'Weather', url: '/app/weather', icon: CloudSun, moduleId: 'weather' },
+      { title: 'Applications', url: '/app/applications', icon: FlaskConical, moduleId: 'applications' },
+      { title: 'Breakroom', url: '/app/breakroom', icon: MonitorSmartphone, moduleId: 'breakroom' },
+    ],
+  },
+  {
     title: 'Communication',
     items: [
       { title: 'Messaging', url: '/app/messaging', icon: MessageSquare, moduleId: 'workflow' },
-      { title: 'Field', url: '/app/field', icon: Smartphone, moduleId: 'field' },
     ],
   },
   {
@@ -105,7 +108,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
   const collapsed = state === 'collapsed';
   const location = useLocation();
   const { currentRole, currentPropertyId, currentUser } = useAuth();
-  const { data: programSetting } = useProgramSettings(currentUser?.orgId);
+  const programSetting = useProgramSettings(currentUser?.orgId).data ?? undefined;
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();

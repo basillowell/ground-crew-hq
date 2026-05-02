@@ -11,19 +11,39 @@ import { PageHeader } from '@/components/shared';
 import { EmployeeRow } from '@/components/workboard/EmployeeRow';
 import { GanttTimeline } from '@/components/workboard/GanttTimeline';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
-import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { EscalationCenter } from '@/components/notifications/EscalationCenter';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
-import { turfData, type ApplicationArea, type Assignment, type Employee, type EquipmentUnit, type Note, type Property, type ScheduleEntry, type Task, type TaskRequest, type WeatherDailyLog, type WeatherLocation, type WorkLocation } from '@/data/seedData';
-import { StickyNote, Droplets, CloudSun, MonitorSmartphone, LayoutList, GanttChart } from 'lucide-react';
+import {
+  type ApplicationArea,
+  type Assignment,
+  type Employee,
+  type EquipmentUnit,
+  type Note,
+  type Property,
+  type ScheduleEntry,
+  type Task,
+  type TaskRequest,
+  type WeatherDailyLog,
+  type WeatherLocation,
+  type WorkLocation,
+} from '@/data/seedData';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  CloudSun,
+  GanttChart,
+  LayoutList,
+  ListChecks,
+  MonitorSmartphone,
+  Radio,
+  StickyNote,
+  Users,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
-
-function defaultBoardDate() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
@@ -110,30 +130,28 @@ function normalizeWorkLocation(row: Record<string, unknown>): WorkLocation {
   };
 }
 
-function normalizeApplicationLog(row: Record<string, unknown>) {
-  return {
-    id: String(row.id ?? ''),
-    applicationDate: String(row.applicationDate ?? row.application_date ?? ''),
-    startTime: String(row.startTime ?? row.start_time ?? ''),
-    endTime: String(row.endTime ?? row.end_time ?? ''),
-    areaId: String(row.areaId ?? row.area_id ?? ''),
-    agronomicPurpose: String(row.agronomicPurpose ?? row.agronomic_purpose ?? ''),
-    areaTreated: Number(row.areaTreated ?? row.area_treated ?? 0),
-    areaUnit: String(row.areaUnit ?? row.area_unit ?? ''),
-  };
-}
+const PRIORITY_LABEL: Record<string, string> = { high: 'High', medium: 'Med', low: 'Low' };
+const PRIORITY_COLOR: Record<string, string> = {
+  high: 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800',
+  medium: 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800',
+  low: 'bg-muted/40 border-border',
+};
+const STATUS_ICON: Record<string, React.ReactNode> = {
+  new: <AlertCircle className="h-3.5 w-3.5 text-amber-500" />,
+  assigned: <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />,
+  'in-progress': <Radio className="h-3.5 w-3.5 text-blue-500 animate-pulse" />,
+};
 
 export default function WorkboardPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { currentPropertyId, setCurrentPropertyId, currentUser } = useAuth();
-  const [boardDate, setBoardDate] = useState(defaultBoardDate());
+  const [boardDate, setBoardDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [department, setDepartment] = useState('Maintenance');
   const [groupFilter, setGroupFilter] = useState('all');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
-  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
   const [linkedRequestId, setLinkedRequestId] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
@@ -141,10 +159,13 @@ export default function WorkboardPage() {
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
   const [lastRealtimeRefreshAt, setLastRealtimeRefreshAt] = useState<number | null>(null);
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
+  const [needsFilter, setNeedsFilter] = useState<'all' | 'new' | 'assigned'>('all');
+
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
     [boardDate, department, groupFilter],
   );
+
   const [assignmentDraft, setAssignmentDraft] = useState({
     employeeId: '',
     taskId: '',
@@ -153,6 +174,7 @@ export default function WorkboardPage() {
     startTime: '05:30',
     duration: '60',
   });
+
   const [noteDraft, setNoteDraft] = useState({
     type: 'daily' as Note['type'],
     title: '',
@@ -160,28 +182,19 @@ export default function WorkboardPage() {
     author: 'Operations Admin',
     location: '',
   });
-  const [requestDraft, setRequestDraft] = useState({
-    title: '',
-    taskId: '',
-    requestedBy: 'Client Request',
-    requestedByType: 'client' as TaskRequest['requestedByType'],
-    priority: 'medium' as TaskRequest['priority'],
-    preferredLocation: '',
-    notes: '',
-  });
 
   const workflowParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const focusedPropertyId = workflowParams.get('property') || '';
-  const focusMode = workflowParams.get('focus') || '';
   const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
 
   const propertiesQuery = useProperties();
   const employeesQuery = useEmployees(effectivePropertyId);
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId);
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId);
-  const tasksQuery = useTasks(effectivePropertyId);
+  const tasksQuery = useTasks(effectivePropertyId, currentUser?.orgId);
   const equipmentQuery = useEquipmentUnits(effectivePropertyId);
   const notesQuery = useNotes(effectivePropertyId);
+
   const taskRequestsQuery = useQuery({
     queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
     queryFn: async () => {
@@ -190,21 +203,13 @@ export default function WorkboardPage() {
       if (error) throw error;
       const normalized = (data ?? []).map((row) => normalizeTaskRequest(row as Record<string, unknown>));
       return effectivePropertyId && effectivePropertyId !== 'all'
-        ? normalized.filter((request) => request.propertyId === effectivePropertyId)
+        ? normalized.filter((r) => r.propertyId === effectivePropertyId)
         : normalized;
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 2,
+    refetchInterval: 1000 * 30,
   });
-  const applicationAreasQuery = useQuery({
-    queryKey: ['application-areas', effectivePropertyId ?? 'all'],
-    queryFn: async () => {
-      if (!supabase) return [] as ApplicationArea[];
-      const { data, error } = await supabase.from('application_areas').select('*');
-      if (error) return [] as ApplicationArea[];
-      return (data ?? []).map((row) => normalizeApplicationArea(row as Record<string, unknown>));
-    },
-    staleTime: 1000 * 60 * 5,
-  });
+
   const weatherLogsQuery = useQuery({
     queryKey: ['weather-daily-logs', boardDate],
     queryFn: async () => {
@@ -215,6 +220,7 @@ export default function WorkboardPage() {
     },
     staleTime: 1000 * 60 * 5,
   });
+
   const weatherLocationsQuery = useQuery({
     queryKey: ['weather-locations', effectivePropertyId ?? 'all'],
     queryFn: async () => {
@@ -225,6 +231,7 @@ export default function WorkboardPage() {
     },
     staleTime: 1000 * 60 * 5,
   });
+
   const workLocationsQuery = useQuery({
     queryKey: ['work-locations', effectivePropertyId ?? 'all'],
     queryFn: async () => {
@@ -235,50 +242,40 @@ export default function WorkboardPage() {
     },
     staleTime: 1000 * 60 * 5,
   });
-  const applicationLogsQuery = useQuery({
-    queryKey: ['chemical-application-logs-board', boardDate],
-    queryFn: async () => {
-      if (!supabase) return [] as Array<ReturnType<typeof normalizeApplicationLog>>;
-      const { data, error } = await supabase.from('chemical_application_logs').select('*').eq('applicationDate', boardDate);
-      if (error) return [] as Array<ReturnType<typeof normalizeApplicationLog>>;
-      return (data ?? []).map((row) => normalizeApplicationLog(row as Record<string, unknown>));
-    },
-    staleTime: 1000 * 60 * 5,
-  });
 
   const properties = propertiesQuery.data ?? [];
   const employeeList = employeesQuery.data ?? [];
   const assignmentList = assignmentsQuery.data ?? [];
   const scheduleList = scheduleQuery.data ?? [];
   const taskList = useMemo(
-    () => (tasksQuery.data ?? []).filter((task) => task.status === 'active').sort((left, right) => (left.priority ?? 999) - (right.priority ?? 999) || left.name.localeCompare(right.name)),
+    () =>
+      (tasksQuery.data ?? [])
+        .filter((t) => t.status === 'active')
+        .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999) || a.name.localeCompare(b.name)),
     [tasksQuery.data],
   );
   const equipmentList = equipmentQuery.data ?? [];
   const noteList = notesQuery.data ?? [];
   const taskRequests = taskRequestsQuery.data ?? [];
-  const applicationAreas = applicationAreasQuery.data ?? [];
   const weatherLogs = weatherLogsQuery.data ?? [];
   const weatherLocations = weatherLocationsQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
-  const applicationLogs = applicationLogsQuery.data ?? [];
 
   useEffect(() => {
-    if (assignmentsQuery.dataUpdatedAt || taskRequestsQuery.dataUpdatedAt || tasksQuery.dataUpdatedAt) {
-      setLastRealtimeRefreshAt(Math.max(assignmentsQuery.dataUpdatedAt ?? 0, taskRequestsQuery.dataUpdatedAt ?? 0, tasksQuery.dataUpdatedAt ?? 0));
+    if (assignmentsQuery.dataUpdatedAt || taskRequestsQuery.dataUpdatedAt) {
+      setLastRealtimeRefreshAt(Math.max(assignmentsQuery.dataUpdatedAt ?? 0, taskRequestsQuery.dataUpdatedAt ?? 0));
     }
-  }, [assignmentsQuery.dataUpdatedAt, taskRequestsQuery.dataUpdatedAt, tasksQuery.dataUpdatedAt]);
+  }, [assignmentsQuery.dataUpdatedAt, taskRequestsQuery.dataUpdatedAt]);
 
   useEffect(() => {
     const firstScheduled =
-      scheduleList.find((entry) => entry.date === boardDate && entry.status === 'scheduled')?.employeeId ??
-      employeeList.find((employee) => employee.status === 'active')?.id ??
-      '';
-    setSelectedEmployeeId((current) => current || firstScheduled);
-    setAssignmentDraft((current) => ({
-      ...current,
-      employeeId: current.employeeId || firstScheduled,
-      taskId: current.taskId || taskList[0]?.id || '',
+      scheduleList.find((e) => e.date === boardDate && e.status === 'scheduled')?.employeeId ??
+      employeeList.find((e) => e.status === 'active')?.id ?? '';
+    setSelectedEmployeeId((cur) => cur || firstScheduled);
+    setAssignmentDraft((cur) => ({
+      ...cur,
+      employeeId: cur.employeeId || firstScheduled,
+      taskId: cur.taskId || taskList[0]?.id || '',
     }));
   }, [boardDate, employeeList, scheduleList, taskList]);
 
@@ -294,15 +291,11 @@ export default function WorkboardPage() {
         setLastRealtimeRefreshAt(Date.now());
         void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
-        setLastRealtimeRefreshAt(Date.now());
-        void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
       })
       .subscribe();
-
-    return () => {
-      void channel.unsubscribe();
-    };
+    return () => { void channel.unsubscribe(); };
   }, [queryClient]);
 
   useEffect(() => {
@@ -311,86 +304,77 @@ export default function WorkboardPage() {
     }
   }, [currentPropertyId, focusedPropertyId, setCurrentPropertyId]);
 
-  const groups = useMemo(
-    () => [...new Set(employeeList.filter((employee) => employee.status === 'active').map((employee) => employee.group))].sort((left, right) => left.localeCompare(right)),
-    [employeeList],
-  );
-
-  const allActiveEmployees = useMemo(
-    () => employeeList.filter((employee) => employee.status === 'active'),
-    [employeeList],
-  );
-
-  const activeDepartmentEmployees = useMemo(
-    () =>
-      allActiveEmployees.filter(
-        (employee) =>
-          (!effectivePropertyId || effectivePropertyId === 'all' || employee.propertyId === effectivePropertyId) &&
-          (!department || department === 'All Departments' || employee.department === department) &&
-          (groupFilter === 'all' || employee.group === groupFilter),
-      ),
-    [allActiveEmployees, department, effectivePropertyId, groupFilter],
-  );
-
-  const propertyWorkLocations = useMemo(
-    () => workLocations.filter((location) => !effectivePropertyId || effectivePropertyId === 'all' || location.propertyId === effectivePropertyId),
-    [effectivePropertyId, workLocations],
-  );
-
-  const activeProperty = useMemo(
-    () => properties.find((property) => property.id === effectivePropertyId) ?? null,
-    [effectivePropertyId, properties],
-  );
-
-  const propertyRequests = useMemo(
-    () =>
-      taskRequests
-        .filter((request) => (!effectivePropertyId || effectivePropertyId === 'all' || request.propertyId === effectivePropertyId) && request.date === boardDate)
-        .sort((left, right) => {
-          const priorityOrder = { high: 0, medium: 1, low: 2 } as const;
-          return priorityOrder[left.priority] - priorityOrder[right.priority];
-        }),
-    [boardDate, effectivePropertyId, taskRequests],
-  );
-
-  const scheduledEmployees = useMemo(() => {
-    const scheduledIds = new Set(
-      scheduleList
-        .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
-        .map((entry) => entry.employeeId),
-    );
-    return activeDepartmentEmployees
-      .filter((employee) => scheduledIds.has(employee.id))
-      .sort((left, right) => {
-        const leftShift = getShiftForEmployee(scheduleList, left.id, boardDate)?.shiftStart ?? '99:99';
-        const rightShift = getShiftForEmployee(scheduleList, right.id, boardDate)?.shiftStart ?? '99:99';
-        if (leftShift !== rightShift) return leftShift.localeCompare(rightShift);
-        return `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`);
-      });
-  }, [activeDepartmentEmployees, boardDate, scheduleList]);
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const storedOrder = window.localStorage.getItem(laneOrderStorageKey);
-    if (!storedOrder) {
-      setLaneOrder([]);
-      return;
-    }
     try {
-      const parsed = JSON.parse(storedOrder);
+      const parsed = JSON.parse(window.localStorage.getItem(laneOrderStorageKey) ?? '[]');
       setLaneOrder(Array.isArray(parsed) ? parsed : []);
     } catch {
       setLaneOrder([]);
     }
   }, [laneOrderStorageKey]);
 
+  const groups = useMemo(
+    () => [...new Set(employeeList.filter((e) => e.status === 'active').map((e) => e.group))].sort(),
+    [employeeList],
+  );
+
+  const activeDepartmentEmployees = useMemo(
+    () =>
+      employeeList.filter(
+        (e) =>
+          e.status === 'active' &&
+          (!effectivePropertyId || effectivePropertyId === 'all' || e.propertyId === effectivePropertyId) &&
+          (!department || department === 'All Departments' || e.department === department) &&
+          (groupFilter === 'all' || e.group === groupFilter),
+      ),
+    [employeeList, department, effectivePropertyId, groupFilter],
+  );
+
+  const propertyWorkLocations = useMemo(
+    () => workLocations.filter((l) => !effectivePropertyId || effectivePropertyId === 'all' || l.propertyId === effectivePropertyId),
+    [effectivePropertyId, workLocations],
+  );
+
+  const activeProperty = useMemo(
+    () => properties.find((p) => p.id === effectivePropertyId) ?? null,
+    [effectivePropertyId, properties],
+  );
+
+  const propertyRequests = useMemo(
+    () =>
+      taskRequests
+        .filter((r) => (!effectivePropertyId || effectivePropertyId === 'all' || r.propertyId === effectivePropertyId) && r.date === boardDate)
+        .sort((a, b) => {
+          const order = { high: 0, medium: 1, low: 2 } as const;
+          return order[a.priority] - order[b.priority];
+        }),
+    [boardDate, effectivePropertyId, taskRequests],
+  );
+
+  const filteredRequests = useMemo(() => {
+    if (needsFilter === 'all') return propertyRequests;
+    return propertyRequests.filter((r) => r.status === needsFilter);
+  }, [propertyRequests, needsFilter]);
+
+  const scheduledEmployees = useMemo(() => {
+    const scheduledIds = new Set(
+      scheduleList.filter((e) => e.date === boardDate && e.status === 'scheduled').map((e) => e.employeeId),
+    );
+    return activeDepartmentEmployees
+      .filter((e) => scheduledIds.has(e.id))
+      .sort((a, b) => {
+        const aShift = getShiftForEmployee(scheduleList, a.id, boardDate)?.shiftStart ?? '99:99';
+        const bShift = getShiftForEmployee(scheduleList, b.id, boardDate)?.shiftStart ?? '99:99';
+        return aShift !== bShift ? aShift.localeCompare(bShift) : `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+      });
+  }, [activeDepartmentEmployees, boardDate, scheduleList]);
+
   const unscheduledEmployees = useMemo(() => {
     const scheduledIds = new Set(
-      scheduleList
-        .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
-        .map((entry) => entry.employeeId),
+      scheduleList.filter((e) => e.date === boardDate && e.status === 'scheduled').map((e) => e.employeeId),
     );
-    return activeDepartmentEmployees.filter((employee) => !scheduledIds.has(employee.id));
+    return activeDepartmentEmployees.filter((e) => !scheduledIds.has(e.id));
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
   const fallbackEligibleEmployees = useMemo(
@@ -399,12 +383,12 @@ export default function WorkboardPage() {
   );
 
   const dayAssignments = useMemo(
-    () => assignmentList.filter((assignment) => assignment.date === boardDate),
+    () => assignmentList.filter((a) => a.date === boardDate),
     [assignmentList, boardDate],
   );
 
   const assignedEmployeeIds = useMemo(
-    () => new Set(dayAssignments.map((assignment) => assignment.employeeId)),
+    () => new Set(dayAssignments.map((a) => a.employeeId)),
     [dayAssignments],
   );
 
@@ -413,58 +397,50 @@ export default function WorkboardPage() {
       scheduledEmployees.map((employee) => {
         const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
         const employeeAssignments = dayAssignments
-          .filter((assignment) => assignment.employeeId === employee.id)
-          .sort((left, right) => left.startTime.localeCompare(right.startTime));
-        const assignedMinutes = employeeAssignments.reduce((total, assignment) => total + assignment.duration, 0);
+          .filter((a) => a.employeeId === employee.id)
+          .sort((a, b) => a.startTime.localeCompare(b.startTime));
+        const assignedMinutes = employeeAssignments.reduce((s, a) => s + a.duration, 0);
         const shiftMinutes = shift ? Math.max(timeToMinutes(shift.shiftEnd) - timeToMinutes(shift.shiftStart), 0) : 0;
-        return {
-          employee,
-          shift,
-          employeeAssignments,
-          assignedMinutes,
-          shiftMinutes,
-          openMinutes: Math.max(shiftMinutes - assignedMinutes, 0),
-        };
+        return { employee, shift, employeeAssignments, assignedMinutes, shiftMinutes, openMinutes: Math.max(shiftMinutes - assignedMinutes, 0) };
       }),
     [boardDate, dayAssignments, scheduleList, scheduledEmployees],
   );
 
   const orderedDispatchBoard = useMemo(() => {
-    const ranking = new Map(laneOrder.map((employeeId, index) => [employeeId, index]));
-    return [...dispatchBoard].sort((left, right) => {
-      const leftRank = ranking.get(left.employee.id);
-      const rightRank = ranking.get(right.employee.id);
-      if (leftRank != null && rightRank != null) return leftRank - rightRank;
-      if (leftRank != null) return -1;
-      if (rightRank != null) return 1;
+    const ranking = new Map(laneOrder.map((id, i) => [id, i]));
+    return [...dispatchBoard].sort((a, b) => {
+      const ra = ranking.get(a.employee.id);
+      const rb = ranking.get(b.employee.id);
+      if (ra != null && rb != null) return ra - rb;
+      if (ra != null) return -1;
+      if (rb != null) return 1;
       return 0;
     });
   }, [dispatchBoard, laneOrder]);
 
   const totalOpenMinutes = useMemo(
-    () => orderedDispatchBoard.reduce((total, lane) => total + lane.openMinutes, 0),
+    () => orderedDispatchBoard.reduce((s, l) => s + l.openMinutes, 0),
     [orderedDispatchBoard],
   );
 
   const availableEquipment = useMemo(
-    () => equipmentList.filter((unit) => unit.status === 'available' || unit.status === 'in-use'),
+    () => equipmentList.filter((u) => u.status === 'available' || u.status === 'in-use'),
     [equipmentList],
   );
 
   const latestWeatherLog = useMemo(
-    () => [...weatherLogs].sort((left, right) => right.date.localeCompare(left.date))[0],
+    () => [...weatherLogs].sort((a, b) => b.date.localeCompare(a.date))[0],
     [weatherLogs],
   );
 
   const planningWeatherLocation = latestWeatherLog
-    ? weatherLocations.find((location) => location.id === latestWeatherLog.locationId) ?? weatherLocations[0]
+    ? weatherLocations.find((l) => l.id === latestWeatherLog.locationId) ?? weatherLocations[0]
     : weatherLocations[0];
 
-  const todayApplications = useMemo(
-    () => applicationLogs.filter((log) => log.applicationDate === boardDate),
-    [applicationLogs, boardDate],
-  );
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
+  const todayDateKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const newRequestsCount = propertyRequests.filter((r) => r.status === 'new').length;
 
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
@@ -482,19 +458,6 @@ export default function WorkboardPage() {
     setAssignmentDialogOpen(true);
   }
 
-  function openRequestDialog() {
-    setRequestDraft({
-      title: '',
-      taskId: taskList[0]?.id ?? '',
-      requestedBy: activeProperty?.name ? `${activeProperty.name} Client` : 'Client Request',
-      requestedByType: 'client',
-      priority: 'medium',
-      preferredLocation: propertyWorkLocations[0]?.name ?? '',
-      notes: '',
-    });
-    setRequestDialogOpen(true);
-  }
-
   function openEditAssignmentDialog(assignment: Assignment) {
     setEditingAssignmentId(assignment.id);
     setSelectedEmployeeId(assignment.employeeId);
@@ -505,6 +468,23 @@ export default function WorkboardPage() {
       area: assignment.area,
       startTime: assignment.startTime,
       duration: String(assignment.duration),
+    });
+    setAssignmentDialogOpen(true);
+  }
+
+  function applyRequestToAssignment(request: TaskRequest) {
+    setLinkedRequestId(request.id);
+    const targetTaskId = request.taskId || taskList[0]?.id || '';
+    const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
+    setEditingAssignmentId(null);
+    setSelectedEmployeeId(targetEmployeeId);
+    setAssignmentDraft({
+      employeeId: targetEmployeeId,
+      taskId: targetTaskId,
+      equipmentId: '',
+      area: request.preferredLocation || propertyWorkLocations[0]?.name || 'Primary zone',
+      startTime: '05:30',
+      duration: String(taskList.find((t) => t.id === targetTaskId)?.duration ?? 60),
     });
     setAssignmentDialogOpen(true);
   }
@@ -532,18 +512,10 @@ export default function WorkboardPage() {
     }
 
     if (linkedRequestId) {
-      const { error: requestError } = await supabase
+      await supabase
         .from('task_requests')
-        .update({
-          status: 'assigned',
-          task_id: assignmentDraft.taskId,
-          preferred_location: assignmentDraft.area,
-        })
+        .update({ status: 'assigned', task_id: assignmentDraft.taskId, preferred_location: assignmentDraft.area })
         .eq('id', linkedRequestId);
-
-      if (requestError) {
-        toast('Assignment saved, but request link was not updated', { description: requestError.message });
-      }
     }
 
     await Promise.all([
@@ -553,66 +525,24 @@ export default function WorkboardPage() {
     setLinkedRequestId(null);
     setEditingAssignmentId(null);
     setAssignmentDialogOpen(false);
-    toast(editingAssignmentId ? 'Assignment updated' : 'Assignment added', {
+    toast(editingAssignmentId ? 'Assignment updated' : 'Assignment dispatched', {
       description: editingAssignmentId
-        ? 'The workflow board, breakroom, and reports now reflect the updated task plan.'
-        : 'The workflow board, breakroom, and reports now reflect this planned task.',
+        ? 'The crew board has been updated.'
+        : 'Task has been dispatched to the crew member.',
     });
   }
 
   async function removeAssignment(assignmentId: string) {
     if (!supabase) return;
     const { error } = await supabase.from('assignments').delete().eq('id', assignmentId);
-    if (error) {
-      toast('Unable to remove assignment', { description: error.message });
-      return;
-    }
+    if (error) { toast('Unable to remove assignment', { description: error.message }); return; }
     await queryClient.invalidateQueries({ queryKey: ['assignments'] });
   }
 
-  async function saveTaskRequest() {
-    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !requestDraft.title.trim()) return;
-    const { error } = await supabase.from('task_requests').insert({
-      id: makeId('treq'),
-      property_id: effectivePropertyId,
-      date: boardDate,
-      title: requestDraft.title.trim(),
-      task_id: requestDraft.taskId || null,
-      requested_by: requestDraft.requestedBy.trim() || 'Client Request',
-      requested_by_type: requestDraft.requestedByType,
-      priority: requestDraft.priority,
-      status: 'new',
-      preferred_location: requestDraft.preferredLocation.trim() || null,
-      notes: requestDraft.notes.trim(),
-    });
-
-    if (error) {
-      toast('Unable to save property request', { description: error.message });
-      return;
-    }
-
+  async function dismissRequest(requestId: string) {
+    if (!supabase) return;
+    await supabase.from('task_requests').update({ status: 'assigned' }).eq('id', requestId);
     await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
-    setRequestDialogOpen(false);
-    toast('Property request added', {
-      description: 'This request is now ready for admin review and assignment on the selected workflow board.',
-    });
-  }
-
-  function applyRequestToAssignment(request: TaskRequest) {
-    setLinkedRequestId(request.id);
-    const targetTaskId = request.taskId || taskList[0]?.id || '';
-    const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
-    setEditingAssignmentId(null);
-    setSelectedEmployeeId(targetEmployeeId);
-    setAssignmentDraft({
-      employeeId: targetEmployeeId,
-      taskId: targetTaskId,
-      equipmentId: '',
-      area: request.preferredLocation || propertyWorkLocations[0]?.name || 'Primary zone',
-      startTime: '05:30',
-      duration: String(taskList.find((task) => task.id === targetTaskId)?.duration ?? 60),
-    });
-    setAssignmentDialogOpen(true);
   }
 
   async function saveNote() {
@@ -628,12 +558,7 @@ export default function WorkboardPage() {
       author: noteDraft.author.trim() || 'Operations Admin',
       date: boardDate,
     });
-
-    if (error) {
-      toast('Unable to save note', { description: error.message });
-      return;
-    }
-
+    if (error) { toast('Unable to save note', { description: error.message }); return; }
     await queryClient.invalidateQueries({ queryKey: ['notes'] });
     setNoteDialogOpen(false);
     setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
@@ -648,535 +573,509 @@ export default function WorkboardPage() {
 
   function moveEmployeeLane(targetEmployeeId: string) {
     if (!draggingEmployeeId || draggingEmployeeId === targetEmployeeId) {
-      setDraggingEmployeeId(null);
-      setDropTargetEmployeeId(null);
-      return;
+      setDraggingEmployeeId(null); setDropTargetEmployeeId(null); return;
     }
-
-    const employeeIds = orderedDispatchBoard.map((lane) => lane.employee.id);
-    const baseOrder = employeeIds.filter((employeeId) => employeeId !== draggingEmployeeId);
-    const targetIndex = baseOrder.indexOf(targetEmployeeId);
-    if (targetIndex === -1) {
-      setDraggingEmployeeId(null);
-      setDropTargetEmployeeId(null);
-      return;
-    }
-
-    baseOrder.splice(targetIndex, 0, draggingEmployeeId);
-    persistLaneOrder(baseOrder);
+    const ids = orderedDispatchBoard.map((l) => l.employee.id);
+    const base = ids.filter((id) => id !== draggingEmployeeId);
+    const idx = base.indexOf(targetEmployeeId);
+    if (idx === -1) { setDraggingEmployeeId(null); setDropTargetEmployeeId(null); return; }
+    base.splice(idx, 0, draggingEmployeeId);
+    persistLaneOrder(base);
     setDraggingEmployeeId(null);
     setDropTargetEmployeeId(null);
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
-      {/* Main workflow board */}
-      <div className="flex-1 p-4 overflow-auto">
-        <PageHeader
-          title={activeProperty ? `${activeProperty.name} Workflow` : 'Workflow'}
-          subtitle={activeProperty ? `Dispatch board for ${activeProperty.name}. Collect property work needs, match them to scheduled crew, and hand the finished plan off to Breakroom.` : 'Pull the scheduled crew for the selected day, assign tasks from Task Management, and send the finished plan straight to the breakroom screen.'}
-          badge={<Badge variant="secondary">{activeProperty ? `${activeProperty.name} / ${department} / ${boardDate}` : `${department} / ${boardDate}`}</Badge>}
-          action={{ label: activeProperty ? 'Add Property Need' : 'Add Assignment', onClick: () => (activeProperty ? openRequestDialog() : openAssignmentDialog(selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '')) }}
-        >
-           {activeProperty ? (
-             <Badge variant="outline" className="h-7 px-3 text-xs" style={{ borderColor: activeProperty.color, color: activeProperty.color }}>
-               {activeProperty.shortName}
-             </Badge>
-           ) : null}
-           <Badge variant="outline" className="h-7 px-3 text-xs">
-             Scheduled Crew Only
-           </Badge>
-           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'timeline')}>
-             <TabsList className="h-8">
-               <TabsTrigger value="list" className="text-xs gap-1"><LayoutList className="h-3.5 w-3.5" /> List</TabsTrigger>
-               <TabsTrigger value="timeline" className="text-xs gap-1"><GanttChart className="h-3.5 w-3.5" /> Timeline</TabsTrigger>
-             </TabsList>
-           </Tabs>
-           <Tooltip>
-             <TooltipTrigger asChild>
-               <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" aria-label="Breakroom cast help">
-                 <MonitorSmartphone className="h-4 w-4" />
-               </Button>
-             </TooltipTrigger>
-             <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
-               Use Breakroom as the passive cast screen for a Wi-Fi connected TV on the existing network. Build the plan here, then refresh Breakroom to display the live crew order and task sequence.
-             </TooltipContent>
-           </Tooltip>
-         </PageHeader>
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
 
-        {activeProperty ? (
-          <div
-            className="mb-4 overflow-hidden rounded-3xl border bg-card/95 shadow-sm"
-            style={{ borderColor: `${activeProperty.color}55` }}
-          >
-            <div className="h-1.5" style={{ background: activeProperty.color }} />
-            <div className="grid gap-4 p-5 lg:grid-cols-[1.15fr_0.85fr]">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" style={{ borderColor: activeProperty.color, color: activeProperty.color }}>
-                    {activeProperty.shortName}
-                  </Badge>
-                  <Badge variant="secondary">{activeProperty.city}, {activeProperty.state}</Badge>
-                  {activeProperty.propertyClassId ? <Badge variant="outline">Property class assigned</Badge> : null}
-                </div>
-                <h3 className="mt-3 text-lg font-semibold">Property Task Needs</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Start here for {activeProperty.name}. Collect what the property needs done on {boardDate}, then convert those needs into assignments for the scheduled crew.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Badge variant="outline">{propertyRequests.length} needs collected</Badge>
-                  <Badge variant="outline">{propertyWorkLocations.length} property locations</Badge>
-                  <Badge variant="outline">{fallbackEligibleEmployees.length} employees available to assign</Badge>
-                </div>
-              </div>
-              <div className="rounded-2xl border bg-muted/20 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold">Today&apos;s needs queue</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      Client-submitted and admin-entered needs waiting to be assigned.
-                    </div>
-                  </div>
-                  <Button size="sm" onClick={openRequestDialog}>Add Need</Button>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {propertyRequests.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed bg-background/70 p-4 text-sm text-muted-foreground">
-                      No task needs have been collected for this property yet.
-                    </div>
-                  ) : (
-                    propertyRequests.map((request) => (
-                      <div key={request.id} className="rounded-2xl border bg-background/80 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-medium">{request.title}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {request.requestedBy} · {request.requestedByType} · {request.preferredLocation || 'No location set'}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <Badge variant={request.priority === 'high' ? 'destructive' : request.priority === 'medium' ? 'secondary' : 'outline'}>
-                              {request.priority}
-                            </Badge>
-                            <Badge variant="outline">{request.status}</Badge>
-                          </div>
-                        </div>
-                        {request.notes ? <div className="mt-2 text-xs text-muted-foreground">{request.notes}</div> : null}
-                        <div className="mt-3 flex justify-end">
-                          <Button size="sm" onClick={() => applyRequestToAssignment(request)} disabled={request.status === 'assigned' || fallbackEligibleEmployees.length === 0}>
-                            Assign Need
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
+      {/* ─── MAIN DISPATCH BOARD ─── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
 
-        <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] mb-4">
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="text-sm font-medium">Crew filter</div>
-            <p className="text-xs text-muted-foreground mt-1">This board follows the top-bar department and date. The assignment flow stays focused on the scheduled crew for that day so dispatching is faster and cleaner.</p>
-            <div className="mt-3">
-              <label className="text-xs text-muted-foreground">Group</label>
-              <select
-                value={groupFilter}
-                onChange={(event) => setGroupFilter(event.target.value)}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="all">All groups</option>
-                {groups.map((group) => (
-                  <option key={group} value={group}>{group}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="text-sm font-medium">Program setup tie-in</div>
-            <p className="text-xs text-muted-foreground mt-1">Assignments pull from Task Management and property locations, while employee rows inherit role, department, group, worker type, and property from Employee Management.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Badge variant="outline">{taskList.length} active tasks</Badge>
-              <Badge variant="outline">{propertyWorkLocations.length} locations</Badge>
-              <Badge variant="outline">{activeDepartmentEmployees.length} active employees</Badge>
-              <Badge variant="outline">{propertyRequests.length} property requests</Badge>
-              {focusMode === 'requests' ? <Badge variant="secondary">Command Center drill-in</Badge> : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          <Badge variant="outline">{orderedDispatchBoard.length} scheduled crew</Badge>
-          <Badge variant="outline">{assignedEmployeeIds.size} with tasks</Badge>
-          <Badge variant="outline">{Math.max(orderedDispatchBoard.length - assignedEmployeeIds.size, 0)} waiting assignment</Badge>
-          <Badge variant="outline">{dayAssignments.length} task rows</Badge>
-          <Badge variant="outline">{totalOpenMinutes} open mins</Badge>
-          {showFreshUpdateBadge ? <Badge variant="secondary">Updated just now</Badge> : null}
-        </div>
-
-        <div className="hidden grid gap-4 xl:grid-cols-[1.15fr_0.85fr] mb-4">
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <CloudSun className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Weather Planning Snapshot</h3>
-            </div>
-            {planningWeatherLocation && latestWeatherLog ? (
-              <WeatherSnapshotCard location={planningWeatherLocation} log={latestWeatherLog} compact />
-            ) : (
-              <p className="text-sm text-muted-foreground">No weather snapshot available for today yet.</p>
+        {/* Header bar */}
+        <div className="border-b bg-card px-5 py-3 flex items-center gap-3 flex-wrap shrink-0">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight">Workflow</h1>
+            {activeProperty && (
+              <Badge variant="outline" style={{ borderColor: activeProperty.color, color: activeProperty.color }}>
+                {activeProperty.shortName}
+              </Badge>
+            )}
+            {showFreshUpdateBadge && (
+              <Badge variant="secondary" className="gap-1">
+                <Radio className="h-3 w-3 animate-pulse" /> Live
+              </Badge>
             )}
           </div>
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <Droplets className="h-4 w-4 text-chart-blue" />
-              <h3 className="text-sm font-semibold">Application Planning Cues</h3>
-            </div>
-            <div className="space-y-3">
-              <div className="rounded-2xl bg-muted/50 p-3">
-                <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Today's applications</div>
-                <div className="mt-1 text-2xl font-semibold">{todayApplications.length}</div>
-              </div>
-              {todayApplications.slice(0, 2).map((log) => {
-                const area = applicationAreas.find((entry) => entry.id === log.areaId);
-                return (
-                  <div key={log.id} className="rounded-2xl border p-3">
-                    <div className="text-sm font-medium">{area?.name ?? 'Unknown area'}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {log.startTime} - {log.endTime} · {log.areaTreated} {log.areaUnit}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">{log.agronomicPurpose}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+
+          {/* Date picker */}
+          <input
+            type="date"
+            value={boardDate}
+            onChange={(e) => setBoardDate(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            data-testid="input-board-date"
+          />
+          {boardDate !== todayDateKey ? (
+            <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => setBoardDate(todayDateKey)}>
+              Today
+            </Button>
+          ) : null}
+
+          {/* Department */}
+          <select
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            data-testid="select-department"
+          >
+            {['Maintenance', 'Irrigation', 'Chemicals', 'All Departments'].map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+
+          {/* Group filter */}
+          <select
+            value={groupFilter}
+            onChange={(e) => setGroupFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            data-testid="select-group"
+          >
+            <option value="all">All groups</option>
+            {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+
+          {/* View toggle */}
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'timeline')}>
+            <TabsList className="h-9">
+              <TabsTrigger value="list" className="text-xs gap-1 px-3">
+                <LayoutList className="h-3.5 w-3.5" /> List
+              </TabsTrigger>
+              <TabsTrigger value="timeline" className="text-xs gap-1 px-3">
+                <GanttChart className="h-3.5 w-3.5" /> Timeline
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label="Breakroom display info">
+                <MonitorSmartphone className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
+              Build the day here, then open Breakroom on a cast TV to display the live crew order and task sequence.
+            </TooltipContent>
+          </Tooltip>
         </div>
 
-        <div className="rounded-3xl border bg-card/90 p-4 shadow-sm mb-4">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div>
-              <h3 className="text-sm font-semibold">Crew Needing Setup Attention</h3>
-              <p className="text-xs text-muted-foreground">These employees are active in the selected department but do not have a scheduled shift for this operating date.</p>
-            </div>
-            <Badge variant="outline">{unscheduledEmployees.length} unscheduled</Badge>
+        {/* Stats strip */}
+        <div className="border-b bg-muted/30 px-5 py-2 flex items-center gap-4 flex-wrap text-xs shrink-0">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Users className="h-3.5 w-3.5" />
+            <span><span className="font-semibold text-foreground">{scheduledEmployees.length}</span> scheduled</span>
           </div>
-          {unscheduledEmployees.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Everyone in this filtered department has a scheduled shift for {boardDate}.</p>
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span><span className="font-semibold text-foreground">{assignedEmployeeIds.size}</span> with tasks</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            <span><span className="font-semibold text-foreground">{totalOpenMinutes}</span> open mins</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <ListChecks className="h-3.5 w-3.5" />
+            <span><span className="font-semibold text-foreground">{dayAssignments.length}</span> tasks assigned</span>
+          </div>
+          {newRequestsCount > 0 && (
+            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 ml-auto">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span><span className="font-semibold">{newRequestsCount}</span> unhandled {newRequestsCount === 1 ? 'need' : 'needs'}</span>
+            </div>
+          )}
+          {unscheduledEmployees.length > 0 && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <span className="text-orange-500 font-semibold">{unscheduledEmployees.length}</span>
+              <span>unscheduled</span>
+            </div>
+          )}
+        </div>
+
+        {/* Crew board */}
+        <div className="flex-1 overflow-auto p-4">
+          {orderedDispatchBoard.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center gap-3">
+              <Users className="h-10 w-10 text-muted-foreground/40" />
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">No crew scheduled for {boardDate}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Build shifts in the Scheduler, then return here to dispatch tasks.
+                </p>
+              </div>
+            </div>
+          ) : viewMode === 'timeline' ? (
+            <GanttTimeline
+              employees={orderedDispatchBoard.map((l) => l.employee)}
+              assignments={dayAssignments}
+              tasks={taskList}
+              equipment={equipmentList}
+              scheduleEntries={scheduleList}
+              date={boardDate}
+              onAssignmentClick={(a) => openEditAssignmentDialog(a)}
+              onDropTask={(employeeId) => openAssignmentDialog(employeeId)}
+            />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {unscheduledEmployees.map((employee) => (
-                <div key={employee.id} className="rounded-2xl border bg-muted/30 p-4">
-                  <div className="font-medium">{employee.firstName} {employee.lastName}</div>
-                  <div className="text-xs text-muted-foreground mt-1">{employee.role} · {employee.group} · {employee.workerType}</div>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <Badge variant="outline">{employee.department}</Badge>
-                    <Badge variant="secondary">{employee.language}</Badge>
+            <div className="space-y-2">
+              {orderedDispatchBoard.map((lane, index) => (
+                <EmployeeRow
+                  key={lane.employee.id}
+                  employee={lane.employee}
+                  assignments={lane.employeeAssignments}
+                  tasks={taskList}
+                  orderIndex={index}
+                  isDragging={draggingEmployeeId === lane.employee.id}
+                  isDropTarget={dropTargetEmployeeId === lane.employee.id}
+                  shiftLabel={lane.shift ? `${lane.shift.shiftStart}–${lane.shift.shiftEnd}` : undefined}
+                  laneSummary={
+                    lane.shift
+                      ? `${lane.assignedMinutes} min assigned · ${lane.openMinutes} min open`
+                      : `${lane.employeeAssignments.length} tasks assigned`
+                  }
+                  onDragStart={setDraggingEmployeeId}
+                  onDragEnter={setDropTargetEmployeeId}
+                  onDragEnd={() => { setDraggingEmployeeId(null); setDropTargetEmployeeId(null); }}
+                  onDropRow={moveEmployeeLane}
+                  onAddTask={openAssignmentDialog}
+                  onEditAssignment={openEditAssignmentDialog}
+                  onRemoveAssignment={removeAssignment}
+                />
+              ))}
+
+              {/* Unscheduled crew notice */}
+              {unscheduledEmployees.length > 0 && (
+                <div className="rounded-3xl border border-dashed bg-card/60 p-4 mt-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-3">
+                    Not yet scheduled for {boardDate} — {unscheduledEmployees.length} crew member{unscheduledEmployees.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {unscheduledEmployees.map((e) => (
+                      <div key={e.id} className="rounded-xl border bg-muted/30 px-3 py-2 text-xs">
+                        <span className="font-medium">{e.firstName} {e.lastName}</span>
+                        <span className="text-muted-foreground ml-1">· {e.role} · {e.group}</span>
+                      </div>
+                    ))}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── RIGHT RAIL ─── */}
+      <div className="w-80 border-l bg-card overflow-auto flex flex-col hidden lg:flex">
+
+        {/* Needs Queue */}
+        <div className="border-b p-4 flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Needs Queue</h3>
+              {newRequestsCount > 0 && (
+                <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{newRequestsCount}</Badge>
+              )}
+            </div>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{boardDate}</span>
+          </div>
+
+          {/* Filter tabs */}
+          <div className="flex gap-1 mb-3">
+            {(['all', 'new', 'assigned'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setNeedsFilter(f)}
+                className={`flex-1 rounded-lg py-1 text-[11px] font-medium transition-colors ${
+                  needsFilter === f
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                }`}
+                data-testid={`filter-needs-${f}`}
+              >
+                {f === 'all' ? `All (${propertyRequests.length})` : f === 'new' ? `Open (${propertyRequests.filter((r) => r.status === 'new').length})` : `Done (${propertyRequests.filter((r) => r.status === 'assigned').length})`}
+              </button>
+            ))}
+          </div>
+
+          {filteredRequests.length === 0 ? (
+            <div className="rounded-2xl border border-dashed bg-muted/20 p-4 text-center">
+              <p className="text-xs text-muted-foreground">
+                {needsFilter === 'new' ? 'All needs have been handled.' : needsFilter === 'assigned' ? 'No needs dispatched yet.' : 'No needs logged for this date.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-72 overflow-auto pr-0.5">
+              {filteredRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className={`rounded-2xl border p-3 ${PRIORITY_COLOR[request.priority] ?? 'bg-muted/20 border-border'}`}
+                  data-testid={`card-request-${request.id}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {STATUS_ICON[request.status]}
+                      <span className="text-sm font-medium truncate">{request.title}</span>
+                    </div>
+                    <Badge
+                      variant={request.priority === 'high' ? 'destructive' : request.priority === 'medium' ? 'secondary' : 'outline'}
+                      className="h-5 px-1.5 text-[10px] shrink-0"
+                    >
+                      {PRIORITY_LABEL[request.priority]}
+                    </Badge>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mb-2">
+                    {request.requestedBy}
+                    {request.preferredLocation ? ` · ${request.preferredLocation}` : ''}
+                  </div>
+                  {request.notes && (
+                    <div className="text-[11px] text-muted-foreground italic mb-2 line-clamp-2">{request.notes}</div>
+                  )}
+                  {request.status !== 'assigned' && (
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        className="h-7 text-[11px] flex-1"
+                        onClick={() => applyRequestToAssignment(request)}
+                        disabled={fallbackEligibleEmployees.length === 0}
+                        data-testid={`button-assign-request-${request.id}`}
+                      >
+                        Dispatch
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px] px-2"
+                        onClick={() => dismissRequest(request.id)}
+                        data-testid={`button-dismiss-request-${request.id}`}
+                      >
+                        Done
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {orderedDispatchBoard.length === 0 ? (
-          <div className="rounded-3xl border border-dashed bg-card/80 p-6 text-sm text-muted-foreground shadow-sm">
-            No scheduled employees are available for {boardDate}. Build the day in Scheduler first, then return here to assign tasks from Task Management.
+        {/* Scheduled crew summary */}
+        <div className="border-b p-4 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-3">
+            <Users className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Scheduled Crew</h3>
+            <Badge variant="outline" className="ml-auto text-[10px]">{scheduledEmployees.length}</Badge>
           </div>
-        ) : viewMode === 'timeline' ? (
-          <GanttTimeline
-            employees={orderedDispatchBoard.map((lane) => lane.employee)}
-            assignments={dayAssignments}
-            tasks={taskList}
-            equipment={equipmentList}
-            scheduleEntries={scheduleList}
-            date={boardDate}
-            onAssignmentClick={(a) => openEditAssignmentDialog(a)}
-            onDropTask={(employeeId, startMinute) => {
-              const hours = Math.floor(startMinute / 60);
-              const mins = startMinute % 60;
-              openAssignmentDialog(employeeId);
-            }}
-          />
-        ) : (
-          <div className="space-y-2">
-            {orderedDispatchBoard.map((lane, index) => (
-              <EmployeeRow
-                key={lane.employee.id}
-                employee={lane.employee}
-                assignments={lane.employeeAssignments}
-                tasks={taskList}
-                orderIndex={index}
-                isDragging={draggingEmployeeId === lane.employee.id}
-                isDropTarget={dropTargetEmployeeId === lane.employee.id}
-                shiftLabel={lane.shift ? `${lane.shift.shiftStart}-${lane.shift.shiftEnd}` : undefined}
-                laneSummary={lane.shift ? `${lane.assignedMinutes} assigned mins / ${lane.openMinutes} open mins` : `${lane.employeeAssignments.length} tasks assigned`}
-                onDragStart={setDraggingEmployeeId}
-                onDragEnter={setDropTargetEmployeeId}
-                onDragEnd={() => {
-                  setDraggingEmployeeId(null);
-                  setDropTargetEmployeeId(null);
-                }}
-                onDropRow={moveEmployeeLane}
-                onAddTask={openAssignmentDialog}
-                onEditAssignment={openEditAssignmentDialog}
-                onRemoveAssignment={removeAssignment}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Right rail */}
-      <div className="w-80 border-l bg-card overflow-auto p-4 hidden lg:block">
-        <div className="space-y-4">
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <EscalationCenter />
-          </div>
-
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <CloudSun className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Daily Weather</h3>
-            </div>
-            {planningWeatherLocation && latestWeatherLog ? (
-              <WeatherSnapshotCard
-                location={planningWeatherLocation}
-                log={latestWeatherLog}
-                compact
-                title="Daily Weather"
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">No weather snapshot is available for the selected day yet.</p>
-            )}
-          </div>
-
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <Droplets className="h-4 w-4 text-chart-blue" />
-              <h3 className="text-sm font-semibold">Daily Applications</h3>
-            </div>
-            <div className="space-y-3">
-              <div className="rounded-2xl bg-muted/50 p-3">
-                <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Applications scheduled today</div>
-                <div className="mt-1 text-2xl font-semibold">{todayApplications.length}</div>
-              </div>
-              {todayApplications.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No chemical applications are logged for this day.</p>
-              ) : (
-                todayApplications.slice(0, 3).map((log) => {
-                  const area = applicationAreas.find((entry) => entry.id === log.areaId);
-                  return (
-                    <div key={log.id} className="rounded-2xl border p-3">
-                      <div className="text-sm font-medium">{area?.name ?? 'Unknown area'}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {log.startTime} - {log.endTime} · {log.areaTreated} {log.areaUnit}
+          {scheduledEmployees.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No shifts entered for this date.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-52 overflow-auto">
+              {orderedDispatchBoard.map((lane) => {
+                const tasksCount = lane.employeeAssignments.length;
+                const coverPct = lane.shiftMinutes > 0 ? Math.round((lane.assignedMinutes / lane.shiftMinutes) * 100) : 0;
+                return (
+                  <div
+                    key={lane.employee.id}
+                    className="flex items-center gap-2 rounded-xl bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/60 transition-colors"
+                    onClick={() => openAssignmentDialog(lane.employee.id)}
+                    data-testid={`row-crew-${lane.employee.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">
+                        {lane.employee.firstName} {lane.employee.lastName}
                       </div>
-                      <div className="mt-1 text-xs text-muted-foreground">{log.agronomicPurpose}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {lane.shift ? `${lane.shift.shiftStart}–${lane.shift.shiftEnd}` : 'No shift'} · {tasksCount} task{tasksCount !== 1 ? 's' : ''}
+                      </div>
                     </div>
-                  );
-                })
-              )}
+                    <div className="text-right shrink-0">
+                      <div className={`text-[10px] font-semibold ${coverPct >= 80 ? 'text-green-600' : coverPct >= 40 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                        {lane.shiftMinutes > 0 ? `${coverPct}%` : '—'}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">covered</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <StickyNote className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Notes</h3>
-            </div>
-            <NotesPanel notes={noteList.filter((note) => note.date === boardDate || note.type === 'general')} onAddNote={() => setNoteDialogOpen(true)} />
+        {/* Weather */}
+        <div className="border-b p-4 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-3">
+            <CloudSun className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Weather</h3>
           </div>
+          {planningWeatherLocation && latestWeatherLog ? (
+            <WeatherSnapshotCard location={planningWeatherLocation} log={latestWeatherLog} compact title="Daily Weather" />
+          ) : (
+            <p className="text-xs text-muted-foreground">No weather data for this date.</p>
+          )}
+        </div>
 
-          <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <Droplets className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Turf</h3>
-            </div>
-            <TurfPanel data={turfData} />
+        {/* Escalations */}
+        <div className="border-b p-4 flex-shrink-0">
+          <EscalationCenter />
+        </div>
+
+        {/* Notes */}
+        <div className="p-4 flex-1">
+          <div className="flex items-center gap-2 mb-3">
+            <StickyNote className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Notes</h3>
           </div>
+          <NotesPanel
+            notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
+            onAddNote={() => setNoteDialogOpen(true)}
+          />
         </div>
       </div>
 
+      {/* ─── ASSIGNMENT DIALOG ─── */}
       <Dialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingAssignmentId ? 'Edit Workflow Assignment' : 'Add Workflow Assignment'}</DialogTitle>
+            <DialogTitle>
+              {editingAssignmentId ? 'Edit Assignment' : linkedRequestId ? 'Dispatch Need to Crew' : 'Assign Task to Crew'}
+            </DialogTitle>
           </DialogHeader>
+
+          {linkedRequestId && (
+            <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 mb-1">
+              Dispatching from needs queue — assignment will mark the request as handled.
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Employee</label>
+              <label className="text-xs text-muted-foreground">Crew member</label>
               <select
                 value={assignmentDraft.employeeId}
-                onChange={(event) => setAssignmentDraft({ ...assignmentDraft, employeeId: event.target.value })}
+                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-assignment-employee"
               >
                 {fallbackEligibleEmployees.length === 0 && <option value="">No employees available</option>}
-                {fallbackEligibleEmployees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName} · {employee.department} · {employee.group}{employee.status !== 'active' ? ' · inactive' : ''}
-                  </option>
-                ))}
+                {fallbackEligibleEmployees.map((e) => {
+                  const shift = getShiftForEmployee(scheduleList, e.id, boardDate);
+                  const shiftStr = shift ? ` (${shift.shiftStart}–${shift.shiftEnd})` : '';
+                  return (
+                    <option key={e.id} value={e.id}>
+                      {e.firstName} {e.lastName}{shiftStr} · {e.group}
+                    </option>
+                  );
+                })}
               </select>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Scheduled employees appear first. If no one is scheduled yet, the active filtered roster is available so you can keep building the day.
-              </p>
             </div>
+
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Task</label>
               <select
                 value={assignmentDraft.taskId}
-                onChange={(event) => setAssignmentDraft({ ...assignmentDraft, taskId: event.target.value })}
+                onChange={(e) => {
+                  const task = taskList.find((t) => t.id === e.target.value);
+                  setAssignmentDraft({ ...assignmentDraft, taskId: e.target.value, duration: String(task?.duration ?? assignmentDraft.duration) });
+                }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-assignment-task"
               >
-                {taskList.map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.name}
-                  </option>
+                {taskList.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
             </div>
+
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Equipment</label>
               <select
                 value={assignmentDraft.equipmentId}
-                onChange={(event) => setAssignmentDraft({ ...assignmentDraft, equipmentId: event.target.value })}
+                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, equipmentId: e.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-assignment-equipment"
               >
-                <option value="">No equipment assigned</option>
-                {availableEquipment.map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.unitNumber} · {unit.location} · {unit.status}
-                  </option>
+                <option value="">No equipment</option>
+                {availableEquipment.map((u) => (
+                  <option key={u.id} value={u.id}>{u.unitNumber} · {u.location} · {u.status}</option>
                 ))}
               </select>
             </div>
+
             <div>
-              <label className="text-xs text-muted-foreground">Start Time</label>
-              <Input type="time" value={assignmentDraft.startTime} onChange={(event) => setAssignmentDraft({ ...assignmentDraft, startTime: event.target.value })} className="mt-1" />
+              <label className="text-xs text-muted-foreground">Start time</label>
+              <Input
+                type="time"
+                value={assignmentDraft.startTime}
+                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, startTime: e.target.value })}
+                className="mt-1"
+                data-testid="input-assignment-start"
+              />
             </div>
+
             <div>
               <label className="text-xs text-muted-foreground">Duration (minutes)</label>
-              <Input value={assignmentDraft.duration} onChange={(event) => setAssignmentDraft({ ...assignmentDraft, duration: event.target.value })} className="mt-1" />
+              <Input
+                value={assignmentDraft.duration}
+                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, duration: e.target.value })}
+                className="mt-1"
+                data-testid="input-assignment-duration"
+              />
             </div>
+
             <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Area</label>
+              <label className="text-xs text-muted-foreground">Location / Area</label>
               {propertyWorkLocations.length > 0 ? (
                 <select
                   value={assignmentDraft.area}
-                  onChange={(event) => setAssignmentDraft({ ...assignmentDraft, area: event.target.value })}
+                  onChange={(e) => setAssignmentDraft({ ...assignmentDraft, area: e.target.value })}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  data-testid="select-assignment-area"
                 >
-                  {propertyWorkLocations.map((location) => (
-                    <option key={location.id} value={location.name}>
-                      {location.name}
-                    </option>
+                  {propertyWorkLocations.map((l) => (
+                    <option key={l.id} value={l.name}>{l.name}</option>
                   ))}
                 </select>
               ) : (
-                <Input value={assignmentDraft.area} onChange={(event) => setAssignmentDraft({ ...assignmentDraft, area: event.target.value })} className="mt-1" />
+                <Input
+                  value={assignmentDraft.area}
+                  onChange={(e) => setAssignmentDraft({ ...assignmentDraft, area: e.target.value })}
+                  className="mt-1"
+                  data-testid="input-assignment-area"
+                />
               )}
             </div>
           </div>
+
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setAssignmentDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveAssignment}>{editingAssignmentId ? 'Save Changes' : 'Save Assignment'}</Button>
+            <Button variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={saveAssignment} data-testid="button-save-assignment">
+              {editingAssignmentId ? 'Save Changes' : 'Dispatch'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add Property Request</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Request title</label>
-              <Input value={requestDraft.title} onChange={(event) => setRequestDraft({ ...requestDraft, title: event.target.value })} className="mt-1" />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Suggested task</label>
-              <select
-                value={requestDraft.taskId}
-                onChange={(event) => setRequestDraft({ ...requestDraft, taskId: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">No task linked yet</option>
-                {taskList.map((task) => (
-                  <option key={task.id} value={task.id}>{task.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Requested by</label>
-              <Input value={requestDraft.requestedBy} onChange={(event) => setRequestDraft({ ...requestDraft, requestedBy: event.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Request type</label>
-              <select
-                value={requestDraft.requestedByType}
-                onChange={(event) => setRequestDraft({ ...requestDraft, requestedByType: event.target.value as TaskRequest['requestedByType'] })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="client">Client</option>
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Priority</label>
-              <select
-                value={requestDraft.priority}
-                onChange={(event) => setRequestDraft({ ...requestDraft, priority: event.target.value as TaskRequest['priority'] })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Preferred location</label>
-              <select
-                value={requestDraft.preferredLocation}
-                onChange={(event) => setRequestDraft({ ...requestDraft, preferredLocation: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">No location preference</option>
-                {propertyWorkLocations.map((location) => (
-                  <option key={location.id} value={location.name}>{location.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Notes</label>
-              <textarea
-                value={requestDraft.notes}
-                onChange={(event) => setRequestDraft({ ...requestDraft, notes: event.target.value })}
-                className="mt-1 min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveTaskRequest}>Save Request</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
+      {/* ─── NOTE DIALOG ─── */}
       <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Workflow Note</DialogTitle>
+            <DialogTitle>Add Board Note</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground">Type</label>
               <select
                 value={noteDraft.type}
-                onChange={(event) => setNoteDraft({ ...noteDraft, type: event.target.value as Note['type'] })}
+                onChange={(e) => setNoteDraft({ ...noteDraft, type: e.target.value as Note['type'] })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="daily">Daily</option>
@@ -1187,41 +1086,39 @@ export default function WorkboardPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Author</label>
-              <Input value={noteDraft.author} onChange={(event) => setNoteDraft({ ...noteDraft, author: event.target.value })} className="mt-1" />
+              <Input value={noteDraft.author} onChange={(e) => setNoteDraft({ ...noteDraft, author: e.target.value })} className="mt-1" />
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Title</label>
-              <Input value={noteDraft.title} onChange={(event) => setNoteDraft({ ...noteDraft, title: event.target.value })} className="mt-1" />
+              <Input value={noteDraft.title} onChange={(e) => setNoteDraft({ ...noteDraft, title: e.target.value })} className="mt-1" />
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Location</label>
               {propertyWorkLocations.length > 0 ? (
                 <select
                   value={noteDraft.location}
-                  onChange={(event) => setNoteDraft({ ...noteDraft, location: event.target.value })}
+                  onChange={(e) => setNoteDraft({ ...noteDraft, location: e.target.value })}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="">General board note</option>
-                  {propertyWorkLocations.map((location) => (
-                    <option key={location.id} value={location.name}>
-                      {location.name}
-                    </option>
+                  {propertyWorkLocations.map((l) => (
+                    <option key={l.id} value={l.name}>{l.name}</option>
                   ))}
                 </select>
               ) : (
-                <Input value={noteDraft.location} onChange={(event) => setNoteDraft({ ...noteDraft, location: event.target.value })} className="mt-1" />
+                <Input value={noteDraft.location} onChange={(e) => setNoteDraft({ ...noteDraft, location: e.target.value })} className="mt-1" />
               )}
             </div>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Content</label>
               <textarea
                 value={noteDraft.content}
-                onChange={(event) => setNoteDraft({ ...noteDraft, content: event.target.value })}
+                onChange={(e) => setNoteDraft({ ...noteDraft, content: e.target.value })}
                 className="mt-1 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setNoteDialogOpen(false)}>Cancel</Button>
             <Button onClick={saveNote}>Save Note</Button>
           </div>
