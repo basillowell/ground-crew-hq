@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Bell, CalendarDays, LogOut, ShieldCheck } from 'lucide-react';
+import { Bell, CalendarDays, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -146,8 +146,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
 
         <div className="flex-1" />
 
-        <div className="hidden text-right xl:block">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Active Profile</div>
+        <div className="hidden text-right md:block">
           <div className="text-sm font-medium">{displayName}</div>
           <div className="text-[11px] text-muted-foreground">{displayRole}</div>
         </div>
@@ -190,45 +189,11 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-10 gap-2 rounded-full px-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary">
-                <span className="text-xs font-semibold text-primary-foreground">
-                  {(currentUser?.avatarInitials || 'WF').slice(0, 2)}
-                </span>
-              </div>
-              <div className="hidden text-left md:block">
-                <div className="text-xs font-semibold leading-none">{displayName}</div>
-                <div className="mt-1 text-[11px] text-muted-foreground">{displayRole}</div>
-              </div>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                <div>
-                  <div>{displayName}</div>
-                  <div className="text-[11px] font-normal text-muted-foreground">
-                    {displayRole} · {currentUser?.clubLabel || programSetting?.clientLabel || 'Client profile'}
-                  </div>
-                </div>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-              Signed in as {displayName} ({displayRole})
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onSignOut} className="gap-2 text-red-600 focus:text-red-700">
-              <LogOut className="h-4 w-4" />
-              Return to Launch Screen
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button variant="ghost" className="h-10 gap-2 rounded-full px-3 text-red-600 hover:text-red-700" onClick={onSignOut}>
+          <LogOut className="h-4 w-4" />
+          <span className="hidden sm:inline">Sign out</span>
+        </Button>
       </div>
     </header>
   );
 });
-

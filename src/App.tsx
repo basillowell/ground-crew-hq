@@ -106,6 +106,13 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
   }
 }
 
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { currentUser, isLoading } = useAuth();
+  if (isLoading) return <RouteFallback />;
+  if (!currentUser) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   const { currentUser, isLoading } = useAuth();
 
@@ -207,7 +214,14 @@ function AppWithNotificationSetup() {
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/app/*" element={<AppRoutes />} />
+            <Route
+              path="/app/*"
+              element={(
+                <ProtectedRoute>
+                  <AppRoutes />
+                </ProtectedRoute>
+              )}
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

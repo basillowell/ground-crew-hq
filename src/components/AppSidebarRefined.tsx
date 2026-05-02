@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Clock,
   Users,
+  ListChecks,
   Wrench,
   Shield,
   BarChart3,
@@ -108,7 +109,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
   const collapsed = state === 'collapsed';
   const location = useLocation();
   const { currentRole, currentPropertyId, currentUser } = useAuth();
-  const programSetting = useProgramSettings(currentUser?.orgId).data ?? undefined;
+  const { data: programSetting } = useProgramSettings(currentUser?.orgId);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
