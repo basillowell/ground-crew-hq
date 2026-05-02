@@ -16,7 +16,8 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { AppNotification } from './AppLayout';
-import type { AppUser, ProgramSettings, Property } from '@/data/seedData';
+import type { ProgramSettings, Property } from '@/data/seedData';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface WorkflowTopBarProps {
   department: string;
@@ -28,10 +29,7 @@ interface WorkflowTopBarProps {
   currentPropertyId: string;
   onSelectProperty: (propertyId: string) => void;
   allowAllProperties?: boolean;
-  appUsers: AppUser[];
-  currentUser?: AppUser;
   notifications: AppNotification[];
-  onSelectUser: (userId: string) => void;
   onSignOut: () => void;
   programSetting?: ProgramSettings;
 }
@@ -54,13 +52,11 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   currentPropertyId,
   onSelectProperty,
   allowAllProperties = false,
-  appUsers,
-  currentUser,
   notifications,
-  onSelectUser,
   onSignOut,
   programSetting,
 }: WorkflowTopBarProps) {
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
@@ -148,7 +144,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
 
         <div className="hidden text-right xl:block">
           <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Active Profile</div>
-          <div className="text-sm font-medium">{currentUser?.fullName || 'Select User'}</div>
+          <div className="text-sm font-medium">{currentUser?.fullName || 'WorkForce User'}</div>
         </div>
 
         <DropdownMenu>
@@ -198,7 +194,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                 </span>
               </div>
               <div className="hidden text-left md:block">
-                <div className="text-xs font-semibold leading-none">{currentUser?.fullName || 'Select User'}</div>
+                <div className="text-xs font-semibold leading-none">{currentUser?.fullName || 'WorkForce User'}</div>
                 <div className="mt-1 text-[11px] text-muted-foreground">{currentUser?.title || 'Launch profile'}</div>
               </div>
             </Button>
@@ -216,20 +212,9 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {appUsers.map((user) => (
-              <DropdownMenuItem key={user.id} onClick={() => onSelectUser(user.id)} className="justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[11px] font-semibold">
-                    {user.avatarInitials.slice(0, 2)}
-                  </div>
-                  <div>
-                    <div className="text-sm">{user.fullName}</div>
-                    <div className="text-[11px] text-muted-foreground">{user.title}</div>
-                  </div>
-                </div>
-                {currentUser?.id === user.id ? <Badge variant="secondary">Active</Badge> : null}
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+              Signed in as {currentUser?.fullName || 'WorkForce User'} ({(currentUser?.role || 'admin').toUpperCase()})
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onSignOut} className="gap-2 text-red-600 focus:text-red-700">
               <LogOut className="h-4 w-4" />

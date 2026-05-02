@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
@@ -6,7 +6,8 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import type { ProgramSettings } from '@/data/seedData';
 import {
   useAssignments,
-  useChemicalApplicationLogs,
+  useChemicalApplicationLogsAll,
+  useDepartmentOptions,
   useEmployees,
   useEquipmentUnits,
   useProgramSettings,
@@ -108,28 +109,23 @@ function applyBranding(programSetting?: ProgramSettings) {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
-  const [departmentOptions, setDepartmentOptions] = useState<string[]>(['Maintenance']);
   const [department, setDepartment] = useState('Maintenance');
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, isAdmin, isManager } = useAuth();
-  const programSettingsQuery = useProgramSettings();
-  const propertiesQuery = useProperties();
+  const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, isAdmin, isManager, orgId } = useAuth();
+  const programSettingsQuery = useProgramSettings(orgId);
+  const propertiesQuery = useProperties(orgId);
+  const departmentOptionsQuery = useDepartmentOptions();
   const todayKey = currentDate.toISOString().slice(0, 10);
-  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
-  const employeesQuery = useEmployees(propertyScope);
-  const scheduleEntriesQuery = useScheduleEntries(todayKey, propertyScope);
-  const assignmentsQuery = useAssignments(todayKey, propertyScope);
-  const equipmentUnitsQuery = useEquipmentUnits(propertyScope);
+  const employeesQuery = useEmployees(currentPropertyId, orgId);
+  const scheduleEntriesQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
+  const assignmentsQuery = useAssignments(todayKey, currentPropertyId, orgId);
+  const equipmentUnitsQuery = useEquipmentUnits(currentPropertyId, orgId);
   const weatherStationsQuery = useWeatherStations();
-  const chemicalApplicationLogsQuery = useChemicalApplicationLogs(todayKey);
+  const chemicalApplicationLogsQuery = useChemicalApplicationLogsAll();
 
   const programSetting = programSettingsQuery.data ?? null;
-  const allProperties = propertiesQuery.data ?? [];
-  const properties = useMemo(() => {
-    if (isAdmin || isManager) return allProperties;
-    if (!currentUser?.propertyId) return [];
-    return allProperties.filter((entry) => entry.id === currentUser.propertyId);
-  }, [allProperties, currentUser?.propertyId, isAdmin, isManager]);
+  const properties = propertiesQuery.data ?? [];
+  const departmentOptions = departmentOptionsQuery.data?.map((departmentOption) => departmentOption.name) ?? ['Maintenance'];
   const employees = employeesQuery.data ?? [];
   const scheduleEntries = scheduleEntriesQuery.data ?? [];
   const assignments = assignmentsQuery.data ?? [];
@@ -152,19 +148,12 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [currentPropertyId, isAdmin, isManager, properties, setCurrentPropertyId]);
 
   useEffect(() => {
-    const derivedDepartments = [...new Set([
-      ...(programSetting?.defaultDepartment ? [programSetting.defaultDepartment] : []),
-      ...employees.map((employee) => employee.department).filter(Boolean),
-      ...(currentUser?.department ? [currentUser.department] : []),
-    ])];
-    const nextDepartmentOptions = derivedDepartments.length > 0 ? derivedDepartments : ['Maintenance'];
-    setDepartmentOptions(nextDepartmentOptions);
     setDepartment((currentDepartment) => {
       if (currentUser?.department) return currentUser.department;
-      if (nextDepartmentOptions.includes(currentDepartment)) return currentDepartment;
-      return nextDepartmentOptions[0] ?? 'Maintenance';
+      if (departmentOptions.includes(currentDepartment)) return currentDepartment;
+      return departmentOptions[0] ?? 'Maintenance';
     });
-  }, [currentUser?.department, employees, programSetting?.defaultDepartment]);
+  }, [currentUser?.department, departmentOptions]);
 
   useEffect(() => {
     applyBranding(programSetting ?? undefined);
@@ -279,32 +268,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             currentPropertyId={currentPropertyId}
             onSelectProperty={handleSelectProperty}
             allowAllProperties={isAdmin || isManager}
-            appUsers={currentUser ? [{
-              id: currentUser.appUserId,
-              fullName: currentUser.fullName,
-              email: currentUser.email,
-              role: currentUser.role === 'employee' ? 'crew' : currentUser.role,
-              title: currentUser.title,
-              department: currentUser.department,
-              clubId: currentUser.propertyId || 'default-property',
-              clubLabel: programSetting?.clientLabel || 'Client profile',
-              avatarInitials: currentUser.fullName.split(' ').map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase() || 'WF',
-              status: 'active',
-            }] : []}
-            currentUser={currentUser ? {
-              id: currentUser.appUserId,
-              fullName: currentUser.fullName,
-              email: currentUser.email,
-              role: currentUser.role === 'employee' ? 'crew' : currentUser.role,
-              title: currentUser.title,
-              department: currentUser.department,
-              clubId: currentUser.propertyId || 'default-property',
-              clubLabel: programSetting?.clientLabel || 'Client profile',
-              avatarInitials: currentUser.fullName.split(' ').map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase() || 'WF',
-              status: 'active',
-            } : undefined}
             notifications={notifications}
-            onSelectUser={() => {}}
             onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
           />

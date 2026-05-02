@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
-  const { currentUser, isLoading, authDebugMessage } = useAuth();
+  const { currentUser, authDebugMessage } = useAuth();
   const programSettingsQuery = useProgramSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,6 +46,8 @@ export default function LaunchPortalPage() {
 
       if (result.error) {
         setErrorMessage(result.error.message);
+      } else {
+        navigate('/app/dashboard');
       }
     } catch {
       setErrorMessage('An unexpected error occurred. Please try again.');
