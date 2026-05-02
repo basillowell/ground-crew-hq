@@ -64,14 +64,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const displayRole = (currentUser?.role || 'admin').toUpperCase();
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
-  const selectedProperty = currentPropertyId === 'all'
-    ? null
-    : properties.find((property) => property.id === currentPropertyId) ?? null;
-  const propertyLabel = currentPropertyId === 'all'
-    ? 'All Properties'
-    : selectedProperty?.name ?? 'Select Property';
-  const propertyDotColor = currentPropertyId === 'all' ? '#334155' : selectedProperty?.color ?? '#166534';
-
   return (
     <header className="border-b bg-card px-3 py-2 shrink-0">
       <div className="flex flex-wrap items-center gap-3">
@@ -106,14 +98,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </SelectContent>
         </Select>
 
-        <div className="hidden min-w-[220px] items-center gap-2 rounded-xl border bg-background px-3 py-2 lg:flex">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: propertyDotColor }} />
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Property Context</div>
-            <div className="text-sm font-medium">{propertyLabel}</div>
-          </div>
-        </div>
-
         <div className="min-w-[250px]">
           <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Workflow Date</div>
           <Popover>
@@ -143,13 +127,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             {programSetting.clientLabel}
           </Badge>
         ) : null}
-
-        <div className="flex-1" />
-
-        <div className="hidden text-right md:block">
-          <div className="text-sm font-medium">{displayName}</div>
-          <div className="text-[11px] text-muted-foreground">{displayRole}</div>
-        </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -189,9 +166,21 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button variant="ghost" className="h-10 gap-2 rounded-full px-3 text-red-600 hover:text-red-700" onClick={onSignOut}>
+        <div className="flex-1" />
+
+        <div className="hidden text-right md:block">
+          <div className="text-sm font-medium">{displayName}</div>
+          <div className="text-[11px] text-muted-foreground">{displayRole}</div>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+          onClick={onSignOut}
+          aria-label="Sign out"
+        >
           <LogOut className="h-4 w-4" />
-          <span className="hidden sm:inline">Sign out</span>
         </Button>
       </div>
     </header>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { equipmentTypes, workOrders, type Employee, type EquipmentUnit } from '@/data/seedData';
+import { workOrders, type Employee, type EquipmentUnit } from '@/data/seedData';
 import { WorkOrderKanban } from '@/components/equipment/WorkOrderKanban';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 import { ChevronRight, Plus, Tractor } from 'lucide-react';
 import { useEmployees, useEquipmentUnits, useWorkLocations } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,8 +17,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 
 const statusMap = { available: 'success', 'in-use': 'info', maintenance: 'warning', 'out-of-service': 'danger' } as const;
-const woStatusMap = { open: 'warning', 'in-progress': 'info', completed: 'success' } as const;
-const prioMap = { low: 'neutral', medium: 'warning', high: 'danger' } as const;
+const currentStatusToUnitStatus = {
+  active: 'available',
+  'in-service': 'in-use',
+  'out-of-service': 'out-of-service',
+} as const;
+
+type CurrentStatus = keyof typeof currentStatusToUnitStatus;
+
+function makeDefaultNextService() {
+  const defaultNextService = new Date();
+  defaultNextService.setDate(defaultNextService.getDate() + 90);
+  return defaultNextService.toISOString().slice(0, 10);
+}
 
 export default function EquipmentPage() {
   const { currentUser, currentPropertyId } = useAuth();
@@ -26,56 +38,78 @@ export default function EquipmentPage() {
   const equipmentQuery = useEquipmentUnits(propertyScope, currentUser?.orgId);
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
   const workLocationsQuery = useWorkLocations();
+
   const unitList = equipmentQuery.data ?? [];
   const employeeList: Employee[] = employeesQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
-  const [selectedType, setSelectedType] = useState(equipmentTypes[0]);
+  const equipmentTypes = useMemo(
+    () => [...new Set(unitList.map((u) => ((u as unknown as { type?: string }).type ?? u.typeId)).filter(Boolean))],
+    [unitList],
+  );
+  const [selectedType, setSelectedType] = useState<string>('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
   const [draft, setDraft] = useState({
-    typeId: equipmentTypes[0]?.id ?? '',
+    typeId: '',
     unitNumber: '',
-    status: 'available' as EquipmentUnit['status'],
+    serialNumber: '',
+    currentStatus: 'active' as CurrentStatus,
     assignedTo: '',
     location: 'Shop',
     hours: '0',
-    lastService: '2024-03-01',
-    nextService: '2024-04-01',
+    lastService: new Date().toISOString().slice(0, 10),
+    nextService: makeDefaultNextService(),
+    notes: '',
     propertyId: '',
   });
 
-  const typeUnits = useMemo(() => unitList.filter((unit) => unit.typeId === selectedType.id), [selectedType.id, unitList]);
+  const activeType = selectedType || equipmentTypes[0] || '';
+  const typeUnits = useMemo(() => unitList.filter((unit) => unit.typeId === activeType), [activeType, unitList]);
   const typeOrders = workOrders.filter((wo) => typeUnits.some((u) => u.id === wo.unitId));
   const activeCount = typeUnits.filter((unit) => unit.status === 'available' || unit.status === 'in-use').length;
   const repairCount = typeUnits.filter((unit) => unit.status === 'maintenance' || unit.status === 'out-of-service').length;
 
-  async function persistUnits(nextUnits: EquipmentUnit[]) {
-    for (const unit of nextUnits) {
-      await supabase.from('equipment_units').upsert({
-        id: unit.id,
-        name: unit.unitNumber,
-        type: unit.typeId,
-        status: unit.status,
-        location: unit.location ?? null,
-        last_serviced: unit.lastService ?? null,
-        property_id: unit.propertyId ?? currentPropertyId,
-        org_id: currentUser?.orgId,
-      })
+  async function persistUnit(unit: EquipmentUnit) {
+    if (!supabase) return;
+
+    const basePayload = {
+      id: unit.id,
+      name: unit.unitNumber,
+      type: unit.typeId,
+      status: unit.status,
+      location: unit.location ?? null,
+      last_serviced: unit.lastService ?? null,
+      property_id: unit.propertyId ?? currentPropertyId ?? null,
+      org_id: currentUser?.orgId ?? null,
+    };
+
+    const payloadWithOptional = {
+      ...basePayload,
+      serial_number: draft.serialNumber.trim() || null,
+      notes: draft.notes.trim() || null,
+    };
+
+    let response = await supabase.from('equipment_units').upsert(payloadWithOptional);
+    if (response.error && response.error.message.toLowerCase().includes('column')) {
+      response = await supabase.from('equipment_units').upsert(basePayload);
     }
-    await queryClient.invalidateQueries({ queryKey: ['equipment-units'] })
+    if (response.error) throw response.error;
+    await queryClient.invalidateQueries({ queryKey: ['equipment-units'] });
   }
 
   function openAddUnit() {
     setEditingUnitId(null);
     setDraft({
-      typeId: selectedType.id,
+      typeId: activeType,
       unitNumber: '',
-      status: 'available',
+      serialNumber: '',
+      currentStatus: 'active',
       assignedTo: '',
       location: workLocations[0]?.name ?? 'Shop',
       hours: '0',
-      lastService: '2024-03-01',
-      nextService: '2024-04-01',
+      lastService: new Date().toISOString().slice(0, 10),
+      nextService: makeDefaultNextService(),
+      notes: '',
       propertyId: currentPropertyId ?? '',
     });
     setDialogOpen(true);
@@ -86,12 +120,19 @@ export default function EquipmentPage() {
     setDraft({
       typeId: unit.typeId,
       unitNumber: unit.unitNumber,
-      status: unit.status,
+      serialNumber: '',
+      currentStatus:
+        unit.status === 'in-use'
+          ? 'in-service'
+          : unit.status === 'out-of-service'
+            ? 'out-of-service'
+            : 'active',
       assignedTo: unit.assignedTo ?? '',
       location: unit.location,
       hours: String(unit.hours),
       lastService: unit.lastService,
-      nextService: unit.nextService,
+      nextService: unit.nextService || makeDefaultNextService(),
+      notes: '',
       propertyId: unit.propertyId ?? '',
     });
     setDialogOpen(true);
@@ -99,71 +140,62 @@ export default function EquipmentPage() {
 
   async function handleSaveUnit() {
     if (!draft.unitNumber.trim()) return;
-
+    const mappedStatus = currentStatusToUnitStatus[draft.currentStatus];
     const nextUnit: EquipmentUnit = {
       id: editingUnitId ?? `u${Date.now()}`,
-      typeId: draft.typeId,
+      typeId: draft.typeId || activeType || 'General',
       unitNumber: draft.unitNumber.trim(),
-      status: draft.status,
+      status: mappedStatus as EquipmentUnit['status'],
       assignedTo: draft.assignedTo || undefined,
       location: draft.location.trim(),
       hours: Number(draft.hours || 0),
       lastService: draft.lastService,
       nextService: draft.nextService,
-      propertyId: draft.propertyId || undefined,
+      propertyId: (currentPropertyId === 'all' ? draft.propertyId : currentPropertyId) || undefined,
     };
-
-    const nextUnits = editingUnitId
-      ? unitList.map((unit) => (unit.id === editingUnitId ? nextUnit : unit))
-      : [...unitList, nextUnit];
-
-    await persistUnits(nextUnits);
+    await persistUnit(nextUnit);
     setDialogOpen(false);
   }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
-      {/* Equipment list */}
       <div className="w-72 border-r bg-card overflow-auto p-3 space-y-1.5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">Equipment Types</h3>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={openAddUnit}><Plus className="h-3.5 w-3.5" /></Button>
         </div>
-        {equipmentTypes.map(eq => (
+        {equipmentTypes.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+            No equipment added yet. Add your first unit.
+          </div>
+        ) : equipmentTypes.map((type) => (
           <div
-            key={eq.id}
-            onClick={() => setSelectedType(eq)}
+            key={type}
+            onClick={() => setSelectedType(type)}
             className={`p-2.5 rounded-lg cursor-pointer transition-colors ${
-              selectedType.id === eq.id ? 'bg-accent border border-primary/20' : 'hover:bg-muted/50'
+              activeType === type ? 'bg-accent border border-primary/20' : 'hover:bg-muted/50'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{eq.name}</span>
+              <span className="text-sm font-medium">{type}</span>
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline" className="text-[10px]">{eq.category}</Badge>
               <span className="text-[10px] text-muted-foreground">
-                {unitList.filter((unit) => unit.typeId === eq.id && (unit.status === 'available' || unit.status === 'in-use')).length}
+                {unitList.filter((unit) => unit.typeId === type && (unit.status === 'available' || unit.status === 'in-use')).length}
                 /
-                {unitList.filter((unit) => unit.typeId === eq.id).length} active
+                {unitList.filter((unit) => unit.typeId === type).length} active
               </span>
-              {unitList.filter((unit) => unit.typeId === eq.id && (unit.status === 'maintenance' || unit.status === 'out-of-service')).length > 0 && (
-                <StatusChip variant="warning">
-                  {unitList.filter((unit) => unit.typeId === eq.id && (unit.status === 'maintenance' || unit.status === 'out-of-service')).length} repair
-                </StatusChip>
-              )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Detail panel */}
       <div className="flex-1 p-4 overflow-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold">{selectedType.name}</h2>
-            <p className="text-sm text-muted-foreground">{selectedType.category} · {typeUnits.length} managed units</p>
+            <h2 className="text-lg font-semibold">{activeType || 'Equipment'}</h2>
+            <p className="text-sm text-muted-foreground">{typeUnits.length} managed units</p>
           </div>
           <Button size="sm" className="gap-1" onClick={openAddUnit}><Plus className="h-3.5 w-3.5" /> Add Unit</Button>
         </div>
@@ -177,10 +209,10 @@ export default function EquipmentPage() {
 
           <TabsContent value="units" className="mt-3">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {typeUnits.map(unit => {
-                const assignee = unit.assignedTo ? employeeList.find(e => e.id === unit.assignedTo) : null;
+              {typeUnits.map((unit) => {
+                const assignee = unit.assignedTo ? employeeList.find((e) => e.id === unit.assignedTo) : null;
                 return (
-                  <Card key={unit.id} className="p-3 cursor-pointer hover:shadow-md transition-shadow" onClick={() => openEditUnit(unit)}>
+                  <Card key={unit.id} className="p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-semibold text-sm flex items-center gap-2">
                         <Tractor className="h-4 w-4 text-primary" />
@@ -193,12 +225,15 @@ export default function EquipmentPage() {
                       <div className="flex justify-between"><span>Hours</span><span className="font-mono text-foreground">{unit.hours.toLocaleString()}</span></div>
                       <div className="flex justify-between"><span>Last Service</span><span>{unit.lastService}</span></div>
                       <div className="flex justify-between"><span>Next Service</span><span>{unit.nextService}</span></div>
-                      {assignee && (
+                      {assignee ? (
                         <div className="flex justify-between">
                           <span>Assigned To</span>
                           <span className="font-medium text-foreground">{assignee.firstName} {assignee.lastName}</span>
                         </div>
-                      )}
+                      ) : null}
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button size="sm" variant="outline" onClick={() => openEditUnit(unit)}>Edit</Button>
                     </div>
                   </Card>
                 );
@@ -221,7 +256,7 @@ export default function EquipmentPage() {
               </Card>
               <Card className="p-4">
                 <div className="text-xs text-muted-foreground mb-1">Total Repair Cost (YTD)</div>
-                <div className="text-2xl font-bold">${typeOrders.reduce((s, o) => s + o.cost, 0).toLocaleString()}</div>
+                <div className="text-2xl font-bold">${typeOrders.reduce((sum, order) => sum + order.cost, 0).toLocaleString()}</div>
               </Card>
               <Card className="p-4">
                 <div className="text-xs text-muted-foreground mb-1">Open Work Orders</div>
@@ -245,8 +280,10 @@ export default function EquipmentPage() {
                 onChange={(event) => setDraft({ ...draft, typeId: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {equipmentTypes.map((type) => (
-                  <option key={type.id} value={type.id}>{type.name}</option>
+                {equipmentTypes.length === 0 ? (
+                  <option value="">General</option>
+                ) : equipmentTypes.map((type) => (
+                  <option key={type} value={type}>{type}</option>
                 ))}
               </select>
             </div>
@@ -255,15 +292,18 @@ export default function EquipmentPage() {
               <Input value={draft.unitNumber} onChange={(event) => setDraft({ ...draft, unitNumber: event.target.value })} className="mt-1" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Status</label>
+              <label className="text-xs text-muted-foreground">Serial Number</label>
+              <Input value={draft.serialNumber} onChange={(event) => setDraft({ ...draft, serialNumber: event.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Current Status</label>
               <select
-                value={draft.status}
-                onChange={(event) => setDraft({ ...draft, status: event.target.value as EquipmentUnit['status'] })}
+                value={draft.currentStatus}
+                onChange={(event) => setDraft({ ...draft, currentStatus: event.target.value as CurrentStatus })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="available">Available</option>
-                <option value="in-use">In Use</option>
-                <option value="maintenance">Maintenance</option>
+                <option value="active">Active</option>
+                <option value="in-service">In Service</option>
                 <option value="out-of-service">Out of Service</option>
               </select>
             </div>
@@ -283,32 +323,24 @@ export default function EquipmentPage() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Location</label>
-              {workLocations.length > 0 ? (
-                <select
-                  value={draft.location}
-                  onChange={(event) => setDraft({ ...draft, location: event.target.value })}
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  {workLocations.map((location) => (
-                    <option key={location.id} value={location.name}>{location.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <Input value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} className="mt-1" />
-              )}
+              <label className="text-xs text-muted-foreground">Location / Assigned Area</label>
+              <Input value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} className="mt-1" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Hours</label>
               <Input value={draft.hours} onChange={(event) => setDraft({ ...draft, hours: event.target.value })} className="mt-1" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Last Service</label>
+              <label className="text-xs text-muted-foreground">Last Serviced</label>
               <Input type="date" value={draft.lastService} onChange={(event) => setDraft({ ...draft, lastService: event.target.value })} className="mt-1" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Next Service</label>
               <Input type="date" value={draft.nextService} onChange={(event) => setDraft({ ...draft, nextService: event.target.value })} className="mt-1" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Notes</label>
+              <Textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} className="mt-1 min-h-20" />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">

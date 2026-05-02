@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -144,6 +144,7 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 
 export default function WorkboardPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { currentPropertyId, setCurrentPropertyId, currentUser } = useAuth();
   const [boardDate, setBoardDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -194,6 +195,7 @@ export default function WorkboardPage() {
   const tasksQuery = useTasks(effectivePropertyId, currentUser?.orgId);
   const equipmentQuery = useEquipmentUnits(effectivePropertyId);
   const notesQuery = useNotes(effectivePropertyId);
+  const tasksLoading = tasksQuery.isLoading;
 
   const taskRequestsQuery = useQuery({
     queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
@@ -981,16 +983,39 @@ export default function WorkboardPage() {
               <select
                 value={assignmentDraft.taskId}
                 onChange={(e) => {
+                  if (e.target.value === '__add_new_task__') {
+                    setAssignmentDialogOpen(false);
+                    setLinkedRequestId(null);
+                    navigate('/app/tasks?new=true');
+                    return;
+                  }
                   const task = taskList.find((t) => t.id === e.target.value);
                   setAssignmentDraft({ ...assignmentDraft, taskId: e.target.value, duration: String(task?.duration ?? assignmentDraft.duration) });
                 }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-assignment-task"
               >
+                {tasksLoading || taskList.length === 0 ? (
+                  <option value="" disabled>No tasks - add tasks in Task Management</option>
+                ) : null}
                 {taskList.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
+                <option value="__add_new_task__">+ Add new task...</option>
               </select>
+              {(tasksLoading || taskList.length === 0) ? (
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-medium text-primary hover:underline"
+                  onClick={() => {
+                    setAssignmentDialogOpen(false);
+                    setLinkedRequestId(null);
+                    navigate('/app/tasks');
+                  }}
+                >
+                  Go to Tasks →
+                </button>
+              ) : null}
             </div>
 
             <div className="col-span-2">

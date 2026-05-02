@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -69,6 +70,7 @@ function statusBadgeVariant(status: TaskStatus): 'default' | 'secondary' | 'outl
 
 export default function TasksCatalogPage() {
   const { currentUser, currentPropertyId } = useAuth();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const tasksQuery = useTasks(currentPropertyId, currentUser?.orgId);
   const taskList = tasksQuery.data ?? [];
@@ -147,6 +149,14 @@ export default function TasksCatalogPage() {
     setDraft(defaultDraft);
     setDialogOpen(true);
   }
+
+  useEffect(() => {
+    if (searchParams.get('new') === 'true') {
+      setEditingTaskId(null);
+      setDraft(defaultDraft);
+      setDialogOpen(true);
+    }
+  }, [searchParams]);
 
   function openEditDialog(task: Task) {
     const normalized = normalizeTask(task, 0);
