@@ -1276,3 +1276,21 @@ export function useClockEventsRange(startDate: string, endDate: string, property
     staleTime: 1000 * 60 * 1,
   });
 }
+
+export async function updatePropertyLocation(
+  propertyId: string,
+  latitude: number,
+  longitude: number,
+  label: string,
+) {
+  const { error } = await ensureSupabase()
+    .from('properties')
+    .update({
+      latitude,
+      longitude,
+      weather_location_label: label,
+    })
+    .eq('id', propertyId);
+
+  if (error) throw error;
+}

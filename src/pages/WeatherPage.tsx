@@ -247,6 +247,11 @@ export default function WeatherPage() {
   const [showDetailedDiagnostics, setShowDetailedDiagnostics] = useState(false);
   const [showOperationsControls, setShowOperationsControls] = useState(false);
   const [activeTab, setActiveTab] = useState<'daily' | 'manage'>('daily');
+  const [showLocationSetup, setShowLocationSetup] = useState(false);
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationSearchResults, setLocationSearchResults] = useState<Array<{ label: string; latitude: number; longitude: number }>>([]);
+  const [locationSearchLoading, setLocationSearchLoading] = useState(false);
+  const [locationSaveLoading, setLocationSaveLoading] = useState(false);
 
   useEffect(() => {
     setSelectedWorkLocationId((current) => {
@@ -290,6 +295,7 @@ export default function WeatherPage() {
   }, [rainfallEntriesQuery.data, weatherLocationsQuery.data, weatherLogsQuery.data, weatherStationsQuery.data]);
 
   const currentProperty = properties.find((property) => property.id === currentPropertyId) ?? null;
+  const hasLocation = hasValidCoordinates(currentProperty?.latitude, currentProperty?.longitude);
 
   function resolveLocationForProperty(property: Property | null | undefined) {
     if (!property) return null;
@@ -406,6 +412,18 @@ export default function WeatherPage() {
       };
     }
 
+    if (hasValidCoordinates(currentProperty?.latitude, currentProperty?.longitude)) {
+      const propertyWeatherLabel =
+        ((currentProperty as Property & { weatherLocationLabel?: string; weather_location_label?: string }).weatherLocationLabel) ||
+        ((currentProperty as Property & { weatherLocationLabel?: string; weather_location_label?: string }).weather_location_label);
+      return {
+        latitude: currentProperty!.latitude!,
+        longitude: currentProperty!.longitude!,
+        label: propertyWeatherLabel || `${currentProperty?.name ?? 'Property'} coordinates`,
+        sourceType: 'area-coordinates' as const,
+      };
+    }
+
     if (useSearchAnchorAsLiveSource && hasValidCoordinates(discoveryAnchor?.latitude, discoveryAnchor?.longitude)) {
       return {
         latitude: discoveryAnchor!.latitude!,
@@ -425,7 +443,7 @@ export default function WeatherPage() {
     }
 
     return null;
-  }, [browserCoordinates, discoveryAnchor, selectedLocation, selectedLocationPrimary, useSearchAnchorAsLiveSource]);
+  }, [browserCoordinates, currentProperty, discoveryAnchor, selectedLocation, selectedLocationPrimary, useSearchAnchorAsLiveSource]);
   const isPrimaryStationActiveSource =
     hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude) &&
     !isLegacyPlaceholderCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude);
@@ -591,10 +609,102 @@ export default function WeatherPage() {
     void weatherStationsQuery.refetch();
     void weatherLogsQuery.refetch();
     void rainfallEntriesQuery.refetch();
+    void propertiesQuery.refetch();
     void queryClient.invalidateQueries({ queryKey: ['weather-page-open-meteo'] });
     void queryClient.invalidateQueries({ queryKey: ['weather', selectedProperty?.id] });
     void selectedPropertyWeatherQuery.refetch();
     void liveForecastQuery.refetch();
+  }
+
+  async function savePropertyWeatherLocation(selectedLat: number, selectedLng: number, selectedLabel: string) {
+    if (!currentPropertyId) {
+      toast('Property not selected', {
+        description: 'Select a property first, then save weather location.',
+      });
+      return;
+    }
+    setLocationSaveLoading(true);
+    const { error } = await supabase
+      .from('properties')
+      .update({
+        latitude: selectedLat,
+        longitude: selectedLng,
+        weather_location_label: selectedLabel,
+      })
+      .eq('id', currentPropertyId);
+    setLocationSaveLoading(false);
+
+    if (error) {
+      toast('Unable to save weather location', {
+        description: error.message,
+      });
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['properties'] });
+    await propertiesQuery.refetch();
+    setShowLocationSetup(false);
+    setLocationQuery('');
+    setLocationSearchResults([]);
+    toast(`Weather location saved for ${currentProperty?.name ?? 'selected property'}`);
+  }
+
+  async function handleLocationSearch() {
+    const query = locationQuery.trim();
+    if (!query) return;
+    setLocationSearchLoading(true);
+    setLocationSearchResults([]);
+    try {
+      const response = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`,
+      );
+      if (!response.ok) {
+        throw new Error(`Location search failed (${response.status})`);
+      }
+      const payload = await response.json();
+      const nextResults = (payload?.results ?? []).slice(0, 5).map((result: any) => ({
+        label: [result?.name, result?.admin1, result?.country].filter(Boolean).join(', '),
+        latitude: Number(result?.latitude),
+        longitude: Number(result?.longitude),
+      }));
+      setLocationSearchResults(nextResults.filter((item: { latitude: number; longitude: number }) => hasValidCoordinates(item.latitude, item.longitude)));
+      if (!nextResults.length) {
+        toast('No matching locations found', {
+          description: 'Try a different city, state, or address.',
+        });
+      }
+    } catch (error) {
+      toast('Location search failed', {
+        description: (error as Error)?.message ?? 'Could not search Open-Meteo geocoding.',
+      });
+    } finally {
+      setLocationSearchLoading(false);
+    }
+  }
+
+  async function handleUseCurrentLocationForProperty() {
+    if (!navigator.geolocation) {
+      toast('Location unavailable', {
+        description: 'This browser does not support device geolocation.',
+      });
+      return;
+    }
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000,
+        });
+      });
+      const selectedLat = Number(position.coords.latitude.toFixed(4));
+      const selectedLng = Number(position.coords.longitude.toFixed(4));
+      await savePropertyWeatherLocation(selectedLat, selectedLng, 'Current Device Location');
+    } catch {
+      toast('Location permission needed', {
+        description: 'Allow location access to save your current property weather location.',
+      });
+    }
   }
 
   async function searchStationsByAddress(queryOverride?: string) {
@@ -1100,15 +1210,15 @@ export default function WeatherPage() {
   }, [properties, propertyLiveLogs, weatherLocations, weatherStations, weatherLogs]);
 
   const liveForecastQuery = useQuery({
-    queryKey: ['weather-page-open-meteo', selectedLocation?.id ?? 'none', liveWeatherCoordinates?.latitude, liveWeatherCoordinates?.longitude],
-    enabled: Boolean(liveWeatherCoordinates),
+    queryKey: ['weather-page-open-meteo', selectedLocation?.id ?? 'none', currentProperty?.latitude, currentProperty?.longitude],
+    enabled: hasLocation,
     staleTime: 1000 * 60 * 30,
     retry: 1,
     refetchOnWindowFocus: false,
     queryFn: async () =>
       fetchOpenMeteoWeather({
-        latitude: liveWeatherCoordinates!.latitude,
-        longitude: liveWeatherCoordinates!.longitude,
+        latitude: currentProperty!.latitude!,
+        longitude: currentProperty!.longitude!,
       }),
   });
   const liveForecastHours = useMemo(() => liveForecastQuery.data?.hourly ?? [], [liveForecastQuery.data?.hourly]);
@@ -1167,6 +1277,14 @@ export default function WeatherPage() {
     selectedPropertyWeatherQuery.data?.current?.temperature !== undefined
       ? Math.round(selectedPropertyWeatherQuery.data.current.temperature)
       : null;
+  const canConfigureCurrentProperty = Boolean(currentProperty && currentPropertyId && currentPropertyId !== 'all');
+  const shouldShowLocationSetup = canConfigureCurrentProperty && (!hasLocation || showLocationSetup);
+  const currentPropertyWeatherLabel =
+    ((currentProperty as (Property & { weatherLocationLabel?: string; weather_location_label?: string }) | null)?.weatherLocationLabel) ||
+    ((currentProperty as (Property & { weatherLocationLabel?: string; weather_location_label?: string }) | null)?.weather_location_label) ||
+    '';
+  const propertyLocationLabel = currentPropertyWeatherLabel
+    || (hasLocation ? `${currentProperty?.latitude?.toFixed(4)}, ${currentProperty?.longitude?.toFixed(4)}` : 'No location saved');
   const liveStatusLabel =
     liveStatus === 'ready'
       ? 'Live feed active'
@@ -1266,11 +1384,60 @@ export default function WeatherPage() {
     ];
   }, [latestLog]);
 
+  const locationSetupBlock = shouldShowLocationSetup ? (
+    <Card className="border-amber-300/80 bg-amber-50/40 p-4">
+      <div className="flex flex-col gap-3">
+        <div>
+          <p className="text-sm font-semibold text-amber-900">Set Weather Location</p>
+          <p className="text-xs text-amber-900/80">Choose your property location to enable live weather.</p>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="space-y-2 rounded-xl border border-amber-200/70 bg-white/70 p-3">
+            <p className="text-xs font-medium text-amber-900">Search by city/address</p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="City, State or Address"
+                value={locationQuery}
+                onChange={(event) => setLocationQuery(event.target.value)}
+              />
+              <Button size="sm" variant="outline" onClick={() => void handleLocationSearch()} disabled={locationSearchLoading || !locationQuery.trim()}>
+                {locationSearchLoading ? 'Searching...' : 'Search'}
+              </Button>
+            </div>
+            {locationSearchResults.length ? (
+              <div className="grid gap-2">
+                {locationSearchResults.map((result) => (
+                  <button
+                    key={`${result.label}-${result.latitude}-${result.longitude}`}
+                    type="button"
+                    onClick={() => void savePropertyWeatherLocation(result.latitude, result.longitude, result.label)}
+                    className="rounded-lg border bg-background px-3 py-2 text-left text-xs transition hover:bg-muted/40"
+                    disabled={locationSaveLoading}
+                  >
+                    <div className="font-medium">{result.label}</div>
+                    <div className="text-muted-foreground">{result.latitude.toFixed(4)}, {result.longitude.toFixed(4)}</div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <div className="space-y-2 rounded-xl border border-amber-200/70 bg-white/70 p-3">
+            <p className="text-xs font-medium text-amber-900">Use device location</p>
+            <Button size="sm" variant="outline" onClick={() => void handleUseCurrentLocationForProperty()} disabled={locationSaveLoading}>
+              Use My Current Location
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  ) : null;
+
   if (isWeatherSetupIncomplete && !isInitialWeatherSetupLoading && !hasWeatherSetupError) {
     const noAreasExist = weatherLocations.length === 0;
     const noStationsExist = scopedStationCount === 0;
     return (
       <div className="p-4 max-w-7xl mx-auto">
+        {locationSetupBlock}
         <Card className="p-6 text-sm space-y-4">
           <div>
             <p className="font-semibold">Weather setup is not complete yet.</p>
@@ -1349,6 +1516,7 @@ export default function WeatherPage() {
 
     return (
       <div className="p-4 max-w-7xl mx-auto">
+        {locationSetupBlock}
         <Card className="p-6 text-sm space-y-4">
           <div>
             <p className="font-semibold">Weather setup is not complete yet.</p>
@@ -1386,6 +1554,15 @@ export default function WeatherPage() {
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
+      {!shouldShowLocationSetup && hasLocation ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>📍 {propertyLocationLabel}</span>
+          <button type="button" className="font-medium text-primary hover:underline" onClick={() => setShowLocationSetup(true)}>
+            Change location
+          </button>
+        </div>
+      ) : null}
+      {locationSetupBlock}
       <PageHeader
         title="Weather"
         subtitle={
@@ -2540,4 +2717,3 @@ export default function WeatherPage() {
     </div>
   );
 }
-

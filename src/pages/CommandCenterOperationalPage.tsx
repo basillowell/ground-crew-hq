@@ -46,6 +46,7 @@ function SummaryCard({
 function PropertySummaryCard({
   property,
   onViewDetails,
+  onOpenWeatherSettings,
 }: {
   property: {
     id: string;
@@ -53,11 +54,15 @@ function PropertySummaryCard({
     city: string;
     state: string;
     status: string;
+    latitude?: number;
+    longitude?: number;
   };
   onViewDetails: () => void;
+  onOpenWeatherSettings: () => void;
 }) {
   const weatherQuery = useWeather(property.id);
   const [showWeatherTimeout, setShowWeatherTimeout] = useState(false);
+  const hasCoordinates = typeof property.latitude === 'number' && typeof property.longitude === 'number';
 
   useEffect(() => {
     if (!weatherQuery.isLoading) {
@@ -90,7 +95,13 @@ function PropertySummaryCard({
         {weatherQuery.isLoading && !showWeatherTimeout ? (
           <div className="text-xs text-muted-foreground">Loading weather...</div>
         ) : weatherQuery.isLoading && showWeatherTimeout ? (
-          <div className="text-xs text-muted-foreground">Weather unavailable - check station setup</div>
+          hasCoordinates ? (
+            <div className="text-xs text-muted-foreground">Weather temporarily unavailable</div>
+          ) : (
+            <button type="button" className="text-xs text-primary hover:underline" onClick={onOpenWeatherSettings}>
+              Set weather location in Weather settings →
+            </button>
+          )
         ) : weatherQuery.data ? (
           <div className="flex items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
@@ -101,7 +112,13 @@ function PropertySummaryCard({
             <span className="text-muted-foreground">Wind {Math.round(weatherQuery.data.current.windSpeed)} mph</span>
           </div>
         ) : (
-          <div className="text-xs text-muted-foreground">Weather unavailable - check station setup</div>
+          hasCoordinates ? (
+            <div className="text-xs text-muted-foreground">Weather temporarily unavailable</div>
+          ) : (
+            <button type="button" className="text-xs text-primary hover:underline" onClick={onOpenWeatherSettings}>
+              Set weather location in Weather settings →
+            </button>
+          )
         )}
       </div>
 
@@ -311,6 +328,7 @@ export default function CommandCenterOperationalPage() {
       {selectedProperty ? (
         <PropertySummaryCard
           property={selectedProperty}
+          onOpenWeatherSettings={() => navigate('/app/weather')}
           onViewDetails={() => {
             setCurrentPropertyId(selectedProperty.id);
             navigate(`/app/workboard?property=${encodeURIComponent(selectedProperty.id)}`);
