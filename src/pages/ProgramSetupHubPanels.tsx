@@ -17,8 +17,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { GripVertical, MapPin, MoreHorizontal, Plus, Settings, Trash2 } from 'lucide-react';
-import type { AppUser, DepartmentOption, Employee, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WorkLocation } from '@/data/seedData';
+import type { AppUser, DepartmentOption, Employee, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WeatherLocation, WorkLocation } from '@/data/seedData';
 import type { ActivePage } from './ProgramSetupHubPage';
+import { useNavigate } from 'react-router-dom';
 
 type PanelsProps = {
   activePage: ActivePage;
@@ -49,6 +50,7 @@ type PanelsProps = {
   setAppUsers: Dispatch<SetStateAction<AppUser[]>>;
   employees: Employee[];
   setEmployees: Dispatch<SetStateAction<Employee[]>>;
+  weatherLocations: WeatherLocation[];
   liveCounts: { employees: number; activeAppUsers: number; properties: number };
   saveGeneralSettings: () => void;
   saveStructures: () => void;
@@ -260,6 +262,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
     setAppUsers,
     employees,
     setEmployees,
+    weatherLocations,
     liveCounts,
     saveGeneralSettings,
     saveStructures,
@@ -284,6 +287,16 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
 
   const editingProperty = propertySheetId ? properties.find((p) => p.id === propertySheetId) : undefined;
   const editingShift = shiftSheetId ? shiftTemplates.find((s) => s.id === shiftSheetId) : undefined;
+  const navigate = useNavigate();
+  const editingPropertyWeather = useMemo(() => {
+    if (!editingProperty) return null;
+    const propertyName = editingProperty.name.trim().toLowerCase();
+    return (
+      weatherLocations.find((location) => location.propertyId === editingProperty.id) ??
+      weatherLocations.find((location) => (location.property ?? '').trim().toLowerCase() === propertyName) ??
+      null
+    );
+  }, [editingProperty, weatherLocations]);
   const sectionMeta = SECTION_META[activePage];
   const sectionWorkflow = SECTION_WORKFLOW[activePage];
   const [viewMode, setViewMode] = useState<SettingsViewMode>('client');
@@ -1461,6 +1474,54 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                     onChange={(e) => setProperties((c) => c.map((x) => (x.id === editingProperty.id ? { ...x, acreage: Number(e.target.value || 0) } : x)))}
                     className="mt-1"
                   />
+                </div>
+                <div className="sm:col-span-2 rounded-xl border border-dashed p-3">
+                  <details open>
+                    <summary className="cursor-pointer text-sm font-semibold">Weather Setup</summary>
+                    <div className="mt-3 space-y-3">
+                      {editingPropertyWeather ? (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Badge className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700" variant="outline">
+                              Weather active
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {editingPropertyWeather.name || editingPropertyWeather.area || 'Weather area'} ·{' '}
+                            {typeof editingPropertyWeather.latitude === 'number' && typeof editingPropertyWeather.longitude === 'number'
+                              ? `${editingPropertyWeather.latitude.toFixed(4)}, ${editingPropertyWeather.longitude.toFixed(4)}`
+                              : 'Coordinates unavailable'}
+                          </p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/app/weather?setup=true&propertyId=${encodeURIComponent(editingProperty.id)}`)}
+                          >
+                            Change location
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-700" variant="outline">
+                              Weather not set up
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Add location so this property gets live weather on the dashboard and weather page.
+                          </p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => navigate(`/app/weather?setup=true&propertyId=${encodeURIComponent(editingProperty.id)}`)}
+                          >
+                            Set up weather for this property →
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </details>
                 </div>
                 <div>
                   <label className="text-xs font-medium">Logo initials</label>

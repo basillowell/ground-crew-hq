@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowRight, Calendar, CloudRain, MapPin, Plus, Users, Wrench } from 'lucide-react';
+import { ArrowRight, Calendar, CheckCircle2, Circle, CloudRain, MapPin, Plus, Users, Wrench } from 'lucide-react';
 import {
   useAssignments,
   useClockEvents,
@@ -14,6 +14,9 @@ import {
   useNotes,
   useProperties,
   useScheduleEntries,
+  useScheduleEntriesRange,
+  useTasks,
+  useWeatherLocations,
 } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -139,12 +142,20 @@ export default function CommandCenterOperationalPage() {
 
   const todayKey = currentDate.toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
+  const start30Date = useMemo(() => {
+    const date = new Date(currentDate);
+    date.setDate(date.getDate() - 30);
+    return date.toISOString().slice(0, 10);
+  }, [currentDate]);
 
   const propertiesQuery = useProperties(currentUser?.orgId);
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
   const assignmentsQuery = useAssignments(todayKey, propertyScope, currentUser?.orgId);
   const scheduleEntriesQuery = useScheduleEntries(todayKey, propertyScope, currentUser?.orgId);
+  const scheduleEntriesRangeQuery = useScheduleEntriesRange(start30Date, todayKey, propertyScope, currentUser?.orgId);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, currentUser?.orgId);
+  const tasksQuery = useTasks(propertyScope, currentUser?.orgId);
+  const weatherLocationsQuery = useWeatherLocations(propertyScope === 'all' ? undefined : propertyScope);
   const notesQuery = useNotes(propertyScope, currentUser?.orgId);
   const clockEventsQuery = useClockEvents(todayKey, propertyScope, currentUser?.orgId);
 
@@ -158,9 +169,13 @@ export default function CommandCenterOperationalPage() {
   const employees = employeesQuery.data ?? [];
   const assignments = assignmentsQuery.data ?? [];
   const scheduleEntries = scheduleEntriesQuery.data ?? [];
+  const scheduleEntriesLast30 = scheduleEntriesRangeQuery.data ?? [];
   const equipmentUnits = equipmentUnitsQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
+  const weatherLocations = weatherLocationsQuery.data ?? [];
   const notes = notesQuery.data ?? [];
   const clockEvents = clockEventsQuery.data ?? [];
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   useEffect(() => {
     if (isAdmin || isManager) {
@@ -239,6 +254,35 @@ export default function CommandCenterOperationalPage() {
     return properties[0] ?? null;
   }, [currentPropertyId, properties]);
 
+  const onboardingDismissKey = useMemo(
+    () => (currentUser?.orgId ? `gcrew-onboarding-dismissed-${currentUser.orgId}` : ''),
+    [currentUser?.orgId],
+  );
+
+  useEffect(() => {
+    if (!onboardingDismissKey) return;
+    setOnboardingDismissed(localStorage.getItem(onboardingDismissKey) === 'true');
+  }, [onboardingDismissKey]);
+
+  const onboardingItems = useMemo(() => {
+    const items = [
+      { id: 'employees', label: 'Add your first employee', complete: employees.length > 0, action: 'Add employee →', to: '/app/employees' },
+      { id: 'weather', label: 'Set up weather for this property', complete: weatherLocations.length > 0, action: 'Set up weather →', to: '/app/weather?setup=true' },
+      { id: 'equipment', label: 'Add your equipment fleet', complete: equipmentUnits.length > 0, action: 'Add equipment →', to: '/app/equipment' },
+      { id: 'tasks', label: 'Build your task library', complete: tasks.length > 0, action: 'Add tasks →', to: '/app/tasks' },
+      { id: 'schedule', label: 'Schedule your first shift', complete: scheduleEntries.length > 0, action: 'Open scheduler →', to: '/app/scheduler' },
+      { id: 'assign', label: 'Assign work on the workboard', complete: assignments.length > 0, action: 'Open workboard →', to: '/app/workboard' },
+    ];
+    return items;
+  }, [assignments.length, employees.length, equipmentUnits.length, scheduleEntries.length, tasks.length, weatherLocations.length]);
+
+  const onboardingCompleted = onboardingItems.filter((item) => item.complete).length;
+  const showGettingStarted =
+    !onboardingDismissed &&
+    employees.length < 3 &&
+    scheduleEntriesLast30.length === 0 &&
+    onboardingCompleted < onboardingItems.length;
+
   const isLoading =
     propertiesQuery.isLoading ||
     employeesQuery.isLoading ||
@@ -248,6 +292,52 @@ export default function CommandCenterOperationalPage() {
 
   return (
     <div className="h-full overflow-auto bg-background p-6">
+      {showGettingStarted ? (
+        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold">Welcome to Ground Crew HQ — let&apos;s get you set up</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Complete these steps to get your team operational</p>
+            </div>
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+              onClick={() => {
+                if (!onboardingDismissKey) return;
+                localStorage.setItem(onboardingDismissKey, 'true');
+                setOnboardingDismissed(true);
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="mt-4">
+            <div className="mb-2 text-xs text-muted-foreground">{onboardingCompleted} of {onboardingItems.length} complete</div>
+            <div className="h-2 w-full rounded-full bg-muted">
+              <div
+                className="h-2 rounded-full bg-emerald-500 transition-all"
+                style={{ width: `${(onboardingCompleted / onboardingItems.length) * 100}%` }}
+              />
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {onboardingItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                <div className={`flex items-center gap-2 text-sm ${item.complete ? 'text-muted-foreground' : 'text-foreground'}`}>
+                  {item.complete ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-muted-foreground" />}
+                  <span>{item.label}</span>
+                </div>
+                {!item.complete ? (
+                  <Button size="sm" variant="outline" onClick={() => navigate(item.to)}>
+                    {item.action}
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
       <div className="mb-4">
         <h2 className="text-2xl font-semibold tracking-tight">Today's Operations Summary</h2>
         <p className="mt-1 text-sm text-muted-foreground">

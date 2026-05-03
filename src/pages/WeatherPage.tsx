@@ -1,12 +1,14 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CloudSun, Crosshair, Droplets, MapPin, MapPinned, PencilLine, Plus, Radar, RefreshCcw, Save, Trash2 } from 'lucide-react';
+import { CloudSun, Crosshair, Droplets, MapPin, MapPinned, MoreHorizontal, PencilLine, Plus, Radar, RefreshCcw, Save, Search, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -29,6 +31,7 @@ import { useWeather, getWeatherIconMeta } from '@/lib/weather';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperties, useProgramSettings, useWeatherLocations, useWorkLocations } from '@/lib/supabase-queries';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 type EntryMode = 'rainfall' | 'override';
 
@@ -130,14 +133,19 @@ function isRecoverableWeatherQueryError(error: unknown) {
 
 export default function WeatherPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { currentUser, currentPropertyId } = useAuth();
+  const setupMode = searchParams.get('setup') === 'true';
+  const setupPropertyId = searchParams.get('propertyId');
+  const weatherScopePropertyId = setupMode && setupPropertyId ? setupPropertyId : currentPropertyId;
   const propertiesQuery = useProperties(currentUser?.orgId);
   const properties = useMemo(() => propertiesQuery.data ?? [], [propertiesQuery.data]);
   const programSettingQuery = useProgramSettings(currentUser?.orgId);
   const programSetting = programSettingQuery.data ?? null;
   const workLocationsQuery = useWorkLocations();
   const workLocations = useMemo(() => workLocationsQuery.data ?? [], [workLocationsQuery.data]);
-  const weatherLocationsQuery = useWeatherLocations(currentPropertyId);
+  const weatherLocationsQuery = useWeatherLocations(weatherScopePropertyId);
   const weatherStationsQuery = useQuery({
     queryKey: ['weather-stations-full', currentUser?.orgId ?? 'all-orgs'],
     enabled: Boolean(currentUser),
@@ -252,6 +260,20 @@ export default function WeatherPage() {
   const [locationSearchResults, setLocationSearchResults] = useState<Array<{ label: string; latitude: number; longitude: number }>>([]);
   const [locationSearchLoading, setLocationSearchLoading] = useState(false);
   const [locationSaveLoading, setLocationSaveLoading] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<1 | 2 | 3>(1);
+  const [onboardingMethod, setOnboardingMethod] = useState<'none' | 'search' | 'manual'>('none');
+  const [onboardingSearchQuery, setOnboardingSearchQuery] = useState('');
+  const [onboardingSearchLoading, setOnboardingSearchLoading] = useState(false);
+  const [onboardingSearchResults, setOnboardingSearchResults] = useState<Array<{ label: string; latitude: number; longitude: number }>>([]);
+  const [onboardingSelectedLat, setOnboardingSelectedLat] = useState<number | null>(null);
+  const [onboardingSelectedLng, setOnboardingSelectedLng] = useState<number | null>(null);
+  const [onboardingSelectedLabel, setOnboardingSelectedLabel] = useState('');
+  const [onboardingManualLat, setOnboardingManualLat] = useState('');
+  const [onboardingManualLng, setOnboardingManualLng] = useState('');
+  const [onboardingAreaName, setOnboardingAreaName] = useState('');
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
+  const [onboardingSheetOpen, setOnboardingSheetOpen] = useState(false);
+  const [removeAreaId, setRemoveAreaId] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedWorkLocationId((current) => {
@@ -294,8 +316,26 @@ export default function WeatherPage() {
     }
   }, [rainfallEntriesQuery.data, weatherLocationsQuery.data, weatherLogsQuery.data, weatherStationsQuery.data]);
 
-  const currentProperty = properties.find((property) => property.id === currentPropertyId) ?? null;
+  useEffect(() => {
+    if (currentProperty?.name && !onboardingAreaName.trim()) {
+      setOnboardingAreaName(currentProperty.name);
+    }
+  }, [currentProperty?.name, onboardingAreaName]);
+
+  const currentProperty = properties.find((property) => property.id === weatherScopePropertyId) ?? null;
   const hasLocation = hasValidCoordinates(currentProperty?.latitude, currentProperty?.longitude);
+  const propertyScopedWeatherLocations = useMemo(() => {
+    if (!currentProperty) return [];
+    const propertyName = currentProperty.name.trim().toLowerCase();
+    return weatherLocations.filter(
+      (location) =>
+        location.propertyId === currentProperty.id ||
+        (location.property ?? '').trim().toLowerCase() === propertyName,
+    );
+  }, [currentProperty, weatherLocations]);
+  const needsPropertyWeatherOnboarding =
+    Boolean(currentProperty && currentPropertyId && currentPropertyId !== 'all') &&
+    propertyScopedWeatherLocations.length === 0;
 
   function resolveLocationForProperty(property: Property | null | undefined) {
     if (!property) return null;
@@ -705,6 +745,209 @@ export default function WeatherPage() {
         description: 'Allow location access to save your current property weather location.',
       });
     }
+  }
+
+  async function handleOnboardingUseCurrentLocation() {
+    if (!navigator.geolocation) {
+      toast('Location unavailable', {
+        description: 'This browser does not support device geolocation.',
+      });
+      return;
+    }
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000,
+        });
+      });
+      const lat = Number(position.coords.latitude.toFixed(4));
+      const lng = Number(position.coords.longitude.toFixed(4));
+      setOnboardingSelectedLat(lat);
+      setOnboardingSelectedLng(lng);
+      setOnboardingSelectedLabel('Current Device Location');
+      setOnboardingStep(2);
+    } catch {
+      toast('Location permission needed', {
+        description: 'Allow location access to use your current location.',
+      });
+    }
+  }
+
+  async function handleOnboardingSearch() {
+    const query = onboardingSearchQuery.trim();
+    if (!query) return;
+    setOnboardingSearchLoading(true);
+    setOnboardingSearchResults([]);
+    try {
+      const response = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`,
+      );
+      if (!response.ok) throw new Error(`Location search failed (${response.status})`);
+      const payload = await response.json();
+      const nextResults = (payload?.results ?? [])
+        .slice(0, 5)
+        .map((result: any) => ({
+          label: [result?.name, result?.admin1, result?.country].filter(Boolean).join(', '),
+          latitude: Number(result?.latitude),
+          longitude: Number(result?.longitude),
+        }))
+        .filter((item: { latitude: number; longitude: number }) => hasValidCoordinates(item.latitude, item.longitude));
+      setOnboardingSearchResults(nextResults);
+      if (!nextResults.length) {
+        toast('No matching locations found', {
+          description: 'Try a more specific address or nearest city.',
+        });
+      }
+    } catch (error) {
+      toast('Location search failed', {
+        description: (error as Error)?.message ?? 'Could not search Open-Meteo geocoding.',
+      });
+    } finally {
+      setOnboardingSearchLoading(false);
+    }
+  }
+
+  function handleOnboardingManualConfirm() {
+    const lat = Number(onboardingManualLat);
+    const lng = Number(onboardingManualLng);
+    if (!hasValidCoordinates(lat, lng)) {
+      toast('Invalid coordinates', {
+        description: 'Enter valid latitude and longitude values.',
+      });
+      return;
+    }
+    setOnboardingSelectedLat(lat);
+    setOnboardingSelectedLng(lng);
+    setOnboardingSelectedLabel('Manual Coordinates');
+    setOnboardingStep(2);
+  }
+
+  async function handleSaveOnboardingWeatherArea() {
+    if (!currentUser?.orgId || !weatherScopePropertyId || !currentProperty || onboardingSelectedLat === null || onboardingSelectedLng === null) {
+      toast('Unable to save setup', {
+        description: 'Missing property or user scope. Refresh and try again.',
+      });
+      return;
+    }
+    const areaName = onboardingAreaName.trim() || currentProperty.name;
+    const existingAreaCount = propertyScopedWeatherLocations.length;
+    setOnboardingSaving(true);
+    try {
+      const newLocationId = crypto.randomUUID();
+
+      const locationInsert = await supabase
+        .from('weather_locations')
+        .insert({
+          id: newLocationId,
+          name: areaName,
+          property: currentProperty.name,
+          property_id: weatherScopePropertyId,
+          area: areaName,
+          latitude: onboardingSelectedLat,
+          longitude: onboardingSelectedLng,
+          org_id: currentUser.orgId,
+        })
+        .select('id')
+        .single();
+
+      if (locationInsert.error || !locationInsert.data) {
+        throw locationInsert.error ?? new Error('Weather location insert failed');
+      }
+
+      const stationInsert = await supabase.from('weather_stations').insert({
+        id: crypto.randomUUID(),
+        location_id: locationInsert.data.id,
+        name: `${areaName} — Live Weather`,
+        provider: 'Open-Meteo',
+        provider_type: 'open-meteo',
+        station_code: `${weatherScopePropertyId.slice(0, 8).toUpperCase()}-${String(existingAreaCount + 1).padStart(2, '0')}`,
+        latitude: onboardingSelectedLat,
+        longitude: onboardingSelectedLng,
+        time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        is_primary: existingAreaCount === 0,
+        status: 'online',
+        org_id: currentUser.orgId,
+      });
+
+      if (stationInsert.error) {
+        throw stationInsert.error;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['weather-locations'] });
+      await queryClient.invalidateQueries({ queryKey: ['weather-stations'] });
+      await weatherLocationsQuery.refetch();
+      await weatherStationsQuery.refetch();
+      setSelectedLocationId(locationInsert.data.id);
+      setActiveTab('daily');
+      setOnboardingStep(1);
+      setOnboardingMethod('none');
+      setOnboardingSearchResults([]);
+      setOnboardingSheetOpen(false);
+      toast('Weather setup complete', {
+        description: `${areaName} is now configured with live Open-Meteo weather.`,
+      });
+      if (setupMode) {
+        navigate('/app/settings?section=properties');
+      }
+    } catch (error) {
+      toast('Setup failed', {
+        description: (error as Error)?.message ?? 'Could not complete weather setup.',
+      });
+    } finally {
+      setOnboardingSaving(false);
+    }
+  }
+
+  function startAddAreaFlow() {
+    setOnboardingStep(1);
+    setOnboardingMethod('none');
+    setOnboardingSearchQuery('');
+    setOnboardingSearchResults([]);
+    setOnboardingSelectedLat(null);
+    setOnboardingSelectedLng(null);
+    setOnboardingSelectedLabel('');
+    setOnboardingManualLat('');
+    setOnboardingManualLng('');
+    setOnboardingAreaName(currentProperty?.name ?? '');
+    setOnboardingSheetOpen(true);
+  }
+
+  async function setPrimaryStationForArea(locationId: string) {
+    const stationsInArea = weatherStations.filter((station) => station.locationId === locationId);
+    if (!stationsInArea.length) {
+      toast('No station available', { description: 'Add a station for this area first.' });
+      return;
+    }
+    const targetStation = stationsInArea[0];
+    const updated = weatherStations.map((station) =>
+      station.locationId === locationId ? { ...station, isPrimary: station.id === targetStation.id } : station,
+    );
+    setWeatherStations(updated);
+    const updates = stationsInArea.map((station) =>
+      supabase
+        .from('weather_stations')
+        .update({ is_primary: station.id === targetStation.id })
+        .eq('id', station.id),
+    );
+    await Promise.all(updates);
+    await queryClient.invalidateQueries({ queryKey: ['weather-stations'] });
+    toast('Primary station updated', { description: `${targetStation.name} is now primary for this area.` });
+  }
+
+  async function removeArea(locationId: string) {
+    const stationsInArea = weatherStations.filter((station) => station.locationId === locationId);
+    for (const station of stationsInArea) {
+      await supabase.from('weather_stations').delete().eq('id', station.id);
+    }
+    await supabase.from('weather_locations').delete().eq('id', locationId);
+    await queryClient.invalidateQueries({ queryKey: ['weather-stations'] });
+    await queryClient.invalidateQueries({ queryKey: ['weather-locations'] });
+    await weatherStationsQuery.refetch();
+    await weatherLocationsQuery.refetch();
+    setRemoveAreaId(null);
+    toast('Area removed', { description: 'Weather area and linked stations were removed.' });
   }
 
   async function searchStationsByAddress(queryOverride?: string) {
@@ -1221,6 +1464,17 @@ export default function WeatherPage() {
         longitude: currentProperty!.longitude!,
       }),
   });
+  const onboardingPreviewQuery = useQuery({
+    queryKey: ['weather-onboarding-preview', onboardingSelectedLat, onboardingSelectedLng],
+    enabled: onboardingStep === 2 && onboardingSelectedLat !== null && onboardingSelectedLng !== null,
+    staleTime: 1000 * 60 * 5,
+    retry: 1,
+    queryFn: async () =>
+      fetchOpenMeteoWeather({
+        latitude: onboardingSelectedLat!,
+        longitude: onboardingSelectedLng!,
+      }),
+  });
   const liveForecastHours = useMemo(() => liveForecastQuery.data?.hourly ?? [], [liveForecastQuery.data?.hourly]);
 
   const fallbackLiveLog = useMemo<WeatherDailyLog | null>(() => {
@@ -1431,6 +1685,200 @@ export default function WeatherPage() {
       </div>
     </Card>
   ) : null;
+
+  if (needsPropertyWeatherOnboarding && !isInitialWeatherSetupLoading && !hasWeatherSetupError) {
+    return (
+      <div className="p-4 max-w-3xl mx-auto min-h-[70vh] flex items-center">
+        <Card className="w-full p-6 space-y-5">
+          <div>
+            <p className="text-xl font-semibold">Set up weather for {currentProperty?.name ?? 'this property'}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Choose how to find your property location. This takes about 60 seconds.
+            </p>
+          </div>
+
+          {onboardingStep === 1 ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => void handleOnboardingUseCurrentLocation()}
+                  className="rounded-xl border p-4 text-left hover:bg-muted/30 transition"
+                >
+                  <Crosshair className="h-5 w-5 text-primary" />
+                  <p className="mt-2 text-sm font-semibold">Use my current location</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Best for mobile — uses your device GPS</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOnboardingMethod((current) => (current === 'search' ? 'none' : 'search'))}
+                  className="rounded-xl border p-4 text-left hover:bg-muted/30 transition"
+                >
+                  <Search className="h-5 w-5 text-primary" />
+                  <p className="mt-2 text-sm font-semibold">Search by address or city</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Type your property address or nearest city</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOnboardingMethod((current) => (current === 'manual' ? 'none' : 'manual'))}
+                  className="rounded-xl border p-4 text-left hover:bg-muted/30 transition"
+                >
+                  <MapPin className="h-5 w-5 text-primary" />
+                  <p className="mt-2 text-sm font-semibold">Enter coordinates manually</p>
+                  <p className="mt-1 text-xs text-muted-foreground">For properties already in another system</p>
+                </button>
+              </div>
+
+              {onboardingMethod === 'search' ? (
+                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      value={onboardingSearchQuery}
+                      onChange={(event) => setOnboardingSearchQuery(event.target.value)}
+                      placeholder="e.g. 123 Main St, Sarasota FL"
+                    />
+                    <Button onClick={() => void handleOnboardingSearch()} disabled={onboardingSearchLoading || !onboardingSearchQuery.trim()}>
+                      {onboardingSearchLoading ? 'Searching...' : 'Search'}
+                    </Button>
+                  </div>
+                  {onboardingSearchResults.length ? (
+                    <div className="space-y-2">
+                      {onboardingSearchResults.map((result) => (
+                        <button
+                          key={`${result.label}-${result.latitude}-${result.longitude}`}
+                          type="button"
+                          onClick={() => {
+                            setOnboardingSelectedLat(result.latitude);
+                            setOnboardingSelectedLng(result.longitude);
+                            setOnboardingSelectedLabel(result.label);
+                            setOnboardingStep(2);
+                          }}
+                          className="w-full rounded-lg border bg-background px-3 py-2 text-left text-sm hover:bg-muted/30"
+                        >
+                          <div className="font-medium">{result.label}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {result.latitude.toFixed(4)}, {result.longitude.toFixed(4)}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {onboardingMethod === 'manual' ? (
+                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      value={onboardingManualLat}
+                      onChange={(event) => setOnboardingManualLat(event.target.value)}
+                      placeholder="Latitude"
+                    />
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      value={onboardingManualLng}
+                      onChange={(event) => setOnboardingManualLng(event.target.value)}
+                      placeholder="Longitude"
+                    />
+                  </div>
+                  <Button variant="outline" onClick={handleOnboardingManualConfirm}>
+                    Confirm Coordinates
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {onboardingStep === 2 ? (
+            <div className="space-y-4">
+              <Card className="p-4 border-dashed">
+                <p className="text-sm font-semibold">Weather will be loaded for:</p>
+                <p className="mt-2 text-lg font-semibold">{onboardingSelectedLabel || `${onboardingSelectedLat}, ${onboardingSelectedLng}`}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Coordinates: {onboardingSelectedLat?.toFixed(4)}, {onboardingSelectedLng?.toFixed(4)}
+                </p>
+                <div className="mt-4 flex gap-2">
+                  <Button variant="outline" onClick={() => setOnboardingStep(1)}>
+                    ← Change location
+                  </Button>
+                  <Button onClick={() => setOnboardingStep(3)}>
+                    Looks right →
+                  </Button>
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <p className="text-sm font-semibold">Current conditions at this location:</p>
+                {onboardingPreviewQuery.isLoading ? (
+                  <p className="mt-2 text-sm text-muted-foreground">Loading preview...</p>
+                ) : onboardingPreviewQuery.data ? (
+                  <div className="mt-2 text-sm">
+                    <span className="font-semibold">{Math.round(onboardingPreviewQuery.data.current.temperature)}F</span>
+                    <span className="text-muted-foreground"> · {getWeatherConditionMeta(onboardingPreviewQuery.data.current.weatherCode).label}</span>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">Preview unavailable right now.</p>
+                )}
+              </Card>
+            </div>
+          ) : null}
+
+          {onboardingStep === 3 ? (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">What do you call this area?</label>
+                <Input
+                  id="onboarding-area-name"
+                  className="mt-2"
+                  value={onboardingAreaName}
+                  onChange={(event) => setOnboardingAreaName(event.target.value)}
+                  placeholder="e.g. Main Course, North Fields, Tournament Grounds"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  You can add more weather areas later for different zones of your property.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {['Main Course', 'Practice Range', 'Maintenance Yard', 'Tournament Grounds', 'North Fields', 'South Fields'].map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      className="rounded-full border px-3 py-1 text-xs hover:bg-muted/30"
+                      onClick={() => setOnboardingAreaName(name)}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="rounded-full border px-3 py-1 text-xs hover:bg-muted/30"
+                    onClick={() => {
+                      const input = document.getElementById('onboarding-area-name') as HTMLInputElement | null;
+                      input?.focus();
+                    }}
+                  >
+                    Custom...
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setOnboardingStep(2)}>
+                  ← Back
+                </Button>
+                <Button onClick={() => void handleSaveOnboardingWeatherArea()} disabled={onboardingSaving}>
+                  {onboardingSaving ? 'Saving...' : 'Save and load weather →'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </Card>
+      </div>
+    );
+  }
 
   if (isWeatherSetupIncomplete && !isInitialWeatherSetupLoading && !hasWeatherSetupError) {
     const noAreasExist = weatherLocations.length === 0;
@@ -2235,6 +2683,17 @@ export default function WeatherPage() {
       </Card>
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="space-y-3">
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Weather Areas</p>
+                <p className="text-xs text-muted-foreground">Manage zones for this property.</p>
+              </div>
+              <Button size="sm" className="gap-1" onClick={startAddAreaFlow}>
+                <Plus className="h-3.5 w-3.5" /> Add area
+              </Button>
+            </div>
+          </Card>
           <Card className="p-4 space-y-3">
             <div>
               <p className="text-sm font-semibold">Build Weather Areas</p>
@@ -2278,7 +2737,8 @@ export default function WeatherPage() {
             </div>
           </Card>
           {weatherLocations.map((location) => {
-            const primaryStation = weatherStations.find((station) => station.locationId === location.id && station.isPrimary);
+            const primaryStation = weatherStations.find((station) => station.locationId === location.id && station.isPrimary)
+              ?? weatherStations.find((station) => station.locationId === location.id);
             const locationProperty = properties.find((property) => property.id === location.propertyId);
             return (
               <Card
@@ -2292,10 +2752,29 @@ export default function WeatherPage() {
                     <p className="text-sm font-semibold">{location.name}</p>
                     <p className="text-xs text-muted-foreground">{location.property} - {location.area}</p>
                   </div>
-                  {primaryStation && <Badge variant="outline">Primary Station</Badge>}
+                  <div className="flex items-center gap-2">
+                    <Badge variant={primaryStation?.status === 'online' ? 'secondary' : 'outline'}>
+                      {primaryStation?.provider ?? 'No provider'} — {primaryStation?.status === 'online' ? 'Online' : 'Offline'}
+                    </Badge>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost" onClick={(event) => event.stopPropagation()}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                        <DropdownMenuItem onClick={() => void setPrimaryStationForArea(location.id)}>
+                          Set as primary
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive" onClick={() => setRemoveAreaId(location.id)}>
+                          Remove area
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground">
-                  {primaryStation ? `${primaryStation.name} · ${primaryStation.provider}` : 'No primary station selected'}
+                  {primaryStation ? `${primaryStation.name} · ${primaryStation.provider}` : 'No station selected'}
                 </div>
               </Card>
             );
@@ -2634,6 +3113,137 @@ export default function WeatherPage() {
       </div>
         </TabsContent>
       </Tabs>
+
+      <Sheet open={onboardingSheetOpen} onOpenChange={setOnboardingSheetOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle>Add Weather Area</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-4">
+            {onboardingStep === 1 ? (
+              <div className="space-y-4">
+                <div className="grid gap-3">
+                  <button type="button" onClick={() => void handleOnboardingUseCurrentLocation()} className="rounded-xl border p-4 text-left hover:bg-muted/30 transition">
+                    <Crosshair className="h-5 w-5 text-primary" />
+                    <p className="mt-2 text-sm font-semibold">Use my current location</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Best for mobile — uses your device GPS</p>
+                  </button>
+                  <button type="button" onClick={() => setOnboardingMethod((current) => (current === 'search' ? 'none' : 'search'))} className="rounded-xl border p-4 text-left hover:bg-muted/30 transition">
+                    <Search className="h-5 w-5 text-primary" />
+                    <p className="mt-2 text-sm font-semibold">Search by address or city</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Type your property address or nearest city</p>
+                  </button>
+                  <button type="button" onClick={() => setOnboardingMethod((current) => (current === 'manual' ? 'none' : 'manual'))} className="rounded-xl border p-4 text-left hover:bg-muted/30 transition">
+                    <MapPin className="h-5 w-5 text-primary" />
+                    <p className="mt-2 text-sm font-semibold">Enter coordinates manually</p>
+                    <p className="mt-1 text-xs text-muted-foreground">For properties already in another system</p>
+                  </button>
+                </div>
+                {onboardingMethod === 'search' ? (
+                  <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                    <div className="flex gap-2">
+                      <Input value={onboardingSearchQuery} onChange={(event) => setOnboardingSearchQuery(event.target.value)} placeholder="e.g. 123 Main St, Sarasota FL" />
+                      <Button onClick={() => void handleOnboardingSearch()} disabled={onboardingSearchLoading || !onboardingSearchQuery.trim()}>
+                        {onboardingSearchLoading ? 'Searching...' : 'Search'}
+                      </Button>
+                    </div>
+                    {onboardingSearchResults.map((result) => (
+                      <button
+                        key={`${result.label}-${result.latitude}-${result.longitude}-sheet`}
+                        type="button"
+                        onClick={() => {
+                          setOnboardingSelectedLat(result.latitude);
+                          setOnboardingSelectedLng(result.longitude);
+                          setOnboardingSelectedLabel(result.label);
+                          setOnboardingStep(2);
+                        }}
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-left text-sm hover:bg-muted/30"
+                      >
+                        <div className="font-medium">{result.label}</div>
+                        <div className="text-xs text-muted-foreground">{result.latitude.toFixed(4)}, {result.longitude.toFixed(4)}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {onboardingMethod === 'manual' ? (
+                  <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Input type="number" step="0.0001" value={onboardingManualLat} onChange={(event) => setOnboardingManualLat(event.target.value)} placeholder="Latitude" />
+                      <Input type="number" step="0.0001" value={onboardingManualLng} onChange={(event) => setOnboardingManualLng(event.target.value)} placeholder="Longitude" />
+                    </div>
+                    <Button variant="outline" onClick={handleOnboardingManualConfirm}>Confirm Coordinates</Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {onboardingStep === 2 ? (
+              <div className="space-y-4">
+                <Card className="p-4 border-dashed">
+                  <p className="text-sm font-semibold">Weather will be loaded for:</p>
+                  <p className="mt-2 text-lg font-semibold">{onboardingSelectedLabel || `${onboardingSelectedLat}, ${onboardingSelectedLng}`}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Coordinates: {onboardingSelectedLat?.toFixed(4)}, {onboardingSelectedLng?.toFixed(4)}</p>
+                  <div className="mt-4 flex gap-2">
+                    <Button variant="outline" onClick={() => setOnboardingStep(1)}>← Change location</Button>
+                    <Button onClick={() => setOnboardingStep(3)}>Looks right →</Button>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <p className="text-sm font-semibold">Current conditions at this location:</p>
+                  {onboardingPreviewQuery.isLoading ? (
+                    <p className="mt-2 text-sm text-muted-foreground">Loading preview...</p>
+                  ) : onboardingPreviewQuery.data ? (
+                    <div className="mt-2 text-sm">
+                      <span className="font-semibold">{Math.round(onboardingPreviewQuery.data.current.temperature)}F</span>
+                      <span className="text-muted-foreground"> · {getWeatherConditionMeta(onboardingPreviewQuery.data.current.weatherCode).label}</span>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">Preview unavailable right now.</p>
+                  )}
+                </Card>
+              </div>
+            ) : null}
+
+            {onboardingStep === 3 ? (
+              <div className="space-y-4">
+                <label className="text-sm font-medium">What do you call this area?</label>
+                <Input value={onboardingAreaName} onChange={(event) => setOnboardingAreaName(event.target.value)} placeholder="e.g. Main Course, North Fields, Tournament Grounds" />
+                <div className="flex flex-wrap gap-2">
+                  {['Main Course', 'Practice Range', 'Maintenance Yard', 'Tournament Grounds', 'North Fields', 'South Fields'].map((name) => (
+                    <button key={`${name}-sheet`} type="button" className="rounded-full border px-3 py-1 text-xs hover:bg-muted/30" onClick={() => setOnboardingAreaName(name)}>
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">You can add more weather areas later for different zones of your property.</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setOnboardingStep(2)}>← Back</Button>
+                  <Button onClick={() => void handleSaveOnboardingWeatherArea()} disabled={onboardingSaving}>
+                    {onboardingSaving ? 'Saving...' : 'Save and load weather →'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={Boolean(removeAreaId)} onOpenChange={(open) => !open && setRemoveAreaId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove weather area?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will remove the selected weather area and all linked stations.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRemoveAreaId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => removeAreaId && void removeArea(removeAreaId)}>
+              Remove area
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-xl">

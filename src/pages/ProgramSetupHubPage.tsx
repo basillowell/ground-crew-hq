@@ -35,6 +35,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useSearchParams } from 'react-router-dom';
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const themePresets = [
@@ -178,6 +179,7 @@ function buildDefaultProgramSetting(orgName?: string): ProgramSettings {
 export default function ProgramSetupHubPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const todayDate = new Date().toISOString().slice(0, 10);
 
   const programSettingQuery = useProgramSettings(currentUser?.orgId);
@@ -543,6 +545,7 @@ export default function ProgramSetupHubPage() {
         setAppUsers={setAppUsers}
         employees={employees}
         setEmployees={setEmployees}
+        weatherLocations={weatherLocationsData}
         liveCounts={{
           employees: liveCounts.employees,
           activeAppUsers: liveCounts.activeAppUsers,
@@ -571,3 +574,7 @@ export default function ProgramSetupHubPage() {
     </div>
   );
 }
+  useEffect(() => {
+    const section = searchParams.get('section');
+    if (section === 'properties') setActivePage('properties');
+  }, [searchParams]);

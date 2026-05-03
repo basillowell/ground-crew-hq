@@ -1,4 +1,4 @@
-import {
+﻿import {
   LayoutDashboard, Clock, Users, ListChecks, Wrench, Shield,
   BarChart3, Settings, MessageSquare, Leaf, CloudSun, FlaskConical, MonitorSmartphone
 } from 'lucide-react';
@@ -9,7 +9,8 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader,
   SidebarFooter, useSidebar,
 } from '@/components/ui/sidebar';
-import { loadProgramSettings } from '@/lib/dataStore';
+import { useProgramSettings } from '@/lib/supabase-queries';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { title: 'Workboard', url: '/app/workboard', icon: LayoutDashboard },
@@ -30,7 +31,8 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const programSetting = loadProgramSettings()[0];
+  const { currentUser } = useAuth();
+  const { data: programSetting } = useProgramSettings(currentUser?.orgId);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
@@ -93,7 +95,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         {!collapsed && (
           <div className="text-xs text-sidebar-foreground">
-            {programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'} � v2.4.1
+            {programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'} • v2.4.1
           </div>
         )}
       </SidebarFooter>

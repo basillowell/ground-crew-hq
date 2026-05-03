@@ -47,3 +47,26 @@ Program Setup → Employees + Properties + Tasks + Shift Templates
 - All data from supabase-queries.ts hooks
 - Auth from useAuth() — never from localStorage directly
 - Pending clock events: localStorage key 'gcrew-pending-clocks'
+
+## Self-Service Onboarding Flow
+New clients complete setup through the app � no developer help:
+1. Register ? org created automatically in organizations table
+2. Dashboard shows onboarding checklist (6 steps)
+3. Weather setup via /app/weather onboarding flow
+4. Employees added via /app/employees
+5. Equipment added via /app/equipment
+6. Tasks added via /app/tasks
+7. Shifts scheduled via /app/scheduler
+8. Assignments built via /app/workboard
+
+## Weather Self-Service Pattern
+weather_locations and weather_stations are ALWAYS created
+by the user through the weather onboarding flow.
+Never hardcode lat/lng or insert weather rows in migrations.
+The geocoding flow uses:
+  https://geocoding-api.open-meteo.com/v1/search
+
+## Feature Flag Pattern
+Enabled modules are stored in program_settings.enabledModules[]
+Check before rendering any module nav item:
+  const isEnabled = programSetting?.enabledModules?.includes('weather')

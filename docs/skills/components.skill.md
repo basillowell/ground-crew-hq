@@ -79,3 +79,29 @@ navigate('/app/workboard')
 import { toast } from '@/components/ui/sonner'
 toast('Success message')
 toast.error('Error message')
+
+## Loading States
+Every page that fetches data must handle isLoading:
+  if (isLoading) return (
+    <div className="flex items-center justify-center p-12">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  )
+
+## Error States
+Every Supabase mutation must handle errors:
+  const { error } = await supabase.from('table').upsert({...})
+  if (error) {
+    toast.error('Save failed: ' + error.message)
+    return
+  }
+
+## Empty States
+Every list that could be empty must show a helpful message:
+  if (!items?.length) return (
+    <div className="rounded-xl border border-dashed p-8 text-center">
+      <p className="text-sm text-muted-foreground">
+        No items yet. Add your first one to get started.
+      </p>
+    </div>
+  )

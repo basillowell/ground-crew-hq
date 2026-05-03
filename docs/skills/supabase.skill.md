@@ -56,3 +56,9 @@ await queryClient.invalidateQueries({ queryKey: ['employees'] })
 4. Add fetch function to supabase-queries.ts
 5. Add useXxx hook wrapping the fetch function
 6. Test with real Supabase data before shipping
+
+## Self-Service Pattern (never hardcode org data)
+Every new org row, property row, and weather_location row
+must be created by the user through the app UI.
+Never seed data for a specific org in application code.
+Seed files in supabase/seeds/ are for development only.

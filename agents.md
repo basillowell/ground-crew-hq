@@ -96,3 +96,29 @@ drift, duplication, and broken patterns.
 This is a REAL product with REAL clients.
 All features must be functional, connected, and production-safe.
 Demo behavior, mock data, and localStorage-as-database are not acceptable.
+
+## Current App State (as of v2.4.1)
+- All 14 pages fully migrated to Supabase — dataStore is DEAD
+- Multi-tenant isolation active via org_id RLS on all tables
+- AppLayout shell reads from Supabase via useAuth + query hooks
+- Weather page has self-service onboarding flow
+- Field page has offline clock event queue
+- Settings page has sidebar nav with 8 sections
+- Dashboard has getting started checklist for new orgs
+- Playwright test suite in e2e/ covers 6 critical flows
+
+## What Is NOT Yet Built
+- Stripe billing integration (stub UI exists in settings)
+- SMS notifications via Twilio
+- Calendar .ics export from scheduler
+- Push notifications
+- Equipment QR code scanning
+These are Phase 2 features — do not build unless explicitly asked.
+
+## Commit Message Format
+feat: add weather 7-day forecast
+fix: correct RLS policy on schedule_entries
+refactor: migrate AppLayout to Supabase hooks
+chore: remove orphan page files
+docs: update skills with loading state patterns
+test: add scheduler Playwright spec
