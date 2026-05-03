@@ -12,12 +12,18 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'setup',
+      testMatch: /auth.setup.ts/,
+    },
+    {
       name: 'Desktop Chrome',
       use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
     },
     {
       name: 'iPhone 14',
       use: { ...devices['iPhone 14'] },
+      dependencies: ['setup'],
     },
   ],
   webServer: {

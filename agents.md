@@ -1,3 +1,6 @@
+> Skills: docs/skills/supabase.skill.md,
+> docs/skills/components.skill.md, docs/skills/features.skill.md
+
 # Ground Crew HQ — Agent Instructions
 
 ## Who I Am
@@ -60,6 +63,16 @@ Every feature must serve a real field operations need.
 - Offline events: localStorage key 'gcrew-pending-clocks' with retry on online
 - Branding: applyBranding() in AppLayout reads from useProgramSettings()
 - RLS bypass for admin: current_user_role() IN ('admin', 'manager')
+
+## Skills Reference
+Before making any change, read the relevant skill file:
+- Database changes → read docs/skills/supabase.skill.md
+- Component changes → read docs/skills/components.skill.md  
+- Page or feature changes → read docs/skills/features.skill.md
+
+Skills contain the exact patterns, table names, hook names,
+and conventions used in this codebase. Using them prevents
+drift, duplication, and broken patterns.
 
 ## Git Rules
 - Commit messages: feat:, fix:, refactor:, chore:, docs:

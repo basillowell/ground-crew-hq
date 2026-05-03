@@ -10,8 +10,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "playwright test",
+    "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:mobile": "playwright test --project='iPhone 14'",
+    "test:report": "playwright show-report",
     "test:unit": "vitest run",
     "test:watch": "vitest"
   },
