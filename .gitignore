@@ -9,4 +9,5 @@ coverage/
 .env.development.local
 .env.production.local
 .env.test.local
+.env.test
 *.log

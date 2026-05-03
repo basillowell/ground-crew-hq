@@ -1,54 +1,85 @@
-# CrewHQ AI Agent Rules
+# Ground Crew HQ — Agent Instructions
 
-## Project Context
-This is a workforce operations platform for grounds, turf, and facility management teams.
+## Who I Am
+I am not a traditional programmer. I understand systems,
+infrastructure, and operations management deeply.
+I have a background in Basic and Visual C++.
+Explain modern patterns simply, relating to systems thinking.
+I build ahead of my capability and learn by doing.
 
-Core modules:
-- Workboard (tasks + execution)
-- Scheduler (timeline + crew assignments)
-- Weather (live + station-based decision making)
-- Applications (chemical + agronomy tracking)
-- Employees (crew management)
-- Properties (multi-location support)
-- Equipment (asset tracking)
+## Project Identity
+Ground Crew HQ is a workforce operations platform for golf course,
+resort, and grounds maintenance teams. It is a real SaaS product
+with paying clients — not a demo or prototype.
+Every feature must serve a real field operations need.
 
 ## Tech Stack
-- React + TypeScript + Vite
-- Supabase (Postgres backend)
-- Vercel deployment
-- Tailwind + shadcn/ui
+- React 18 + TypeScript + Vite
+- shadcn/ui + Tailwind CSS — do NOT introduce other UI libraries
+- Supabase (auth, database, realtime, edge functions)
+- TanStack Query v5 for all data fetching
+- React Router v6 for routing
+- Vercel for deployment (auto-deploys on push to main)
 
-## Rules for AI Agents
+## Code Rules
+- Make surgical changes only — never rewrite entire files
+- Preserve existing architecture and patterns
+- Use existing hooks from supabase-queries.ts before creating new ones
+- Use useAuth() for currentUser, currentPropertyId, orgId
+- Never hardcode UUIDs or credentials in application code
+- All new components use Tailwind + shadcn only
 
-### Code Rules
-- DO NOT rewrite entire files unless explicitly told
-- Make **surgical changes only**
-- Preserve existing architecture
-- Use existing patterns before creating new ones
+## Data Rules — CRITICAL
+- ALL data persists via Supabase — no localStorage as primary store
+- Every INSERT and UPDATE must include org_id: currentUser?.orgId
+- Every INSERT and UPDATE must include property_id: currentPropertyId
+  where that column exists on the table
+- Never change Supabase schema without providing a migration SQL file
+  in supabase/migrations/
+- After every mutation: queryClient.invalidateQueries({ queryKey: ['table'] })
+- RLS policies required on every table — admin/manager bypass pattern:
+  current_user_role() IN ('admin', 'manager')
 
-### Data Rules
-- ALL data must persist via Supabase
-- NO mock data in production code
-- Do not change schema without providing SQL migration
+## Multi-Tenant Rules
+- This app serves multiple client organizations
+- Each org is isolated by org_id — never query without org scope
+- Never expose one org's data to another
 
-### UI Rules
-- Use existing Tailwind + shadcn styles
-- Do not introduce new UI libraries
-- Keep UI consistent across modules
+## File Structure Rules
+- Pages: src/pages/ — one file per module, no duplicates
+- Components: src/components/ — shared UI only
+- Data hooks: src/lib/supabase-queries.ts — single source of truth
+- Auth: src/contexts/AuthContext.tsx — never bypass
+- Migrations: supabase/migrations/ — numbered sequentially
+- Seeds: supabase/seeds/ — starter data only
 
-### Behavior Rules
-- Explain changes simply (user is not a traditional developer)
-- Prefer stability over cleverness
-- Fix root causes, not symptoms
+## Known Working Patterns — Use These
+- Data fetch: useQuery hook from supabase-queries.ts
+- Auth state: useAuth() → currentUser, currentPropertyId, orgId
+- After save: queryClient.invalidateQueries({ queryKey: ['table-name'] })
+- Offline events: localStorage key 'gcrew-pending-clocks' with retry on online
+- Branding: applyBranding() in AppLayout reads from useProgramSettings()
+- RLS bypass for admin: current_user_role() IN ('admin', 'manager')
 
-### Git Rules
-- Use clear commit messages:
-  - feat:
-  - fix:
-  - refactor:
-- Do not commit broken code
-- Keep changes small and testable
+## Git Rules
+- Commit messages: feat:, fix:, refactor:, chore:, docs:
+- Never commit broken code — npm run build must pass
+- Keep changes small and testable — one feature per commit
+- Never push directly to main without build passing
 
-### Critical Rule
-This is a REAL product - not a demo.
+## Testing Rules
+- Every critical flow needs a Playwright test
+- Critical flows: auth, workboard task assign, scheduler shift save,
+  field clock in/out, equipment add unit, weather location save
+- Run tests: npx playwright test
+- Never ship a change that breaks an existing test
+
+## Mobile-First Rules
+- Field page (/app/field) is used on phones — minimum 44px touch targets
+- Offline resilience required on all field interactions
+- Test on mobile viewport before shipping field page changes
+
+## The Prime Rule
+This is a REAL product with REAL clients.
 All features must be functional, connected, and production-safe.
+Demo behavior, mock data, and localStorage-as-database are not acceptable.

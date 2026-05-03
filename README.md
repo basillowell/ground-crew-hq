@@ -80,3 +80,36 @@ npx playwright test
 - Turf managers
 - Facilities and operations managers
 - Multi-site/property supervisors
+
+## Live Infrastructure
+
+- Frontend: Vercel (auto-deploys on push to main)
+- Backend: Supabase (PostgreSQL + Auth + Realtime)
+- Weather: Open-Meteo API (free, no key required)
+- Supabase Project: fjqeekwisnbpxgebrnpl.supabase.co
+
+## Database Setup
+
+Run migrations in order from `supabase/migrations/`:
+1. `001_initial_schema.sql`
+2. `002_multi_tenant.sql`
+3. `004_fix_recursive_rls.sql`
+
+After migrations, seed starter tasks:
+Run `supabase/seeds/001_starter_tasks.sql`
+
+## First Org Setup
+
+Every new client org needs:
+1. A row in organizations table
+2. A Supabase auth user
+3. A row in app_users linked to auth user
+4. A row in employees linked to app_users
+5. At least one row in properties with latitude and longitude
+
+## Current Version
+
+v2.4.1 - Full Supabase migration complete  
+All 14 pages on real Supabase data  
+Multi-tenant org isolation via RLS  
+Offline clock event queue on field page
