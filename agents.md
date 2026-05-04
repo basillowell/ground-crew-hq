@@ -43,6 +43,11 @@ Every feature must serve a real field operations need.
 - RLS policies required on every table — admin/manager bypass pattern:
   current_user_role() IN ('admin', 'manager')
 
+## Deployment
+- Production URL: ground-crew-hq.vercel.app
+- Preview deployments are protected by Vercel SSO — use production URL for testing
+- Deploy via: vercel --prod (or push to main branch)
+
 ## Multi-Tenant Rules
 - This app serves multiple client organizations
 - Each org is isolated by org_id — never query without org scope
