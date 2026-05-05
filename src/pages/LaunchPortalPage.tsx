@@ -1,40 +1,73 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Leaf, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { supabase } from '@/lib/supabase';
+import { hasSupabaseConfig, supabase, supabaseConfigError } from '@/lib/supabase';
 import { useProgramSettings } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
-  const { currentUser, authDebugMessage } = useAuth();
+  const { currentUser, authDebugMessage, isLoading } = useAuth();
   const programSettingsQuery = useProgramSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAwaitingProfile, setIsAwaitingProfile] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const clientName = programSettingsQuery.data?.clientLabel || 'Ground Crew HQ';
-  const appName = programSettingsQuery.data?.appName || 'WorkForce App';
+  const appName = programSettingsQuery.data?.appName || 'Ground Crew HQ';
   const shellImageUrl = programSettingsQuery.data?.logoUrl || '';
 
   useEffect(() => {
     if (currentUser) {
-      navigate('/app/dashboard');
+      setIsAwaitingProfile(false);
+      setIsSubmitting(false);
+      setErrorMessage('');
+      navigate('/app/dashboard', { replace: true });
+      return;
     }
-  }, [currentUser, navigate]);
+
+    if (isAwaitingProfile && !isLoading) {
+      setIsAwaitingProfile(false);
+      setIsSubmitting(false);
+      if (authDebugMessage) {
+        setErrorMessage(authDebugMessage);
+      } else {
+        setErrorMessage('Sign-in completed, but your app profile could not be loaded.');
+      }
+    }
+  }, [authDebugMessage, currentUser, isAwaitingProfile, isLoading, navigate]);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig) {
+      setErrorMessage(supabaseConfigError);
+    }
+  }, []);
+
+  const mapAuthError = (message: string) => {
+    const normalized = message.toLowerCase();
+    if (normalized.includes('invalid login credentials')) {
+      return 'Invalid credentials. Please check your email and password and try again.';
+    }
+    if (normalized.includes('email not confirmed')) {
+      return 'Email not confirmed. Please verify your email address before signing in.';
+    }
+    return message;
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) {
-      setErrorMessage('Supabase is not configured for this environment.');
+      setErrorMessage(supabaseConfigError || 'Supabase is not configured for this environment.');
       return;
     }
 
     setIsSubmitting(true);
+    setIsAwaitingProfile(false);
     setErrorMessage('');
     try {
       const result = await Promise.race([
@@ -45,13 +78,14 @@ export default function LaunchPortalPage() {
       ]);
 
       if (result.error) {
-        setErrorMessage(result.error.message);
+        setErrorMessage(mapAuthError(result.error.message));
+        setIsSubmitting(false);
       } else {
-        navigate('/app/dashboard');
+        // Wait for AuthContext profile hydration before redirecting.
+        setIsAwaitingProfile(true);
       }
     } catch {
       setErrorMessage('An unexpected error occurred. Please try again.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -73,8 +107,8 @@ export default function LaunchPortalPage() {
         }}
       >
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-4 text-white">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 backdrop-blur">
-            <Leaf className="h-5 w-5" />
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-sm font-bold tracking-wide backdrop-blur">
+            HQ
           </div>
           <div>
             <div className="text-lg font-semibold tracking-tight">{appName}</div>
@@ -146,9 +180,9 @@ export default function LaunchPortalPage() {
                   {authDebugMessage}
                 </div>
               ) : null}
-              <Button className="w-full gap-2" disabled={isSubmitting || !email || !password} type="submit">
+              <Button className="w-full gap-2" disabled={isSubmitting || !email || !password || !hasSupabaseConfig} type="submit">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                {isSubmitting ? 'Signing In' : 'Get Started'}
+                {isSubmitting ? (isAwaitingProfile ? 'Loading Profile' : 'Signing In') : 'Get Started'}
               </Button>
             </form>
           </Card>

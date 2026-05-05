@@ -465,7 +465,7 @@ export const programSettings: ProgramSettings[] = [
     id: 'ps1',
     clubId: 'club-1',
     organizationName: 'Ground Crew HQ',
-    appName: 'WorkForce App',
+  appName: 'Ground Crew HQ',
     navigationTitle: 'GroundsCrew',
     navigationSubtitle: 'Task Tracker',
     clientLabel: 'Ground Crew HQ',

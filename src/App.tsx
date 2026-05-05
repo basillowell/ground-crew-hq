@@ -114,16 +114,6 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 function AppRoutes() {
-  const { currentUser, isLoading } = useAuth();
-
-  if (isLoading) {
-    return <RouteFallback />;
-  }
-
-  if (!currentUser) {
-    return <Navigate to="/" replace />;
-  }
-
   return (
     <Suspense fallback={<RouteFallback />}>
       <RouteErrorBoundary>

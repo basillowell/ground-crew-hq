@@ -32,6 +32,7 @@ type AuthContextValue = {
   isManager: boolean;
   isEmployee: boolean;
   isLoading: boolean;
+  hasProfileIssue: boolean;
 };
 
 type AppUserRow = {
@@ -254,6 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isManager: currentRole === 'manager',
       isEmployee: currentRole === 'employee',
       isLoading,
+      hasProfileIssue: !isLoading && !currentUser && Boolean(authDebugMessage),
     };
   }, [authDebugMessage, currentPropertyId, currentUser, isLoading]);
 

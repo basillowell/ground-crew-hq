@@ -66,7 +66,7 @@ function hexToHslValues(hex: string | undefined, fallback: string) {
 
 function applyBranding(programSetting?: ProgramSettings) {
   if (typeof document === 'undefined' || !programSetting) return;
-  document.title = `${programSetting.appName || 'WorkForce App'}${programSetting.clientLabel ? ` | ${programSetting.clientLabel}` : ''}`;
+  document.title = `${programSetting.appName || 'Ground Crew HQ'}${programSetting.clientLabel ? ` | ${programSetting.clientLabel}` : ''}`;
   const root = document.documentElement;
   root.style.setProperty('--primary', hexToHslValues(programSetting.primaryColor, '152 55% 38%'));
   root.style.setProperty('--ring', hexToHslValues(programSetting.primaryColor, '152 55% 38%'));

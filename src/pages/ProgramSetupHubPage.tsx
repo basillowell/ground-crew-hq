@@ -116,8 +116,8 @@ function slugifyClubId(value: string) {
 function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
   return {
     ...settings,
-    appName: settings.appName || 'WorkForce App',
-    navigationTitle: settings.navigationTitle || settings.appName || settings.organizationName || 'WorkForce App',
+    appName: settings.appName || 'Ground Crew HQ',
+    navigationTitle: settings.navigationTitle || settings.appName || settings.organizationName || 'Ground Crew HQ',
     navigationSubtitle: settings.navigationSubtitle || 'Operations platform',
     clientLabel: settings.clientLabel || settings.organizationName || 'Client profile',
     logoInitials: settings.logoInitials || (settings.organizationName || 'WF').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'WF',
@@ -152,8 +152,8 @@ function buildDefaultProgramSetting(orgName?: string): ProgramSettings {
   return withBrandDefaults({
     id: makeId('ps'),
     organizationName: normalizedOrgName,
-    appName: 'WorkForce App',
-    navigationTitle: 'WorkForce App',
+    appName: 'Ground Crew HQ',
+    navigationTitle: 'Ground Crew HQ',
     navigationSubtitle: 'Operations platform',
     clientLabel: normalizedOrgName,
     logoInitials: normalizedOrgName.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'WF',

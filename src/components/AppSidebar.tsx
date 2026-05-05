@@ -33,7 +33,7 @@ export function AppSidebar() {
   const location = useLocation();
   const { currentUser } = useAuth();
   const { data: programSetting } = useProgramSettings(currentUser?.orgId);
-  const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'WorkForce App';
+  const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
   const logoUrl = programSetting?.logoUrl;
