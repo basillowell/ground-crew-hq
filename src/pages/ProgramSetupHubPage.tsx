@@ -231,6 +231,11 @@ export default function ProgramSetupHubPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   useEffect(() => {
+    const section = searchParams.get('section');
+    if (section === 'properties') setActivePage('properties');
+  }, [searchParams]);
+
+  useEffect(() => {
     if (programSetting || programSettingQuery.isLoading) return;
     if (programSettingData) {
       setProgramSetting(withBrandDefaults(programSettingData));
@@ -574,7 +579,3 @@ export default function ProgramSetupHubPage() {
     </div>
   );
 }
-  useEffect(() => {
-    const section = searchParams.get('section');
-    if (section === 'properties') setActivePage('properties');
-  }, [searchParams]);
