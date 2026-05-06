@@ -8,7 +8,6 @@ import {
   BarChart3,
   Settings,
   MessageSquare,
-  Leaf,
   CloudSun,
   FlaskConical,
   MonitorSmartphone,
@@ -140,7 +139,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
             ) : collapsed ? (
               <span className="text-xs font-bold text-sidebar-primary-foreground">{logoInitials.slice(0, 2)}</span>
             ) : (
-              <Leaf className="h-5 w-5 text-sidebar-primary-foreground" />
+              <span className="text-primary-foreground text-sm font-bold tracking-tight">HQ</span>
             )}
           </div>
           {!collapsed ? (
