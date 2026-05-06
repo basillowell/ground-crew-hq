@@ -11,3 +11,7 @@ coverage/
 .env.test.local
 .env.test
 *.log
+.import_replit/
+ValetPro_clean/
+ValetPro/
+ValetPro_repo/
