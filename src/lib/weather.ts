@@ -21,9 +21,18 @@ export type PropertyWeather = {
   propertyId: string;
   latitude: number;
   longitude: number;
+  locationLabel: string;
+  source: 'property' | 'default';
+  lastUpdated: string;
   current: WeatherCurrent;
   hourly: WeatherHourlyPoint[];
 };
+
+export const DEFAULT_WEATHER_LOCATION = {
+  label: 'Sarasota Polo Club, Sarasota, FL',
+  latitude: 27.316,
+  longitude: -82.402,
+} as const;
 
 async function fetchOpenMeteoPayload(lat: number, lng: number) {
   const params = new URLSearchParams({
@@ -82,7 +91,13 @@ export async function fetchHourlyForecast(lat: number, lng: number): Promise<Wea
 
 async function fetchPropertyCoordinates(propertyId: string) {
   if (!supabase) {
-    throw new Error('Supabase client is not configured.');
+    return {
+      propertyId,
+      latitude: DEFAULT_WEATHER_LOCATION.latitude,
+      longitude: DEFAULT_WEATHER_LOCATION.longitude,
+      locationLabel: DEFAULT_WEATHER_LOCATION.label,
+      source: 'default' as const,
+    };
   }
   const { data, error } = await supabase
     .from('properties')
@@ -90,15 +105,35 @@ async function fetchPropertyCoordinates(propertyId: string) {
     .eq('id', propertyId)
     .maybeSingle();
 
-  if (error) throw error;
-  if (!data?.latitude || !data?.longitude) {
-    throw new Error('Property coordinates are not configured.');
+  if (error) {
+    return {
+      propertyId,
+      latitude: DEFAULT_WEATHER_LOCATION.latitude,
+      longitude: DEFAULT_WEATHER_LOCATION.longitude,
+      locationLabel: DEFAULT_WEATHER_LOCATION.label,
+      source: 'default' as const,
+    };
+  }
+
+  const latitude = Number(data?.latitude);
+  const longitude = Number(data?.longitude);
+  const hasCoords = Number.isFinite(latitude) && Number.isFinite(longitude);
+  if (!hasCoords) {
+    return {
+      propertyId,
+      latitude: DEFAULT_WEATHER_LOCATION.latitude,
+      longitude: DEFAULT_WEATHER_LOCATION.longitude,
+      locationLabel: DEFAULT_WEATHER_LOCATION.label,
+      source: 'default' as const,
+    };
   }
 
   return {
     propertyId: data.id as string,
-    latitude: Number(data.latitude),
-    longitude: Number(data.longitude),
+    latitude,
+    longitude,
+    locationLabel: 'Property coordinates',
+    source: 'property' as const,
   };
 }
 
@@ -118,6 +153,7 @@ export function useWeather(propertyId?: string) {
       ]);
       return {
         ...coordinates,
+        lastUpdated: new Date().toISOString(),
         current,
         hourly,
       };

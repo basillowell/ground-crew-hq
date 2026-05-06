@@ -61,6 +61,7 @@ type OrganizationRow = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const isDev = import.meta.env.DEV;
 
 function getSupabaseProjectLabel() {
   try {
@@ -79,6 +80,12 @@ function timeoutResult<T>(ms: number, fallback: T): Promise<T> {
 
 async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfile | null; debugMessage: string }> {
   if (!supabase || !user) return { profile: null, debugMessage: '' };
+  if (isDev) {
+    console.info('[Auth] Loading app profile for auth user', {
+      userId: user.id,
+      email: user.email ?? null,
+    });
+  }
   try {
     const { data, error } = await supabase
       .from('app_users')
@@ -87,6 +94,13 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
       .maybeSingle();
 
     if (error || !data) {
+      if (isDev) {
+        console.warn('[Auth] app_users row missing for auth user', {
+          userId: user.id,
+          email: user.email ?? null,
+          error: error?.message ?? null,
+        });
+      }
       return {
         profile: null,
         debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but no app user profile was found for ${user.email ?? user.id}.`,
@@ -101,6 +115,12 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
       .maybeSingle();
     const employee = (employeeData as EmployeeRow | null) ?? null;
     if (!employee) {
+      if (isDev) {
+        console.warn('[Auth] linked employee row missing', {
+          authUserId: user.id,
+          employeeId: row.employee_id,
+        });
+      }
       return {
         profile: null,
         debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked employee record ${row.employee_id} is missing.`,
@@ -114,12 +134,27 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
       .maybeSingle();
     const organization = (organizationData as OrganizationRow | null) ?? null;
     if (!organization) {
+      if (isDev) {
+        console.warn('[Auth] linked organization row missing', {
+          authUserId: user.id,
+          orgId: row.org_id,
+        });
+      }
       return {
         profile: null,
         debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked organization ${row.org_id} is missing.`,
       };
     }
 
+    if (isDev) {
+      console.info('[Auth] Profile hydration complete', {
+        authUserId: user.id,
+        appUserId: row.id,
+        employeeId: row.employee_id,
+        orgId: row.org_id,
+        role: row.role,
+      });
+    }
     return {
       profile: {
         authUser: user,
@@ -138,7 +173,10 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
       },
       debugMessage: '',
     };
-  } catch {
+  } catch (error) {
+    if (isDev) {
+      console.error('[Auth] Unexpected profile hydration error', error);
+    }
     return {
       profile: null,
       debugMessage: `Could not load profile data from ${getSupabaseProjectLabel()}. Please refresh and try again.`,
@@ -161,6 +199,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     async function hydrateAuth() {
+      if (isDev) {
+        console.info('[Auth] Starting initial auth hydration');
+      }
       setIsLoading(true);
       try {
         const sessionResult = await Promise.race([
@@ -168,6 +209,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           timeoutResult(10000, { data: { session: null } }),
         ]);
         const sessionUser = sessionResult.data?.session?.user ?? null;
+        if (isDev) {
+          console.info('[Auth] Initial session lookup finished', {
+            hasSessionUser: Boolean(sessionUser),
+            sessionUserId: sessionUser?.id ?? null,
+          });
+        }
         const { profile, debugMessage } = await Promise.race([
           loadAuthProfile(sessionUser),
           timeoutResult(10000, {
@@ -183,7 +230,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (current) return current;
           return profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId;
         });
-      } catch {
+      } catch (error) {
+        if (isDev) {
+          console.error('[Auth] Initial auth hydration failed', error);
+        }
         if (!mounted) return;
         setCurrentUser(null);
         setCurrentPropertyIdState('');
@@ -191,6 +241,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         if (mounted) {
           setIsLoading(false);
+          if (isDev) {
+            console.info('[Auth] Initial auth hydration finished');
+          }
         }
       }
     }
@@ -198,6 +251,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void hydrateAuth();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (isDev) {
+        console.info('[Auth] Supabase auth state changed', {
+          event: _event,
+          hasSessionUser: Boolean(session?.user),
+          sessionUserId: session?.user?.id ?? null,
+        });
+      }
       if (mounted) {
         setIsLoading(true);
       }
@@ -217,7 +277,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (current) return current;
           return profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId;
         });
-      } catch {
+      } catch (error) {
+        if (isDev) {
+          console.error('[Auth] Auth state profile hydration failed', error);
+        }
         if (!mounted) return;
         setCurrentUser(null);
         setCurrentPropertyIdState('');
@@ -225,6 +288,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         if (mounted) {
           setIsLoading(false);
+          if (isDev) {
+            console.info('[Auth] Auth state processing finished');
+          }
         }
       }
     });

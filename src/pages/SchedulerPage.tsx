@@ -20,7 +20,7 @@ function toDateKey(date: Date) {
 function startOfWeek(date: Date) {
   const next = new Date(date);
   const day = next.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
+  const diff = -day;
   next.setDate(next.getDate() + diff);
   next.setHours(0, 0, 0, 0);
   return next;
@@ -29,7 +29,7 @@ function startOfWeek(date: Date) {
 function getWeekStart(date: Date) {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const diff = d.getDate() - day;
   d.setDate(diff);
   return d.toISOString().slice(0, 10);
 }
@@ -49,6 +49,7 @@ function buildWeekDays(anchorDate: Date) {
 }
 
 function shiftHours(start: string, end: string): number {
+  if (!start || !end) return 0;
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   return Math.max(0, (eh * 60 + em - (sh * 60 + sm)) / 60);
@@ -113,6 +114,7 @@ export default function SchedulerPage() {
     shiftStart: '05:00',
     shiftEnd: '13:30',
     status: 'scheduled' as ScheduleEntry['status'],
+    notes: '',
   });
 
   useEffect(() => {
@@ -152,17 +154,20 @@ export default function SchedulerPage() {
       shiftStart: '05:00',
       shiftEnd: '13:30',
       status: 'scheduled',
+      notes: '',
     });
     setDialogOpen(true);
   }
 
   function openEditShift(employeeId: string, day: { date: string }, entry: ScheduleEntry) {
+    const ext = entry as ScheduleEntry & { notes?: string | null };
     setDraft({
       employeeId,
       date: day.date,
       shiftStart: entry.shiftStart,
       shiftEnd: entry.shiftEnd,
       status: entry.status,
+      notes: ext.notes ?? '',
     });
     setDialogOpen(true);
   }
@@ -175,6 +180,14 @@ export default function SchedulerPage() {
     if (!supabase) {
       toast.error('Database connection not available.');
       return;
+    }
+    if (draft.status === 'scheduled') {
+      const startMinutes = draft.shiftStart ? Number(draft.shiftStart.slice(0, 2)) * 60 + Number(draft.shiftStart.slice(3, 5)) : 0;
+      const endMinutes = draft.shiftEnd ? Number(draft.shiftEnd.slice(0, 2)) * 60 + Number(draft.shiftEnd.slice(3, 5)) : 0;
+      if (!draft.shiftStart || !draft.shiftEnd || endMinutes <= startMinutes) {
+        toast.error('Shift end must be after shift start.');
+        return;
+      }
     }
 
     const employee = employeeList.find((e) => e.id === draft.employeeId);
@@ -194,16 +207,27 @@ export default function SchedulerPage() {
     const payload: Record<string, unknown> = {
       employee_id: draft.employeeId,
       date: draft.date,
-      shift_start: draft.shiftStart,
-      shift_end: draft.shiftEnd,
+      shift_start: draft.status === 'scheduled' ? draft.shiftStart : '00:00',
+      shift_end: draft.status === 'scheduled' ? draft.shiftEnd : '00:00',
       status: draft.status,
+      is_day_off: draft.status !== 'scheduled',
+      notes: draft.notes.trim() || null,
     };
     if (propertyId) payload.property_id = propertyId;
     if (currentUser?.orgId) payload.org_id = currentUser.orgId;
 
-    const response = existing
+    let response = existing
       ? await supabase.from('schedule_entries').update(payload).eq('id', existing.id)
       : await supabase.from('schedule_entries').insert(payload);
+
+    if (response.error && /column/i.test(response.error.message)) {
+      const legacyPayload = { ...payload };
+      delete legacyPayload.is_day_off;
+      delete legacyPayload.notes;
+      response = existing
+        ? await supabase.from('schedule_entries').update(legacyPayload).eq('id', existing.id)
+        : await supabase.from('schedule_entries').insert(legacyPayload);
+    }
 
     setIsSaving(false);
 
@@ -280,6 +304,14 @@ export default function SchedulerPage() {
   }
 
   const isEditing = !!scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
+  const dailyTotals = useMemo(() => {
+    return weekDays.map((day) => {
+      const totalHours = scheduleList
+        .filter((entry) => entry.date === day.date && entry.status === 'scheduled')
+        .reduce((sum, entry) => sum + shiftHours(entry.shiftStart, entry.shiftEnd), 0);
+      return { date: day.date, totalHours };
+    });
+  }, [scheduleList, weekDays]);
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
@@ -384,7 +416,7 @@ export default function SchedulerPage() {
                       </th>
                     );
                   })}
-                  <th className="text-center px-3 py-3 font-medium text-muted-foreground text-xs min-w-[64px]">Total</th>
+                  <th className="text-center px-3 py-3 font-medium text-muted-foreground text-xs min-w-[80px]">Weekly Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -469,6 +501,25 @@ export default function SchedulerPage() {
                   })
                 )}
               </tbody>
+              <tfoot>
+                <tr className="border-t bg-muted/20">
+                  <td className="px-4 py-2.5 text-xs font-semibold text-muted-foreground sticky left-0 bg-muted/20 z-10">
+                    Daily Total Hours
+                  </td>
+                  {dailyTotals.map((day) => (
+                    <td key={day.date} className="px-2 py-2 text-center">
+                      <span className="font-mono text-xs font-semibold text-foreground">
+                        {day.totalHours > 0 ? `${day.totalHours.toFixed(1)}h` : '—'}
+                      </span>
+                    </td>
+                  ))}
+                  <td className="px-3 py-2 text-center">
+                    <span className="font-mono text-xs font-semibold text-primary">
+                      {dailyTotals.reduce((sum, day) => sum + day.totalHours, 0).toFixed(1)}h
+                    </span>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </Card>
         )}
@@ -566,6 +617,16 @@ export default function SchedulerPage() {
                 )}
               </>
             )}
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Notes</label>
+              <Input
+                value={draft.notes}
+                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                placeholder="Optional shift note"
+                className="mt-1"
+                data-testid="input-shift-notes"
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-between pt-2">

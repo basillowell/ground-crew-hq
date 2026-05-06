@@ -174,6 +174,8 @@ export default function WorkboardPage() {
     area: 'Primary zone',
     startTime: '05:30',
     duration: '60',
+    status: 'planned' as Assignment['status'],
+    notes: '',
   });
 
   const [noteDraft, setNoteDraft] = useState({
@@ -426,7 +428,7 @@ export default function WorkboardPage() {
   );
 
   const availableEquipment = useMemo(
-    () => equipmentList.filter((u) => u.status === 'available' || u.status === 'in-use'),
+    () => equipmentList.filter((u) => ['ready', 'available'].includes(String(u.status).toLowerCase())),
     [equipmentList],
   );
 
@@ -456,6 +458,8 @@ export default function WorkboardPage() {
       area: defaultLocation,
       startTime: '05:30',
       duration: '60',
+      status: 'planned',
+      notes: '',
     });
     setAssignmentDialogOpen(true);
   }
@@ -470,6 +474,8 @@ export default function WorkboardPage() {
       area: assignment.area,
       startTime: assignment.startTime,
       duration: String(assignment.duration),
+      status: assignment.status,
+      notes: '',
     });
     setAssignmentDialogOpen(true);
   }
@@ -487,26 +493,76 @@ export default function WorkboardPage() {
       area: request.preferredLocation || propertyWorkLocations[0]?.name || 'Primary zone',
       startTime: '05:30',
       duration: String(taskList.find((t) => t.id === targetTaskId)?.duration ?? 60),
+      status: 'planned',
+      notes: request.notes ?? '',
     });
     setAssignmentDialogOpen(true);
   }
 
   async function saveAssignment() {
     if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !assignmentDraft.employeeId || !assignmentDraft.taskId) return;
+    const duration = Number(assignmentDraft.duration || 0);
+    if (duration <= 0) {
+      toast.error('Task duration must be greater than 0 minutes.');
+      return;
+    }
+    if (assignmentDraft.equipmentId) {
+      const selectedEquipment = equipmentList.find((unit) => unit.id === assignmentDraft.equipmentId);
+      const isReady = selectedEquipment && ['ready', 'available'].includes(String(selectedEquipment.status).toLowerCase());
+      if (!isReady) {
+        toast.error('Selected equipment is not ready for assignment.');
+        return;
+      }
+    }
+
+    const employeeShift = getShiftForEmployee(scheduleList, assignmentDraft.employeeId, boardDate);
+    const shiftMinutes = employeeShift
+      ? Math.max(timeToMinutes(employeeShift.shiftEnd) - timeToMinutes(employeeShift.shiftStart), 0)
+      : 0;
+    const existingEmployeeAssignments = dayAssignments.filter(
+      (assignment) => assignment.employeeId === assignmentDraft.employeeId && assignment.id !== editingAssignmentId,
+    );
+    const assignedMinutes = existingEmployeeAssignments.reduce((sum, assignment) => sum + assignment.duration, 0);
+    if (shiftMinutes > 0 && assignedMinutes + duration > shiftMinutes) {
+      toast('Assigned tasks exceed shift hours', {
+        description: `Shift: ${shiftMinutes} min · Assigned: ${assignedMinutes + duration} min`,
+      });
+    }
 
     const assignmentId = editingAssignmentId ?? makeId('assign');
-    const { error } = await supabase.from('assignments').upsert({
+    const basePayload = {
       id: assignmentId,
+      org_id: currentUser?.orgId ?? null,
       employee_id: assignmentDraft.employeeId,
       property_id: effectivePropertyId,
       task_id: assignmentDraft.taskId,
       date: boardDate,
       location: assignmentDraft.area,
-      status: 'planned',
+      status: assignmentDraft.status,
       start_time: assignmentDraft.startTime,
-      duration: Number(assignmentDraft.duration || 0),
+      duration,
       equipment_id: assignmentDraft.equipmentId || null,
-    });
+      notes: assignmentDraft.notes.trim() || null,
+      order_index: existingEmployeeAssignments.length,
+    };
+    let { error } = await supabase.from('assignments').upsert(basePayload);
+    if (error) {
+      const fallbackPayload = {
+        id: assignmentId,
+        org_id: currentUser?.orgId ?? null,
+        employee_id: assignmentDraft.employeeId,
+        property_id: effectivePropertyId,
+        task_id: assignmentDraft.taskId,
+        date: boardDate,
+        location: assignmentDraft.area,
+        status: assignmentDraft.status,
+        start_time: assignmentDraft.startTime,
+        duration,
+        equipment_id: assignmentDraft.equipmentId || null,
+      };
+      const fallback = await supabase.from('assignments').upsert(fallbackPayload);
+      error = fallback.error;
+    }
 
     if (error) {
       toast('Unable to save assignment', { description: error.message });
@@ -516,7 +572,12 @@ export default function WorkboardPage() {
     if (linkedRequestId) {
       await supabase
         .from('task_requests')
-        .update({ status: 'assigned', task_id: assignmentDraft.taskId, preferred_location: assignmentDraft.area })
+        .update({
+          status: 'assigned',
+          task_id: assignmentDraft.taskId,
+          preferred_location: assignmentDraft.area,
+          org_id: currentUser?.orgId ?? null,
+        })
         .eq('id', linkedRequestId);
     }
 
@@ -1054,6 +1115,20 @@ export default function WorkboardPage() {
               />
             </div>
 
+            <div>
+              <label className="text-xs text-muted-foreground">Status</label>
+              <select
+                value={assignmentDraft.status}
+                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, status: e.target.value as Assignment['status'] })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-assignment-status"
+              >
+                <option value="planned">Planned</option>
+                <option value="in-progress">In Progress</option>
+                <option value="complete">Complete</option>
+              </select>
+            </div>
+
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Location / Area</label>
               {propertyWorkLocations.length > 0 ? (
@@ -1075,6 +1150,16 @@ export default function WorkboardPage() {
                   data-testid="input-assignment-area"
                 />
               )}
+            </div>
+
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Notes</label>
+              <textarea
+                value={assignmentDraft.notes}
+                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, notes: e.target.value })}
+                className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                data-testid="input-assignment-notes"
+              />
             </div>
           </div>
 

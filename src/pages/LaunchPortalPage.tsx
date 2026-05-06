@@ -24,6 +24,13 @@ export default function LaunchPortalPage() {
 
   useEffect(() => {
     if (currentUser) {
+      if (import.meta.env.DEV) {
+        console.info('[Login] Profile hydrated, navigating to dashboard', {
+          appUserId: currentUser.appUserId,
+          orgId: currentUser.orgId,
+          role: currentUser.role,
+        });
+      }
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
       setErrorMessage('');
@@ -32,6 +39,11 @@ export default function LaunchPortalPage() {
     }
 
     if (isAwaitingProfile && !isLoading) {
+      if (import.meta.env.DEV) {
+        console.warn('[Login] Sign-in succeeded but app profile hydration failed', {
+          authDebugMessage,
+        });
+      }
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
       if (authDebugMessage) {
@@ -70,6 +82,9 @@ export default function LaunchPortalPage() {
     setIsAwaitingProfile(false);
     setErrorMessage('');
     try {
+      if (import.meta.env.DEV) {
+        console.info('[Login] Starting signInWithPassword', { email });
+      }
       const result = await Promise.race([
         supabase.auth.signInWithPassword({ email, password }),
         new Promise<{ error: { message: string } }>((resolve) =>
@@ -78,10 +93,16 @@ export default function LaunchPortalPage() {
       ]);
 
       if (result.error) {
+        if (import.meta.env.DEV) {
+          console.warn('[Login] Supabase sign-in error', result.error.message);
+        }
         setErrorMessage(mapAuthError(result.error.message));
         setIsSubmitting(false);
       } else {
         // Wait for AuthContext profile hydration before redirecting.
+        if (import.meta.env.DEV) {
+          console.info('[Login] Supabase sign-in succeeded, waiting for profile hydration');
+        }
         setIsAwaitingProfile(true);
       }
     } catch {

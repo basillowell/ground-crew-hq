@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Calendar, Download, Droplets, FileText, FlaskConical, MapPin, Play, Printer, Wind } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import {
   useWeatherLocations,
 } from '@/lib/supabase-queries';
 import { computeTimecardSummary } from '@/lib/laborMetrics';
+import { supabase } from '@/lib/supabase';
 
 const COLORS = ['hsl(152,55%,38%)', 'hsl(210,80%,52%)', 'hsl(38,92%,50%)', 'hsl(270,60%,55%)', 'hsl(0,0%,55%)'];
 const LazyReportsCharts = lazy(() =>
@@ -86,7 +88,7 @@ function reportDescription(report: string) {
 }
 
 export default function ReportsPage() {
-  const { currentPropertyId } = useAuth();
+  const { currentPropertyId, orgId } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState(reportCategories[4] ?? reportCategories[0]);
   const [selectedReport, setSelectedReport] = useState((reportCategories[4] ?? reportCategories[0]).reports[0]);
   const [endDate, setEndDate] = useState(currentDateIso());
@@ -98,19 +100,22 @@ export default function ReportsPage() {
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [taskFilter, setTaskFilter] = useState('all');
   const [areaFilter, setAreaFilter] = useState('all');
+  const [appliedStartDate, setAppliedStartDate] = useState(startDate);
+  const [appliedEndDate, setAppliedEndDate] = useState(endDate);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const propertyId = currentPropertyId || 'all';
   const employeesQuery = useEmployees(propertyId);
-  const scheduleEntriesQuery = useScheduleEntriesRange(startDate, endDate, propertyId);
-  const assignmentsQuery = useAssignmentsRange(startDate, endDate, propertyId);
+  const scheduleEntriesQuery = useScheduleEntriesRange(appliedStartDate, appliedEndDate, propertyId);
+  const assignmentsQuery = useAssignmentsRange(appliedStartDate, appliedEndDate, propertyId);
   const tasksQuery = useTasks(propertyId);
-  const clockEventsRangeQuery = useClockEventsRange(startDate, endDate, propertyId);
-  const applicationLogsQuery = useChemicalApplicationLogsRange(startDate, endDate, propertyId);
+  const clockEventsRangeQuery = useClockEventsRange(appliedStartDate, appliedEndDate, propertyId);
+  const applicationLogsQuery = useChemicalApplicationLogsRange(appliedStartDate, appliedEndDate, propertyId);
   const applicationLogs = applicationLogsQuery.data ?? [];
   const refWeatherLogIds = useMemo(
     () => [...new Set(applicationLogs.map((log) => log.weatherLogId).filter(Boolean) as string[])],
     [applicationLogs],
   );
-  const weatherRangeQuery = useWeatherDailyLogsRange(startDate, endDate, propertyId);
+  const weatherRangeQuery = useWeatherDailyLogsRange(appliedStartDate, appliedEndDate, propertyId);
   const weatherByIdQuery = useWeatherDailyLogsByIds(refWeatherLogIds);
   const weatherLogs = useMemo(() => {
     const map = new Map<string, WeatherDailyLog>();
@@ -126,9 +131,28 @@ export default function ReportsPage() {
   const scheduleEntries = scheduleEntriesQuery.data ?? [];
   const assignments = assignmentsQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];
+  const hourlyRatesQuery = useQuery({
+    queryKey: ['employee-hourly-rates', propertyId, orgId ?? 'all-orgs'],
+    queryFn: async () => {
+      if (!supabase) return new Map<string, number>();
+      let query = supabase.from('employees').select('id, hourly_rate, wage, org_id, property_id');
+      if (orgId) query = query.eq('org_id', orgId);
+      if (propertyId && propertyId !== 'all') query = query.eq('property_id', propertyId);
+      const { data, error } = await query;
+      if (error) throw error;
+      const rates = new Map<string, number>();
+      for (const row of data ?? []) {
+        const raw = row as { id: string; hourly_rate?: number | null; wage?: number | null };
+        const value = Number(raw.hourly_rate ?? raw.wage ?? 0);
+        rates.set(raw.id, Number.isFinite(value) ? value : 0);
+      }
+      return rates;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
 
   const filteredEmployees = useMemo(
-    () => employees.filter((employee) => !propertyId || employee.propertyId === propertyId),
+    () => employees.filter((employee) => propertyId === 'all' || !propertyId || employee.propertyId === propertyId),
     [employees, propertyId],
   );
 
@@ -138,20 +162,20 @@ export default function ReportsPage() {
   );
 
   const filteredWeather = useMemo(
-    () => weatherLogs.filter((log) => inRange(log.date, startDate, endDate)),
-    [endDate, startDate, weatherLogs],
+    () => weatherLogs.filter((log) => inRange(log.date, appliedStartDate, appliedEndDate)),
+    [appliedEndDate, appliedStartDate, weatherLogs],
   );
 
   const filteredApplications = useMemo(
     () =>
       applicationLogs.filter((log) => {
-        const matchesDate = inRange(log.applicationDate, startDate, endDate);
+        const matchesDate = inRange(log.applicationDate, appliedStartDate, appliedEndDate);
         const matchesProperty = filteredEmployeeIds.has(log.applicatorId);
         const matchesEmployee = employeeFilter === 'all' || log.applicatorId === employeeFilter;
         const matchesArea = areaFilter === 'all' || areaFilter === `app:${log.areaId}`;
         return matchesDate && matchesProperty && matchesEmployee && matchesArea;
       }),
-    [applicationLogs, areaFilter, employeeFilter, endDate, filteredEmployeeIds, startDate],
+    [appliedEndDate, appliedStartDate, applicationLogs, areaFilter, employeeFilter, filteredEmployeeIds],
   );
 
   const filteredClockEvents = useMemo(
@@ -254,23 +278,23 @@ export default function ReportsPage() {
       scheduleEntries.filter(
         (entry) =>
           filteredEmployeeIds.has(entry.employeeId) &&
-          inRange(entry.date, startDate, endDate) &&
+          inRange(entry.date, appliedStartDate, appliedEndDate) &&
           (employeeFilter === 'all' || entry.employeeId === employeeFilter),
       ),
-    [employeeFilter, endDate, filteredEmployeeIds, scheduleEntries, startDate],
+    [appliedEndDate, appliedStartDate, employeeFilter, filteredEmployeeIds, scheduleEntries],
   );
 
   const filteredAssignments = useMemo(
     () =>
       assignments.filter((assignment) => {
-        const matchesDate = inRange(assignment.date, startDate, endDate);
+        const matchesDate = inRange(assignment.date, appliedStartDate, appliedEndDate);
         const matchesProperty = filteredEmployeeIds.has(assignment.employeeId);
         const matchesEmployee = employeeFilter === 'all' || assignment.employeeId === employeeFilter;
         const matchesTask = taskFilter === 'all' || assignment.taskId === taskFilter;
         const matchesArea = areaFilter === 'all' || areaFilter === `work:${assignment.area}`;
         return matchesDate && matchesProperty && matchesEmployee && matchesTask && matchesArea;
       }),
-    [areaFilter, assignments, employeeFilter, endDate, filteredEmployeeIds, startDate, taskFilter],
+    [appliedEndDate, appliedStartDate, areaFilter, assignments, employeeFilter, filteredEmployeeIds, taskFilter],
   );
 
   const dailyLabor = useMemo(() => {
@@ -331,7 +355,8 @@ export default function ReportsPage() {
         const employeeAssignments = filteredAssignments.filter((assignment) => assignment.employeeId === employee.id);
         const employeeApplications = filteredApplications.filter((log) => log.applicatorId === employee.id);
         const employeeClockEvents = filteredClockEvents.filter((event) => event.employeeId === employee.id);
-        const timecard = computeTimecardSummary(employeeClockEvents, `${endDate}T23:59:59.999Z`);
+        const timecard = computeTimecardSummary(employeeClockEvents, `${appliedEndDate}T23:59:59.999Z`);
+        const hourlyRate = hourlyRatesQuery.data?.get(employee.id) ?? employee.wage;
         const scheduledHours = shifts.reduce((sum, entry) => sum + shiftHours(entry), 0);
         const assignedHours = employeeAssignments.reduce((sum, assignment) => sum + assignment.duration, 0) / 60;
         const applicationHoursTotal = employeeApplications.reduce((sum, log) => sum + applicationHours(log), 0);
@@ -344,7 +369,7 @@ export default function ReportsPage() {
           employee: `${employee.firstName} ${employee.lastName}`,
           department: employee.department,
           group: employee.group,
-          wage: employee.wage,
+          wage: hourlyRate,
           scheduledHours: Number(scheduledHours.toFixed(2)),
           assignedHours: Number(assignedHours.toFixed(2)),
           actualWorkedHours: Number(actualWorkedHours.toFixed(2)),
@@ -353,12 +378,49 @@ export default function ReportsPage() {
           assignmentCount: employeeAssignments.length,
           applicationCount: employeeApplications.length,
           utilization: Number(utilization.toFixed(1)),
-          laborCost: Number(((actualWorkedHours || assignedHours) * employee.wage).toFixed(2)),
+          laborCost: Number(((actualWorkedHours || assignedHours) * hourlyRate).toFixed(2)),
         };
       })
       .filter((entry) => entry.scheduledHours > 0 || entry.assignmentCount > 0 || entry.applicationCount > 0 || entry.actualWorkedHours > 0)
       .sort((left, right) => (right.actualWorkedHours || right.scheduledHours) - (left.actualWorkedHours || left.scheduledHours));
-  }, [endDate, filteredApplications, filteredAssignments, filteredClockEvents, filteredEmployees, filteredSchedules]);
+  }, [appliedEndDate, filteredApplications, filteredAssignments, filteredClockEvents, filteredEmployees, filteredSchedules, hourlyRatesQuery.data]);
+
+  const dollarsAndHoursRows = useMemo(() => {
+    return filteredAssignments.map((assignment) => {
+      const employee = filteredEmployees.find((entry) => entry.id === assignment.employeeId);
+      const task = tasks.find((entry) => entry.id === assignment.taskId);
+      const hourlyRate = hourlyRatesQuery.data?.get(assignment.employeeId) ?? employee?.wage ?? 0;
+      const hours = assignment.duration / 60;
+      return {
+        id: assignment.id,
+        date: assignment.date,
+        employee: employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown employee',
+        task: task?.name ?? 'Unknown task',
+        taskGroup: task?.category ?? 'Uncategorized',
+        hours: Number(hours.toFixed(2)),
+        hourlyRate: Number(hourlyRate.toFixed(2)),
+        laborCost: Number((hours * hourlyRate).toFixed(2)),
+      };
+    });
+  }, [filteredAssignments, filteredEmployees, hourlyRatesQuery.data, tasks]);
+
+  const taskTotalsByDateAndGroup = useMemo(() => {
+    const grouped = new Map<string, { date: string; taskGroup: string; task: string; hours: number; assignments: number }>();
+    for (const assignment of filteredAssignments) {
+      const task = tasks.find((entry) => entry.id === assignment.taskId);
+      const date = assignment.date;
+      const taskGroup = task?.category ?? 'Uncategorized';
+      const taskName = task?.name ?? 'Unknown task';
+      const key = `${date}__${taskGroup}__${taskName}`;
+      const existing = grouped.get(key) ?? { date, taskGroup, task: taskName, hours: 0, assignments: 0 };
+      existing.hours += assignment.duration / 60;
+      existing.assignments += 1;
+      grouped.set(key, existing);
+    }
+    return [...grouped.values()]
+      .map((row) => ({ ...row, hours: Number(row.hours.toFixed(2)) }))
+      .sort((a, b) => `${a.date}${a.taskGroup}${a.task}`.localeCompare(`${b.date}${b.taskGroup}${b.task}`));
+  }, [filteredAssignments, tasks]);
 
   const applicationsToHoursRows = useMemo(() => {
     return filteredApplications
@@ -432,14 +494,61 @@ export default function ReportsPage() {
     return [...workAreas, ...appAreas];
   }, [applicationAreas, assignments]);
 
+  const requiredReportsLoading =
+    employeesQuery.isLoading ||
+    scheduleEntriesQuery.isLoading ||
+    assignmentsQuery.isLoading ||
+    tasksQuery.isLoading ||
+    hourlyRatesQuery.isLoading;
+  const requiredReportsError =
+    employeesQuery.error ||
+    scheduleEntriesQuery.error ||
+    assignmentsQuery.error ||
+    tasksQuery.error ||
+    hourlyRatesQuery.error;
+  const hasRequiredRows =
+    dollarsAndHoursRows.length > 0 ||
+    taskTotalsByDateAndGroup.length > 0 ||
+    employeeHoursRows.length > 0;
+
   function handleExportCsv() {
+    if (selectedReport === 'Labor Cost by Task' || selectedReport === 'Dollars and Hours') {
+      const rows = [
+        'date,employee,task,task_group,hours,hourly_rate,labor_cost',
+        ...dollarsAndHoursRows.map((row) =>
+          [row.date, row.employee, row.task, row.taskGroup, row.hours, row.hourlyRate, row.laborCost].join(','),
+        ),
+      ];
+      downloadCsv(`dollars-hours-${appliedStartDate}-${appliedEndDate}.csv`, rows);
+      return;
+    }
+    if (selectedReport === 'Task Distribution' || selectedReport === 'Task Totals by Date and Group') {
+      const rows = [
+        'date,task_group,task,hours,assignments',
+        ...taskTotalsByDateAndGroup.map((row) =>
+          [row.date, row.taskGroup, row.task, row.hours, row.assignments].join(','),
+        ),
+      ];
+      downloadCsv(`task-totals-${appliedStartDate}-${appliedEndDate}.csv`, rows);
+      return;
+    }
+    if (selectedReport === 'Weekly Hours by Employee' || selectedReport === 'Employee Hours Summary') {
+      const rows = [
+        'employee,department,group,scheduled_hours,worked_hours,assigned_hours,labor_cost',
+        ...employeeHoursRows.map((row) =>
+          [row.employee, row.department, row.group, row.scheduledHours, row.actualWorkedHours, row.assignedHours, row.laborCost].join(','),
+        ),
+      ];
+      downloadCsv(`employee-hours-${appliedStartDate}-${appliedEndDate}.csv`, rows);
+      return;
+    }
     const rows = [
       'date,area,applicator,products,total_quantity,rainfall',
       ...applicationRows.map((row) =>
         [row.date, row.area, row.applicator, `"${row.products}"`, row.quantity, row.rainfall].join(','),
       ),
     ];
-    downloadCsv('applications-and-weather-report.csv', rows);
+    downloadCsv(`applications-and-weather-${appliedStartDate}-${appliedEndDate}.csv`, rows);
   }
 
   function handlePdfAction() {
@@ -500,7 +609,17 @@ export default function ReportsPage() {
                 <span className="text-xs text-muted-foreground">to</span>
                 <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="h-7 w-32 border-0 bg-transparent px-1 text-xs shadow-none" />
               </div>
-              <Button size="sm" className="gap-1 text-xs rounded-xl">
+              <Button
+                size="sm"
+                className="gap-1 text-xs rounded-xl"
+                onClick={() => {
+                  if (!startDate || !endDate || startDate > endDate) return;
+                  setAppliedStartDate(startDate);
+                  setAppliedEndDate(endDate);
+                  setGeneratedAt(new Date().toISOString());
+                }}
+                disabled={!startDate || !endDate || startDate > endDate}
+              >
                 <Play className="h-3 w-3" />
                 Run
               </Button>
@@ -571,9 +690,52 @@ export default function ReportsPage() {
                 <Badge variant="outline">{selectedCategory.name}</Badge>
                 <Badge variant="outline">{filteredAssignments.length} assignments</Badge>
                 <Badge variant="outline">{filteredApplications.length} applications</Badge>
+                {generatedAt ? <Badge variant="outline">Generated {new Date(generatedAt).toLocaleString()}</Badge> : null}
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="mb-5 rounded-3xl border bg-card/90 backdrop-blur p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Core Labor Reports</h3>
+            <Badge variant="secondary">{appliedStartDate} to {appliedEndDate}</Badge>
+          </div>
+          {requiredReportsLoading ? (
+            <div className="flex items-center justify-center p-8">
+              <Skeleton className="h-12 w-full max-w-sm rounded-xl" />
+            </div>
+          ) : requiredReportsError ? (
+            <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+              Report query failed. Check Supabase connectivity and click Run again.
+            </div>
+          ) : !hasRequiredRows ? (
+            <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+              No labor data found in this date range yet.
+            </div>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-3">
+              <Card className="rounded-2xl p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Dollars and Hours</div>
+                <div className="mt-2 text-2xl font-semibold">
+                  ${dollarsAndHoursRows.reduce((sum, row) => sum + row.laborCost, 0).toFixed(2)}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {dollarsAndHoursRows.reduce((sum, row) => sum + row.hours, 0).toFixed(2)} total labor hours
+                </p>
+              </Card>
+              <Card className="rounded-2xl p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Task Totals by Date and Group</div>
+                <div className="mt-2 text-2xl font-semibold">{taskTotalsByDateAndGroup.length}</div>
+                <p className="mt-1 text-xs text-muted-foreground">Grouped rows across date / task group / task</p>
+              </Card>
+              <Card className="rounded-2xl p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Employee Hours Summary</div>
+                <div className="mt-2 text-2xl font-semibold">{employeeHoursRows.length}</div>
+                <p className="mt-1 text-xs text-muted-foreground">Employees with scheduled, assigned, or worked hours</p>
+              </Card>
+            </div>
+          )}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-5">

@@ -27,7 +27,7 @@ import {
 import { toast } from '@/components/ui/sonner';
 import { fetchPrimaryStationSnapshot, fetchStationForecastDetail, fetchWeatherStationSuggestions, type GeocodeResult, type WeatherForecastDetail } from '@/lib/weatherProviders';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
-import { useWeather, getWeatherIconMeta } from '@/lib/weather';
+import { DEFAULT_WEATHER_LOCATION, useWeather, getWeatherIconMeta } from '@/lib/weather';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperties, useProgramSettings, useWeatherLocations, useWorkLocations } from '@/lib/supabase-queries';
@@ -130,6 +130,8 @@ function isRecoverableWeatherQueryError(error: unknown) {
     (message.includes('relation') && message.includes('does not exist'))
   );
 }
+
+const DEFAULT_FACILITY_LABEL = 'Sarasota Polo Club · 8201 Polo Club Lane, Sarasota, FL 34240';
 
 export default function WeatherPage() {
   const queryClient = useQueryClient();
@@ -248,6 +250,12 @@ export default function WeatherPage() {
   const [selectedForecast, setSelectedForecast] = useState<WeatherForecastDetail | null>(null);
   const [browserCoordinates, setBrowserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showHourlyForecast, setShowHourlyForecast] = useState(true);
+  const [showCurrentConditions, setShowCurrentConditions] = useState(true);
+  const [showDailyForecast, setShowDailyForecast] = useState(true);
+  const [showWind, setShowWind] = useState(true);
+  const [showRain, setShowRain] = useState(true);
+  const [showAlerts, setShowAlerts] = useState(true);
+  const [showTurfRiskNotes, setShowTurfRiskNotes] = useState(true);
   const [showStationManagement, setShowStationManagement] = useState(false);
   const [showPropertyWeatherCards, setShowPropertyWeatherCards] = useState(true);
   const [showManualRainfallHistory, setShowManualRainfallHistory] = useState(false);
@@ -482,7 +490,12 @@ export default function WeatherPage() {
       };
     }
 
-    return null;
+    return {
+      latitude: DEFAULT_WEATHER_LOCATION.latitude,
+      longitude: DEFAULT_WEATHER_LOCATION.longitude,
+      label: DEFAULT_FACILITY_LABEL,
+      sourceType: 'area-coordinates' as const,
+    };
   }, [browserCoordinates, currentProperty, discoveryAnchor, selectedLocation, selectedLocationPrimary, useSearchAnchorAsLiveSource]);
   const isPrimaryStationActiveSource =
     hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude) &&
@@ -2135,8 +2148,32 @@ export default function WeatherPage() {
             {showOperationsControls ? (
               <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Current Conditions</span>
+                  <Switch checked={showCurrentConditions} onCheckedChange={setShowCurrentConditions} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
                   <span>Hourly Forecast</span>
                   <Switch checked={showHourlyForecast} onCheckedChange={setShowHourlyForecast} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Daily Forecast</span>
+                  <Switch checked={showDailyForecast} onCheckedChange={setShowDailyForecast} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Wind</span>
+                  <Switch checked={showWind} onCheckedChange={setShowWind} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Rain</span>
+                  <Switch checked={showRain} onCheckedChange={setShowRain} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Alerts</span>
+                  <Switch checked={showAlerts} onCheckedChange={setShowAlerts} />
+                </label>
+                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
+                  <span>Turf Risk Notes</span>
+                  <Switch checked={showTurfRiskNotes} onCheckedChange={setShowTurfRiskNotes} />
                 </label>
                 <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
                   <span>Property Weather Cards</span>
@@ -2203,7 +2240,8 @@ export default function WeatherPage() {
               </div>
             ) : liveForecastQuery.data ? (
               <>
-                <div className={`grid gap-4 ${showHourlyForecast ? 'lg:grid-cols-[0.8fr_1.2fr]' : ''}`}>
+                <div className={`grid gap-4 ${(showHourlyForecast && showCurrentConditions) ? 'lg:grid-cols-[0.8fr_1.2fr]' : ''}`}>
+                  {showCurrentConditions ? (
                   <div className="rounded-2xl border bg-background/70 p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -2236,6 +2274,7 @@ export default function WeatherPage() {
                       </div>
                     </div>
                   </div>
+                  ) : null}
 
                   {showHourlyForecast ? (
                     <div className="rounded-2xl border bg-background/70 p-5">
@@ -2285,7 +2324,7 @@ export default function WeatherPage() {
             )}
           </Card>
 
-          {showPropertyWeatherCards ? (
+          {showPropertyWeatherCards && showDailyForecast ? (
           <Card className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -2349,6 +2388,7 @@ export default function WeatherPage() {
           ) : null}
 
           <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            {(showRain || showWind) ? (
             <Card className="p-5">
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -2360,7 +2400,10 @@ export default function WeatherPage() {
                 <Badge variant="outline">{selectedProperty?.shortName ?? selectedLocation.name}</Badge>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {rainfallAndWindSummary.map((item) => (
+                {rainfallAndWindSummary
+                  .filter((item) => (showRain ? true : !item.label.toLowerCase().includes('rain')))
+                  .filter((item) => (showWind ? true : !item.label.toLowerCase().includes('wind')))
+                  .map((item) => (
                   <div key={item.label} className="rounded-xl border bg-muted/20 px-4 py-3">
                     <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</div>
                     <div className="mt-2 text-lg font-semibold">{item.value}</div>
@@ -2369,8 +2412,9 @@ export default function WeatherPage() {
                 ))}
               </div>
             </Card>
+            ) : null}
 
-            {showOperationalDecisionCards ? (
+            {showOperationalDecisionCards && showTurfRiskNotes ? (
             <Card className="p-5">
               <div className="mb-4">
                 <p className="text-sm font-semibold">Decision Cards</p>
@@ -2379,7 +2423,9 @@ export default function WeatherPage() {
                 </p>
               </div>
               <div className="space-y-3">
-                {decisionCards.map((card) => (
+                {decisionCards
+                  .filter((card) => (showTurfRiskNotes ? true : card.label !== 'Traffic Risk'))
+                  .map((card) => (
                   <div key={card.label} className="rounded-xl border bg-background/70 p-4">
                     <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{card.label}</div>
                     <div className="mt-2 text-base font-semibold">{card.value}</div>
@@ -2495,7 +2541,9 @@ export default function WeatherPage() {
                     </div>
                     <div className="rounded-xl border bg-background/70 p-4">
                       <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Current Alerts</div>
-                      <div className="mt-2 text-sm font-semibold">{latestLog?.alerts?.length ? latestLog.alerts.join(', ') : 'No major alerts'}</div>
+                      <div className="mt-2 text-sm font-semibold">
+                        {showAlerts ? (latestLog?.alerts?.length ? latestLog.alerts.join(', ') : 'No major alerts') : 'Alerts hidden by view controls'}
+                      </div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {latestLog?.capturedAt ? `Last capture ${new Date(latestLog.capturedAt).toLocaleString()}` : 'No live capture yet'}
                       </div>
