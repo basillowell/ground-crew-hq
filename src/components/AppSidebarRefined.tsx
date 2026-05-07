@@ -131,21 +131,21 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarHeader className="border-b border-sidebar-border p-4">
+      <SidebarHeader className="border-b border-sidebar-border/80 bg-[linear-gradient(180deg,rgba(10,32,22,0.85),rgba(10,32,22,0.35))] p-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary shadow-[0_0_0_1px_rgba(255,255,255,0.1)]">
             {logoUrl ? (
               <img src={logoUrl} alt={`${navigationTitle} logo`} className="h-7 w-7 rounded-md object-contain" />
             ) : collapsed ? (
               <span className="text-xs font-bold text-sidebar-primary-foreground">{logoInitials.slice(0, 2)}</span>
             ) : (
-              <span className="text-primary-foreground text-sm font-bold tracking-tight">HQ</span>
+              <span className="text-primary-foreground text-sm font-extrabold tracking-tight">HQ</span>
             )}
           </div>
           {!collapsed ? (
             <div>
               <h1 className="text-sm font-bold text-sidebar-accent-foreground">{navigationTitle}</h1>
-              <p className="text-xs text-sidebar-foreground">{navigationSubtitle}</p>
+              <p className="text-[11px] uppercase tracking-[0.12em] text-sidebar-foreground/80">{navigationSubtitle}</p>
             </div>
           ) : null}
         </div>
@@ -155,7 +155,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
         {visibleSections.map((section) => (
           <SidebarGroup key={section.title}>
             {!collapsed ? (
-              <div className="px-3 pb-2 pt-1 text-[11px] uppercase tracking-[0.16em] text-sidebar-foreground/60">
+              <div className="px-3 pb-2 pt-1 text-[10px] uppercase tracking-[0.18em] text-sidebar-foreground/55">
                 {section.title}
               </div>
             ) : null}
@@ -167,8 +167,8 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
                       <NavLink
                         to={item.url}
                         end
-                        className="hover:bg-sidebar-accent"
-                        activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                        className="rounded-lg border border-transparent px-2.5 py-2 text-sidebar-foreground transition-colors duration-150 hover:border-sidebar-border/60 hover:bg-sidebar-accent"
+                        activeClassName="border-sidebar-primary/40 bg-sidebar-accent text-sidebar-primary font-semibold shadow-[inset_0_0_0_1px_rgba(47,168,102,0.16)]"
                       >
                         <item.icon className="h-4 w-4" />
                         {!collapsed ? <span>{item.title}</span> : null}
@@ -182,9 +182,9 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
         ))}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-4">
+      <SidebarFooter className="border-t border-sidebar-border/80 bg-[linear-gradient(180deg,rgba(10,32,22,0),rgba(10,32,22,0.55))] p-4">
         {!collapsed ? (
-          <div className="text-xs text-sidebar-foreground">
+          <div className="text-[11px] text-sidebar-foreground/85">
             {programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'} · v2.4.1
           </div>
         ) : null}

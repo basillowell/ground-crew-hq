@@ -811,132 +811,163 @@ export default function EmployeesPage() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Add Employee</DialogTitle>
+        <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden p-0">
+          <DialogHeader className="border-b bg-muted/20 px-6 py-4">
+            <DialogTitle className="text-lg">Add Employee</DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Create a crew profile with settings-driven structure for scheduling and daily execution.
+            </p>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground">First Name</label>
-              <Input value={draft.firstName} onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Last Name</label>
-              <Input value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Property</label>
-              <select
-                value={draft.propertyId}
-                onChange={(event) => setDraft({ ...draft, propertyId: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">No property</option>
-                {properties.map((property) => (
-                  <option key={property.id} value={property.id}>{property.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Group</label>
-              <select
-                value={draft.group}
-                onChange={(event) => setDraft({ ...draft, group: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {groupOptionsForDropdown.map((group) => (
-                  <option key={group.id} value={group.name}>{group.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Role</label>
-              <select
-                value={draft.role}
-                onChange={(event) => setDraft({ ...draft, role: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {roleOptionsForDropdown.map((role) => (
-                  <option key={role.id} value={role.name}>{role.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Hourly Wage</label>
-              <Input value={draft.wage} onChange={(event) => setDraft({ ...draft, wage: event.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Department</label>
-              <select
-                value={draft.department}
-                onChange={(event) => setDraft({ ...draft, department: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {departmentOptionsForDropdown.map((department) => (
-                  <option key={department.id} value={department.name}>{department.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Phone</label>
-              <Input value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Email</label>
-              <Input value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Language</label>
-              <select
-                value={draft.language}
-                onChange={(event) => setDraft({ ...draft, language: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {languageOptions.map((language) => (
-                  <option key={language.id} value={language.name}>{language.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Worker Type</label>
-              <select
-                value={draft.workerType}
-                onChange={(event) => setDraft({ ...draft, workerType: event.target.value as Employee['workerType'] })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {workerTypeOptionsForDropdown.map((workerType) => (
-                  <option key={workerType} value={workerType}>{workerType}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Default Location</label>
-              <select
-                value={draft.defaultLocationId}
-                onChange={(event) => setDraft({ ...draft, defaultLocationId: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">No default location</option>
-                {workLocations.map((location) => (
-                  <option key={location.id} value={location.id}>{location.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Preferred Shift Template</label>
-              <select
-                value={draft.shiftTemplateId}
-                onChange={(event) => setDraft({ ...draft, shiftTemplateId: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">No preferred shift</option>
-                {shiftTemplates.map((template) => (
-                  <option key={template.id} value={template.id}>{template.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-2 rounded-xl border bg-muted/30 p-3">
-              <div className="flex items-center justify-between">
+          <div className="max-h-[calc(88vh-150px)] space-y-5 overflow-y-auto px-6 py-5">
+            <section className="rounded-xl border bg-background p-4">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Identity</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">First Name</label>
+                  <Input value={draft.firstName} onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Last Name</label>
+                  <Input value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} className="mt-1" />
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-xl border bg-background p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Work Details</div>
+                <span className="text-[11px] text-muted-foreground">Settings-driven options</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Property</label>
+                  <select
+                    value={draft.propertyId}
+                    onChange={(event) => setDraft({ ...draft, propertyId: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">No property</option>
+                    {properties.map((property) => (
+                      <option key={property.id} value={property.id}>{property.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Department</label>
+                  <select
+                    value={draft.department}
+                    onChange={(event) => setDraft({ ...draft, department: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {departmentOptionsForDropdown.map((department) => (
+                      <option key={department.id} value={department.name}>{department.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Group</label>
+                  <select
+                    value={draft.group}
+                    onChange={(event) => setDraft({ ...draft, group: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {groupOptionsForDropdown.map((group) => (
+                      <option key={group.id} value={group.name}>{group.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Role</label>
+                  <select
+                    value={draft.role}
+                    onChange={(event) => setDraft({ ...draft, role: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {roleOptionsForDropdown.map((role) => (
+                      <option key={role.id} value={role.name}>{role.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Worker Type</label>
+                  <select
+                    value={draft.workerType}
+                    onChange={(event) => setDraft({ ...draft, workerType: event.target.value as Employee['workerType'] })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {workerTypeOptionsForDropdown.map((workerType) => (
+                      <option key={workerType} value={workerType}>{workerType}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Hourly Wage</label>
+                  <Input value={draft.wage} onChange={(event) => setDraft({ ...draft, wage: event.target.value })} className="mt-1" />
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-xl border bg-background p-4">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Contact</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Phone</label>
+                  <Input value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Email</label>
+                  <Input value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} className="mt-1" />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="text-xs text-muted-foreground">Language</label>
+                  <select
+                    value={draft.language}
+                    onChange={(event) => setDraft({ ...draft, language: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {languageOptions.map((language) => (
+                      <option key={language.id} value={language.name}>{language.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-xl border bg-background p-4">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Defaults</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Default Location</label>
+                  <select
+                    value={draft.defaultLocationId}
+                    onChange={(event) => setDraft({ ...draft, defaultLocationId: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">No default location</option>
+                    {workLocations.map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Preferred Shift Template</label>
+                  <select
+                    value={draft.shiftTemplateId}
+                    onChange={(event) => setDraft({ ...draft, shiftTemplateId: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">No preferred shift</option>
+                    {shiftTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>{template.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-xl border bg-muted/20 p-4">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Access</div>
+              <div className="flex items-center justify-between rounded-lg border bg-background p-3">
                 <div>
                   <div className="text-sm font-medium">Portal Login</div>
                   <div className="text-xs text-muted-foreground">Enable this employee to log into the client workspace.</div>
@@ -949,11 +980,11 @@ export default function EmployeesPage() {
                   <Input type="password" placeholder="Password" value={draft.loginPassword} onChange={(event) => setDraft({ ...draft, loginPassword: event.target.value })} />
                 </div>
               ) : null}
-            </div>
+            </section>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-background/95 px-6 py-4 backdrop-blur">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddEmployee}>Save Employee</Button>
+            <Button className="min-w-[150px]" onClick={handleAddEmployee}>Save Employee</Button>
           </div>
         </DialogContent>
       </Dialog>

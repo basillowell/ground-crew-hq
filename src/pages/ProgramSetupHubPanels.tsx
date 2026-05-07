@@ -678,12 +678,19 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
         {activePage === 'operations' && programSetting && (
           <div className="mx-auto max-w-3xl space-y-8">
             <SectionIntro
-              title="Modules & Features"
+              title="Operations Controls"
               audience={sectionMeta.audience}
               helper={sectionWorkflow.helper}
               saveScope={sectionWorkflow.saveScope}
               editPattern={sectionWorkflow.editPattern}
             />
+            <Card className="border-dashed p-4">
+              <h3 className="text-sm font-semibold">What this section controls</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use this section to define how operations run day to day: enabled modules, weather defaults, and
+                planning structures used across Workboard, Weather, and Equipment.
+              </p>
+            </Card>
             {['Core modules', 'Operational'].map((g) => (
               <div key={g}>
                 <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{g}</h3>
@@ -823,9 +830,45 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                 </div>
               </div>
             </Card>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="p-4">
+                <h4 className="text-sm font-semibold">Task Groups</h4>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Task groups help organize work by operational function.
+                </p>
+                {propertyClasses.length === 0 ? (
+                  <div className="mt-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                    Not configured yet. Create your first task group from Settings - Properties & Locations.
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {propertyClasses.slice(0, 6).map((propertyClass) => (
+                      <Badge key={propertyClass.id} variant="outline" className="text-[10px]">
+                        {propertyClass.name}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setActivePage('properties')}>
+                  Manage task groups
+                </Button>
+              </Card>
+              <Card className="p-4">
+                <h4 className="text-sm font-semibold">Equipment Categories</h4>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Categories shape equipment planning and assignment readiness.
+                </p>
+                <div className="mt-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                  Configure categories from Equipment page setup. This Settings panel keeps the operations hierarchy visible.
+                </div>
+                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => navigate('/app/equipment')}>
+                  Open equipment setup
+                </Button>
+              </Card>
+            </div>
             <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
-              <p className="text-xs text-muted-foreground">Applies only to Modules and Features settings.</p>
-              <Button onClick={saveGeneralSettings}>Save module settings</Button>
+              <p className="text-xs text-muted-foreground">Applies to operational defaults, feature visibility, and weather behavior.</p>
+              <Button onClick={saveGeneralSettings}>Save operations settings</Button>
             </div>
           </div>
         )}
@@ -1119,6 +1162,37 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             <div className="rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Applies to:</span> authentication access, role permissions, and portal seat management.
             </div>
+            {appUsers.length === 0 ? (
+              <Card className="border-dashed p-4">
+                <h3 className="text-sm font-semibold">No portal users configured yet</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add your first portal user to grant login access and permissions for this workspace.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-3 gap-1"
+                  onClick={() =>
+                    setAppUsers((cur) => [
+                      ...cur,
+                      {
+                        id: makeId('user'),
+                        fullName: `New User ${cur.length + 1}`,
+                        email: '',
+                        role: 'manager',
+                        title: 'Operations Manager',
+                        department: programSetting.defaultDepartment || departmentOptions[0]?.name || 'Maintenance',
+                        clubId: slugifyClubId(programSetting.clientLabel || programSetting.organizationName || 'Client profile'),
+                        clubLabel: programSetting.clientLabel || programSetting.organizationName || 'Client profile',
+                        avatarInitials: 'NU',
+                        status: 'active',
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add first portal user
+                </Button>
+              </Card>
+            ) : null}
 
             <Card className="overflow-hidden">
               <Table>
@@ -1252,6 +1326,14 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             <div className="rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Applies to:</span> employee records, labor grouping, scheduling structure, and reports.
             </div>
+            {departmentOptions.length === 0 && groupOptions.length === 0 && roleOptions.length === 0 && workerTypes.length === 0 ? (
+              <Card className="border-dashed p-4">
+                <h3 className="text-sm font-semibold">No workforce structure configured yet</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add departments, groups, roles, and worker types so Employees, Scheduler, and Workboard use shared structure.
+                </p>
+              </Card>
+            ) : null}
             <div className="grid gap-6 lg:grid-cols-2">
               <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">

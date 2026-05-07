@@ -65,12 +65,12 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
   return (
-    <header className="border-b bg-card px-3 py-2 shrink-0">
+    <header className="sticky top-0 z-20 shrink-0 border-b border-border/80 bg-card/92 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/85">
       <div className="flex flex-wrap items-center gap-3">
-        <SidebarTrigger className="text-muted-foreground" />
+        <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
 
         <Select value={department} onValueChange={setDepartment}>
-          <SelectTrigger className="h-9 w-[170px] text-sm">
+          <SelectTrigger className="h-9 w-[170px] rounded-lg border-border/80 bg-background/90 text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -83,7 +83,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         </Select>
 
         <Select value={currentPropertyId} onValueChange={onSelectProperty}>
-          <SelectTrigger className="h-9 w-[190px] text-sm">
+          <SelectTrigger className="h-9 w-[190px] rounded-lg border-border/80 bg-background/90 text-sm">
             <SelectValue placeholder="Select property" />
           </SelectTrigger>
           <SelectContent>
@@ -99,10 +99,10 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         </Select>
 
         <div className="min-w-[250px]">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Workflow Date</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Workflow Date</div>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl px-3 text-left font-medium">
+              <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-border/80 bg-background/90 px-3 text-left font-medium">
                 <span>{formatDate(currentDate)}</span>
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -118,7 +118,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </Popover>
         </div>
 
-        <Button variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={today}>
+        <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/80 bg-background/90 text-xs" onClick={today}>
           {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
         </Button>
 
@@ -130,7 +130,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9 relative rounded-full">
+            <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent hover:border-border/70 hover:bg-muted/50">
               <Bell className="h-4 w-4" />
               <Badge className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
                 {notifications.length}
@@ -169,14 +169,14 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         <div className="flex-1" />
 
         <div className="hidden text-right md:block">
-          <div className="text-sm font-medium">{displayName}</div>
-          <div className="text-[11px] text-muted-foreground">{displayRole}</div>
+          <div className="text-sm font-semibold text-foreground">{displayName}</div>
+          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{displayRole}</div>
         </div>
 
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground"
+          className="h-9 w-9 rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           onClick={onSignOut}
           aria-label="Sign out"
         >

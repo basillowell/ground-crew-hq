@@ -47,6 +47,34 @@ function SummaryCard({
   );
 }
 
+function OpsSignalCard({
+  title,
+  value,
+  subtitle,
+  tone = 'neutral',
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  tone?: 'good' | 'warning' | 'critical' | 'neutral';
+}) {
+  const toneClass =
+    tone === 'good'
+      ? 'border-emerald-200/70 bg-emerald-50/60'
+      : tone === 'warning'
+        ? 'border-amber-200/70 bg-amber-50/60'
+        : tone === 'critical'
+          ? 'border-red-200/70 bg-red-50/50'
+          : 'border-border bg-card';
+  return (
+    <Card className={`rounded-2xl p-5 shadow-sm ${toneClass}`}>
+      <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{title}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
+      <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+    </Card>
+  );
+}
+
 function PropertySummaryCard({
   property,
   onViewDetails,
@@ -254,6 +282,7 @@ export default function CommandCenterOperationalPage() {
     }
     return properties[0] ?? null;
   }, [currentPropertyId, properties]);
+  const selectedWeatherQuery = useWeather(selectedProperty?.id);
 
   const onboardingDismissKey = useMemo(
     () => (currentUser?.orgId ? `gcrew-onboarding-dismissed-${currentUser.orgId}` : ''),
@@ -296,6 +325,94 @@ export default function CommandCenterOperationalPage() {
     if (!weatherNote) return 'No weather log summary available yet.';
     return weatherNote.title || weatherNote.content || 'Weather log captured.';
   }, [notes]);
+
+  const unassignedScheduledCount = useMemo(
+    () => scheduledRows.filter((row) => !row.assigned).length,
+    [scheduledRows],
+  );
+
+  const weatherRiskSummary = useMemo(() => {
+    if (!selectedProperty) {
+      return {
+        value: 'No property selected',
+        subtitle: 'Select a property to evaluate weather risk.',
+        tone: 'warning' as const,
+      };
+    }
+    if (selectedWeatherQuery.isLoading) {
+      return {
+        value: 'Loading weather',
+        subtitle: 'Live weather source is being checked.',
+        tone: 'neutral' as const,
+      };
+    }
+    if (selectedWeatherQuery.error || !selectedWeatherQuery.data) {
+      return {
+        value: 'Weather unavailable',
+        subtitle: 'No live weather response yet. Check weather setup.',
+        tone: 'warning' as const,
+      };
+    }
+    const current = selectedWeatherQuery.data.current;
+    if (current.windSpeed >= 20 || current.weatherCode >= 95) {
+      return {
+        value: `${Math.round(current.temperature)}F / High Risk`,
+        subtitle: `Wind ${Math.round(current.windSpeed)} mph · review field plans`,
+        tone: 'critical' as const,
+      };
+    }
+    if (current.windSpeed >= 12) {
+      return {
+        value: `${Math.round(current.temperature)}F / Caution`,
+        subtitle: `Wind ${Math.round(current.windSpeed)} mph · monitor spray windows`,
+        tone: 'warning' as const,
+      };
+    }
+    return {
+      value: `${Math.round(current.temperature)}F / Stable`,
+      subtitle: `Wind ${Math.round(current.windSpeed)} mph · normal operating window`,
+      tone: 'good' as const,
+    };
+  }, [selectedProperty, selectedWeatherQuery.data, selectedWeatherQuery.error, selectedWeatherQuery.isLoading]);
+
+  const coverageSummary = useMemo(() => {
+    if (crewScheduledCount === 0) {
+      return {
+        value: 'No shifts scheduled',
+        subtitle: 'Open Scheduler to assign today’s crew.',
+        tone: 'critical' as const,
+      };
+    }
+    if (unassignedScheduledCount > 0) {
+      return {
+        value: `${crewScheduledCount - unassignedScheduledCount}/${crewScheduledCount} covered`,
+        subtitle: `${unassignedScheduledCount} scheduled crew still need assignments`,
+        tone: 'warning' as const,
+      };
+    }
+    return {
+      value: `${crewScheduledCount}/${crewScheduledCount} covered`,
+      subtitle: 'All scheduled crew have assignments.',
+      tone: 'good' as const,
+    };
+  }, [crewScheduledCount, unassignedScheduledCount]);
+
+  const blockersSummary = useMemo(() => {
+    const alertCount = notes.filter((note) => note.type === 'alert').length;
+    const blockers = openIssuesCount + unassignedScheduledCount + alertCount;
+    if (blockers === 0) {
+      return {
+        value: 'No blockers detected',
+        subtitle: 'Equipment, workflow, and alerts are clear right now.',
+        tone: 'good' as const,
+      };
+    }
+    return {
+      value: `${blockers} active blocker${blockers === 1 ? '' : 's'}`,
+      subtitle: `${openIssuesCount} equipment issues · ${unassignedScheduledCount} unassigned crew · ${alertCount} alerts`,
+      tone: blockers >= 3 ? ('critical' as const) : ('warning' as const),
+    };
+  }, [notes, openIssuesCount, unassignedScheduledCount]);
 
   const isLoading =
     propertiesQuery.isLoading ||
@@ -378,8 +495,59 @@ export default function CommandCenterOperationalPage() {
       <div className="mb-4">
         <h2 className="text-2xl font-semibold tracking-tight">Today's Operations Summary</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Morning snapshot of crew, assignments, and equipment readiness.
+          Are we ready for today? Review readiness, risks, and blockers at a glance.
         </p>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <OpsSignalCard
+          title="Today's Crew Readiness"
+          value={crewScheduledCount === 0 ? 'No crew scheduled' : `${crewScheduledCount} scheduled`}
+          subtitle={
+            crewScheduledCount === 0
+              ? 'Create today’s shifts in Scheduler to begin planning.'
+              : `${activeEmployees.length} active crew available in roster`
+          }
+          tone={crewScheduledCount === 0 ? 'critical' : 'good'}
+        />
+        <OpsSignalCard
+          title="Active Tasks / Workflow"
+          value={`${tasksAssignedCount} assigned`}
+          subtitle={
+            tasksAssignedCount === 0
+              ? 'No assignments created yet for today.'
+              : `${pendingAssignmentsCount} still in progress or planned`
+          }
+          tone={tasksAssignedCount === 0 ? 'warning' : 'neutral'}
+        />
+        <OpsSignalCard
+          title="Weather Risk"
+          value={weatherRiskSummary.value}
+          subtitle={weatherRiskSummary.subtitle}
+          tone={weatherRiskSummary.tone}
+        />
+        <OpsSignalCard
+          title="Equipment Readiness"
+          value={equipmentUnits.length === 0 ? 'No equipment data' : `${equipmentActiveCount} ready`}
+          subtitle={
+            equipmentUnits.length === 0
+              ? 'Add equipment units to track operational readiness.'
+              : `${openIssuesCount} units flagged as maintenance/out-of-service`
+          }
+          tone={equipmentUnits.length === 0 ? 'warning' : openIssuesCount > 0 ? 'warning' : 'good'}
+        />
+        <OpsSignalCard
+          title="Schedule Coverage"
+          value={coverageSummary.value}
+          subtitle={coverageSummary.subtitle}
+          tone={coverageSummary.tone}
+        />
+        <OpsSignalCard
+          title="Alerts / Blockers"
+          value={blockersSummary.value}
+          subtitle={blockersSummary.subtitle}
+          tone={blockersSummary.tone}
+        />
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">

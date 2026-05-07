@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -72,6 +72,16 @@ export default function LaunchPortalPage() {
     return message;
   };
 
+  const errorTone = (() => {
+    const normalized = errorMessage.toLowerCase();
+    if (!normalized) return null;
+    if (normalized.includes('invalid credentials')) return { title: 'Sign-in failed', detail: 'The email or password was incorrect.' };
+    if (normalized.includes('timed out')) return { title: 'Connection timed out', detail: 'Your network or Supabase response is taking too long.' };
+    if (normalized.includes('not configured')) return { title: 'Configuration required', detail: 'Supabase environment variables are missing for this deployment.' };
+    if (normalized.includes('profile')) return { title: 'Profile setup needed', detail: 'Authentication succeeded, but workspace profile data is incomplete.' };
+    return { title: 'Unable to sign in', detail: 'Please review the message and try again.' };
+  })();
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) {
@@ -117,9 +127,9 @@ export default function LaunchPortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(247,250,248,1),rgba(237,243,239,1))]">
+    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(247,250,248,1),rgba(236,244,239,1))]">
       <header
-        className="border-b border-white/10"
+        className="border-b border-white/10 shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]"
         style={{
           backgroundImage: shellImageUrl
             ? `linear-gradient(120deg, rgba(15,23,42,0.86), rgba(18,54,36,0.72)), url(${shellImageUrl})`
@@ -129,12 +139,12 @@ export default function LaunchPortalPage() {
         }}
       >
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-4 text-white">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-sm font-bold tracking-wide backdrop-blur">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-sm font-extrabold tracking-wide backdrop-blur">
             HQ
           </div>
           <div>
             <div className="text-lg font-semibold tracking-tight">{appName}</div>
-            <div className="text-xs uppercase tracking-[0.18em] text-white/70">{clientName}</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">{clientName}</div>
           </div>
         </div>
       </header>
@@ -142,7 +152,7 @@ export default function LaunchPortalPage() {
       <main className="mx-auto max-w-6xl px-6 py-14 md:py-20">
         <section className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,420px)] lg:items-center">
           <div className="max-w-2xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-primary">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
               Ground operations workspace
             </div>
             <h1 className="max-w-xl text-4xl font-bold tracking-tight text-foreground md:text-5xl">
@@ -150,8 +160,18 @@ export default function LaunchPortalPage() {
             </h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg">
               Ground Crew HQ gives supervisors, admins, and field teams one place to organize schedules,
-              tasks, weather, and communication across every property.
+              tasks, weather, equipment, and communication across every property.
             </p>
+            <div className="mt-6 grid gap-2 sm:grid-cols-3">
+              {['Live workforce scheduling', 'Daily execution control', 'Property-ready operations'].map((item) => (
+                <div key={item} className="rounded-xl border border-border/80 bg-white/75 px-3 py-2 text-xs text-foreground/85 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                    <span>{item}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
             <div className="mt-8">
               <Button size="lg" className="gap-2 px-6" onClick={scrollToAccess}>
                 Get Started
@@ -160,7 +180,7 @@ export default function LaunchPortalPage() {
             </div>
           </div>
 
-          <Card id="launch-access" className="border-primary/15 bg-card/95 p-6 shadow-xl shadow-primary/5">
+          <Card id="launch-access" className="border-primary/20 bg-card/95 p-6 shadow-xl shadow-primary/10">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <ShieldCheck className="h-4 w-4 text-primary" />
               Login and access
@@ -194,7 +214,9 @@ export default function LaunchPortalPage() {
               </div>
               {errorMessage ? (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-3 text-sm text-destructive">
-                  {errorMessage}
+                  <div className="font-semibold">{errorTone?.title ?? 'Sign-in error'}</div>
+                  <div className="mt-0.5 text-xs">{errorTone?.detail ?? ''}</div>
+                  <div className="mt-2 text-xs">{errorMessage}</div>
                 </div>
               ) : null}
               {!errorMessage && authDebugMessage ? (
@@ -211,8 +233,11 @@ export default function LaunchPortalPage() {
               ) : null}
               <Button className="w-full gap-2" disabled={isSubmitting || !email || !password || !hasSupabaseConfig} type="submit">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                {isSubmitting ? (isAwaitingProfile ? 'Loading Profile' : 'Signing In') : 'Get Started'}
+                {isSubmitting ? (isAwaitingProfile ? 'Loading workspace profile...' : 'Signing in securely...') : 'Get Started'}
               </Button>
+              <p className="text-center text-[11px] text-muted-foreground">
+                Secure access powered by Supabase authentication.
+              </p>
             </form>
           </Card>
         </section>

@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StatusChip } from '@/components/StatusChip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,11 +37,11 @@ type WorkOrderRow = {
 
 type CanonicalStatus = 'ready' | 'issue' | 'maintenance' | 'disabled';
 
-const statusChipMap: Record<CanonicalStatus, 'success' | 'warning' | 'info' | 'danger'> = {
-  ready: 'success',
-  issue: 'warning',
-  maintenance: 'info',
-  disabled: 'danger',
+const statusBadgeClassMap: Record<CanonicalStatus, string> = {
+  ready: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
+  issue: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+  maintenance: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300',
+  disabled: 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300',
 };
 
 function normalizeStatus(raw?: string): CanonicalStatus {
@@ -128,6 +127,24 @@ export default function EquipmentPage() {
     });
     return counts;
   }, [filteredUnits]);
+  const typeWorkOrderCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const workOrders = workOrdersQuery.data ?? [];
+    for (const type of equipmentTypes) {
+      const unitIds = units
+        .filter((u) => u.typeId === type.name || u.typeId === type.id)
+        .map((u) => u.id);
+      counts[type.id] = workOrders.filter((wo) => unitIds.includes(wo.equipment_unit_id)).length;
+    }
+    return counts;
+  }, [equipmentTypes, units, workOrdersQuery.data]);
+  const unitWorkOrderCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const wo of workOrdersQuery.data ?? []) {
+      counts[wo.equipment_unit_id] = (counts[wo.equipment_unit_id] ?? 0) + 1;
+    }
+    return counts;
+  }, [workOrdersQuery.data]);
 
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
@@ -282,11 +299,44 @@ export default function EquipmentPage() {
 
   const hasWorkOrderTable = (workOrdersQuery.data ?? []).length > 0 || !workOrdersQuery.error;
   const loading = unitsQuery.isLoading || equipmentTypesQuery.isLoading;
+  const hasError = Boolean(unitsQuery.error || equipmentTypesQuery.error || workOrdersQuery.error);
+  const errorMessage =
+    (unitsQuery.error as { message?: string } | null)?.message ||
+    (equipmentTypesQuery.error as { message?: string } | null)?.message ||
+    (workOrdersQuery.error as { message?: string } | null)?.message ||
+    'Unable to load equipment readiness data.';
 
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Clock className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="rounded-2xl border border-dashed bg-muted/20 px-5 py-4 text-center">
+          <Clock className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
+          <p className="mt-2 text-sm text-muted-foreground">Loading fleet readiness board...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="max-w-lg rounded-2xl border border-dashed bg-muted/20 px-6 py-5 text-center">
+          <AlertTriangle className="mx-auto h-6 w-6 text-amber-500" />
+          <p className="mt-2 text-sm font-medium text-foreground">Equipment data is temporarily unavailable.</p>
+          <p className="mt-1 text-xs text-muted-foreground">{errorMessage}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            onClick={() => {
+              void unitsQuery.refetch();
+              void equipmentTypesQuery.refetch();
+              void workOrdersQuery.refetch();
+            }}
+          >
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -319,11 +369,14 @@ export default function EquipmentPage() {
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
-                <Badge variant="outline" className="text-[10px]">Ready {status.ready}</Badge>
-                <Badge variant="outline" className="text-[10px]">Issue {status.issue}</Badge>
-                <Badge variant="outline" className="text-[10px]">Maint {status.maintenance}</Badge>
-                <Badge variant="outline" className="text-[10px]">Disabled {status.disabled}</Badge>
+                <Badge variant="outline" className={`text-[10px] ${statusBadgeClassMap.ready}`}>Ready {status.ready}</Badge>
+                <Badge variant="outline" className={`text-[10px] ${statusBadgeClassMap.issue}`}>Issue {status.issue}</Badge>
+                <Badge variant="outline" className={`text-[10px] ${statusBadgeClassMap.maintenance}`}>Maint {status.maintenance}</Badge>
+                <Badge variant="outline" className={`text-[10px] ${statusBadgeClassMap.disabled}`}>Disabled {status.disabled}</Badge>
                 <Badge variant="secondary" className="text-[10px] ml-auto">{total} total</Badge>
+              </div>
+              <div className="mt-2 text-[10px] text-muted-foreground">
+                Work orders: <span className="font-medium text-foreground">{typeWorkOrderCounts[type.id] ?? 0}</span>
               </div>
               <div className="mt-2">
                 <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={(event) => {
@@ -344,6 +397,9 @@ export default function EquipmentPage() {
             <h2 className="text-lg font-semibold">{equipmentTypes.find((type) => type.id === activeTypeId)?.name ?? 'Equipment Units'}</h2>
             <p className="text-sm text-muted-foreground">
               Ready {statusCounts.ready} · Issue {statusCounts.issue} · Maintenance {statusCounts.maintenance} · Disabled {statusCounts.disabled}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Work orders: {(workOrdersQuery.data ?? []).length}
             </p>
           </div>
           <div className="flex gap-2">
@@ -369,7 +425,7 @@ export default function EquipmentPage() {
                 <Card key={unit.id} className="p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-semibold">{unit.unitNumber}</span>
-                    <StatusChip variant={statusChipMap[canonical]}>{canonical}</StatusChip>
+                    <Badge variant="outline" className={`capitalize ${statusBadgeClassMap[canonical]}`}>{canonical}</Badge>
                   </div>
                   <div className="space-y-1 text-xs text-muted-foreground">
                     <div className="flex justify-between">
@@ -379,6 +435,10 @@ export default function EquipmentPage() {
                     <div className="flex justify-between">
                       <span>Active</span>
                       <span className="text-foreground">{ext.active === false || canonical === 'disabled' ? 'No' : 'Yes'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Work Orders</span>
+                      <span className="text-foreground">{unitWorkOrderCounts[unit.id] ?? 0}</span>
                     </div>
                     {ext.notes ? (
                       <p className="pt-1 text-[11px]">{ext.notes}</p>

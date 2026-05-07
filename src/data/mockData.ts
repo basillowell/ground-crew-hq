@@ -273,6 +273,12 @@ export interface ProgramSettings {
   /** Feature flags for sidebar modules (ids match Program Setup toggles). */
   enabledModules?: string[];
   pushNotifications?: boolean;
+  weatherDefaultLocationName?: string;
+  weatherDefaultAddress?: string;
+  weatherDefaultLatitude?: number;
+  weatherDefaultLongitude?: number;
+  weatherPreferredProvider?: string;
+  weatherEnabledPanels?: string[];
 }
 
 export interface DepartmentOption {

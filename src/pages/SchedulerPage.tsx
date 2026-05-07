@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee } from 'lucide-react';
+import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
@@ -57,8 +57,8 @@ function shiftHours(start: string, end: string): number {
 }
 
 const STATUS_STYLES: Record<string, { cell: string; label: string }> = {
-  scheduled: { cell: 'bg-primary/10 border-primary/40 text-primary hover:bg-primary/20', label: 'Scheduled' },
-  'day-off': { cell: 'bg-muted border-border text-muted-foreground hover:bg-muted/80', label: 'Day Off' },
+  scheduled: { cell: 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/35 dark:border-emerald-800 dark:text-emerald-200 dark:hover:bg-emerald-950/50', label: 'Scheduled' },
+  'day-off': { cell: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/35 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950/50', label: 'Day Off' },
   vacation: { cell: 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/50', label: 'Vacation' },
   sick: { cell: 'bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/50', label: 'Sick' },
 };
@@ -141,10 +141,14 @@ export default function SchedulerPage() {
   const summary = useMemo(() => {
     const ids = new Set(activeEmployees.map((e) => e.id));
     const entries = scheduleList.filter((e) => ids.has(e.employeeId) && weekDays.some((d) => d.date === e.date));
+    const scheduledHours = entries
+      .filter((e) => e.status === 'scheduled')
+      .reduce((sum, entry) => sum + shiftHours(entry.shiftStart, entry.shiftEnd), 0);
     return {
       scheduled: entries.filter((e) => e.status === 'scheduled').length,
       dayOff: entries.filter((e) => e.status !== 'scheduled').length,
       coverage: new Set(entries.filter((e) => e.status === 'scheduled').map((e) => e.employeeId)).size,
+      scheduledHours,
     };
   }, [activeEmployees, scheduleList, weekDays]);
 
@@ -326,6 +330,10 @@ export default function SchedulerPage() {
       return { date: day.date, totalHours };
     });
   }, [scheduleList, weekDays]);
+  const weeklyTotalHours = useMemo(
+    () => dailyTotals.reduce((sum, day) => sum + day.totalHours, 0),
+    [dailyTotals],
+  );
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
@@ -394,6 +402,10 @@ export default function SchedulerPage() {
           <Coffee className="h-3.5 w-3.5" />
           <span><span className="font-semibold text-foreground">{summary.dayOff}</span> off/vacation/sick entries</span>
         </div>
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <CalendarDays className="h-3.5 w-3.5" />
+          <span><span className="font-semibold text-foreground">{summary.scheduledHours.toFixed(1)}h</span> scheduled hours</span>
+        </div>
         <div className="flex items-center gap-1.5 text-muted-foreground ml-auto">
           <span className="text-[10px] uppercase tracking-wider">
             {activeEmployees.length} crew{search ? ' (filtered)' : ''}
@@ -405,6 +417,9 @@ export default function SchedulerPage() {
       <div className="flex-1 overflow-auto">
         {isLoading ? (
           <div className="p-4 grid gap-2">
+            <div className="rounded-xl border border-dashed bg-muted/25 px-4 py-3 text-xs text-muted-foreground">
+              Loading weekly schedule and crew coverage...
+            </div>
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="h-12 animate-pulse rounded-xl border bg-muted/50" />
             ))}
@@ -436,8 +451,18 @@ export default function SchedulerPage() {
               <tbody>
                 {activeEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                      {search ? `No crew matches "${search}"` : 'No active crew members found.'}
+                    <td colSpan={9} className="px-4 py-10">
+                      <div className="mx-auto max-w-lg rounded-2xl border border-dashed bg-muted/20 px-5 py-6 text-center text-sm text-muted-foreground space-y-3">
+                        <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-background border">
+                          <AlertTriangle className="h-4 w-4" />
+                        </div>
+                        <p className="font-medium text-foreground">
+                          {search ? `No crew matches "${search}"` : 'No active crew members found.'}
+                        </p>
+                        <p className="text-xs">
+                          {search ? 'Try a different search term or clear filters.' : 'Add employees or activate crew members to begin weekly scheduling.'}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -508,7 +533,7 @@ export default function SchedulerPage() {
 
                         {/* Weekly total */}
                         <td className="px-3 py-2 text-center">
-                          <span className={`font-mono text-xs font-semibold ${weekHours >= 40 ? 'text-primary' : weekHours > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                          <span className={`font-mono text-xs font-semibold ${weekHours >= 40 ? 'text-emerald-700 dark:text-emerald-300' : weekHours > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
                             {weekHours > 0 ? `${weekHours.toFixed(1)}h` : '—'}
                           </span>
                         </td>
@@ -524,14 +549,14 @@ export default function SchedulerPage() {
                   </td>
                   {dailyTotals.map((day) => (
                     <td key={day.date} className="px-2 py-2 text-center">
-                      <span className="font-mono text-xs font-semibold text-foreground">
+                      <span className={`font-mono text-xs font-semibold ${day.totalHours >= 24 ? 'text-amber-700 dark:text-amber-300' : 'text-foreground'}`}>
                         {day.totalHours > 0 ? `${day.totalHours.toFixed(1)}h` : '—'}
                       </span>
                     </td>
                   ))}
                   <td className="px-3 py-2 text-center">
                     <span className="font-mono text-xs font-semibold text-primary">
-                      {dailyTotals.reduce((sum, day) => sum + day.totalHours, 0).toFixed(1)}h
+                      {weeklyTotalHours.toFixed(1)}h
                     </span>
                   </td>
                 </tr>

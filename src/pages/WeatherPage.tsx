@@ -132,6 +132,15 @@ function isRecoverableWeatherQueryError(error: unknown) {
 }
 
 const DEFAULT_FACILITY_LABEL = 'Sarasota Polo Club · 8201 Polo Club Lane, Sarasota, FL 34240';
+const DEFAULT_SETTINGS_PANELS = [
+  'current-conditions',
+  'hourly-forecast',
+  'daily-forecast',
+  'wind',
+  'rain',
+  'alerts',
+  'turf-risk-notes',
+] as const;
 
 export default function WeatherPage() {
   const queryClient = useQueryClient();
@@ -282,6 +291,26 @@ export default function WeatherPage() {
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [onboardingSheetOpen, setOnboardingSheetOpen] = useState(false);
   const [removeAreaId, setRemoveAreaId] = useState<string | null>(null);
+
+  const settingsDefaultWeather = useMemo(() => {
+    const locationName = programSetting?.weatherDefaultLocationName?.trim() || 'Sarasota Polo Club';
+    const address = programSetting?.weatherDefaultAddress?.trim() || '8201 Polo Club Lane, Sarasota, FL 34240';
+    const latitude = Number.isFinite(programSetting?.weatherDefaultLatitude) ? Number(programSetting?.weatherDefaultLatitude) : 27.316;
+    const longitude = Number.isFinite(programSetting?.weatherDefaultLongitude) ? Number(programSetting?.weatherDefaultLongitude) : -82.402;
+    const panels = programSetting?.weatherEnabledPanels?.length ? programSetting.weatherEnabledPanels : [...DEFAULT_SETTINGS_PANELS];
+    return { locationName, address, latitude, longitude, panels };
+  }, [programSetting]);
+
+  useEffect(() => {
+    const enabled = new Set(settingsDefaultWeather.panels);
+    setShowCurrentConditions(enabled.has('current-conditions'));
+    setShowHourlyForecast(enabled.has('hourly-forecast'));
+    setShowDailyForecast(enabled.has('daily-forecast'));
+    setShowWind(enabled.has('wind'));
+    setShowRain(enabled.has('rain'));
+    setShowAlerts(enabled.has('alerts'));
+    setShowTurfRiskNotes(enabled.has('turf-risk-notes'));
+  }, [settingsDefaultWeather.panels]);
 
   useEffect(() => {
     setSelectedWorkLocationId((current) => {
@@ -481,6 +510,15 @@ export default function WeatherPage() {
       };
     }
 
+    if (hasValidCoordinates(settingsDefaultWeather.latitude, settingsDefaultWeather.longitude)) {
+      return {
+        latitude: settingsDefaultWeather.latitude,
+        longitude: settingsDefaultWeather.longitude,
+        label: `${settingsDefaultWeather.locationName} · ${settingsDefaultWeather.address}`,
+        sourceType: 'settings-default' as const,
+      };
+    }
+
     if (browserCoordinates) {
       return {
         latitude: browserCoordinates.latitude,
@@ -491,12 +529,12 @@ export default function WeatherPage() {
     }
 
     return {
-      latitude: DEFAULT_WEATHER_LOCATION.latitude,
-      longitude: DEFAULT_WEATHER_LOCATION.longitude,
+      latitude: settingsDefaultWeather.latitude ?? DEFAULT_WEATHER_LOCATION.latitude,
+      longitude: settingsDefaultWeather.longitude ?? DEFAULT_WEATHER_LOCATION.longitude,
       label: DEFAULT_FACILITY_LABEL,
       sourceType: 'area-coordinates' as const,
     };
-  }, [browserCoordinates, currentProperty, discoveryAnchor, selectedLocation, selectedLocationPrimary, useSearchAnchorAsLiveSource]);
+  }, [browserCoordinates, currentProperty, discoveryAnchor, selectedLocation, selectedLocationPrimary, settingsDefaultWeather.address, settingsDefaultWeather.latitude, settingsDefaultWeather.locationName, settingsDefaultWeather.longitude, useSearchAnchorAsLiveSource]);
   const isPrimaryStationActiveSource =
     hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude) &&
     !isLegacyPlaceholderCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude);
@@ -1465,16 +1503,23 @@ export default function WeatherPage() {
       .filter(Boolean) as { property: Property; location: WeatherLocation; station?: WeatherStation; log: WeatherDailyLog | null; recentRain24: number }[];
   }, [properties, propertyLiveLogs, weatherLocations, weatherStations, weatherLogs]);
 
+  const hasLiveWeatherCoordinates = hasValidCoordinates(liveWeatherCoordinates?.latitude, liveWeatherCoordinates?.longitude);
   const liveForecastQuery = useQuery({
-    queryKey: ['weather-page-open-meteo', selectedLocation?.id ?? 'none', currentProperty?.latitude, currentProperty?.longitude],
-    enabled: hasLocation,
+    queryKey: [
+      'weather-page-open-meteo',
+      selectedLocation?.id ?? 'none',
+      liveWeatherCoordinates?.latitude ?? null,
+      liveWeatherCoordinates?.longitude ?? null,
+      liveWeatherCoordinates?.sourceType ?? 'none',
+    ],
+    enabled: hasLiveWeatherCoordinates,
     staleTime: 1000 * 60 * 30,
     retry: 1,
     refetchOnWindowFocus: false,
     queryFn: async () =>
       fetchOpenMeteoWeather({
-        latitude: currentProperty!.latitude!,
-        longitude: currentProperty!.longitude!,
+        latitude: liveWeatherCoordinates!.latitude!,
+        longitude: liveWeatherCoordinates!.longitude!,
       }),
   });
   const onboardingPreviewQuery = useQuery({
@@ -1525,6 +1570,8 @@ export default function WeatherPage() {
       ? 'Primary Station'
       : liveWeatherCoordinates?.sourceType === 'area-coordinates'
         ? 'Area Coordinates'
+        : liveWeatherCoordinates?.sourceType === 'settings-default'
+          ? 'Settings Default Location'
         : liveWeatherCoordinates?.sourceType === 'search-anchor'
           ? 'Search Anchor Coordinates'
           : liveWeatherCoordinates?.sourceType === 'device-location'
@@ -1567,6 +1614,9 @@ export default function WeatherPage() {
     : latestLog?.date
       ? `${latestLog.date} (daily log)`
       : 'No capture available';
+  const activeProviderLabel =
+    selectedLocationPrimary?.provider ||
+    (liveWeatherCoordinates?.sourceType === 'device-location' ? 'Open-Meteo (device coordinates)' : 'Open-Meteo');
   const selectedPropertyRainContext = selectedProperty
     ? propertyWeatherCards.find((entry) => entry.property.id === selectedProperty.id)?.recentRain24 ?? null
     : null;
@@ -2055,6 +2105,8 @@ export default function WeatherPage() {
                   <Badge variant={liveStatusBadgeVariant}>{liveStatusLabel}</Badge>
                   <Badge variant={selectedLiveSourceVariant}>Source Type: {activeLiveSourceTypeLabel}</Badge>
                   <Badge variant="outline">Source Detail: {selectedLiveSourceLabel}</Badge>
+                  <Badge variant="outline">Provider: {activeProviderLabel}</Badge>
+                  <Badge variant="outline">Last Updated: {latestCaptureLabel}</Badge>
                   <Badge variant="outline">Active Live Source: {activeLiveSourceCoordinatesLabel}</Badge>
                   <Badge variant="outline">Area: {selectedLocation.name}</Badge>
                   <Badge variant="outline">Logs: {locationLogs.length}</Badge>

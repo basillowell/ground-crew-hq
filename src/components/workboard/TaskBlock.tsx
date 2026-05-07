@@ -41,15 +41,28 @@ export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove }:
             </Badge>
           ) : null}
         </div>
+        <div className="mt-2 grid gap-2 rounded-lg border bg-background/70 p-2 text-[11px] text-muted-foreground sm:grid-cols-4">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80">Location</div>
+            <div className="truncate font-medium text-foreground/90">{assignment.area}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80">Start</div>
+            <div className="font-medium text-foreground/90">{assignment.startTime}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80">Duration</div>
+            <div className="font-medium text-foreground/90">{assignment.duration} min</div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80">Equipment</div>
+            <div className="truncate font-medium text-foreground/90">{equipment ? equipment.unitNumber : 'None'}</div>
+          </div>
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          <StatusChip variant="neutral">{assignment.area}</StatusChip>
+          <StatusChip variant="neutral">{assignment.status}</StatusChip>
           <Badge variant="secondary" className="text-[10px]">{assignment.startTime}</Badge>
-          <Badge variant="secondary" className="text-[10px]">{assignment.duration}m</Badge>
-          {equipment && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-              {equipment.unitNumber}
-            </Badge>
-          )}
+          {equipment && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{equipment.unitNumber}</Badge>}
         </div>
       </div>
       <div className="flex items-start gap-1">

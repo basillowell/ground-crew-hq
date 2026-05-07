@@ -510,6 +510,7 @@ export default function ReportsPage() {
     dollarsAndHoursRows.length > 0 ||
     taskTotalsByDateAndGroup.length > 0 ||
     employeeHoursRows.length > 0;
+  const hasInvalidDateRange = !startDate || !endDate || startDate > endDate;
 
   function handleExportCsv() {
     if (selectedReport === 'Labor Cost by Task' || selectedReport === 'Dollars and Hours') {
@@ -588,6 +589,9 @@ export default function ReportsPage() {
         <div className="mb-5 rounded-3xl border bg-card/90 backdrop-blur p-5 shadow-sm">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-2">
+                Management Reporting Center
+              </div>
               <div className="flex items-center gap-2 mb-2">
                 <Badge variant="secondary" className="rounded-full px-3 py-1">
                   {selectedCategory.name}
@@ -618,7 +622,7 @@ export default function ReportsPage() {
                   setAppliedEndDate(endDate);
                   setGeneratedAt(new Date().toISOString());
                 }}
-                disabled={!startDate || !endDate || startDate > endDate}
+                disabled={hasInvalidDateRange}
               >
                 <Play className="h-3 w-3" />
                 Run
@@ -637,6 +641,11 @@ export default function ReportsPage() {
               </Button>
             </div>
           </div>
+          {hasInvalidDateRange ? (
+            <div className="mt-3 rounded-xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs text-amber-800">
+              Select a valid date range before running the report.
+            </div>
+          ) : null}
 
           <div className="mt-4 grid gap-3 xl:grid-cols-4">
             <div className="rounded-2xl border bg-background/80 p-3">
@@ -861,17 +870,25 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {applicationsToHoursRows.map((row) => (
-                    <tr key={row.id} className="border-b last:border-b-0">
-                      <td className="px-3 py-3">{row.date}</td>
-                      <td className="px-3 py-3">{row.applicator}</td>
-                      <td className="px-3 py-3">{row.area}</td>
-                      <td className="px-3 py-3">{row.appliedHours}</td>
-                      <td className="px-3 py-3">{row.scheduledHours}</td>
-                      <td className="px-3 py-3">{row.assignmentHoursSameDay}</td>
-                      <td className="px-3 py-3">{row.totalQuantity}</td>
+                  {applicationsToHoursRows.length ? (
+                    applicationsToHoursRows.map((row) => (
+                      <tr key={row.id} className="border-b last:border-b-0">
+                        <td className="px-3 py-3">{row.date}</td>
+                        <td className="px-3 py-3">{row.applicator}</td>
+                        <td className="px-3 py-3">{row.area}</td>
+                        <td className="px-3 py-3">{row.appliedHours}</td>
+                        <td className="px-3 py-3">{row.scheduledHours}</td>
+                        <td className="px-3 py-3">{row.assignmentHoursSameDay}</td>
+                        <td className="px-3 py-3">{row.totalQuantity}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                        No application-to-hours rows in this date range yet.
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -948,21 +965,29 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {employeeHoursRows.map((row) => (
-                  <tr key={row.employeeId} className="border-b last:border-b-0">
-                    <td className="px-3 py-3">{row.employee}</td>
-                    <td className="px-3 py-3 text-muted-foreground">{row.department} / {row.group}</td>
-                    <td className="px-3 py-3">{row.scheduledHours}</td>
-                    <td className="px-3 py-3">{row.actualWorkedHours}</td>
-                    <td className="px-3 py-3">{row.assignedHours}</td>
-                    <td className="px-3 py-3">{row.applicationHours}</td>
-                    <td className="px-3 py-3">{row.breakMinutes}</td>
-                    <td className="px-3 py-3">
-                      <Badge variant={row.utilization >= 85 ? 'default' : 'outline'}>{row.utilization}%</Badge>
+                {employeeHoursRows.length ? (
+                  employeeHoursRows.map((row) => (
+                    <tr key={row.employeeId} className="border-b last:border-b-0">
+                      <td className="px-3 py-3">{row.employee}</td>
+                      <td className="px-3 py-3 text-muted-foreground">{row.department} / {row.group}</td>
+                      <td className="px-3 py-3">{row.scheduledHours}</td>
+                      <td className="px-3 py-3">{row.actualWorkedHours}</td>
+                      <td className="px-3 py-3">{row.assignedHours}</td>
+                      <td className="px-3 py-3">{row.applicationHours}</td>
+                      <td className="px-3 py-3">{row.breakMinutes}</td>
+                      <td className="px-3 py-3">
+                        <Badge variant={row.utilization >= 85 ? 'default' : 'outline'}>{row.utilization}%</Badge>
+                      </td>
+                      <td className="px-3 py-3">${row.laborCost.toFixed(2)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                      No employee labor rows available for this filter range.
                     </td>
-                    <td className="px-3 py-3">${row.laborCost.toFixed(2)}</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -992,20 +1017,28 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody>
-                {applicationRows.map((row) => (
-                  <tr key={row.id} className="border-b last:border-b-0">
-                    <td className="px-3 py-3">{row.date}</td>
-                    <td className="px-3 py-3">{row.area}</td>
-                    <td className="px-3 py-3">{row.applicator}</td>
-                    <td className="px-3 py-3 text-muted-foreground">{row.products}</td>
-                    <td className="px-3 py-3">{row.quantity}</td>
-                    <td className="px-3 py-3">
-                      <Badge variant="outline" className="rounded-full">
-                        {row.rainfall}"
-                      </Badge>
+                {applicationRows.length ? (
+                  applicationRows.map((row) => (
+                    <tr key={row.id} className="border-b last:border-b-0">
+                      <td className="px-3 py-3">{row.date}</td>
+                      <td className="px-3 py-3">{row.area}</td>
+                      <td className="px-3 py-3">{row.applicator}</td>
+                      <td className="px-3 py-3 text-muted-foreground">{row.products}</td>
+                      <td className="px-3 py-3">{row.quantity}</td>
+                      <td className="px-3 py-3">
+                        <Badge variant="outline" className="rounded-full">
+                          {row.rainfall}"
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                      No application register records found for this period.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

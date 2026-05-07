@@ -13,6 +13,7 @@ interface EmployeeRowProps {
   tasks: Task[];
   shiftLabel?: string;
   laneSummary?: string;
+  laneWarning?: string;
   orderIndex?: number;
   isDragging?: boolean;
   isDropTarget?: boolean;
@@ -31,6 +32,7 @@ export function EmployeeRow({
   tasks,
   shiftLabel,
   laneSummary,
+  laneWarning,
   orderIndex,
   isDragging,
   isDropTarget,
@@ -91,6 +93,11 @@ export function EmployeeRow({
           {laneSummary ? (
             <div className="mb-3 rounded-xl border bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground">
               {laneSummary}
+            </div>
+          ) : null}
+          {laneWarning ? (
+            <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              {laneWarning}
             </div>
           ) : null}
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">

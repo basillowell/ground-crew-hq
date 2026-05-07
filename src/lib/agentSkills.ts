@@ -80,5 +80,23 @@ export const AGENT_SKILLS: AgentSkill[] = [
     recommendedCodexPromptTemplate:
       'Use AGENTS.md and docs/skills/branding-skill.md. TASK: align visible app branding and icons to Ground Crew HQ / HQ without changing auth behavior.',
   },
+  {
+    id: 'design',
+    title: 'Design System',
+    description: 'Guides visual polish, layout, branding, and page-level UI consistency.',
+    docPath: 'docs/skills/design-skill.md',
+    relatedPages: [
+      'dashboard',
+      'employees',
+      'scheduler',
+      'workboard',
+      'equipment',
+      'weather',
+      'reports',
+      'settings',
+      'landing',
+    ],
+    recommendedCodexPromptTemplate:
+      'Use AGENTS.md, docs/skills/design-skill.md, and docs/design.md. Apply a small, page-specific design polish to [PAGE]. Preserve working functionality. Return files changed and testing steps.',
+  },
 ];
-

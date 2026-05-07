@@ -225,7 +225,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               setDepartment,
             }}
           >
-            <main className="flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,250,248,1))]">
+            <main className="flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,248,246,1))]">
               {children}
             </main>
           </OperationsProvider>

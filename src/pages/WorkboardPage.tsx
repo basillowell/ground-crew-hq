@@ -740,6 +740,22 @@ export default function WorkboardPage() {
 
         {/* Header bar */}
         <div className="border-b bg-card px-5 py-3 flex items-center gap-3 flex-wrap shrink-0">
+          <div className="flex items-center gap-2 rounded-xl border bg-muted/20 px-3 py-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Board Date</span>
+            <input
+              type="date"
+              value={boardDate}
+              onChange={(e) => setBoardDate(e.target.value)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              data-testid="input-board-date"
+            />
+            {boardDate !== todayDateKey ? (
+              <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setBoardDate(todayDateKey)}>
+                Today
+              </Button>
+            ) : null}
+          </div>
+
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <h1 className="text-lg font-semibold tracking-tight">Workflow</h1>
             {activeProperty && (
@@ -753,20 +769,6 @@ export default function WorkboardPage() {
               </Badge>
             )}
           </div>
-
-          {/* Date picker */}
-          <input
-            type="date"
-            value={boardDate}
-            onChange={(e) => setBoardDate(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-            data-testid="input-board-date"
-          />
-          {boardDate !== todayDateKey ? (
-            <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => setBoardDate(todayDateKey)}>
-              Today
-            </Button>
-          ) : null}
 
           {/* Department */}
           <select
@@ -914,6 +916,14 @@ export default function WorkboardPage() {
             />
           ) : (
             <div className="space-y-2">
+              <div className="rounded-2xl border bg-card/70 px-4 py-2 text-[11px] text-muted-foreground">
+                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3">
+                  <span className="font-medium text-foreground/90">Employee / Assignments</span>
+                  <span className="text-right">Duration</span>
+                  <span className="text-right">Equipment</span>
+                  <span className="text-right">Status</span>
+                </div>
+              </div>
               {orderedDispatchBoard.map((lane, index) => (
                 <EmployeeRow
                   key={lane.employee.id}
@@ -928,6 +938,11 @@ export default function WorkboardPage() {
                     lane.shift
                       ? `${lane.assignedMinutes} min assigned · ${lane.openMinutes} min open`
                       : `${lane.employeeAssignments.length} tasks assigned`
+                  }
+                  laneWarning={
+                    lane.shiftMinutes > 0 && lane.assignedMinutes > lane.shiftMinutes
+                      ? `Assigned hours exceed scheduled shift by ${Math.ceil((lane.assignedMinutes - lane.shiftMinutes) / 60)}h ${(lane.assignedMinutes - lane.shiftMinutes) % 60}m`
+                      : undefined
                   }
                   onDragStart={setDraggingEmployeeId}
                   onDragEnter={setDropTargetEmployeeId}

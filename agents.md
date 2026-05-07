@@ -42,6 +42,12 @@ Always inspect:
 - any weather hooks or weather utilities
 - Supabase weather/location tables if present
 
+## Design Reference
+For visual polish, layout consistency, branding, page hierarchy, and UI behavior, read:
+- docs/design.md
+
+Use docs/design.md only when the task involves UI, layout, branding, page redesign, or visual polish.
+
 ## Expected Output From Codex
 Every response should include:
 1. Summary of fix
