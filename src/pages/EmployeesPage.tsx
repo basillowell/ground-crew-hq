@@ -36,6 +36,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type SupabaseErrorLike = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
 function EmployeeDetail({
   employee,
   onClose,
@@ -577,46 +586,95 @@ export default function EmployeesPage() {
     };
   }, [selected, scheduleEntries, assignments, equipmentUnits, applicationLogs]);
 
-  function nullableUuid(value?: string) {
+  function nullableText(value?: string) {
     const normalized = value?.trim();
     return normalized ? normalized : null;
   }
 
-  async function persist(nextEmployees: Employee[]) {
-    for (const emp of nextEmployees) {
-      const payload = {
-        id: emp.id,
-        first_name: emp.firstName.trim(),
-        last_name: emp.lastName.trim(),
-        property_id: nullableUuid(emp.propertyId ?? (currentPropertyId === 'all' ? properties[0]?.id : currentPropertyId)),
-        group_id: nullableUuid(groupIdByName.get(emp.group)),
-        group_name: emp.group.trim() || null,
-        role_id: nullableUuid(roleIdByName.get(emp.role)),
-        role: emp.role.trim() || 'Operator',
-        hourly_rate: Number.isFinite(emp.wage) ? Number(emp.wage) : 0,
-        department_id: nullableUuid(departmentIdByName.get(emp.department)),
-        department: emp.department.trim() || 'Maintenance',
-        phone: emp.phone?.trim() ? emp.phone.trim() : null,
-        email: emp.email?.trim() ? emp.email.trim() : null,
-        language: emp.language?.trim() ? emp.language.trim() : null,
-        worker_type_id: nullableUuid(workerTypeIdByName.get(String(emp.workerType))),
-        worker_type: String(emp.workerType || '').trim() || null,
-        job_description_id: nullableUuid(jobDescriptionIdByName.get(emp.jobDescription ?? '')),
-        job_description: emp.jobDescription?.trim() ? emp.jobDescription.trim() : null,
-        employment_status_id: nullableUuid(employmentStatusIdByName.get(emp.employmentStatus ?? '')),
-        employment_status: emp.employmentStatus?.trim() ? emp.employmentStatus.trim() : null,
-        wage_category_id: nullableUuid(wageCategoryIdByName.get(emp.wageCategory ?? '')),
-        overtime_rule_id: nullableUuid(overtimeRuleIdByName.get(emp.overtimeRule ?? '')),
-        default_location_id: nullableUuid(emp.defaultLocationId),
-        preferred_shift_template_id: nullableUuid(emp.shiftTemplateId),
-        portal_enabled: Boolean(emp.portalEnabled),
-        login_email: emp.loginEmail?.trim() ? emp.loginEmail.trim() : null,
-        status: emp.status,
-        org_id: currentUser?.orgId,
-      };
-      const { error } = await supabase.from('employees').upsert(payload);
-      if (error) throw error;
+  function nullableUuid(value?: string) {
+    const normalized = value?.trim();
+    if (!normalized) return null;
+    return UUID_PATTERN.test(normalized) ? normalized : null;
+  }
+
+  function formatSupabaseError(error: unknown): { description: string; raw: SupabaseErrorLike | null } {
+    const supabaseError =
+      typeof error === 'object' && error !== null
+        ? (error as SupabaseErrorLike)
+        : null;
+    const message = supabaseError?.message ?? (error instanceof Error ? error.message : 'Unknown error');
+    const details = supabaseError?.details?.trim();
+    const hint = supabaseError?.hint?.trim();
+    const code = supabaseError?.code?.trim();
+
+    if (code === '23505') return { description: `Duplicate value: ${message}`, raw: supabaseError };
+    if (code === '23503') return { description: `Linked record missing: ${message}`, raw: supabaseError };
+    if (code === '22P02') return { description: `Invalid value format: ${message}`, raw: supabaseError };
+    if (code === '42501') return { description: `Permission denied by policy: ${message}`, raw: supabaseError };
+    if (code === '23502') return { description: `Missing required field: ${message}`, raw: supabaseError };
+
+    const enriched = [message, details, hint].filter(Boolean).join(' — ');
+    return { description: enriched || 'Unknown error', raw: supabaseError };
+  }
+
+  function logSupabaseError(scope: string, error: unknown, payload?: Record<string, unknown>) {
+    if (!import.meta.env.DEV) return;
+    // Dev-only diagnostics to pinpoint payload/schema mismatches without leaking secrets in production.
+    console.error(`[EmployeesPage] ${scope} failed`, {
+      error,
+      payload,
+    });
+  }
+
+  async function persistEmployee(emp: Employee) {
+    const scopedPropertyId = emp.propertyId ?? (currentPropertyId === 'all' ? properties[0]?.id : currentPropertyId);
+    const payload = {
+      id: emp.id,
+      first_name: emp.firstName.trim(),
+      last_name: emp.lastName.trim(),
+      property_id: nullableUuid(scopedPropertyId),
+      group_id: nullableUuid(groupIdByName.get(emp.group)),
+      group_name: emp.group.trim() || null,
+      role_id: nullableUuid(roleIdByName.get(emp.role)),
+      role: emp.role.trim() || 'Operator',
+      hourly_rate: Number.isFinite(emp.wage) ? Number(emp.wage) : 0,
+      department_id: nullableUuid(departmentIdByName.get(emp.department)),
+      department: emp.department.trim() || 'Maintenance',
+      phone: nullableText(emp.phone),
+      email: nullableText(emp.email),
+      language: nullableText(emp.language),
+      worker_type_id: nullableUuid(workerTypeIdByName.get(String(emp.workerType))),
+      worker_type: nullableText(String(emp.workerType || '')),
+      job_description_id: nullableUuid(jobDescriptionIdByName.get(emp.jobDescription ?? '')),
+      job_description: nullableText(emp.jobDescription),
+      employment_status_id: nullableUuid(employmentStatusIdByName.get(emp.employmentStatus ?? '')),
+      employment_status: nullableText(emp.employmentStatus),
+      wage_category_id: nullableUuid(wageCategoryIdByName.get(emp.wageCategory ?? '')),
+      overtime_rule_id: nullableUuid(overtimeRuleIdByName.get(emp.overtimeRule ?? '')),
+      // These are text columns in this project schema; do not UUID-cast them.
+      default_location_id: nullableText(emp.defaultLocationId),
+      preferred_shift_template_id: nullableText(emp.shiftTemplateId),
+      portal_enabled: Boolean(emp.portalEnabled),
+      login_email: nullableText(emp.loginEmail),
+      status: emp.status,
+      org_id: currentUser?.orgId ?? null,
+    };
+
+    if (!payload.org_id) {
+      throw new Error('Missing org_id for employee save.');
     }
+    if (!payload.property_id) {
+      throw new Error('Missing property_id for employee save.');
+    }
+
+    const { error } = await supabase.from('employees').upsert(payload);
+    if (error) {
+      logSupabaseError('Employee upsert', error, payload);
+      throw error;
+    }
+  }
+
+  async function refreshEmployees() {
     await queryClient.invalidateQueries({ queryKey: ['employees'] });
     await employeesQuery.refetch();
   }
@@ -686,15 +744,16 @@ export default function EmployeesPage() {
     };
 
     try {
-      await persist([nextEmployee, ...employeeList]);
+      await persistEmployee(nextEmployee);
+      await refreshEmployees();
       setDialogOpen(false);
       setDraft(buildDefaultDraft());
       toast('Employee saved', {
         description: `${nextEmployee.firstName} ${nextEmployee.lastName} was added and is now available in the roster.`,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error('Could not save employee', { description: message });
+      const { description } = formatSupabaseError(error);
+      toast.error('Could not save employee', { description });
     }
   }
 
@@ -704,13 +763,16 @@ export default function EmployeesPage() {
         ? { ...employee, status: (employee.status === 'active' ? 'inactive' : 'active') as 'active' | 'inactive' }
         : employee,
     );
+    const targetEmployee = nextEmployees.find((employee) => employee.id === employeeId);
+    if (!targetEmployee) return;
     try {
-      await persist(nextEmployees);
-      setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
+      await persistEmployee(targetEmployee);
+      await refreshEmployees();
+      setSelected(targetEmployee);
       toast('Employee updated', { description: 'Status change saved.' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error('Could not update employee', { description: message });
+      const { description } = formatSupabaseError(error);
+      toast.error('Could not update employee', { description });
     }
   }
 
@@ -761,12 +823,15 @@ export default function EmployeesPage() {
       return;
     }
     const nextEmployees = employeeList.map((employee) => (employee.id === employeeId ? { ...employee, ...updates } : employee));
+    const targetEmployee = nextEmployees.find((employee) => employee.id === employeeId);
+    if (!targetEmployee) return;
     try {
-      await persist(nextEmployees);
-      setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
+      await persistEmployee(targetEmployee);
+      await refreshEmployees();
+      setSelected(targetEmployee);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error('Could not save portal access', { description: message });
+      const { description } = formatSupabaseError(error);
+      toast.error('Could not save portal access', { description });
       return;
     }
 
