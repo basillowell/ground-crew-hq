@@ -40,6 +40,14 @@ type PanelsProps = {
   setRoleOptions: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
   workerTypes: { id: string; name: string }[];
   setWorkerTypes: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
+  jobDescriptions: { id: string; name: string }[];
+  setJobDescriptions: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
+  employmentStatuses: { id: string; name: string }[];
+  setEmploymentStatuses: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
+  wageCategories: { id: string; name: string }[];
+  setWageCategories: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
+  overtimeRules: { id: string; name: string }[];
+  setOvertimeRules: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
   languageOptions: { id: string; name: string }[];
   setLanguageOptions: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
   properties: Property[];
@@ -250,6 +258,14 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
     setRoleOptions,
     workerTypes,
     setWorkerTypes,
+    jobDescriptions,
+    setJobDescriptions,
+    employmentStatuses,
+    setEmploymentStatuses,
+    wageCategories,
+    setWageCategories,
+    overtimeRules,
+    setOvertimeRules,
     languageOptions,
     setLanguageOptions,
     properties,
@@ -1326,7 +1342,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             <div className="rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Applies to:</span> employee records, labor grouping, scheduling structure, and reports.
             </div>
-            {departmentOptions.length === 0 && groupOptions.length === 0 && roleOptions.length === 0 && workerTypes.length === 0 ? (
+            {departmentOptions.length === 0 && groupOptions.length === 0 && roleOptions.length === 0 && workerTypes.length === 0 && jobDescriptions.length === 0 && employmentStatuses.length === 0 && wageCategories.length === 0 && overtimeRules.length === 0 ? (
               <Card className="border-dashed p-4">
                 <h3 className="text-sm font-semibold">No workforce structure configured yet</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1418,6 +1434,98 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                 ))}
               </div>
             </Card>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold">Job Descriptions</span>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setJobDescriptions((c) => [...c, { id: makeId('jdesc'), name: `Job Description ${c.length + 1}` }])}>
+                    <Plus className="h-3 w-3" /> Add
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {jobDescriptions.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+                      <Input
+                        value={item.name}
+                        onChange={(e) => setJobDescriptions((c) => c.map((x) => (x.id === item.id ? { ...x, name: e.target.value } : x)))}
+                        className="h-8 flex-1 border-0 bg-transparent"
+                      />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setJobDescriptions((c) => c.filter((x) => x.id !== item.id))}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold">Employment Statuses</span>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setEmploymentStatuses((c) => [...c, { id: makeId('estatus'), name: `Status ${c.length + 1}` }])}>
+                    <Plus className="h-3 w-3" /> Add
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {employmentStatuses.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+                      <Input
+                        value={item.name}
+                        onChange={(e) => setEmploymentStatuses((c) => c.map((x) => (x.id === item.id ? { ...x, name: e.target.value } : x)))}
+                        className="h-8 flex-1 border-0 bg-transparent"
+                      />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setEmploymentStatuses((c) => c.filter((x) => x.id !== item.id))}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold">Wage Categories</span>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setWageCategories((c) => [...c, { id: makeId('wcat'), name: `Wage Category ${c.length + 1}` }])}>
+                    <Plus className="h-3 w-3" /> Add
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {wageCategories.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+                      <Input
+                        value={item.name}
+                        onChange={(e) => setWageCategories((c) => c.map((x) => (x.id === item.id ? { ...x, name: e.target.value } : x)))}
+                        className="h-8 flex-1 border-0 bg-transparent"
+                      />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setWageCategories((c) => c.filter((x) => x.id !== item.id))}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold">Overtime Rules</span>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setOvertimeRules((c) => [...c, { id: makeId('otrule'), name: `Overtime Rule ${c.length + 1}` }])}>
+                    <Plus className="h-3 w-3" /> Add
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {overtimeRules.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+                      <Input
+                        value={item.name}
+                        onChange={(e) => setOvertimeRules((c) => c.map((x) => (x.id === item.id ? { ...x, name: e.target.value } : x)))}
+                        className="h-8 flex-1 border-0 bg-transparent"
+                      />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setOvertimeRules((c) => c.filter((x) => x.id !== item.id))}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-semibold">Languages</span>
@@ -1441,7 +1549,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               </div>
             </Card>
             <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
-              <p className="text-xs text-muted-foreground">Applies to departments, groups, roles, worker types, and languages.</p>
+              <p className="text-xs text-muted-foreground">Applies to workforce framework options used directly by Employees, Scheduler, Workboard, and Reports.</p>
               <Button onClick={saveStructures}>Save workforce structure</Button>
             </div>
           </div>

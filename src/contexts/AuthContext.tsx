@@ -230,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hasSession, setHasSession] = useState(false);
   const [authState, setAuthState] = useState<AuthContextValue['authState']>('checking-session');
   const retryHydrationRef = useRef<() => Promise<void>>(async () => {});
+  const currentAuthUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -274,7 +275,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const profileResult = await Promise.race([
           loadAuthProfile(sessionUser),
-          timeoutResult(10000, {
+          timeoutResult(20000, {
             profile: null,
             debugMessage: `Authentication timed out while connecting to ${getSupabaseProjectLabel()}. Please try again.`,
             reason: 'error' as const,
@@ -289,6 +290,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setCurrentUser(profileResult.profile);
+        currentAuthUserIdRef.current = profileResult.profile?.authUser.id ?? null;
         setAuthDebugMessage(profileResult.debugMessage);
         if (profileResult.profile) setAuthState('authenticated');
         else if (profileResult.reason === 'missing-app-user' || profileResult.reason === 'missing-employee' || profileResult.reason === 'missing-organization') setAuthState('profile-missing');
@@ -305,6 +307,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
         setCurrentUser(null);
         setCurrentPropertyIdState('');
+        currentAuthUserIdRef.current = null;
         setAuthDebugMessage(`Could not connect to ${getSupabaseProjectLabel()}. Please try again.`);
         setAuthState('profile-error');
       } finally {
@@ -330,8 +333,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           sessionUserId: session?.user?.id ?? null,
         });
       }
-      if (mounted) {
-        setIsLoading(true);
+      if (
+        _event === 'TOKEN_REFRESHED' &&
+        session?.user?.id &&
+        currentAuthUserIdRef.current === session.user.id
+      ) {
+        if (isDev) {
+          console.info('[Auth] Skipping profile re-hydration on token refresh for active user');
+        }
+        return;
       }
       await hydrateAuth(session?.user ?? null);
       if (isDev) {

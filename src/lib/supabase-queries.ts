@@ -56,6 +56,14 @@ type DbEmployee = {
   department_id?: string | null;
   worker_type?: string | null;
   worker_type_id?: string | null;
+  job_description_id?: string | null;
+  job_description?: string | null;
+  employment_status_id?: string | null;
+  employment_status?: string | null;
+  wage_category_id?: string | null;
+  wage_category?: string | null;
+  overtime_rule_id?: string | null;
+  overtime_rule?: string | null;
   language?: string | null;
   hourly_rate?: number | null;
   default_location_id?: string | null;
@@ -273,6 +281,7 @@ type DbShiftTemplate = {
   active?: boolean | null;
 };
 type DbWorkerType = { id: string; org_id?: string | null; name: string; active?: boolean | null };
+type DbFrameworkOption = { id: string; org_id?: string | null; name: string; active?: boolean | null };
 type DbApplicationArea = {
   id: string;
   name: string;
@@ -437,6 +446,14 @@ function toEmployee(row: DbEmployee): Employee {
     photo: '',
     language: row.language ?? 'English',
     workerType: (row.worker_type as Employee['workerType']) ?? 'full-time',
+    jobDescriptionId: row.job_description_id ?? undefined,
+    jobDescription: row.job_description ?? undefined,
+    employmentStatusId: row.employment_status_id ?? undefined,
+    employmentStatus: row.employment_status ?? undefined,
+    wageCategoryId: row.wage_category_id ?? undefined,
+    wageCategory: row.wage_category ?? undefined,
+    overtimeRuleId: row.overtime_rule_id ?? undefined,
+    overtimeRule: row.overtime_rule ?? undefined,
     hireDate: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     defaultLocationId: row.default_location_id ?? undefined,
     shiftTemplateId: row.preferred_shift_template_id ?? undefined,
@@ -1015,6 +1032,17 @@ async function fetchWorkerTypes(orgId?: string): Promise<Array<{ id: string; nam
   return rows.map((row) => ({ id: row.id, name: row.name }));
 }
 
+async function fetchFrameworkOptions(table: 'job_descriptions' | 'employment_statuses' | 'wage_categories' | 'overtime_rules', orgId?: string): Promise<Array<{ id: string; name: string }>> {
+  const client = ensureSupabase();
+  let query = client.from(table).select('id, name, active, org_id').order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  query = query.eq('active', true);
+  const { data, error } = await query;
+  if (error) return [];
+  const rows = (data as DbFrameworkOption[]) ?? [];
+  return rows.map((row) => ({ id: row.id, name: row.name }));
+}
+
 async function fetchChemicalApplicationLogFieldsForDate(
   date: string,
 ): Promise<Array<{ weatherLogId?: string | null; applicatorLicenseNumber?: string | null; supervisorLicenseNumber?: string | null }>> {
@@ -1333,6 +1361,38 @@ export function useWorkerTypes(orgId?: string) {
   return useQuery({
     queryKey: ['worker-types', orgId ?? 'all-orgs'],
     queryFn: () => fetchWorkerTypes(orgId),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useJobDescriptions(orgId?: string) {
+  return useQuery({
+    queryKey: ['job-descriptions', orgId ?? 'all-orgs'],
+    queryFn: () => fetchFrameworkOptions('job_descriptions', orgId),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useEmploymentStatuses(orgId?: string) {
+  return useQuery({
+    queryKey: ['employment-statuses', orgId ?? 'all-orgs'],
+    queryFn: () => fetchFrameworkOptions('employment_statuses', orgId),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useWageCategories(orgId?: string) {
+  return useQuery({
+    queryKey: ['wage-categories', orgId ?? 'all-orgs'],
+    queryFn: () => fetchFrameworkOptions('wage_categories', orgId),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useOvertimeRules(orgId?: string) {
+  return useQuery({
+    queryKey: ['overtime-rules', orgId ?? 'all-orgs'],
+    queryFn: () => fetchFrameworkOptions('overtime_rules', orgId),
     staleTime: 1000 * 60 * 10,
   });
 }

@@ -20,7 +20,9 @@ import {
   useDepartmentOptions,
   useEmployees,
   useGroupOptions,
+  useJobDescriptions,
   useLanguageOptions,
+  useOvertimeRules,
   useProgramSettings,
   useProperties,
   usePropertyClassOptions,
@@ -30,7 +32,9 @@ import {
   useTasks,
   useWeatherLocations,
   useWorkerTypes,
+  useWageCategories,
   useWorkLocations,
+  useEmploymentStatuses,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -223,6 +227,14 @@ export default function ProgramSetupHubPage() {
   const roleOptionsData = roleOptionsQuery.data ?? [];
   const workerTypesQuery = useWorkerTypes(currentUser?.orgId);
   const workerTypesData = workerTypesQuery.data ?? [];
+  const jobDescriptionsQuery = useJobDescriptions(currentUser?.orgId);
+  const jobDescriptionsData = jobDescriptionsQuery.data ?? [];
+  const employmentStatusesQuery = useEmploymentStatuses(currentUser?.orgId);
+  const employmentStatusesData = employmentStatusesQuery.data ?? [];
+  const wageCategoriesQuery = useWageCategories(currentUser?.orgId);
+  const wageCategoriesData = wageCategoriesQuery.data ?? [];
+  const overtimeRulesQuery = useOvertimeRules(currentUser?.orgId);
+  const overtimeRulesData = overtimeRulesQuery.data ?? [];
   const languageOptionsQuery = useLanguageOptions();
   const languageOptionsData = languageOptionsQuery.data ?? [];
   const propertiesQuery = useProperties(currentUser?.orgId);
@@ -256,6 +268,10 @@ export default function ProgramSetupHubPage() {
   const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
   const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
   const [workerTypes, setWorkerTypes] = useState<{ id: string; name: string }[]>([]);
+  const [jobDescriptions, setJobDescriptions] = useState<{ id: string; name: string }[]>([]);
+  const [employmentStatuses, setEmploymentStatuses] = useState<{ id: string; name: string }[]>([]);
+  const [wageCategories, setWageCategories] = useState<{ id: string; name: string }[]>([]);
+  const [overtimeRules, setOvertimeRules] = useState<{ id: string; name: string }[]>([]);
   const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyClasses, setPropertyClasses] = useState<PropertyClassOption[]>([]);
@@ -286,6 +302,10 @@ export default function ProgramSetupHubPage() {
   useEffect(() => setGroupOptions(groupOptionsData), [groupOptionsData]);
   useEffect(() => setRoleOptions(roleOptionsData), [roleOptionsData]);
   useEffect(() => setWorkerTypes(workerTypesData), [workerTypesData]);
+  useEffect(() => setJobDescriptions(jobDescriptionsData), [jobDescriptionsData]);
+  useEffect(() => setEmploymentStatuses(employmentStatusesData), [employmentStatusesData]);
+  useEffect(() => setWageCategories(wageCategoriesData), [wageCategoriesData]);
+  useEffect(() => setOvertimeRules(overtimeRulesData), [overtimeRulesData]);
   useEffect(() => setLanguageOptions(languageOptionsData), [languageOptionsData]);
   useEffect(() => setProperties(propertiesData), [propertiesData]);
   useEffect(() => setPropertyClasses(propertyClassesData), [propertyClassesData]);
@@ -382,6 +402,34 @@ export default function ProgramSetupHubPage() {
         active: true,
       });
     }
+    for (const jobDescription of jobDescriptions) {
+      await supabase.from('job_descriptions').upsert({
+        ...jobDescription,
+        org_id: currentUser?.orgId,
+        active: true,
+      });
+    }
+    for (const employmentStatus of employmentStatuses) {
+      await supabase.from('employment_statuses').upsert({
+        ...employmentStatus,
+        org_id: currentUser?.orgId,
+        active: true,
+      });
+    }
+    for (const wageCategory of wageCategories) {
+      await supabase.from('wage_categories').upsert({
+        ...wageCategory,
+        org_id: currentUser?.orgId,
+        active: true,
+      });
+    }
+    for (const overtimeRule of overtimeRules) {
+      await supabase.from('overtime_rules').upsert({
+        ...overtimeRule,
+        org_id: currentUser?.orgId,
+        active: true,
+      });
+    }
     for (const lang of languageOptions) {
       await supabase.from('language_options').upsert({
         ...lang,
@@ -392,9 +440,13 @@ export default function ProgramSetupHubPage() {
     await queryClient.invalidateQueries({ queryKey: ['group-options'] });
     await queryClient.invalidateQueries({ queryKey: ['role-options'] });
     await queryClient.invalidateQueries({ queryKey: ['worker-types'] });
+    await queryClient.invalidateQueries({ queryKey: ['job-descriptions'] });
+    await queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
+    await queryClient.invalidateQueries({ queryKey: ['wage-categories'] });
+    await queryClient.invalidateQueries({ queryKey: ['overtime-rules'] });
     await queryClient.invalidateQueries({ queryKey: ['language-options'] });
     toast('Workforce structure saved', {
-      description: 'Departments, crew groups, roles, and languages are now aligned across the app.',
+      description: 'Workforce framework is now aligned across Employees, Scheduler, Workboard, and Reports.',
     });
   }
 
@@ -565,7 +617,7 @@ export default function ProgramSetupHubPage() {
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">Settings</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Configure your CrewHQ workspace branding, people structure, properties, and account controls.
+              Define your facility framework here. These options power Employees, Scheduler, Workboard, Equipment, Weather, and Reports.
             </p>
           </div>
           <Badge variant="secondary" className="h-fit">
@@ -607,6 +659,14 @@ export default function ProgramSetupHubPage() {
         setRoleOptions={setRoleOptions}
         workerTypes={workerTypes}
         setWorkerTypes={setWorkerTypes}
+        jobDescriptions={jobDescriptions}
+        setJobDescriptions={setJobDescriptions}
+        employmentStatuses={employmentStatuses}
+        setEmploymentStatuses={setEmploymentStatuses}
+        wageCategories={wageCategories}
+        setWageCategories={setWageCategories}
+        overtimeRules={overtimeRules}
+        setOvertimeRules={setOvertimeRules}
         languageOptions={languageOptions}
         setLanguageOptions={setLanguageOptions}
         properties={properties}

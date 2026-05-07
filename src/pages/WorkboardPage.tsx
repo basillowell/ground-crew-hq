@@ -203,8 +203,8 @@ export default function WorkboardPage() {
   const focusedPropertyId = workflowParams.get('property') || '';
   const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
 
-  const propertiesQuery = useProperties();
-  const employeesQuery = useEmployees(effectivePropertyId);
+  const propertiesQuery = useProperties(currentUser?.orgId);
+  const employeesQuery = useEmployees(effectivePropertyId, currentUser?.orgId);
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, currentUser?.orgId);
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, currentUser?.orgId);
   const tasksQuery = useTasks(effectivePropertyId, currentUser?.orgId);
@@ -216,7 +216,9 @@ export default function WorkboardPage() {
     queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
     queryFn: async () => {
       if (!supabase) return [] as TaskRequest[];
-      const { data, error } = await supabase.from('task_requests').select('*').eq('date', boardDate);
+      let query = supabase.from('task_requests').select('*').eq('date', boardDate);
+      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      const { data, error } = await query;
       if (error) throw error;
       const normalized = (data ?? []).map((row) => normalizeTaskRequest(row as Record<string, unknown>));
       return effectivePropertyId && effectivePropertyId !== 'all'
@@ -252,7 +254,9 @@ export default function WorkboardPage() {
     queryKey: ['weather-daily-logs', boardDate],
     queryFn: async () => {
       if (!supabase) return [] as WeatherDailyLog[];
-      const { data, error } = await supabase.from('weather_daily_logs').select('*').eq('date', boardDate);
+      let query = supabase.from('weather_daily_logs').select('*').eq('date', boardDate);
+      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      const { data, error } = await query;
       if (error) return [] as WeatherDailyLog[];
       return (data ?? []).map((row) => normalizeWeatherLog(row as Record<string, unknown>));
     },
@@ -263,7 +267,9 @@ export default function WorkboardPage() {
     queryKey: ['weather-locations', effectivePropertyId ?? 'all'],
     queryFn: async () => {
       if (!supabase) return [] as WeatherLocation[];
-      const { data, error } = await supabase.from('weather_locations').select('*');
+      let query = supabase.from('weather_locations').select('*');
+      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      const { data, error } = await query;
       if (error) return [] as WeatherLocation[];
       return (data ?? []).map((row) => normalizeWeatherLocation(row as Record<string, unknown>));
     },
@@ -274,7 +280,9 @@ export default function WorkboardPage() {
     queryKey: ['work-locations', effectivePropertyId ?? 'all'],
     queryFn: async () => {
       if (!supabase) return [] as WorkLocation[];
-      const { data, error } = await supabase.from('work_locations').select('*');
+      let query = supabase.from('work_locations').select('*');
+      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      const { data, error } = await query;
       if (error) return [] as WorkLocation[];
       return (data ?? []).map((row) => normalizeWorkLocation(row as Record<string, unknown>));
     },
@@ -730,6 +738,67 @@ export default function WorkboardPage() {
     persistLaneOrder(base);
     setDraggingEmployeeId(null);
     setDropTargetEmployeeId(null);
+  }
+
+  const isLoadingBoard =
+    propertiesQuery.isLoading ||
+    employeesQuery.isLoading ||
+    assignmentsQuery.isLoading ||
+    scheduleQuery.isLoading ||
+    tasksQuery.isLoading ||
+    equipmentQuery.isLoading ||
+    notesQuery.isLoading;
+  const boardErrorMessage =
+    (propertiesQuery.error as { message?: string } | null)?.message ||
+    (employeesQuery.error as { message?: string } | null)?.message ||
+    (assignmentsQuery.error as { message?: string } | null)?.message ||
+    (scheduleQuery.error as { message?: string } | null)?.message ||
+    (tasksQuery.error as { message?: string } | null)?.message ||
+    (equipmentQuery.error as { message?: string } | null)?.message ||
+    (notesQuery.error as { message?: string } | null)?.message ||
+    (taskRequestsQuery.error as { message?: string } | null)?.message ||
+    '';
+
+  if (isLoadingBoard) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+          Loading workflow board and labor context...
+        </div>
+      </div>
+    );
+  }
+
+  if (boardErrorMessage) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="max-w-xl rounded-xl border border-dashed p-6 text-center">
+          <p className="text-sm font-medium text-foreground">Workflow data is temporarily unavailable.</p>
+          <p className="mt-1 text-xs text-muted-foreground">{boardErrorMessage}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            onClick={() => {
+              void propertiesQuery.refetch();
+              void employeesQuery.refetch();
+              void assignmentsQuery.refetch();
+              void scheduleQuery.refetch();
+              void tasksQuery.refetch();
+              void equipmentQuery.refetch();
+              void notesQuery.refetch();
+              void taskRequestsQuery.refetch();
+              void pendingTaskRequestsQuery.refetch();
+              void weatherLogsQuery.refetch();
+              void weatherLocationsQuery.refetch();
+              void workLocationsQuery.refetch();
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

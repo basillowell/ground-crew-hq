@@ -146,7 +146,7 @@ function LandingRoute() {
   const { currentUser, isLoading, hasSession, authState } = useAuth();
   if (isLoading || authState === 'checking-session' || authState === 'loading-profile') return <RouteFallback />;
   if (currentUser) return <Navigate to="/app/dashboard" replace />;
-  if (hasSession) return <RouteFallback />;
+  if (hasSession) return <Navigate to="/app/dashboard" replace />;
   return <LandingPage />;
 }
 

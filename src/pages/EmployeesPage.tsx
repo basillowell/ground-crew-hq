@@ -16,20 +16,25 @@ import {
   useAssignments,
   useChemicalApplicationLogsAll,
   useDepartmentOptions,
+  useEmploymentStatuses,
   useEmployees,
   useEquipmentUnits,
   useGroupOptions,
+  useJobDescriptions,
   useLanguageOptions,
+  useOvertimeRules,
   useProperties,
   useRoleOptions,
   useScheduleEntries,
   useShiftTemplates,
   useWorkerTypes,
+  useWageCategories,
   useWorkLocations,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useNavigate } from 'react-router-dom';
 
 function EmployeeDetail({
   employee,
@@ -319,6 +324,7 @@ const columns: Column<Employee>[] = [
 
 export default function EmployeesPage() {
   const { currentUser, currentPropertyId } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const todayKey = new Date().toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
@@ -328,6 +334,10 @@ export default function EmployeesPage() {
   const departmentOptionsQuery = useDepartmentOptions(currentUser?.orgId);
   const groupOptionsQuery = useGroupOptions(currentUser?.orgId);
   const roleOptionsQuery = useRoleOptions(currentUser?.orgId);
+  const jobDescriptionsQuery = useJobDescriptions(currentUser?.orgId);
+  const employmentStatusesQuery = useEmploymentStatuses(currentUser?.orgId);
+  const wageCategoriesQuery = useWageCategories(currentUser?.orgId);
+  const overtimeRulesQuery = useOvertimeRules(currentUser?.orgId);
   const workerTypesQuery = useWorkerTypes(currentUser?.orgId);
   const languageOptionsQuery = useLanguageOptions();
   const propertiesQuery = useProperties(currentUser?.orgId);
@@ -379,7 +389,43 @@ export default function EmployeesPage() {
     if (derived.length > 0) return derived;
     return ['full-time'];
   }, [employeeList, workerTypesQuery.data]);
+  const jobDescriptionOptionsForDropdown = useMemo(() => {
+    const configured = (jobDescriptionsQuery.data ?? []).filter((option) => option.name?.trim().length > 0);
+    if (configured.length > 0) return configured;
+    const derived = [...new Set(employeeList.map((employee) => employee.jobDescription).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name, index) => ({ id: `derived-job-description-${index}`, name: String(name) }));
+    if (derived.length > 0) return derived;
+    return [{ id: 'fallback-job-description-operator', name: 'General Crew Operator' }];
+  }, [employeeList, jobDescriptionsQuery.data]);
+  const employmentStatusOptionsForDropdown = useMemo(() => {
+    const configured = (employmentStatusesQuery.data ?? []).filter((option) => option.name?.trim().length > 0);
+    if (configured.length > 0) return configured;
+    const derived = [...new Set(employeeList.map((employee) => employee.employmentStatus).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name, index) => ({ id: `derived-employment-status-${index}`, name: String(name) }));
+    if (derived.length > 0) return derived;
+    return [{ id: 'fallback-employment-status-active', name: 'Active' }];
+  }, [employeeList, employmentStatusesQuery.data]);
+  const wageCategoryOptionsForDropdown = useMemo(() => {
+    const configured = (wageCategoriesQuery.data ?? []).filter((option) => option.name?.trim().length > 0);
+    if (configured.length > 0) return configured;
+    return [{ id: 'fallback-wage-category-standard', name: 'Standard Hourly' }];
+  }, [wageCategoriesQuery.data]);
+  const overtimeRuleOptionsForDropdown = useMemo(() => {
+    const configured = (overtimeRulesQuery.data ?? []).filter((option) => option.name?.trim().length > 0);
+    if (configured.length > 0) return configured;
+    return [{ id: 'fallback-overtime-rule-40h', name: 'Over 40 Hours Weekly' }];
+  }, [overtimeRulesQuery.data]);
   const languageOptions = languageOptionsQuery.data ?? [];
+  const languageOptionsForDropdown = useMemo(() => {
+    if (languageOptions.length > 0) return languageOptions;
+    const derived = [...new Set(employeeList.map((employee) => employee.language).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name, index) => ({ id: `derived-language-${index}`, name }));
+    if (derived.length > 0) return derived;
+    return [{ id: 'fallback-language-english', name: 'English' }];
+  }, [employeeList, languageOptions]);
   const properties = propertiesQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
   const shiftTemplates = shiftTemplatesQuery.data ?? [];
@@ -404,6 +450,10 @@ export default function EmployeesPage() {
     email: '',
     language: 'English',
     workerType: 'full-time' as Employee['workerType'],
+    jobDescription: '',
+    employmentStatus: 'Active',
+    wageCategory: '',
+    overtimeRule: '',
     department: 'Maintenance',
     defaultLocationId: '',
     shiftTemplateId: '',
@@ -429,6 +479,22 @@ export default function EmployeesPage() {
     () => new Map((workerTypesQuery.data ?? []).map((workerType) => [workerType.name, workerType.id])),
     [workerTypesQuery.data],
   );
+  const jobDescriptionIdByName = useMemo(
+    () => new Map((jobDescriptionsQuery.data ?? []).map((item) => [item.name, item.id])),
+    [jobDescriptionsQuery.data],
+  );
+  const employmentStatusIdByName = useMemo(
+    () => new Map((employmentStatusesQuery.data ?? []).map((item) => [item.name, item.id])),
+    [employmentStatusesQuery.data],
+  );
+  const wageCategoryIdByName = useMemo(
+    () => new Map((wageCategoriesQuery.data ?? []).map((item) => [item.name, item.id])),
+    [wageCategoriesQuery.data],
+  );
+  const overtimeRuleIdByName = useMemo(
+    () => new Map((overtimeRulesQuery.data ?? []).map((item) => [item.name, item.id])),
+    [overtimeRulesQuery.data],
+  );
 
   useEffect(() => {
     setDraft((current) => ({
@@ -436,13 +502,30 @@ export default function EmployeesPage() {
       department: current.department || departmentOptionsForDropdown[0]?.name || '',
       group: current.group || groupOptionsForDropdown[0]?.name || '',
       role: current.role || roleOptionsForDropdown[0]?.name || '',
-      language: current.language || languageOptions[0]?.name || '',
+      language: current.language || languageOptionsForDropdown[0]?.name || '',
       workerType: current.workerType || (workerTypeOptionsForDropdown[0] as Employee['workerType']) || 'full-time',
+      jobDescription: current.jobDescription || jobDescriptionOptionsForDropdown[0]?.name || '',
+      employmentStatus: current.employmentStatus || employmentStatusOptionsForDropdown[0]?.name || 'Active',
+      wageCategory: current.wageCategory || wageCategoryOptionsForDropdown[0]?.name || '',
+      overtimeRule: current.overtimeRule || overtimeRuleOptionsForDropdown[0]?.name || '',
       propertyId: current.propertyId || properties[0]?.id || '',
       defaultLocationId: current.defaultLocationId || workLocations[0]?.id || '',
       shiftTemplateId: current.shiftTemplateId || shiftTemplates[0]?.id || '',
     }));
-  }, [departmentOptionsForDropdown, groupOptionsForDropdown, roleOptionsForDropdown, workerTypeOptionsForDropdown, languageOptions, properties, workLocations, shiftTemplates]);
+  }, [
+    departmentOptionsForDropdown,
+    groupOptionsForDropdown,
+    roleOptionsForDropdown,
+    workerTypeOptionsForDropdown,
+    jobDescriptionOptionsForDropdown,
+    employmentStatusOptionsForDropdown,
+    wageCategoryOptionsForDropdown,
+    overtimeRuleOptionsForDropdown,
+    languageOptionsForDropdown,
+    properties,
+    workLocations,
+    shiftTemplates,
+  ]);
 
   const departments = useMemo(
     () => {
@@ -518,6 +601,12 @@ export default function EmployeesPage() {
         language: emp.language?.trim() ? emp.language.trim() : null,
         worker_type_id: nullableUuid(workerTypeIdByName.get(String(emp.workerType))),
         worker_type: String(emp.workerType || '').trim() || null,
+        job_description_id: nullableUuid(jobDescriptionIdByName.get(emp.jobDescription ?? '')),
+        job_description: emp.jobDescription?.trim() ? emp.jobDescription.trim() : null,
+        employment_status_id: nullableUuid(employmentStatusIdByName.get(emp.employmentStatus ?? '')),
+        employment_status: emp.employmentStatus?.trim() ? emp.employmentStatus.trim() : null,
+        wage_category_id: nullableUuid(wageCategoryIdByName.get(emp.wageCategory ?? '')),
+        overtime_rule_id: nullableUuid(overtimeRuleIdByName.get(emp.overtimeRule ?? '')),
         default_location_id: nullableUuid(emp.defaultLocationId),
         preferred_shift_template_id: nullableUuid(emp.shiftTemplateId),
         portal_enabled: Boolean(emp.portalEnabled),
@@ -542,8 +631,12 @@ export default function EmployeesPage() {
       wage: '18',
       phone: '',
       email: '',
-      language: languageOptions[0]?.name ?? '',
+      language: languageOptionsForDropdown[0]?.name ?? '',
       workerType: (workerTypeOptionsForDropdown[0] as Employee['workerType']) ?? 'full-time',
+      jobDescription: jobDescriptionOptionsForDropdown[0]?.name ?? '',
+      employmentStatus: employmentStatusOptionsForDropdown[0]?.name ?? 'Active',
+      wageCategory: wageCategoryOptionsForDropdown[0]?.name ?? '',
+      overtimeRule: overtimeRuleOptionsForDropdown[0]?.name ?? '',
       department: departmentOptionsForDropdown[0]?.name ?? '',
       defaultLocationId: workLocations[0]?.id ?? '',
       shiftTemplateId: shiftTemplates[0]?.id ?? '',
@@ -579,6 +672,10 @@ export default function EmployeesPage() {
       department: draft.department.trim(),
       language: draft.language.trim(),
       workerType: draft.workerType,
+      jobDescription: draft.jobDescription?.trim() || undefined,
+      employmentStatus: draft.employmentStatus?.trim() || undefined,
+      wageCategory: draft.wageCategory?.trim() || undefined,
+      overtimeRule: draft.overtimeRule?.trim() || undefined,
       hireDate: new Date().toISOString().slice(0, 10),
       defaultLocationId: draft.defaultLocationId || undefined,
       shiftTemplateId: draft.shiftTemplateId || undefined,
@@ -618,6 +715,10 @@ export default function EmployeesPage() {
   }
 
   async function handleDeleteEmployee(employeeId: string) {
+    if (!supabase) {
+      toast.error('Database connection not available.');
+      return;
+    }
     const employee = employeeList.find((entry) => entry.id === employeeId);
     if (!employee) return;
 
@@ -655,6 +756,10 @@ export default function EmployeesPage() {
   }
 
   async function handleSavePortalAccess(employeeId: string, updates: Partial<Employee>) {
+    if (!supabase) {
+      toast.error('Database connection not available.');
+      return;
+    }
     const nextEmployees = employeeList.map((employee) => (employee.id === employeeId ? { ...employee, ...updates } : employee));
     try {
       await persist(nextEmployees);
@@ -728,9 +833,83 @@ export default function EmployeesPage() {
     [employeeList],
   );
 
+  const isLoading =
+    employeesQuery.isLoading ||
+    appUsersQuery.isLoading ||
+    departmentOptionsQuery.isLoading ||
+    groupOptionsQuery.isLoading ||
+    roleOptionsQuery.isLoading ||
+    jobDescriptionsQuery.isLoading ||
+    employmentStatusesQuery.isLoading ||
+    wageCategoriesQuery.isLoading ||
+    overtimeRulesQuery.isLoading ||
+    workerTypesQuery.isLoading ||
+    languageOptionsQuery.isLoading ||
+    propertiesQuery.isLoading ||
+    workLocationsQuery.isLoading ||
+    shiftTemplatesQuery.isLoading;
+  const pageError =
+    (employeesQuery.error as { message?: string } | null)?.message ||
+    (departmentOptionsQuery.error as { message?: string } | null)?.message ||
+    (groupOptionsQuery.error as { message?: string } | null)?.message ||
+    (roleOptionsQuery.error as { message?: string } | null)?.message ||
+    (jobDescriptionsQuery.error as { message?: string } | null)?.message ||
+    (employmentStatusesQuery.error as { message?: string } | null)?.message ||
+    (wageCategoriesQuery.error as { message?: string } | null)?.message ||
+    (overtimeRulesQuery.error as { message?: string } | null)?.message ||
+    (workerTypesQuery.error as { message?: string } | null)?.message ||
+    (languageOptionsQuery.error as { message?: string } | null)?.message ||
+    (propertiesQuery.error as { message?: string } | null)?.message ||
+    (workLocationsQuery.error as { message?: string } | null)?.message ||
+    (shiftTemplatesQuery.error as { message?: string } | null)?.message ||
+    '';
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+          Loading employee roster and settings structure...
+        </div>
+      </div>
+    );
+  }
+
+  if (pageError) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="max-w-lg rounded-xl border border-dashed p-6 text-center">
+          <p className="text-sm font-medium text-foreground">Employee workspace is temporarily unavailable.</p>
+          <p className="mt-1 text-xs text-muted-foreground">{pageError}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            onClick={() => {
+              void employeesQuery.refetch();
+              void appUsersQuery.refetch();
+              void departmentOptionsQuery.refetch();
+              void groupOptionsQuery.refetch();
+              void roleOptionsQuery.refetch();
+              void workerTypesQuery.refetch();
+              void languageOptionsQuery.refetch();
+              void propertiesQuery.refetch();
+              void workLocationsQuery.refetch();
+              void shiftTemplatesQuery.refetch();
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <PageHeader title="Employee Management" action={{ label: 'Add Employee', onClick: openAddEmployeeDialog }} />
+      <div className="mb-4 rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
+        Options are managed in <button type="button" className="font-medium text-primary underline-offset-2 hover:underline" onClick={() => navigate('/app/settings?section=people')}>Settings → Workforce Framework</button>.
+      </div>
       <div className="grid gap-4 md:grid-cols-3 mb-4">
         <div className="rounded-3xl border bg-card/90 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
@@ -887,6 +1066,14 @@ export default function EmployeesPage() {
                       <option key={role.id} value={role.name}>{role.name}</option>
                     ))}
                   </select>
+                  {(roleOptionsQuery.data?.length ?? 0) === 0 ? (
+                    <p className="mt-1 text-[11px] text-amber-700">
+                      Create roles in Settings before assigning them to employees.{' '}
+                      <button type="button" className="font-medium underline underline-offset-2" onClick={() => navigate('/app/settings?section=people')}>
+                        Open Settings
+                      </button>
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">Worker Type</label>
@@ -901,8 +1088,56 @@ export default function EmployeesPage() {
                   </select>
                 </div>
                 <div>
+                  <label className="text-xs text-muted-foreground">Job Description</label>
+                  <select
+                    value={draft.jobDescription}
+                    onChange={(event) => setDraft({ ...draft, jobDescription: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {jobDescriptionOptionsForDropdown.map((option) => (
+                      <option key={option.id} value={option.name}>{option.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Employment Status</label>
+                  <select
+                    value={draft.employmentStatus}
+                    onChange={(event) => setDraft({ ...draft, employmentStatus: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {employmentStatusOptionsForDropdown.map((option) => (
+                      <option key={option.id} value={option.name}>{option.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="text-xs text-muted-foreground">Hourly Wage</label>
                   <Input value={draft.wage} onChange={(event) => setDraft({ ...draft, wage: event.target.value })} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Wage Category</label>
+                  <select
+                    value={draft.wageCategory}
+                    onChange={(event) => setDraft({ ...draft, wageCategory: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {wageCategoryOptionsForDropdown.map((option) => (
+                      <option key={option.id} value={option.name}>{option.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Overtime Rule</label>
+                  <select
+                    value={draft.overtimeRule}
+                    onChange={(event) => setDraft({ ...draft, overtimeRule: event.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {overtimeRuleOptionsForDropdown.map((option) => (
+                      <option key={option.id} value={option.name}>{option.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </section>
@@ -925,7 +1160,7 @@ export default function EmployeesPage() {
                     onChange={(event) => setDraft({ ...draft, language: event.target.value })}
                     className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   >
-                    {languageOptions.map((language) => (
+                    {languageOptionsForDropdown.map((language) => (
                       <option key={language.id} value={language.name}>{language.name}</option>
                     ))}
                   </select>

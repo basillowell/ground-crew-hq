@@ -16,6 +16,14 @@ export interface Employee {
   department: string;
   language: string;
   workerType: 'full-time' | 'part-time' | 'seasonal';
+  jobDescriptionId?: string;
+  jobDescription?: string;
+  employmentStatusId?: string;
+  employmentStatus?: string;
+  wageCategoryId?: string;
+  wageCategory?: string;
+  overtimeRuleId?: string;
+  overtimeRule?: string;
   hireDate: string;
   defaultLocationId?: string;
   shiftTemplateId?: string;

@@ -109,6 +109,10 @@ export default function SchedulerPage() {
   const employeeList = employeesQuery.data ?? [];
   const scheduleList = useMemo(() => weekScheduleQueries.flatMap((q) => q.data ?? []), [weekScheduleQueries]);
   const isLoading = employeesQuery.isLoading || weekScheduleQueries.some((q) => q.isLoading);
+  const queryErrorMessage =
+    (employeesQuery.error as { message?: string } | null)?.message ||
+    (weekScheduleQueries.find((query) => query.error)?.error as { message?: string } | null)?.message ||
+    '';
 
   const [draft, setDraft] = useState({
     employeeId: '',
@@ -423,6 +427,26 @@ export default function SchedulerPage() {
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="h-12 animate-pulse rounded-xl border bg-muted/50" />
             ))}
+          </div>
+        ) : queryErrorMessage ? (
+          <div className="p-4">
+            <div className="mx-auto max-w-xl rounded-xl border border-dashed p-5 text-center">
+              <p className="text-sm font-medium text-foreground">Scheduler data is temporarily unavailable.</p>
+              <p className="mt-1 text-xs text-muted-foreground">{queryErrorMessage}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={() => {
+                  void employeesQuery.refetch();
+                  weekScheduleQueries.forEach((query) => {
+                    void query.refetch();
+                  });
+                }}
+              >
+                Retry
+              </Button>
+            </div>
           </div>
         ) : (
           <Card className="rounded-none border-0 border-b">
