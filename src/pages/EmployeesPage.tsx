@@ -339,7 +339,7 @@ export default function EmployeesPage() {
   const wageCategoriesQuery = useWageCategories(currentUser?.orgId);
   const overtimeRulesQuery = useOvertimeRules(currentUser?.orgId);
   const workerTypesQuery = useWorkerTypes(currentUser?.orgId);
-  const languageOptionsQuery = useLanguageOptions();
+  const languageOptionsQuery = useLanguageOptions(currentUser?.orgId);
   const propertiesQuery = useProperties(currentUser?.orgId);
   const workLocationsQuery = useWorkLocations(propertyScope, currentUser?.orgId);
   const shiftTemplatesQuery = useShiftTemplates(currentUser?.orgId);
@@ -890,6 +890,10 @@ export default function EmployeesPage() {
               void departmentOptionsQuery.refetch();
               void groupOptionsQuery.refetch();
               void roleOptionsQuery.refetch();
+              void jobDescriptionsQuery.refetch();
+              void employmentStatusesQuery.refetch();
+              void wageCategoriesQuery.refetch();
+              void overtimeRulesQuery.refetch();
               void workerTypesQuery.refetch();
               void languageOptionsQuery.refetch();
               void propertiesQuery.refetch();

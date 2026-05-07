@@ -164,6 +164,13 @@ function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
   };
 }
 
+function makeUuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}${Math.random().toString(16).slice(2)}`;
+}
+
 function applyThemePreset(settings: ProgramSettings, presetId: string): ProgramSettings {
   const preset = themePresets.find((entry) => entry.id === presetId);
   if (!preset) return settings;
@@ -235,7 +242,7 @@ export default function ProgramSetupHubPage() {
   const wageCategoriesData = wageCategoriesQuery.data ?? [];
   const overtimeRulesQuery = useOvertimeRules(currentUser?.orgId);
   const overtimeRulesData = overtimeRulesQuery.data ?? [];
-  const languageOptionsQuery = useLanguageOptions();
+  const languageOptionsQuery = useLanguageOptions(currentUser?.orgId);
   const languageOptionsData = languageOptionsQuery.data ?? [];
   const propertiesQuery = useProperties(currentUser?.orgId);
   const propertiesData = propertiesQuery.data ?? [];
@@ -372,70 +379,71 @@ export default function ProgramSetupHubPage() {
   }
 
   async function saveStructures() {
-    for (const dept of departmentOptions) {
-      await supabase.from('departments').upsert({
-        id: dept.id,
-        name: dept.name,
-        org_id: currentUser?.orgId,
-        active: true,
-      });
+    const orgIdValue = currentUser?.orgId;
+    if (!orgIdValue) {
+      toast.error('Unable to save workforce structure without an active organization.');
+      return;
     }
-    for (const group of groupOptions) {
-      await supabase.from('employee_groups').upsert({
-        id: group.id,
-        name: group.name,
-        org_id: currentUser?.orgId,
-        active: true,
-      });
+    const syncActiveOptions = async (
+      table: 'departments' | 'employee_groups' | 'workforce_roles' | 'worker_types' | 'job_descriptions' | 'employment_statuses' | 'wage_categories' | 'overtime_rules',
+      currentOptions: Array<{ id: string; name: string }>,
+      existingOptions: Array<{ id: string; name: string }>,
+    ) => {
+      const cleaned = currentOptions
+        .map((entry) => ({ id: entry.id, name: entry.name.trim() }))
+        .filter((entry) => entry.id && entry.name.length > 0);
+      const currentIds = new Set(cleaned.map((entry) => entry.id));
+      const missingIds = existingOptions
+        .map((entry) => entry.id)
+        .filter((id) => !currentIds.has(id));
+
+      if (missingIds.length > 0) {
+        const { error } = await supabase
+          .from(table)
+          .update({ active: false })
+          .eq('org_id', orgIdValue)
+          .in('id', missingIds);
+        if (error) throw error;
+      }
+
+      for (const entry of cleaned) {
+        const { error } = await supabase.from(table).upsert({
+          id: entry.id,
+          name: entry.name,
+          org_id: orgIdValue,
+          active: true,
+        });
+        if (error) throw error;
+      }
+    };
+
+    try {
+      await syncActiveOptions('departments', departmentOptions, departmentOptionsData);
+      await syncActiveOptions('employee_groups', groupOptions, groupOptionsData);
+      await syncActiveOptions('workforce_roles', roleOptions, roleOptionsData);
+      await syncActiveOptions('worker_types', workerTypes, workerTypesData);
+      await syncActiveOptions('job_descriptions', jobDescriptions, jobDescriptionsData);
+      await syncActiveOptions('employment_statuses', employmentStatuses, employmentStatusesData);
+      await syncActiveOptions('wage_categories', wageCategories, wageCategoriesData);
+      await syncActiveOptions('overtime_rules', overtimeRules, overtimeRulesData);
+
+      const cleanedLanguages = languageOptions
+        .map((entry) => ({ id: entry.id, name: entry.name.trim() }))
+        .filter((entry) => entry.id && entry.name.length > 0);
+      for (const lang of cleanedLanguages) {
+        const { error } = await supabase.from('language_options').upsert({
+          id: lang.id,
+          name: lang.name,
+          org_id: orgIdValue,
+        });
+        if (error) throw error;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Could not save workforce structure', { description: message });
+      return;
     }
-    for (const role of roleOptions) {
-      await supabase.from('workforce_roles').upsert({
-        ...role,
-        org_id: currentUser?.orgId,
-        active: true,
-      });
-    }
-    for (const workerType of workerTypes) {
-      await supabase.from('worker_types').upsert({
-        ...workerType,
-        org_id: currentUser?.orgId,
-        active: true,
-      });
-    }
-    for (const jobDescription of jobDescriptions) {
-      await supabase.from('job_descriptions').upsert({
-        ...jobDescription,
-        org_id: currentUser?.orgId,
-        active: true,
-      });
-    }
-    for (const employmentStatus of employmentStatuses) {
-      await supabase.from('employment_statuses').upsert({
-        ...employmentStatus,
-        org_id: currentUser?.orgId,
-        active: true,
-      });
-    }
-    for (const wageCategory of wageCategories) {
-      await supabase.from('wage_categories').upsert({
-        ...wageCategory,
-        org_id: currentUser?.orgId,
-        active: true,
-      });
-    }
-    for (const overtimeRule of overtimeRules) {
-      await supabase.from('overtime_rules').upsert({
-        ...overtimeRule,
-        org_id: currentUser?.orgId,
-        active: true,
-      });
-    }
-    for (const lang of languageOptions) {
-      await supabase.from('language_options').upsert({
-        ...lang,
-        org_id: currentUser?.orgId,
-      });
-    }
+
     await queryClient.invalidateQueries({ queryKey: ['department-options'] });
     await queryClient.invalidateQueries({ queryKey: ['group-options'] });
     await queryClient.invalidateQueries({ queryKey: ['role-options'] });
@@ -701,6 +709,7 @@ export default function ProgramSetupHubPage() {
         typographyPresets={typographyPresets}
         weekDays={weekDays}
         makeId={makeId}
+        makeUuid={makeUuid}
         applyThemePreset={applyThemePreset}
         slugifyClubId={slugifyClubId}
         navGroups={navGroups}

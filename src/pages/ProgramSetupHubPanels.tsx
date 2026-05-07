@@ -78,6 +78,7 @@ type PanelsProps = {
   typographyPresets: { id: string; name: string }[];
   weekDays: string[];
   makeId: (prefix: string) => string;
+  makeUuid: () => string;
   applyThemePreset: (s: ProgramSettings, id: string) => ProgramSettings;
   slugifyClubId: (v: string) => string;
   navGroups: { label: string; items: { id: ActivePage; label: string; icon: typeof Settings }[] }[];
@@ -296,6 +297,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
     typographyPresets,
     weekDays,
     makeId,
+    makeUuid,
     applyThemePreset,
     slugifyClubId,
     navGroups,
@@ -1354,7 +1356,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">Departments</span>
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setDepartmentOptions((c) => [...c, { id: makeId('dep'), name: `Department ${c.length + 1}` }])}>
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => setDepartmentOptions((c) => [...c, { id: makeUuid(), name: `Department ${c.length + 1}` }])}>
                     <Plus className="h-3 w-3" /> Add
                   </Button>
                 </div>
@@ -1373,7 +1375,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">Crew groups</span>
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setGroupOptions((c) => [...c, { id: makeId('grp'), name: `Group ${c.length + 1}`, color: '#2f855a' }])}>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setGroupOptions((c) => [...c, { id: makeUuid(), name: `Group ${c.length + 1}`, color: '#2f855a' }])}>
                     <Plus className="h-3 w-3" /> Add
                   </Button>
                 </div>
@@ -1393,7 +1395,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-semibold">Roles</span>
-                <Button size="sm" variant="outline" className="gap-1" onClick={() => setRoleOptions((c) => [...c, { id: makeId('role'), name: `Role ${c.length + 1}` }])}>
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => setRoleOptions((c) => [...c, { id: makeUuid(), name: `Role ${c.length + 1}` }])}>
                   <Plus className="h-3 w-3" /> Add
                 </Button>
               </div>
@@ -1415,7 +1417,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-semibold">Worker Types</span>
-                <Button size="sm" variant="outline" className="gap-1" onClick={() => setWorkerTypes((c) => [...c, { id: makeId('wtype'), name: `Worker Type ${c.length + 1}` }])}>
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => setWorkerTypes((c) => [...c, { id: makeUuid(), name: `Worker Type ${c.length + 1}` }])}>
                   <Plus className="h-3 w-3" /> Add
                 </Button>
               </div>
@@ -1438,7 +1440,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">Job Descriptions</span>
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setJobDescriptions((c) => [...c, { id: makeId('jdesc'), name: `Job Description ${c.length + 1}` }])}>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setJobDescriptions((c) => [...c, { id: makeUuid(), name: `Job Description ${c.length + 1}` }])}>
                     <Plus className="h-3 w-3" /> Add
                   </Button>
                 </div>
@@ -1460,7 +1462,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">Employment Statuses</span>
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setEmploymentStatuses((c) => [...c, { id: makeId('estatus'), name: `Status ${c.length + 1}` }])}>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setEmploymentStatuses((c) => [...c, { id: makeUuid(), name: `Status ${c.length + 1}` }])}>
                     <Plus className="h-3 w-3" /> Add
                   </Button>
                 </div>
@@ -1484,7 +1486,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">Wage Categories</span>
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setWageCategories((c) => [...c, { id: makeId('wcat'), name: `Wage Category ${c.length + 1}` }])}>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setWageCategories((c) => [...c, { id: makeUuid(), name: `Wage Category ${c.length + 1}` }])}>
                     <Plus className="h-3 w-3" /> Add
                   </Button>
                 </div>
@@ -1506,7 +1508,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm font-semibold">Overtime Rules</span>
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setOvertimeRules((c) => [...c, { id: makeId('otrule'), name: `Overtime Rule ${c.length + 1}` }])}>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setOvertimeRules((c) => [...c, { id: makeUuid(), name: `Overtime Rule ${c.length + 1}` }])}>
                     <Plus className="h-3 w-3" /> Add
                   </Button>
                 </div>
@@ -1529,7 +1531,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-semibold">Languages</span>
-                <Button size="sm" variant="outline" className="gap-1" onClick={() => setLanguageOptions((c) => [...c, { id: makeId('lang'), name: `Language ${c.length + 1}` }])}>
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => setLanguageOptions((c) => [...c, { id: makeUuid(), name: `Language ${c.length + 1}` }])}>
                   <Plus className="h-3 w-3" /> Add
                 </Button>
               </div>

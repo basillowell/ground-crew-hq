@@ -60,6 +60,17 @@ function RouteFallback() {
   );
 }
 
+function PageRouteFallback() {
+  return (
+    <div className="p-6">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        Loading page...
+      </div>
+    </div>
+  );
+}
+
 class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; message: string }> {
   state = { hasError: false, message: "" };
 
@@ -108,7 +119,7 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { currentUser, isLoading, hasSession, authState, authDebugMessage, retryAuthHydration } = useAuth();
-  if (isLoading || authState === 'checking-session' || authState === 'loading-profile') return <RouteFallback />;
+  if (!currentUser && (isLoading || authState === "checking-session" || authState === "loading-profile")) return <RouteFallback />;
   if (!currentUser && hasSession) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(244,247,245,1))] p-4">
@@ -144,37 +155,39 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 function LandingRoute() {
   const { currentUser, isLoading, hasSession, authState } = useAuth();
-  if (isLoading || authState === 'checking-session' || authState === 'loading-profile') return <RouteFallback />;
+  if (!currentUser && (isLoading || authState === "checking-session" || authState === "loading-profile")) return <RouteFallback />;
   if (currentUser) return <Navigate to="/app/dashboard" replace />;
   if (hasSession) return <Navigate to="/app/dashboard" replace />;
-  return <LandingPage />;
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <LandingPage />
+    </Suspense>
+  );
 }
 
 function AppRoutes() {
   return (
-    <Suspense fallback={<RouteFallback />}>
-      <RouteErrorBoundary>
-        <AppLayout>
-          <Routes>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<CommandCenterPage />} />
-            <Route path="workboard" element={<WorkboardPage />} />
-            <Route path="employees" element={<EmployeesPage />} />
-            <Route path="scheduler" element={<SchedulerPage />} />
-            <Route path="equipment" element={<EquipmentPage />} />
-            <Route path="breakroom" element={<BreakroomPage />} />
-            <Route path="weather" element={<WeatherPage />} />
-            <Route path="applications" element={<ApplicationsPage />} />
-            <Route path="messaging" element={<MessagingPage />} />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="tasks" element={<TasksPage />} />
-            <Route path="safety" element={<SafetyPage />} />
-            <Route path="settings" element={<ProgramSetupHubPage />} />
-            <Route path="field" element={<MobileFieldPage />} />
-          </Routes>
-        </AppLayout>
-      </RouteErrorBoundary>
-    </Suspense>
+    <RouteErrorBoundary>
+      <AppLayout>
+        <Routes>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<Suspense fallback={<PageRouteFallback />}><CommandCenterPage /></Suspense>} />
+          <Route path="workboard" element={<Suspense fallback={<PageRouteFallback />}><WorkboardPage /></Suspense>} />
+          <Route path="employees" element={<Suspense fallback={<PageRouteFallback />}><EmployeesPage /></Suspense>} />
+          <Route path="scheduler" element={<Suspense fallback={<PageRouteFallback />}><SchedulerPage /></Suspense>} />
+          <Route path="equipment" element={<Suspense fallback={<PageRouteFallback />}><EquipmentPage /></Suspense>} />
+          <Route path="breakroom" element={<Suspense fallback={<PageRouteFallback />}><BreakroomPage /></Suspense>} />
+          <Route path="weather" element={<Suspense fallback={<PageRouteFallback />}><WeatherPage /></Suspense>} />
+          <Route path="applications" element={<Suspense fallback={<PageRouteFallback />}><ApplicationsPage /></Suspense>} />
+          <Route path="messaging" element={<Suspense fallback={<PageRouteFallback />}><MessagingPage /></Suspense>} />
+          <Route path="reports" element={<Suspense fallback={<PageRouteFallback />}><ReportsPage /></Suspense>} />
+          <Route path="tasks" element={<Suspense fallback={<PageRouteFallback />}><TasksPage /></Suspense>} />
+          <Route path="safety" element={<Suspense fallback={<PageRouteFallback />}><SafetyPage /></Suspense>} />
+          <Route path="settings" element={<ProgramSetupHubPage />} />
+          <Route path="field" element={<Suspense fallback={<PageRouteFallback />}><MobileFieldPage /></Suspense>} />
+        </Routes>
+      </AppLayout>
+    </RouteErrorBoundary>
   );
 }
 
@@ -195,11 +208,11 @@ function AppWithNotificationSetup() {
     const messagesChannel = supabase
       .channel(`app-notify-messages-${currentUser.appUserId}`)
       .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `recipient_id=eq.${currentUser.authUser.id}` },
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${currentUser.authUser.id}` },
         (payload) => {
           const next = payload.new as { subject?: string | null; body?: string | null };
-          sendNotification('New message received', next.subject || next.body || 'Open Messaging to view the latest message.', '/app/messaging');
+          sendNotification("New message received", next.subject || next.body || "Open Messaging to view the latest message.", "/app/messaging");
         },
       )
       .subscribe();
@@ -207,10 +220,10 @@ function AppWithNotificationSetup() {
     const scheduleChannel = supabase
       .channel(`app-notify-schedule-${currentUser.employeeId}`)
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'schedule_entries', filter: `employee_id=eq.${currentUser.employeeId}` },
+        "postgres_changes",
+        { event: "*", schema: "public", table: "schedule_entries", filter: `employee_id=eq.${currentUser.employeeId}` },
         () => {
-          sendNotification('Schedule updated', 'Your shift schedule changed. Open Scheduler to review.', '/app/scheduler');
+          sendNotification("Schedule updated", "Your shift schedule changed. Open Scheduler to review.", "/app/scheduler");
         },
       )
       .subscribe();
@@ -218,10 +231,10 @@ function AppWithNotificationSetup() {
     const assignmentsChannel = supabase
       .channel(`app-notify-assignments-${currentUser.employeeId}`)
       .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'assignments', filter: `employee_id=eq.${currentUser.employeeId}` },
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "assignments", filter: `employee_id=eq.${currentUser.employeeId}` },
         () => {
-          sendNotification('New task assigned', 'A new task was assigned to you. Open Workflow to review.', '/app/workboard');
+          sendNotification("New task assigned", "A new task was assigned to you. Open Workflow to review.", "/app/workboard");
         },
       )
       .subscribe();
@@ -238,20 +251,18 @@ function AppWithNotificationSetup() {
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/" element={<LandingRoute />} />
-            <Route
-              path="/app/*"
-              element={(
-                <ProtectedRoute>
-                  <AppRoutes />
-                </ProtectedRoute>
-              )}
-            />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
+        <Routes>
+          <Route path="/" element={<LandingRoute />} />
+          <Route
+            path="/app/*"
+            element={(
+              <ProtectedRoute>
+                <AppRoutes />
+              </ProtectedRoute>
+            )}
+          />
+          <Route path="*" element={<Suspense fallback={<RouteFallback />}><NotFound /></Suspense>} />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   );
@@ -266,7 +277,7 @@ export default function App() {
         dehydrateOptions: {
           shouldDehydrateQuery: (query) =>
             Array.isArray(query.queryKey) &&
-            ['assignments', 'schedule-entries', 'clock-events', 'properties', 'tasks', 'employees'].includes(String(query.queryKey[0])),
+            ["assignments", "schedule-entries", "clock-events", "properties", "tasks", "employees"].includes(String(query.queryKey[0])),
         },
       }}
     >

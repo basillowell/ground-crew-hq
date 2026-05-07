@@ -231,6 +231,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthContextValue['authState']>('checking-session');
   const retryHydrationRef = useRef<() => Promise<void>>(async () => {});
   const currentAuthUserIdRef = useRef<string | null>(null);
+  const currentUserRef = useRef<AuthProfile | null>(null);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   useEffect(() => {
     if (!supabase) {
@@ -242,12 +247,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let mounted = true;
 
-    async function hydrateAuth(userOverride?: User | null) {
+    async function hydrateAuth(userOverride?: User | null, options?: { blockUi?: boolean }) {
+      const shouldBlockUi = options?.blockUi ?? !currentUserRef.current;
       if (isDev) {
         console.info('[Auth] Starting initial auth hydration');
       }
-      setIsLoading(true);
-      setAuthState('checking-session');
+      if (shouldBlockUi) {
+        setIsLoading(true);
+        setAuthState('checking-session');
+      }
       try {
         const sessionUser =
           typeof userOverride === 'undefined'
@@ -271,7 +279,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!mounted) return;
         setHasSession(true);
-        setAuthState('loading-profile');
+        if (shouldBlockUi) {
+          setAuthState('loading-profile');
+        }
 
         const profileResult = await Promise.race([
           loadAuthProfile(sessionUser),
@@ -283,16 +293,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ]);
         if (!mounted) return;
         if (!profileResult.profile && profileResult.debugMessage.includes('timed out')) {
-          setCurrentUser(null);
+          if (!currentUserRef.current) {
+            setCurrentUser(null);
+          }
           setAuthDebugMessage(profileResult.debugMessage);
           setAuthState('network-timeout');
           return;
         }
 
-        setCurrentUser(profileResult.profile);
-        currentAuthUserIdRef.current = profileResult.profile?.authUser.id ?? null;
+        if (profileResult.profile) {
+          setCurrentUser(profileResult.profile);
+          currentAuthUserIdRef.current = profileResult.profile.authUser.id;
+        } else if (!currentUserRef.current) {
+          setCurrentUser(null);
+          currentAuthUserIdRef.current = null;
+        }
         setAuthDebugMessage(profileResult.debugMessage);
-        if (profileResult.profile) setAuthState('authenticated');
+        if (profileResult.profile || currentUserRef.current) setAuthState('authenticated');
         else if (profileResult.reason === 'missing-app-user' || profileResult.reason === 'missing-employee' || profileResult.reason === 'missing-organization') setAuthState('profile-missing');
         else setAuthState('profile-error');
         setCurrentPropertyIdState((current) => {
@@ -305,13 +322,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error('[Auth] Initial auth hydration failed', error);
         }
         if (!mounted) return;
-        setCurrentUser(null);
-        setCurrentPropertyIdState('');
-        currentAuthUserIdRef.current = null;
+        if (!currentUserRef.current) {
+          setCurrentUser(null);
+          setCurrentPropertyIdState('');
+          currentAuthUserIdRef.current = null;
+        }
         setAuthDebugMessage(`Could not connect to ${getSupabaseProjectLabel()}. Please try again.`);
         setAuthState('profile-error');
       } finally {
-        if (mounted) {
+        if (mounted && shouldBlockUi) {
           setIsLoading(false);
           if (isDev) {
             console.info('[Auth] Initial auth hydration finished');
@@ -320,9 +339,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    void hydrateAuth();
+    void hydrateAuth(undefined, { blockUi: true });
     retryHydrationRef.current = async () => {
-      await hydrateAuth();
+      await hydrateAuth(undefined, { blockUi: true });
     };
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -343,7 +362,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      await hydrateAuth(session?.user ?? null);
+      await hydrateAuth(session?.user ?? null, { blockUi: !currentUserRef.current });
       if (isDev) {
         console.info('[Auth] Auth state processing finished');
       }

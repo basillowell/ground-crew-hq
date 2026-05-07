@@ -268,7 +268,7 @@ type DbWorkforceRole = {
   description?: string | null;
   active?: boolean | null;
 };
-type DbLanguageOption = { id: string; name: string };
+type DbLanguageOption = { id: string; org_id?: string | null; name: string };
 type DbShiftTemplate = {
   id: string;
   org_id?: string | null;
@@ -987,9 +987,17 @@ async function fetchRoleOptions(orgId?: string): Promise<RoleOption[]> {
     .filter((row) => row.name && row.name.trim().length > 0);
 }
 
-async function fetchLanguageOptions(): Promise<LanguageOption[]> {
+async function fetchLanguageOptions(orgId?: string): Promise<LanguageOption[]> {
+  const client = ensureSupabase();
+  let query = client.from('language_options').select('id, org_id, name').order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  const { data, error } = await query;
+  if (!error) {
+    return ((data as DbLanguageOption[]) ?? []).map((row) => ({ id: row.id, name: row.name }));
+  }
   const rows = await fetchOptionalRows<DbLanguageOption>('language_options', 'name');
-  return rows.map((row) => ({ id: row.id, name: row.name }));
+  const filtered = orgId ? rows.filter((row) => row.org_id === orgId) : rows;
+  return filtered.map((row) => ({ id: row.id, name: row.name }));
 }
 
 async function fetchShiftTemplates(orgId?: string): Promise<ShiftTemplate[]> {
@@ -1341,10 +1349,10 @@ export function useRoleOptions(orgId?: string) {
   });
 }
 
-export function useLanguageOptions() {
+export function useLanguageOptions(orgId?: string) {
   return useQuery({
-    queryKey: ['language-options'],
-    queryFn: fetchLanguageOptions,
+    queryKey: ['language-options', orgId ?? 'all-orgs'],
+    queryFn: () => fetchLanguageOptions(orgId),
     staleTime: 1000 * 60 * 10,
   });
 }
