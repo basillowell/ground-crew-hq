@@ -107,10 +107,47 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { currentUser, isLoading } = useAuth();
-  if (isLoading) return <RouteFallback />;
+  const { currentUser, isLoading, hasSession, authState, authDebugMessage, retryAuthHydration } = useAuth();
+  if (isLoading || authState === 'checking-session' || authState === 'loading-profile') return <RouteFallback />;
+  if (!currentUser && hasSession) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(244,247,245,1))] p-4">
+        <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="text-lg font-semibold">Loading workspace profile</div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your session is valid, but profile loading did not complete yet.
+          </p>
+          {authDebugMessage ? (
+            <p className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{authDebugMessage}</p>
+          ) : null}
+          <div className="mt-4 flex gap-2">
+            <button
+              className="h-10 rounded-md border px-4 text-sm"
+              onClick={() => void retryAuthHydration()}
+            >
+              Retry profile load
+            </button>
+            <button
+              className="h-10 rounded-md bg-primary px-4 text-sm text-primary-foreground"
+              onClick={() => window.location.reload()}
+            >
+              Refresh app
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!currentUser) return <Navigate to="/" replace />;
   return <>{children}</>;
+}
+
+function LandingRoute() {
+  const { currentUser, isLoading, hasSession, authState } = useAuth();
+  if (isLoading || authState === 'checking-session' || authState === 'loading-profile') return <RouteFallback />;
+  if (currentUser) return <Navigate to="/app/dashboard" replace />;
+  if (hasSession) return <RouteFallback />;
+  return <LandingPage />;
 }
 
 function AppRoutes() {
@@ -203,7 +240,7 @@ function AppWithNotificationSetup() {
       <BrowserRouter>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-            <Route path="/" element={<LandingPage />} />
+            <Route path="/" element={<LandingRoute />} />
             <Route
               path="/app/*"
               element={(

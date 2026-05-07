@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
-  const { currentUser, authDebugMessage, isLoading } = useAuth();
+  const { currentUser, authDebugMessage, isLoading, authState, hasSession, retryAuthHydration } = useAuth();
   const programSettingsQuery = useProgramSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,6 +42,7 @@ export default function LaunchPortalPage() {
       if (import.meta.env.DEV) {
         console.warn('[Login] Sign-in succeeded but app profile hydration failed', {
           authDebugMessage,
+          authState,
         });
       }
       setIsAwaitingProfile(false);
@@ -52,7 +53,7 @@ export default function LaunchPortalPage() {
         setErrorMessage('Sign-in completed, but your app profile could not be loaded.');
       }
     }
-  }, [authDebugMessage, currentUser, isAwaitingProfile, isLoading, navigate]);
+  }, [authDebugMessage, authState, currentUser, isAwaitingProfile, isLoading, navigate]);
 
   useEffect(() => {
     if (!hasSupabaseConfig) {
@@ -199,6 +200,13 @@ export default function LaunchPortalPage() {
               {!errorMessage && authDebugMessage ? (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950">
                   {authDebugMessage}
+                  {hasSession && (authState === 'network-timeout' || authState === 'profile-error' || authState === 'profile-missing') ? (
+                    <div className="mt-2">
+                      <Button type="button" size="sm" variant="outline" onClick={() => void retryAuthHydration()}>
+                        Retry profile load
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <Button className="w-full gap-2" disabled={isSubmitting || !email || !password || !hasSupabaseConfig} type="submit">

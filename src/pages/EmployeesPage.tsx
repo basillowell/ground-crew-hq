@@ -24,6 +24,7 @@ import {
   useRoleOptions,
   useScheduleEntries,
   useShiftTemplates,
+  useWorkerTypes,
   useWorkLocations,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
@@ -324,13 +325,14 @@ export default function EmployeesPage() {
 
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
   const appUsersQuery = useAppUsers(currentUser?.orgId);
-  const departmentOptionsQuery = useDepartmentOptions();
-  const groupOptionsQuery = useGroupOptions();
-  const roleOptionsQuery = useRoleOptions();
+  const departmentOptionsQuery = useDepartmentOptions(currentUser?.orgId);
+  const groupOptionsQuery = useGroupOptions(currentUser?.orgId);
+  const roleOptionsQuery = useRoleOptions(currentUser?.orgId);
+  const workerTypesQuery = useWorkerTypes(currentUser?.orgId);
   const languageOptionsQuery = useLanguageOptions();
   const propertiesQuery = useProperties(currentUser?.orgId);
-  const workLocationsQuery = useWorkLocations();
-  const shiftTemplatesQuery = useShiftTemplates();
+  const workLocationsQuery = useWorkLocations(propertyScope, currentUser?.orgId);
+  const shiftTemplatesQuery = useShiftTemplates(currentUser?.orgId);
   const scheduleEntriesQuery = useScheduleEntries(todayKey, propertyScope, currentUser?.orgId);
   const assignmentsQuery = useAssignments(todayKey, propertyScope, currentUser?.orgId);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, currentUser?.orgId);
@@ -340,7 +342,43 @@ export default function EmployeesPage() {
   const appUsers = appUsersQuery.data ?? [];
   const departmentOptions = departmentOptionsQuery.data ?? [];
   const groupOptions = groupOptionsQuery.data ?? [];
+  const departmentOptionsForDropdown = useMemo(() => {
+    if (departmentOptions.length > 0) return departmentOptions;
+    const derived = [...new Set(employeeList.map((employee) => employee.department).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name, index) => ({ id: `derived-department-${index}`, name }));
+    if (derived.length > 0) return derived;
+    return [{ id: 'fallback-department-default', name: 'Maintenance' }];
+  }, [departmentOptions, employeeList]);
+  const groupOptionsForDropdown = useMemo(() => {
+    if (groupOptions.length > 0) return groupOptions;
+    const derived = [...new Set(employeeList.map((employee) => employee.group).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name, index) => ({ id: `derived-group-${index}`, name, color: 'hsl(var(--primary))' }));
+    if (derived.length > 0) return derived;
+    return [{ id: 'fallback-group-default', name: 'General', color: 'hsl(var(--primary))' }];
+  }, [employeeList, groupOptions]);
   const roleOptions = roleOptionsQuery.data ?? [];
+  const roleOptionsForDropdown = useMemo(() => {
+    const configured = roleOptions
+      .map((role) => ({ id: role.id, name: role.name?.trim() ?? '' }))
+      .filter((role) => role.name.length > 0);
+    if (configured.length > 0) return configured;
+    const derived = [...new Set(employeeList.map((employee) => employee.role).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name, index) => ({ id: `derived-role-${index}`, name }));
+    if (derived.length > 0) return derived;
+    return [{ id: 'fallback-role-operator', name: 'Operator' }];
+  }, [employeeList, roleOptions]);
+  const workerTypeOptionsForDropdown = useMemo(() => {
+    const configured = (workerTypesQuery.data ?? [])
+      .map((workerType) => workerType.name?.trim() ?? '')
+      .filter((name) => name.length > 0);
+    if (configured.length > 0) return configured;
+    const derived = [...new Set(employeeList.map((employee) => String(employee.workerType)).filter(Boolean))];
+    if (derived.length > 0) return derived;
+    return ['full-time'];
+  }, [employeeList, workerTypesQuery.data]);
   const languageOptions = languageOptionsQuery.data ?? [];
   const properties = propertiesQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
@@ -375,18 +413,36 @@ export default function EmployeesPage() {
     appRole: 'crew' as AppUser['role'],
   });
 
+  const departmentIdByName = useMemo(
+    () => new Map(departmentOptionsForDropdown.map((department) => [department.name, department.id])),
+    [departmentOptionsForDropdown],
+  );
+  const groupIdByName = useMemo(
+    () => new Map(groupOptionsForDropdown.map((group) => [group.name, group.id])),
+    [groupOptionsForDropdown],
+  );
+  const roleIdByName = useMemo(
+    () => new Map(roleOptionsForDropdown.map((role) => [role.name, role.id])),
+    [roleOptionsForDropdown],
+  );
+  const workerTypeIdByName = useMemo(
+    () => new Map((workerTypesQuery.data ?? []).map((workerType) => [workerType.name, workerType.id])),
+    [workerTypesQuery.data],
+  );
+
   useEffect(() => {
     setDraft((current) => ({
       ...current,
-      department: current.department || departmentOptions[0]?.name || '',
-      group: current.group || groupOptions[0]?.name || '',
-      role: current.role || roleOptions[0]?.name || '',
+      department: current.department || departmentOptionsForDropdown[0]?.name || '',
+      group: current.group || groupOptionsForDropdown[0]?.name || '',
+      role: current.role || roleOptionsForDropdown[0]?.name || '',
       language: current.language || languageOptions[0]?.name || '',
+      workerType: current.workerType || (workerTypeOptionsForDropdown[0] as Employee['workerType']) || 'full-time',
       propertyId: current.propertyId || properties[0]?.id || '',
       defaultLocationId: current.defaultLocationId || workLocations[0]?.id || '',
       shiftTemplateId: current.shiftTemplateId || shiftTemplates[0]?.id || '',
     }));
-  }, [departmentOptions, groupOptions, roleOptions, languageOptions, properties, workLocations, shiftTemplates]);
+  }, [departmentOptionsForDropdown, groupOptionsForDropdown, roleOptionsForDropdown, workerTypeOptionsForDropdown, languageOptions, properties, workLocations, shiftTemplates]);
 
   const departments = useMemo(
     () => {
@@ -438,22 +494,42 @@ export default function EmployeesPage() {
     };
   }, [selected, scheduleEntries, assignments, equipmentUnits, applicationLogs]);
 
+  function nullableUuid(value?: string) {
+    const normalized = value?.trim();
+    return normalized ? normalized : null;
+  }
+
   async function persist(nextEmployees: Employee[]) {
     for (const emp of nextEmployees) {
-      await supabase.from('employees').upsert({
+      const payload = {
         id: emp.id,
-        first_name: emp.firstName,
-        last_name: emp.lastName,
-        role: emp.role,
-        department: emp.department,
+        first_name: emp.firstName.trim(),
+        last_name: emp.lastName.trim(),
+        property_id: nullableUuid(emp.propertyId ?? (currentPropertyId === 'all' ? properties[0]?.id : currentPropertyId)),
+        group_id: nullableUuid(groupIdByName.get(emp.group)),
+        group_name: emp.group.trim() || null,
+        role_id: nullableUuid(roleIdByName.get(emp.role)),
+        role: emp.role.trim() || 'Operator',
+        hourly_rate: Number.isFinite(emp.wage) ? Number(emp.wage) : 0,
+        department_id: nullableUuid(departmentIdByName.get(emp.department)),
+        department: emp.department.trim() || 'Maintenance',
+        phone: emp.phone?.trim() ? emp.phone.trim() : null,
+        email: emp.email?.trim() ? emp.email.trim() : null,
+        language: emp.language?.trim() ? emp.language.trim() : null,
+        worker_type_id: nullableUuid(workerTypeIdByName.get(String(emp.workerType))),
+        worker_type: String(emp.workerType || '').trim() || null,
+        default_location_id: nullableUuid(emp.defaultLocationId),
+        preferred_shift_template_id: nullableUuid(emp.shiftTemplateId),
+        portal_enabled: Boolean(emp.portalEnabled),
+        login_email: emp.loginEmail?.trim() ? emp.loginEmail.trim() : null,
         status: emp.status,
-        phone: emp.phone ?? null,
-        email: emp.email ?? null,
-        property_id: emp.propertyId ?? currentPropertyId,
         org_id: currentUser?.orgId,
-      })
+      };
+      const { error } = await supabase.from('employees').upsert(payload);
+      if (error) throw error;
     }
-    await queryClient.invalidateQueries({ queryKey: ['employees'] })
+    await queryClient.invalidateQueries({ queryKey: ['employees'] });
+    await employeesQuery.refetch();
   }
 
   function buildDefaultDraft() {
@@ -461,14 +537,14 @@ export default function EmployeesPage() {
       firstName: '',
       lastName: '',
       propertyId: properties[0]?.id ?? '',
-      group: groupOptions[0]?.name ?? '',
-      role: roleOptions[0]?.name ?? '',
+      group: groupOptionsForDropdown[0]?.name ?? '',
+      role: roleOptionsForDropdown[0]?.name ?? '',
       wage: '18',
       phone: '',
       email: '',
       language: languageOptions[0]?.name ?? '',
-      workerType: 'full-time' as Employee['workerType'],
-      department: departmentOptions[0]?.name ?? '',
+      workerType: (workerTypeOptionsForDropdown[0] as Employee['workerType']) ?? 'full-time',
+      department: departmentOptionsForDropdown[0]?.name ?? '',
       defaultLocationId: workLocations[0]?.id ?? '',
       shiftTemplateId: shiftTemplates[0]?.id ?? '',
       portalEnabled: false,
@@ -512,9 +588,17 @@ export default function EmployeesPage() {
       appRole: draft.appRole,
     };
 
-    await persist([nextEmployee, ...employeeList]);
-    setDialogOpen(false);
-    setDraft(buildDefaultDraft());
+    try {
+      await persist([nextEmployee, ...employeeList]);
+      setDialogOpen(false);
+      setDraft(buildDefaultDraft());
+      toast('Employee saved', {
+        description: `${nextEmployee.firstName} ${nextEmployee.lastName} was added and is now available in the roster.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Could not save employee', { description: message });
+    }
   }
 
   async function handleStatusToggle(employeeId: string) {
@@ -523,8 +607,14 @@ export default function EmployeesPage() {
         ? { ...employee, status: (employee.status === 'active' ? 'inactive' : 'active') as 'active' | 'inactive' }
         : employee,
     );
-    await persist(nextEmployees);
-    setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
+    try {
+      await persist(nextEmployees);
+      setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
+      toast('Employee updated', { description: 'Status change saved.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Could not update employee', { description: message });
+    }
   }
 
   async function handleDeleteEmployee(employeeId: string) {
@@ -566,8 +656,14 @@ export default function EmployeesPage() {
 
   async function handleSavePortalAccess(employeeId: string, updates: Partial<Employee>) {
     const nextEmployees = employeeList.map((employee) => (employee.id === employeeId ? { ...employee, ...updates } : employee));
-    await persist(nextEmployees);
-    setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
+    try {
+      await persist(nextEmployees);
+      setSelected(nextEmployees.find((employee) => employee.id === employeeId) ?? null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Could not save portal access', { description: message });
+      return;
+    }
 
     const employee = nextEmployees.find((entry) => entry.id === employeeId);
     if (!employee) return;
@@ -748,7 +844,7 @@ export default function EmployeesPage() {
                 onChange={(event) => setDraft({ ...draft, group: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {groupOptions.map((group) => (
+                {groupOptionsForDropdown.map((group) => (
                   <option key={group.id} value={group.name}>{group.name}</option>
                 ))}
               </select>
@@ -760,7 +856,7 @@ export default function EmployeesPage() {
                 onChange={(event) => setDraft({ ...draft, role: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {roleOptions.map((role) => (
+                {roleOptionsForDropdown.map((role) => (
                   <option key={role.id} value={role.name}>{role.name}</option>
                 ))}
               </select>
@@ -776,7 +872,7 @@ export default function EmployeesPage() {
                 onChange={(event) => setDraft({ ...draft, department: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                {departmentOptions.map((department) => (
+                {departmentOptionsForDropdown.map((department) => (
                   <option key={department.id} value={department.name}>{department.name}</option>
                 ))}
               </select>
@@ -808,9 +904,9 @@ export default function EmployeesPage() {
                 onChange={(event) => setDraft({ ...draft, workerType: event.target.value as Employee['workerType'] })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="full-time">Full-time</option>
-                <option value="part-time">Part-time</option>
-                <option value="seasonal">Seasonal</option>
+                {workerTypeOptionsForDropdown.map((workerType) => (
+                  <option key={workerType} value={workerType}>{workerType}</option>
+                ))}
               </select>
             </div>
             <div>

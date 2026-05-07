@@ -45,11 +45,23 @@ type DbProperty = {
 type DbEmployee = {
   id: string;
   org_id?: string | null;
-  property_id: string;
+  property_id: string | null;
   first_name: string;
   last_name: string;
   role: string;
   department: string;
+  group_name?: string | null;
+  role_id?: string | null;
+  group_id?: string | null;
+  department_id?: string | null;
+  worker_type?: string | null;
+  worker_type_id?: string | null;
+  language?: string | null;
+  hourly_rate?: number | null;
+  default_location_id?: string | null;
+  preferred_shift_template_id?: string | null;
+  portal_enabled?: boolean | null;
+  login_email?: string | null;
   status: string;
   phone: string | null;
   email: string | null;
@@ -156,6 +168,12 @@ type DbProgramSettings = {
   font_theme_preset: string;
   logo_url: string | null;
   default_department: string;
+  weather_default_location_name?: string | null;
+  weather_default_address?: string | null;
+  weather_default_latitude?: number | null;
+  weather_default_longitude?: number | null;
+  weather_preferred_provider?: string | null;
+  weather_enabled_panels?: string[] | null;
   created_at: string;
 };
 
@@ -232,11 +250,29 @@ type DbWeatherDailyLog = {
   notes?: string | null;
 };
 
-type DbDepartmentOption = { id: string; name: string };
-type DbGroupOption = { id: string; name: string; color?: string | null };
+type DbDepartmentOption = { id: string; org_id?: string | null; name: string; active?: boolean | null };
+type DbGroupOption = { id: string; org_id?: string | null; name: string; color?: string | null; active?: boolean | null };
 type DbRoleOption = { id: string; name: string };
+type DbWorkforceRole = {
+  id: string;
+  org_id?: string | null;
+  name: string;
+  description?: string | null;
+  active?: boolean | null;
+};
 type DbLanguageOption = { id: string; name: string };
-type DbShiftTemplate = { id: string; name: string; start: string; end: string; days: string[] | null };
+type DbShiftTemplate = {
+  id: string;
+  org_id?: string | null;
+  name: string;
+  start?: string | null;
+  end?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  days: string[] | null;
+  active?: boolean | null;
+};
+type DbWorkerType = { id: string; org_id?: string | null; name: string; active?: boolean | null };
 type DbApplicationArea = {
   id: string;
   name: string;
@@ -388,7 +424,7 @@ function toProperty(row: DbProperty): Property {
 function toEmployee(row: DbEmployee): Employee {
   return {
     id: row.id,
-    propertyId: row.property_id,
+    propertyId: row.property_id ?? undefined,
     firstName: row.first_name,
     lastName: row.last_name,
     role: row.role,
@@ -396,12 +432,16 @@ function toEmployee(row: DbEmployee): Employee {
     status: (row.status as Employee['status']) ?? 'active',
     phone: row.phone ?? '',
     email: row.email ?? '',
-    group: row.department || 'General',
-    wage: 0,
+    group: row.group_name ?? row.department ?? 'General',
+    wage: Number(row.hourly_rate ?? 0),
     photo: '',
-    language: 'English',
-    workerType: 'full-time',
+    language: row.language ?? 'English',
+    workerType: (row.worker_type as Employee['workerType']) ?? 'full-time',
     hireDate: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    defaultLocationId: row.default_location_id ?? undefined,
+    shiftTemplateId: row.preferred_shift_template_id ?? undefined,
+    portalEnabled: row.portal_enabled ?? false,
+    loginEmail: row.login_email ?? undefined,
   };
 }
 
@@ -507,6 +547,12 @@ function toProgramSettings(row: DbProgramSettings): ProgramSettings {
     sidebarColor: row.sidebar_color,
     fontThemePreset: row.font_theme_preset,
     defaultDepartment: row.default_department,
+    weatherDefaultLocationName: row.weather_default_location_name ?? undefined,
+    weatherDefaultAddress: row.weather_default_address ?? undefined,
+    weatherDefaultLatitude: row.weather_default_latitude ?? undefined,
+    weatherDefaultLongitude: row.weather_default_longitude ?? undefined,
+    weatherPreferredProvider: row.weather_preferred_provider ?? undefined,
+    weatherEnabledPanels: row.weather_enabled_panels ?? undefined,
     timeZone: 'America/New_York',
     fiscalYearStart: '01-01',
     enableMobileApp: true,
@@ -876,19 +922,52 @@ async function fetchWeatherDailyLogsByIds(ids: string[]): Promise<WeatherDailyLo
   return ((data as DbWeatherDailyLog[]) ?? []).map(toWeatherDailyLog);
 }
 
-async function fetchDepartmentOptions(): Promise<DepartmentOption[]> {
+async function fetchDepartmentOptions(orgId?: string): Promise<DepartmentOption[]> {
+  const client = ensureSupabase();
+  let query = client.from('departments').select('id, name, active, org_id').order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  query = query.eq('active', true);
+  const next = await query;
+  if (!next.error) {
+    return ((next.data as DbDepartmentOption[]) ?? []).map((row) => ({ id: row.id, name: row.name }));
+  }
   const rows = await fetchOptionalRows<DbDepartmentOption>('department_options', 'name');
   return rows.map((row) => ({ id: row.id, name: row.name }));
 }
 
-async function fetchGroupOptions(): Promise<GroupOption[]> {
+async function fetchGroupOptions(orgId?: string): Promise<GroupOption[]> {
+  const client = ensureSupabase();
+  let query = client.from('employee_groups').select('id, name, active, org_id').order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  query = query.eq('active', true);
+  const next = await query;
+  if (!next.error) {
+    return ((next.data as DbGroupOption[]) ?? []).map((row) => ({ id: row.id, name: row.name, color: 'hsl(var(--primary))' }));
+  }
   const rows = await fetchOptionalRows<DbGroupOption>('group_options', 'name');
   return rows.map((row) => ({ id: row.id, name: row.name, color: row.color ?? 'hsl(var(--primary))' }));
 }
 
-async function fetchRoleOptions(): Promise<RoleOption[]> {
-  const rows = await fetchOptionalRows<DbRoleOption>('role_options', 'name');
-  return rows.map((row) => ({ id: row.id, name: row.name }));
+async function fetchRoleOptions(orgId?: string): Promise<RoleOption[]> {
+  const client = ensureSupabase();
+  let query = client.from('workforce_roles').select('id, name, active, org_id').order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  query = query.eq('active', true);
+  let { data, error } = await query;
+  if (error) {
+    let fallbackQuery = client.from('role_options').select('*').order('name');
+    if (orgId) fallbackQuery = fallbackQuery.eq('org_id', orgId);
+    const fallback = await fallbackQuery;
+    if (fallback.error) return [];
+    const rows = (fallback.data ?? []) as DbRoleOption[];
+    return rows
+      .map((row) => ({ id: row.id, name: row.name }))
+      .filter((row) => row.name && row.name.trim().length > 0);
+  }
+  const rows = (data ?? []) as DbWorkforceRole[];
+  return rows
+    .map((row) => ({ id: row.id, name: row.name }))
+    .filter((row) => row.name && row.name.trim().length > 0);
 }
 
 async function fetchLanguageOptions(): Promise<LanguageOption[]> {
@@ -896,9 +975,44 @@ async function fetchLanguageOptions(): Promise<LanguageOption[]> {
   return rows.map((row) => ({ id: row.id, name: row.name }));
 }
 
-async function fetchShiftTemplates(): Promise<ShiftTemplate[]> {
+async function fetchShiftTemplates(orgId?: string): Promise<ShiftTemplate[]> {
+  const client = ensureSupabase();
+  let query = client
+    .from('shift_templates')
+    .select('id, name, start, "end", start_time, end_time, days, active, org_id')
+    .order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  let { data, error } = await query;
+  if (!error) {
+    return ((data as DbShiftTemplate[]) ?? [])
+      .filter((row) => row.active ?? true)
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        start: String(row.start_time ?? row.start ?? '06:00').slice(0, 5),
+        end: String(row.end_time ?? row.end ?? '14:30').slice(0, 5),
+        days: row.days ?? [],
+      }));
+  }
   const rows = await fetchOptionalRows<DbShiftTemplate>('shift_templates', 'name');
-  return rows.map((row) => ({ id: row.id, name: row.name, start: row.start, end: row.end, days: row.days ?? [] }));
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    start: String(row.start_time ?? row.start ?? '06:00').slice(0, 5),
+    end: String(row.end_time ?? row.end ?? '14:30').slice(0, 5),
+    days: row.days ?? [],
+  }));
+}
+
+async function fetchWorkerTypes(orgId?: string): Promise<Array<{ id: string; name: string }>> {
+  const client = ensureSupabase();
+  let query = client.from('worker_types').select('id, name, active, org_id').order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  query = query.eq('active', true);
+  const { data, error } = await query;
+  if (error) return [];
+  const rows = (data as DbWorkerType[]) ?? [];
+  return rows.map((row) => ({ id: row.id, name: row.name }));
 }
 
 async function fetchChemicalApplicationLogFieldsForDate(
@@ -1126,10 +1240,16 @@ export function usePropertyClassOptions() {
   });
 }
 
-export function useWorkLocations() {
+export function useWorkLocations(propertyId?: string, orgId?: string) {
   return useQuery({
-    queryKey: ['work-locations'],
-    queryFn: fetchWorkLocations,
+    queryKey: ['work-locations', propertyId ?? 'all', orgId ?? 'all-orgs'],
+    queryFn: async () => {
+      const locations = await fetchWorkLocations();
+      return locations.filter((location) => {
+        const propertyMatch = !propertyId || propertyId === 'all' || location.propertyId === propertyId;
+        return propertyMatch;
+      });
+    },
     staleTime: 1000 * 60 * 10,
   });
 }
@@ -1169,26 +1289,26 @@ export function useWeatherDailyLogsByIds(ids: string[]) {
   });
 }
 
-export function useDepartmentOptions() {
+export function useDepartmentOptions(orgId?: string) {
   return useQuery({
-    queryKey: ['department-options'],
-    queryFn: fetchDepartmentOptions,
+    queryKey: ['department-options', orgId ?? 'all-orgs'],
+    queryFn: () => fetchDepartmentOptions(orgId),
     staleTime: 1000 * 60 * 10,
   });
 }
 
-export function useGroupOptions() {
+export function useGroupOptions(orgId?: string) {
   return useQuery({
-    queryKey: ['group-options'],
-    queryFn: fetchGroupOptions,
+    queryKey: ['group-options', orgId ?? 'all-orgs'],
+    queryFn: () => fetchGroupOptions(orgId),
     staleTime: 1000 * 60 * 10,
   });
 }
 
-export function useRoleOptions() {
+export function useRoleOptions(orgId?: string) {
   return useQuery({
-    queryKey: ['role-options'],
-    queryFn: fetchRoleOptions,
+    queryKey: ['role-options', orgId ?? 'all-orgs'],
+    queryFn: () => fetchRoleOptions(orgId),
     staleTime: 1000 * 60 * 10,
   });
 }
@@ -1201,10 +1321,18 @@ export function useLanguageOptions() {
   });
 }
 
-export function useShiftTemplates() {
+export function useShiftTemplates(orgId?: string) {
   return useQuery({
-    queryKey: ['shift-templates'],
-    queryFn: fetchShiftTemplates,
+    queryKey: ['shift-templates', orgId ?? 'all-orgs'],
+    queryFn: () => fetchShiftTemplates(orgId),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useWorkerTypes(orgId?: string) {
+  return useQuery({
+    queryKey: ['worker-types', orgId ?? 'all-orgs'],
+    queryFn: () => fetchWorkerTypes(orgId),
     staleTime: 1000 * 60 * 10,
   });
 }

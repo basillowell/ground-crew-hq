@@ -3,13 +3,12 @@ import { Badge } from '@/components/ui/badge';
 import {
   Building2,
   Clock,
-  CreditCard,
+  Cpu,
+  FolderTree,
+  KeyRound,
   Palette,
-  Plug,
-  Puzzle,
   Settings,
-  UserCog,
-  UsersRound,
+  Sparkles,
 } from 'lucide-react';
 import { ProgramSetupHubPanels } from '@/pages/ProgramSetupHubPanels';
 import { toast } from '@/components/ui/sonner';
@@ -30,6 +29,7 @@ import {
   useShiftTemplates,
   useTasks,
   useWeatherLocations,
+  useWorkerTypes,
   useWorkLocations,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
@@ -63,70 +63,54 @@ const DEFAULT_ENABLED_MODULES = [
   'safety',
   'messaging',
 ] as const;
+const DEFAULT_WEATHER_ENABLED_PANELS = [
+  'current-conditions',
+  'hourly-forecast',
+  'daily-forecast',
+  'wind',
+  'rain',
+  'alerts',
+  'turf-risk-notes',
+] as const;
 
 const PLAN_LIMITS = { properties: 10, employees: 50, portalUsers: 25 };
 const CURRENT_PLAN_NAME = 'Pro';
-const AGENT_SKILLS: { name: string; description: string; status: 'Active' | 'Inactive'; docFile: string }[] = [
-  {
-    name: 'ground-crew-agent',
-    description: 'Master orchestration skill for app-wide coding prompts and operations coordination.',
-    status: 'Active',
-    docFile: 'ground-crew-agent.md',
-  },
-  {
-    name: 'schedule',
-    description: 'Guides weekly crew scheduling workflows and schedule_entries operations.',
-    status: 'Active',
-    docFile: 'schedule.md',
-  },
-  {
-    name: 'workboard',
-    description: 'Handles daily task dispatch, approvals, and assignment execution flow.',
-    status: 'Active',
-    docFile: 'workboard.md',
-  },
-  {
-    name: 'breakroom',
-    description: 'Supports announcements, handoffs, and safety/team communication posts.',
-    status: 'Active',
-    docFile: 'breakroom.md',
-  },
-  {
-    name: 'weather',
-    description: 'Interprets live weather into operational go/caution/stop decisions.',
-    status: 'Active',
-    docFile: 'weather.md',
-  },
-];
-
 export type ActivePage =
   | 'brand'
-  | 'modules'
   | 'properties'
-  | 'users'
-  | 'workforce'
+  | 'people'
+  | 'access'
+  | 'operations'
+  | 'agentSkills'
   | 'shifts'
-  | 'billing'
-  | 'integrations';
+  ;
 
 const NAV_GROUPS: { label: string; items: { id: ActivePage; label: string; icon: typeof Settings }[] }[] = [
   {
-    label: 'Client Operations',
+    label: 'Workspace',
     items: [
       { id: 'brand', label: 'Brand & Identity', icon: Palette },
       { id: 'properties', label: 'Properties & Locations', icon: Building2 },
+    ],
+  },
+  {
+    label: 'People',
+    items: [
+      { id: 'people', label: 'Departments • Groups • Roles • Worker Types', icon: FolderTree },
       { id: 'shifts', label: 'Shift Templates', icon: Clock },
     ],
   },
   {
-    label: 'Admin / System',
-    items: [
-      { id: 'modules', label: 'Modules & Features', icon: Puzzle },
-      { id: 'users', label: 'Users & Access', icon: UsersRound },
-      { id: 'workforce', label: 'Workforce Structure', icon: UserCog },
-      { id: 'billing', label: 'Billing & Plan', icon: CreditCard },
-      { id: 'integrations', label: 'Integrations', icon: Plug },
-    ],
+    label: 'Access',
+    items: [{ id: 'access', label: 'Portal Users • Permissions', icon: KeyRound }],
+  },
+  {
+    label: 'Operations',
+    items: [{ id: 'operations', label: 'Weather Defaults • Task Groups • Equipment Categories', icon: Cpu }],
+  },
+  {
+    label: 'Agent Skills',
+    items: [{ id: 'agentSkills', label: 'Skills References & Prompt Helper', icon: Sparkles }],
   },
 ];
 
@@ -164,6 +148,15 @@ function withBrandDefaults(settings: ProgramSettings): ProgramSettings {
     enabledModules:
       settings.enabledModules && settings.enabledModules.length > 0 ? settings.enabledModules : [...DEFAULT_ENABLED_MODULES],
     pushNotifications: settings.pushNotifications ?? false,
+    weatherDefaultLocationName: settings.weatherDefaultLocationName || 'Sarasota Polo Club',
+    weatherDefaultAddress: settings.weatherDefaultAddress || '8201 Polo Club Lane, Sarasota, FL 34240',
+    weatherDefaultLatitude: settings.weatherDefaultLatitude ?? 27.316,
+    weatherDefaultLongitude: settings.weatherDefaultLongitude ?? -82.402,
+    weatherPreferredProvider: settings.weatherPreferredProvider || 'open-meteo',
+    weatherEnabledPanels:
+      settings.weatherEnabledPanels && settings.weatherEnabledPanels.length > 0
+        ? settings.weatherEnabledPanels
+        : [...DEFAULT_WEATHER_ENABLED_PANELS],
   };
 }
 
@@ -205,6 +198,12 @@ function buildDefaultProgramSetting(orgName?: string): ProgramSettings {
     equipmentQrCodes: true,
     enabledModules: [...DEFAULT_ENABLED_MODULES],
     pushNotifications: false,
+    weatherDefaultLocationName: 'Sarasota Polo Club',
+    weatherDefaultAddress: '8201 Polo Club Lane, Sarasota, FL 34240',
+    weatherDefaultLatitude: 27.316,
+    weatherDefaultLongitude: -82.402,
+    weatherPreferredProvider: 'open-meteo',
+    weatherEnabledPanels: [...DEFAULT_WEATHER_ENABLED_PANELS],
   });
 }
 
@@ -216,19 +215,21 @@ export default function ProgramSetupHubPage() {
 
   const programSettingQuery = useProgramSettings(currentUser?.orgId);
   const programSettingData = programSettingQuery.data ?? null;
-  const departmentOptionsQuery = useDepartmentOptions();
+  const departmentOptionsQuery = useDepartmentOptions(currentUser?.orgId);
   const departmentOptionsData = departmentOptionsQuery.data ?? [];
-  const groupOptionsQuery = useGroupOptions();
+  const groupOptionsQuery = useGroupOptions(currentUser?.orgId);
   const groupOptionsData = groupOptionsQuery.data ?? [];
-  const roleOptionsQuery = useRoleOptions();
+  const roleOptionsQuery = useRoleOptions(currentUser?.orgId);
   const roleOptionsData = roleOptionsQuery.data ?? [];
+  const workerTypesQuery = useWorkerTypes(currentUser?.orgId);
+  const workerTypesData = workerTypesQuery.data ?? [];
   const languageOptionsQuery = useLanguageOptions();
   const languageOptionsData = languageOptionsQuery.data ?? [];
   const propertiesQuery = useProperties(currentUser?.orgId);
   const propertiesData = propertiesQuery.data ?? [];
-  const workLocationsQuery = useWorkLocations();
+  const workLocationsQuery = useWorkLocations(undefined, currentUser?.orgId);
   const workLocationsData = workLocationsQuery.data ?? [];
-  const shiftTemplatesQuery = useShiftTemplates();
+  const shiftTemplatesQuery = useShiftTemplates(currentUser?.orgId);
   const shiftTemplatesData = shiftTemplatesQuery.data ?? [];
   const appUsersQuery = useAppUsers(currentUser?.orgId);
   const appUsersData = appUsersQuery.data ?? [];
@@ -254,6 +255,7 @@ export default function ProgramSetupHubPage() {
   const [departmentOptions, setDepartmentOptions] = useState<DepartmentOption[]>([]);
   const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
   const [roleOptions, setRoleOptions] = useState<{ id: string; name: string }[]>([]);
+  const [workerTypes, setWorkerTypes] = useState<{ id: string; name: string }[]>([]);
   const [languageOptions, setLanguageOptions] = useState<{ id: string; name: string }[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyClasses, setPropertyClasses] = useState<PropertyClassOption[]>([]);
@@ -265,6 +267,10 @@ export default function ProgramSetupHubPage() {
   useEffect(() => {
     const section = searchParams.get('section');
     if (section === 'properties') setActivePage('properties');
+    if (section === 'people') setActivePage('people');
+    if (section === 'access') setActivePage('access');
+    if (section === 'operations') setActivePage('operations');
+    if (section === 'skills') setActivePage('agentSkills');
   }, [searchParams]);
 
   useEffect(() => {
@@ -279,6 +285,7 @@ export default function ProgramSetupHubPage() {
   useEffect(() => setDepartmentOptions(departmentOptionsData), [departmentOptionsData]);
   useEffect(() => setGroupOptions(groupOptionsData), [groupOptionsData]);
   useEffect(() => setRoleOptions(roleOptionsData), [roleOptionsData]);
+  useEffect(() => setWorkerTypes(workerTypesData), [workerTypesData]);
   useEffect(() => setLanguageOptions(languageOptionsData), [languageOptionsData]);
   useEffect(() => setProperties(propertiesData), [propertiesData]);
   useEffect(() => setPropertyClasses(propertyClassesData), [propertyClassesData]);
@@ -303,6 +310,17 @@ export default function ProgramSetupHubPage() {
       propertyClasses: propertyClasses.length,
     };
   }, [appUsers, assignmentsData, applicationAreasData, employees, properties, propertyClasses, schedulesData, tasksData, weatherLocationsData]);
+
+  const navGroups = useMemo(() => {
+    if (currentUser?.role === 'admin') return NAV_GROUPS;
+    return NAV_GROUPS.filter((group) => group.label !== 'Agent Skills');
+  }, [currentUser?.role]);
+
+  useEffect(() => {
+    if (activePage !== 'agentSkills') return;
+    if (currentUser?.role === 'admin') return;
+    setActivePage('brand');
+  }, [activePage, currentUser?.role]);
 
   async function saveGeneralSettings() {
     if (!programSetting) return;
@@ -335,21 +353,33 @@ export default function ProgramSetupHubPage() {
 
   async function saveStructures() {
     for (const dept of departmentOptions) {
-      await supabase.from('department_options').upsert({
-        ...dept,
+      await supabase.from('departments').upsert({
+        id: dept.id,
+        name: dept.name,
         org_id: currentUser?.orgId,
+        active: true,
       });
     }
     for (const group of groupOptions) {
-      await supabase.from('group_options').upsert({
-        ...group,
+      await supabase.from('employee_groups').upsert({
+        id: group.id,
+        name: group.name,
         org_id: currentUser?.orgId,
+        active: true,
       });
     }
     for (const role of roleOptions) {
-      await supabase.from('role_options').upsert({
+      await supabase.from('workforce_roles').upsert({
         ...role,
         org_id: currentUser?.orgId,
+        active: true,
+      });
+    }
+    for (const workerType of workerTypes) {
+      await supabase.from('worker_types').upsert({
+        ...workerType,
+        org_id: currentUser?.orgId,
+        active: true,
       });
     }
     for (const lang of languageOptions) {
@@ -361,6 +391,7 @@ export default function ProgramSetupHubPage() {
     await queryClient.invalidateQueries({ queryKey: ['department-options'] });
     await queryClient.invalidateQueries({ queryKey: ['group-options'] });
     await queryClient.invalidateQueries({ queryKey: ['role-options'] });
+    await queryClient.invalidateQueries({ queryKey: ['worker-types'] });
     await queryClient.invalidateQueries({ queryKey: ['language-options'] });
     toast('Workforce structure saved', {
       description: 'Departments, crew groups, roles, and languages are now aligned across the app.',
@@ -448,7 +479,14 @@ export default function ProgramSetupHubPage() {
   async function saveShiftPlans() {
     for (const shift of shiftTemplates) {
       await supabase.from('shift_templates').upsert({
-        ...shift,
+        id: shift.id,
+        name: shift.name,
+        start_time: shift.start,
+        end_time: shift.end,
+        start: shift.start,
+        end: shift.end,
+        days: shift.days,
+        active: true,
         org_id: currentUser?.orgId,
       });
     }
@@ -549,44 +587,9 @@ export default function ProgramSetupHubPage() {
           </div>
         </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Badge variant="outline">Client Operations</Badge>
-          <Badge variant="secondary">Admin / System</Badge>
-        </div>
+        <Badge variant="secondary">Admin Control Center</Badge>
       </div>
-      {currentUser?.role === 'admin' ? (
-        <div className="rounded-2xl border bg-card p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold">Agent Skills</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Active skill references available to admins for guided operational and coding workflows.
-              </p>
-            </div>
-            <Badge variant="outline">Admin Only</Badge>
-          </div>
-          <div className="mt-4 divide-y rounded-xl border">
-            {AGENT_SKILLS.map((skill) => (
-              <div key={skill.name} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div>
-                  <div className="text-sm font-semibold">{skill.name}</div>
-                  <div className="text-xs text-muted-foreground">{skill.description}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={skill.status === 'Active' ? 'secondary' : 'outline'}>{skill.status}</Badge>
-                  <a
-                    href={`https://github.com/basillowell/ground-crew-hq/blob/main/docs/skills/${skill.docFile}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-medium text-primary hover:underline"
-                  >
-                    View Docs
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      </div>
       <ProgramSetupHubPanels
         activePage={activePage}
         setActivePage={setActivePage}
@@ -602,6 +605,8 @@ export default function ProgramSetupHubPage() {
         setGroupOptions={setGroupOptions}
         roleOptions={roleOptions}
         setRoleOptions={setRoleOptions}
+        workerTypes={workerTypes}
+        setWorkerTypes={setWorkerTypes}
         languageOptions={languageOptions}
         setLanguageOptions={setLanguageOptions}
         properties={properties}
@@ -638,7 +643,7 @@ export default function ProgramSetupHubPage() {
         makeId={makeId}
         applyThemePreset={applyThemePreset}
         slugifyClubId={slugifyClubId}
-        navGroups={NAV_GROUPS}
+        navGroups={navGroups}
         planLimits={PLAN_LIMITS}
         currentPlanName={CURRENT_PLAN_NAME}
       />

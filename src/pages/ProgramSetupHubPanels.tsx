@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useMemo, type Dispatch, type SetStateAction } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -16,6 +16,8 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { AGENT_SKILLS } from '@/lib/agentSkills';
+import { toast } from '@/components/ui/sonner';
 import { GripVertical, MapPin, MoreHorizontal, Plus, Settings, Trash2 } from 'lucide-react';
 import type { AppUser, DepartmentOption, Employee, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WeatherLocation, WorkLocation } from '@/data/seedData';
 import type { ActivePage } from './ProgramSetupHubPage';
@@ -36,6 +38,8 @@ type PanelsProps = {
   setGroupOptions: Dispatch<SetStateAction<GroupOption[]>>;
   roleOptions: { id: string; name: string }[];
   setRoleOptions: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
+  workerTypes: { id: string; name: string }[];
+  setWorkerTypes: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
   languageOptions: { id: string; name: string }[];
   setLanguageOptions: Dispatch<SetStateAction<{ id: string; name: string }[]>>;
   properties: Property[];
@@ -90,34 +94,40 @@ const MODULE_ROWS: {
   { group: 'Operational', id: 'safety', title: 'Safety', description: 'Safety programs and tracking.' },
   { group: 'Operational', id: 'messaging', title: 'Messaging', description: 'Team messaging between users.' },
 ];
+const WEATHER_PANEL_OPTIONS = [
+  { id: 'current-conditions', label: 'Current Conditions' },
+  { id: 'hourly-forecast', label: 'Hourly Forecast' },
+  { id: 'daily-forecast', label: 'Daily Forecast' },
+  { id: 'wind', label: 'Wind' },
+  { id: 'rain', label: 'Rain' },
+  { id: 'alerts', label: 'Alerts' },
+  { id: 'turf-risk-notes', label: 'Turf Risk Notes' },
+] as const;
 
-const SECTION_META: Record<
-  ActivePage,
-  { title: string; description: string; audience: 'Client Operations' | 'Admin / System' }
-> = {
+const SECTION_META: Record<ActivePage, { title: string; description: string; audience: 'Client Operations' | 'Admin / System' }> = {
   brand: {
     title: 'Brand & Identity',
     description: 'Organization name, navigation labels, theme, and logo preview.',
     audience: 'Client Operations',
-  },
-  modules: {
-    title: 'Modules & Features',
-    description: 'Enable or disable workspace features and operational controls.',
-    audience: 'Admin / System',
   },
   properties: {
     title: 'Properties & Locations',
     description: 'Manage properties, classes, locations, and assignment structure.',
     audience: 'Client Operations',
   },
-  users: {
-    title: 'Users & Access',
-    description: 'Portal profiles, roles, and access status for the workspace.',
+  people: {
+    title: 'People',
+    description: 'Departments, groups, roles, worker types, and workforce taxonomy.',
     audience: 'Admin / System',
   },
-  workforce: {
-    title: 'Workforce Structure',
-    description: 'Departments, groups, roles, and languages used across the app.',
+  access: {
+    title: 'Access',
+    description: 'Portal users, permissions, and access status.',
+    audience: 'Admin / System',
+  },
+  operations: {
+    title: 'Operations',
+    description: 'Weather defaults, task groups, and equipment categories.',
     audience: 'Admin / System',
   },
   shifts: {
@@ -125,14 +135,9 @@ const SECTION_META: Record<
     description: 'Reusable shift patterns for scheduling and labor planning.',
     audience: 'Client Operations',
   },
-  billing: {
-    title: 'Billing & Plan',
-    description: 'Subscription details, usage, and plan limits.',
-    audience: 'Admin / System',
-  },
-  integrations: {
-    title: 'Integrations',
-    description: 'Connected services and operational data integrations.',
+  agentSkills: {
+    title: 'Agent Skills',
+    description: 'Operational and coding skill references for admins.',
     audience: 'Admin / System',
   },
 };
@@ -146,37 +151,34 @@ const SECTION_WORKFLOW: Record<
     saveScope: 'Brand and identity only',
     editPattern: 'mixed',
   },
-  modules: {
-    helper: 'System owners can enable or disable features without touching operational records.',
-    saveScope: 'Module toggles and workspace controls',
-    editPattern: 'inline',
-  },
   properties: {
     helper: 'Follow the numbered workflow so multi-property setup stays predictable for admins and operators.',
     saveScope: 'Property records, classes, and location mappings',
     editPattern: 'list',
   },
-  users: {
+  people: {
+    helper: 'Workforce structure defines labor taxonomy used across scheduling, assignments, and reporting.',
+    saveScope: 'Departments, groups, roles, and language options',
+    editPattern: 'list',
+  },
+  access: {
     helper: 'Portal users control sign-in and permission scope. This is separate from workforce labor structure.',
     saveScope: 'Portal users, access roles, and account status',
     editPattern: 'list',
   },
-  workforce: {
-    helper: 'Workforce structure defines labor taxonomy used across scheduling, assignments, and reporting.',
-    saveScope: 'Departments, groups, roles, and language options',
-    editPattern: 'list',
+  operations: {
+    helper: 'Operational defaults control weather source behavior and reusable task/equipment group context.',
+    saveScope: 'Modules, weather defaults, property classes, and integration controls',
+    editPattern: 'mixed',
   },
   shifts: {
     helper: 'Templates are reusable scheduling patterns. Keep names and times standardized for planners.',
     saveScope: 'Shift templates only',
     editPattern: 'list',
   },
-  billing: {
-    helper: 'Billing is account-level visibility for plan limits and subscription controls.',
-    editPattern: 'inline',
-  },
-  integrations: {
-    helper: 'Integrations show connected operational services and readiness status.',
+  agentSkills: {
+    helper: 'Skill references keep prompts and coding workflows aligned to the current architecture.',
+    saveScope: 'Documentation links and prompt helpers',
     editPattern: 'inline',
   },
 };
@@ -186,9 +188,7 @@ const GROUP_META: Record<string, string> = {
   'Admin / System': 'Organization controls, permissions, and account governance.',
 };
 
-const CLIENT_FACING_PAGES: ActivePage[] = ['brand', 'properties', 'shifts'];
-const ADMIN_ONLY_PAGES: ActivePage[] = ['modules', 'users', 'workforce', 'billing', 'integrations'];
-type SettingsViewMode = 'client' | 'admin';
+const ADMIN_ONLY_PAGES: ActivePage[] = ['people', 'access', 'operations', 'agentSkills'];
 
 function roleBadgeClass(role: AppUser['role']) {
   if (role === 'admin') return 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200';
@@ -248,6 +248,8 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
     setGroupOptions,
     roleOptions,
     setRoleOptions,
+    workerTypes,
+    setWorkerTypes,
     languageOptions,
     setLanguageOptions,
     properties,
@@ -299,18 +301,6 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
   }, [editingProperty, weatherLocations]);
   const sectionMeta = SECTION_META[activePage];
   const sectionWorkflow = SECTION_WORKFLOW[activePage];
-  const [viewMode, setViewMode] = useState<SettingsViewMode>('client');
-
-  const visibleNavGroups = useMemo(() => {
-    if (viewMode === 'admin') return navGroups;
-    return navGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) => CLIENT_FACING_PAGES.includes(item.id)),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [navGroups, viewMode]);
-
   const activeIsAdminSection = ADMIN_ONLY_PAGES.includes(activePage);
 
   return (
@@ -319,36 +309,9 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
         <div className="border-b px-4 py-4">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Program Setup</div>
           <div className="mt-1 text-sm font-medium">Workspace Settings Navigator</div>
-          <div className="mt-3 rounded-lg border bg-background/80 p-1">
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode('client');
-                  if (ADMIN_ONLY_PAGES.includes(activePage)) setActivePage('brand');
-                }}
-                className={cn(
-                  'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                  viewMode === 'client' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
-                )}
-              >
-                Client View
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('admin')}
-                className={cn(
-                  'rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                  viewMode === 'admin' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
-                )}
-              >
-                Admin View
-              </button>
-            </div>
-          </div>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
-          {visibleNavGroups.map((group) => (
+          {navGroups.map((group) => (
             <div key={group.label} className="rounded-xl border bg-background/80 p-2">
               <div className="px-2 pb-2">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{group.label}</div>
@@ -391,15 +354,6 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               </nav>
             </div>
           ))}
-          {viewMode === 'client' && (
-            <div className="rounded-xl border border-dashed bg-background/80 p-3 text-xs text-muted-foreground">
-              <div className="font-medium text-foreground">Advanced settings hidden</div>
-              <p className="mt-1">Switch to Admin View for modules, user access, workforce, billing, and integrations.</p>
-              <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => setViewMode('admin')}>
-                Open admin settings
-              </Button>
-            </div>
-          )}
         </div>
         <div className="border-t p-4">
           <div className="rounded-lg border bg-background/90 p-3 text-xs shadow-sm">
@@ -409,13 +363,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               </Badge>
               <span className="text-muted-foreground">{liveCounts.properties} properties</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setActivePage('billing')}
-              className="mt-2 w-full text-left text-[11px] font-medium text-primary underline-offset-2 hover:underline"
-            >
-              Manage plan
-            </button>
+            <p className="mt-2 text-[11px] text-muted-foreground">Usage indicators refresh from live workspace records.</p>
           </div>
         </div>
       </aside>
@@ -429,15 +377,14 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <p className="mt-1 text-xs text-muted-foreground">{sectionMeta.description}</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Badge variant="outline">{viewMode === 'client' ? 'Client View' : 'Admin View'}</Badge>
               <Badge variant={sectionMeta.audience === 'Admin / System' ? 'secondary' : 'outline'}>{sectionMeta.audience}</Badge>
             </div>
           </div>
         </div>
         <div className="p-6">
-        {viewMode === 'client' && activeIsAdminSection && (
+        {activeIsAdminSection && (
           <div className="mx-auto mb-4 max-w-5xl rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900">
-            You are viewing an admin section while in Client View. Switch to Admin View for full system configuration context.
+            Admin settings affect system-wide behavior across Employees, Scheduler, Workboard, Weather, and Reports.
           </div>
         )}
         {activePage === 'brand' && programSetting && (
@@ -728,7 +675,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
           </div>
         )}
 
-        {activePage === 'modules' && programSetting && (
+        {activePage === 'operations' && programSetting && (
           <div className="mx-auto max-w-3xl space-y-8">
             <SectionIntro
               title="Modules & Features"
@@ -788,6 +735,94 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                 </div>
               </div>
             </div>
+            <Card className="p-4">
+              <h3 className="text-sm font-semibold">Weather Defaults</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                This saved operations location is used as the reliable default weather source.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Default Location Name</label>
+                  <Input
+                    className="mt-1"
+                    value={programSetting.weatherDefaultLocationName ?? ''}
+                    onChange={(event) => setProgramSetting((current) => (current ? { ...current, weatherDefaultLocationName: event.target.value } : current))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Preferred Provider</label>
+                  <select
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={programSetting.weatherPreferredProvider ?? 'open-meteo'}
+                    onChange={(event) => setProgramSetting((current) => (current ? { ...current, weatherPreferredProvider: event.target.value } : current))}
+                  >
+                    <option value="open-meteo">open-meteo</option>
+                    <option value="manual">manual</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground">Address</label>
+                  <Input
+                    className="mt-1"
+                    value={programSetting.weatherDefaultAddress ?? ''}
+                    onChange={(event) => setProgramSetting((current) => (current ? { ...current, weatherDefaultAddress: event.target.value } : current))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Latitude</label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="0.0001"
+                    value={programSetting.weatherDefaultLatitude ?? ''}
+                    onChange={(event) =>
+                      setProgramSetting((current) =>
+                        current ? { ...current, weatherDefaultLatitude: event.target.value ? Number(event.target.value) : undefined } : current,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Longitude</label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="0.0001"
+                    value={programSetting.weatherDefaultLongitude ?? ''}
+                    onChange={(event) =>
+                      setProgramSetting((current) =>
+                        current ? { ...current, weatherDefaultLongitude: event.target.value ? Number(event.target.value) : undefined } : current,
+                      )
+                    }
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-medium text-muted-foreground">Enabled Weather Panels</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {WEATHER_PANEL_OPTIONS.map((panel) => {
+                    const enabled = (programSetting.weatherEnabledPanels ?? []).includes(panel.id);
+                    return (
+                      <label key={panel.id} className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+                        <span>{panel.label}</span>
+                        <Switch
+                          checked={enabled}
+                          onCheckedChange={(checked) =>
+                            setProgramSetting((current) => {
+                              if (!current) return current;
+                              const next = new Set(current.weatherEnabledPanels ?? []);
+                              if (checked) next.add(panel.id);
+                              else next.delete(panel.id);
+                              return { ...current, weatherEnabledPanels: [...next] };
+                            })
+                          }
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </Card>
             <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
               <p className="text-xs text-muted-foreground">Applies only to Modules and Features settings.</p>
               <Button onClick={saveGeneralSettings}>Save module settings</Button>
@@ -1039,7 +1074,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
           </div>
         )}
 
-        {activePage === 'users' && programSetting && (
+        {activePage === 'access' && programSetting && (
           <div className="mx-auto max-w-5xl space-y-8">
             <SectionIntro
               title="Users & Access"
@@ -1204,7 +1239,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
           </div>
         )}
 
-        {activePage === 'workforce' && (
+        {activePage === 'people' && (
           <div className="mx-auto max-w-4xl space-y-8">
             <SectionIntro
               title="Workforce Structure"
@@ -1281,6 +1316,28 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             </Card>
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm font-semibold">Worker Types</span>
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => setWorkerTypes((c) => [...c, { id: makeId('wtype'), name: `Worker Type ${c.length + 1}` }])}>
+                  <Plus className="h-3 w-3" /> Add
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {workerTypes.map((workerType) => (
+                  <Badge key={workerType.id} variant="outline" className="gap-1 pr-1 font-normal">
+                    <Input
+                      value={workerType.name}
+                      onChange={(e) => setWorkerTypes((c) => c.map((x) => (x.id === workerType.id ? { ...x, name: e.target.value } : x)))}
+                      className="h-6 w-32 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0"
+                    />
+                    <button type="button" className="rounded p-0.5 hover:bg-destructive/20" onClick={() => setWorkerTypes((c) => c.filter((x) => x.id !== workerType.id))}>
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-semibold">Languages</span>
                 <Button size="sm" variant="outline" className="gap-1" onClick={() => setLanguageOptions((c) => [...c, { id: makeId('lang'), name: `Language ${c.length + 1}` }])}>
                   <Plus className="h-3 w-3" /> Add
@@ -1302,7 +1359,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               </div>
             </Card>
             <div className="sticky bottom-0 flex items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 backdrop-blur">
-              <p className="text-xs text-muted-foreground">Applies only to departments, groups, roles, and languages.</p>
+              <p className="text-xs text-muted-foreground">Applies to departments, groups, roles, worker types, and languages.</p>
               <Button onClick={saveStructures}>Save workforce structure</Button>
             </div>
           </div>
@@ -1359,66 +1416,66 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
           </div>
         )}
 
-        {activePage === 'billing' && (
-          <div className="mx-auto max-w-4xl space-y-8">
-            <div>
-              <h2 className="text-lg font-semibold">Billing &amp; plan</h2>
-              <p className="text-sm text-muted-foreground">Subscription and usage (UI preview — no payment processing yet).</p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card className="border-primary p-6 shadow-sm ring-1 ring-primary/20">
-                <Badge className="mb-2">Current</Badge>
-                <div className="text-xl font-bold">Pro</div>
-                <p className="mt-1 text-sm text-muted-foreground">Full ops stack for growing clubs.</p>
-                <Separator className="my-4" />
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>· Up to {planLimits.properties} properties</li>
-                  <li>· {planLimits.employees} employees</li>
-                  <li>· {planLimits.portalUsers} portal seats</li>
-                </ul>
-              </Card>
-              <Card className="p-6">
-                <Badge variant="secondary" className="mb-2">
-                  Next tier
-                </Badge>
-                <div className="text-xl font-bold">Enterprise</div>
-                <p className="mt-1 text-sm text-muted-foreground">SSO, SLA, and dedicated support.</p>
-                <Separator className="my-4" />
-                <Button variant="outline" className="w-full" disabled>
-                  Contact sales
-                </Button>
-              </Card>
-            </div>
+        {activePage === 'agentSkills' && (
+          <div className="mx-auto max-w-5xl space-y-6">
+            <SectionIntro
+              title="Agent Skills"
+              audience={sectionMeta.audience}
+              helper={sectionWorkflow.helper}
+              saveScope={sectionWorkflow.saveScope}
+              editPattern={sectionWorkflow.editPattern}
+            />
             <Card className="p-4">
-              <h3 className="text-sm font-semibold">Usage</h3>
-              <div className="mt-4 space-y-3">
-                <UsageBar label="Properties" current={liveCounts.properties} max={planLimits.properties} />
-                <UsageBar label="Employees" current={liveCounts.employees} max={planLimits.employees} />
-                <UsageBar label="Portal users" current={liveCounts.activeAppUsers} max={planLimits.portalUsers} />
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">Loaded skill references</h3>
+                <Badge variant="outline">Admin Only</Badge>
+              </div>
+              <div className="space-y-3">
+                {AGENT_SKILLS.map((skill) => (
+                  <div key={skill.id} className="rounded-lg border p-3">
+                    <div>
+                      <div className="text-sm font-medium">{skill.title}</div>
+                      <p className="text-xs text-muted-foreground">{skill.description}</p>
+                      <div className="mt-2 text-[11px] text-muted-foreground">
+                        Related: {skill.relatedPages.join(' • ')}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">Active</Badge>
+                      <a
+                        className="text-xs font-medium text-primary hover:underline"
+                        href={`https://github.com/basillowell/ground-crew-hq/blob/main/${skill.docPath}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View Docs
+                      </a>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(skill.recommendedCodexPromptTemplate);
+                            toast('Prompt copied', { description: `${skill.title} template copied to clipboard.` });
+                          } catch {
+                            toast.error('Copy failed', { description: 'Clipboard access was blocked by your browser.' });
+                          }
+                        }}
+                      >
+                        Copy Prompt
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </Card>
-            <Card className="border-destructive/40 p-4">
-              <h3 className="text-sm font-semibold text-destructive">Danger zone</h3>
-              <p className="mt-1 text-xs text-muted-foreground">Canceling stops renewal at period end (stub).</p>
-              <Button variant="destructive" className="mt-4" disabled>
-                Cancel subscription
-              </Button>
+            <Card className="border-dashed p-4">
+              <h4 className="text-sm font-semibold">Copy prompt helper</h4>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use AGENTS.md and the matching docs/skills file before changes to keep prompts consistent and architecture-safe.
+              </p>
             </Card>
-          </div>
-        )}
-
-        {activePage === 'integrations' && (
-          <div className="mx-auto max-w-4xl space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold">Integrations</h2>
-              <p className="text-sm text-muted-foreground">Connected services and data sources.</p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <IntegrationCard title="Open-Meteo Weather" status="connected" description="Forecast and station-linked weather data." />
-              <IntegrationCard title="Twilio SMS" status="disconnected" description="SMS alerts to crew phones." />
-              <IntegrationCard title="Calendar export (.ics)" status="built-in" description="Subscribe to shifts from external calendars." />
-              <IntegrationCard title="Stripe Billing" status="active" description="Plan and payment method on file." />
-            </div>
           </div>
         )}
         </div>

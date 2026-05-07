@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -26,7 +26,17 @@ type AuthContextValue = {
   currentPropertyId: string;
   setCurrentPropertyId: (propertyId: string) => void;
   signOut: () => Promise<void>;
+  retryAuthHydration: () => Promise<void>;
   authDebugMessage: string;
+  authState:
+    | 'checking-session'
+    | 'loading-profile'
+    | 'authenticated'
+    | 'no-session'
+    | 'profile-missing'
+    | 'network-timeout'
+    | 'profile-error';
+  hasSession: boolean;
   isPlanActive: () => boolean;
   isAdmin: boolean;
   isManager: boolean;
@@ -78,8 +88,12 @@ function timeoutResult<T>(ms: number, fallback: T): Promise<T> {
   });
 }
 
-async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfile | null; debugMessage: string }> {
-  if (!supabase || !user) return { profile: null, debugMessage: '' };
+async function loadAuthProfile(user: User | null): Promise<{
+  profile: AuthProfile | null;
+  debugMessage: string;
+  reason: 'ok' | 'missing-app-user' | 'missing-employee' | 'missing-organization' | 'error';
+}> {
+  if (!supabase || !user) return { profile: null, debugMessage: '', reason: 'error' };
   if (isDev) {
     console.info('[Auth] Loading app profile for auth user', {
       userId: user.id,
@@ -104,10 +118,18 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
       return {
         profile: null,
         debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but no app user profile was found for ${user.email ?? user.id}.`,
+        reason: 'missing-app-user',
       };
     }
 
     const row = data as AppUserRow;
+    if (isDev) {
+      console.info('[Auth] app_users loaded', {
+        appUserId: row.id,
+        employeeId: row.employee_id,
+        orgId: row.org_id,
+      });
+    }
     const { data: employeeData } = await supabase
       .from('employees')
       .select('id, property_id, first_name, last_name, role, email, phone, department')
@@ -124,7 +146,14 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
       return {
         profile: null,
         debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked employee record ${row.employee_id} is missing.`,
+        reason: 'missing-employee',
       };
+    }
+    if (isDev) {
+      console.info('[Auth] employee loaded', {
+        employeeId: employee.id,
+        propertyId: employee.property_id,
+      });
     }
 
     const { data: organizationData } = await supabase
@@ -143,7 +172,14 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
       return {
         profile: null,
         debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked organization ${row.org_id} is missing.`,
+        reason: 'missing-organization',
       };
+    }
+    if (isDev) {
+      console.info('[Auth] organization loaded', {
+        orgId: organization.id,
+        subscriptionStatus: organization.subscription_status ?? null,
+      });
     }
 
     if (isDev) {
@@ -172,6 +208,7 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
         phone: employee.phone ?? '',
       },
       debugMessage: '',
+      reason: 'ok',
     };
   } catch (error) {
     if (isDev) {
@@ -180,6 +217,7 @@ async function loadAuthProfile(user: User | null): Promise<{ profile: AuthProfil
     return {
       profile: null,
       debugMessage: `Could not load profile data from ${getSupabaseProjectLabel()}. Please refresh and try again.`,
+      reason: 'error',
     };
   }
 }
@@ -189,46 +227,76 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentPropertyId, setCurrentPropertyIdState] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [authDebugMessage, setAuthDebugMessage] = useState('');
+  const [hasSession, setHasSession] = useState(false);
+  const [authState, setAuthState] = useState<AuthContextValue['authState']>('checking-session');
+  const retryHydrationRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (!supabase) {
       setIsLoading(false);
+      setAuthState('profile-error');
+      setAuthDebugMessage(`Missing Supabase configuration for ${getSupabaseProjectLabel()}.`);
       return;
     }
 
     let mounted = true;
 
-    async function hydrateAuth() {
+    async function hydrateAuth(userOverride?: User | null) {
       if (isDev) {
         console.info('[Auth] Starting initial auth hydration');
       }
       setIsLoading(true);
+      setAuthState('checking-session');
       try {
-        const sessionResult = await Promise.race([
-          supabase.auth.getSession(),
-          timeoutResult(10000, { data: { session: null } }),
-        ]);
-        const sessionUser = sessionResult.data?.session?.user ?? null;
+        const sessionUser =
+          typeof userOverride === 'undefined'
+            ? (await supabase.auth.getSession()).data.session?.user ?? null
+            : userOverride;
         if (isDev) {
           console.info('[Auth] Initial session lookup finished', {
             hasSessionUser: Boolean(sessionUser),
             sessionUserId: sessionUser?.id ?? null,
           });
         }
-        const { profile, debugMessage } = await Promise.race([
+        if (!sessionUser) {
+          if (!mounted) return;
+          setHasSession(false);
+          setCurrentUser(null);
+          setCurrentPropertyIdState('');
+          setAuthDebugMessage('');
+          setAuthState('no-session');
+          return;
+        }
+
+        if (!mounted) return;
+        setHasSession(true);
+        setAuthState('loading-profile');
+
+        const profileResult = await Promise.race([
           loadAuthProfile(sessionUser),
           timeoutResult(10000, {
             profile: null,
             debugMessage: `Authentication timed out while connecting to ${getSupabaseProjectLabel()}. Please try again.`,
+            reason: 'error' as const,
           }),
         ]);
         if (!mounted) return;
-        setCurrentUser(profile);
-        setAuthDebugMessage(debugMessage);
+        if (!profileResult.profile && profileResult.debugMessage.includes('timed out')) {
+          setCurrentUser(null);
+          setAuthDebugMessage(profileResult.debugMessage);
+          setAuthState('network-timeout');
+          return;
+        }
+
+        setCurrentUser(profileResult.profile);
+        setAuthDebugMessage(profileResult.debugMessage);
+        if (profileResult.profile) setAuthState('authenticated');
+        else if (profileResult.reason === 'missing-app-user' || profileResult.reason === 'missing-employee' || profileResult.reason === 'missing-organization') setAuthState('profile-missing');
+        else setAuthState('profile-error');
         setCurrentPropertyIdState((current) => {
-          if (!profile) return '';
+          if (!profileResult.profile) return '';
           if (current) return current;
-          return profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId;
+          return profileResult.profile.role === 'admin' || profileResult.profile.role === 'manager' ? 'all' : profileResult.profile.propertyId;
         });
       } catch (error) {
         if (isDev) {
@@ -238,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentUser(null);
         setCurrentPropertyIdState('');
         setAuthDebugMessage(`Could not connect to ${getSupabaseProjectLabel()}. Please try again.`);
+        setAuthState('profile-error');
       } finally {
         if (mounted) {
           setIsLoading(false);
@@ -249,6 +318,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     void hydrateAuth();
+    retryHydrationRef.current = async () => {
+      await hydrateAuth();
+    };
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (isDev) {
@@ -261,37 +333,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted) {
         setIsLoading(true);
       }
-      try {
-        const { profile, debugMessage } = await Promise.race([
-          loadAuthProfile(session?.user ?? null),
-          timeoutResult(10000, {
-            profile: null,
-            debugMessage: `Authentication timed out while connecting to ${getSupabaseProjectLabel()}. Please try again.`,
-          }),
-        ]);
-        if (!mounted) return;
-        setCurrentUser(profile);
-        setAuthDebugMessage(debugMessage);
-        setCurrentPropertyIdState((current) => {
-          if (!profile) return '';
-          if (current) return current;
-          return profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId;
-        });
-      } catch (error) {
-        if (isDev) {
-          console.error('[Auth] Auth state profile hydration failed', error);
-        }
-        if (!mounted) return;
-        setCurrentUser(null);
-        setCurrentPropertyIdState('');
-        setAuthDebugMessage(`Could not connect to ${getSupabaseProjectLabel()}. Please try again.`);
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-          if (isDev) {
-            console.info('[Auth] Auth state processing finished');
-          }
-        }
+      await hydrateAuth(session?.user ?? null);
+      if (isDev) {
+        console.info('[Auth] Auth state processing finished');
       }
     });
 
@@ -314,8 +358,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentUser(null);
         setCurrentPropertyIdState('');
         setAuthDebugMessage('');
+        setHasSession(false);
+        setAuthState('no-session');
+      },
+      retryAuthHydration: async () => {
+        await retryHydrationRef.current();
       },
       authDebugMessage,
+      authState,
+      hasSession,
       isPlanActive: () => ['active', 'trialing'].includes(currentUser?.subscriptionStatus ?? ''),
       isAdmin: currentRole === 'admin',
       isManager: currentRole === 'manager',
@@ -323,7 +374,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       hasProfileIssue: !isLoading && !currentUser && Boolean(authDebugMessage),
     };
-  }, [authDebugMessage, currentPropertyId, currentUser, isLoading]);
+  }, [authDebugMessage, authState, currentPropertyId, currentUser, hasSession, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
