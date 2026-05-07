@@ -66,6 +66,38 @@ const DEFAULT_ENABLED_MODULES = [
 
 const PLAN_LIMITS = { properties: 10, employees: 50, portalUsers: 25 };
 const CURRENT_PLAN_NAME = 'Pro';
+const AGENT_SKILLS: { name: string; description: string; status: 'Active' | 'Inactive'; docFile: string }[] = [
+  {
+    name: 'ground-crew-agent',
+    description: 'Master orchestration skill for app-wide coding prompts and operations coordination.',
+    status: 'Active',
+    docFile: 'ground-crew-agent.md',
+  },
+  {
+    name: 'schedule',
+    description: 'Guides weekly crew scheduling workflows and schedule_entries operations.',
+    status: 'Active',
+    docFile: 'schedule.md',
+  },
+  {
+    name: 'workboard',
+    description: 'Handles daily task dispatch, approvals, and assignment execution flow.',
+    status: 'Active',
+    docFile: 'workboard.md',
+  },
+  {
+    name: 'breakroom',
+    description: 'Supports announcements, handoffs, and safety/team communication posts.',
+    status: 'Active',
+    docFile: 'breakroom.md',
+  },
+  {
+    name: 'weather',
+    description: 'Interprets live weather into operational go/caution/stop decisions.',
+    status: 'Active',
+    docFile: 'weather.md',
+  },
+];
 
 export type ActivePage =
   | 'brand'
@@ -516,11 +548,45 @@ export default function ProgramSetupHubPage() {
             <div className="mt-1 text-lg font-semibold">{liveCounts.activeEmployees}</div>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
           <Badge variant="outline">Client Operations</Badge>
           <Badge variant="secondary">Admin / System</Badge>
         </div>
       </div>
+      {currentUser?.role === 'admin' ? (
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold">Agent Skills</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Active skill references available to admins for guided operational and coding workflows.
+              </p>
+            </div>
+            <Badge variant="outline">Admin Only</Badge>
+          </div>
+          <div className="mt-4 divide-y rounded-xl border">
+            {AGENT_SKILLS.map((skill) => (
+              <div key={skill.name} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div>
+                  <div className="text-sm font-semibold">{skill.name}</div>
+                  <div className="text-xs text-muted-foreground">{skill.description}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={skill.status === 'Active' ? 'secondary' : 'outline'}>{skill.status}</Badge>
+                  <a
+                    href={`https://github.com/basillowell/ground-crew-hq/blob/main/docs/skills/${skill.docFile}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    View Docs
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <ProgramSetupHubPanels
         activePage={activePage}
         setActivePage={setActivePage}

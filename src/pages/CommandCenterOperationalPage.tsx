@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/components/ui/sonner';
 import { ArrowRight, Calendar, CheckCircle2, Circle, CloudRain, MapPin, Plus, Users, Wrench } from 'lucide-react';
 import {
   useAssignments,
@@ -283,12 +284,48 @@ export default function CommandCenterOperationalPage() {
     scheduleEntriesLast30.length === 0 &&
     onboardingCompleted < onboardingItems.length;
 
+  const pendingAssignmentsCount = useMemo(
+    () => assignments.filter((assignment) => assignment.date === todayKey && assignment.status !== 'completed').length,
+    [assignments, todayKey],
+  );
+
+  const lastWeatherLogSummary = useMemo(() => {
+    const weatherNote = notes
+      .filter((note) => note.type === 'weather' || note.type === 'alert')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    if (!weatherNote) return 'No weather log summary available yet.';
+    return weatherNote.title || weatherNote.content || 'Weather log captured.';
+  }, [notes]);
+
   const isLoading =
     propertiesQuery.isLoading ||
     employeesQuery.isLoading ||
     assignmentsQuery.isLoading ||
     scheduleEntriesQuery.isLoading ||
     equipmentUnitsQuery.isLoading;
+
+  async function handleGenerateBrief() {
+    if (!supabase || !currentUser?.orgId || (!isAdmin && !isManager)) return;
+    const summary = [
+      `Crew scheduled: ${crewScheduledCount}`,
+      `Pending assignments: ${pendingAssignmentsCount}`,
+      `Weather summary: ${lastWeatherLogSummary}`,
+    ].join('\n');
+    const { error } = await supabase.from('notes').insert({
+      org_id: currentUser.orgId,
+      property_id: selectedProperty?.id ?? null,
+      type: 'announcement',
+      title: `Morning Brief ${todayKey}`,
+      content: summary,
+      created_by: currentUser.id,
+    });
+    if (error) {
+      toast.error('Failed to generate brief', { description: error.message });
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ['notes'] });
+    toast.success('Morning brief posted');
+  }
 
   return (
     <div className="h-full overflow-auto bg-background p-6">
@@ -351,6 +388,32 @@ export default function CommandCenterOperationalPage() {
         <SummaryCard title="Equipment Active" value={equipmentActiveCount} onClick={() => navigate('/app/equipment')} />
         <SummaryCard title="Open Issues" value={openIssuesCount} onClick={() => navigate('/app/equipment')} />
       </div>
+
+      {isAdmin || isManager ? (
+        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold">Ops Brief</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Generate and post the morning operations brief for the crew.</p>
+            </div>
+            <Button onClick={() => void handleGenerateBrief()}>Generate Brief</Button>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+            <div className="rounded-xl border bg-muted/20 p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Scheduled Crew</div>
+              <div className="mt-1 text-lg font-semibold">{crewScheduledCount}</div>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Pending Assignments</div>
+              <div className="mt-1 text-lg font-semibold">{pendingAssignmentsCount}</div>
+            </div>
+            <div className="rounded-xl border bg-muted/20 p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Last Weather Log</div>
+              <div className="mt-1 text-sm font-medium">{lastWeatherLogSummary}</div>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="mb-6 rounded-2xl border p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

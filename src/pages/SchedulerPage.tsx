@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEmployees } from '@/lib/supabase-queries';
@@ -98,7 +99,8 @@ export default function SchedulerPage() {
           shiftStart: String(row.shift_start ?? '').slice(0, 5),
           shiftEnd: String(row.shift_end ?? '').slice(0, 5),
           status: (row.status ?? 'scheduled') as ScheduleEntry['status'],
-        }));
+          notes: typeof row.notes === 'string' ? row.notes : null,
+        })) as (ScheduleEntry & { notes?: string | null })[];
       },
       staleTime: 1000 * 60 * 5,
     })),
@@ -217,7 +219,11 @@ export default function SchedulerPage() {
     if (currentUser?.orgId) payload.org_id = currentUser.orgId;
 
     let response = existing
-      ? await supabase.from('schedule_entries').update(payload).eq('id', existing.id)
+      ? await supabase
+          .from('schedule_entries')
+          .update(payload)
+          .eq('id', existing.id)
+          .eq('org_id', currentUser?.orgId ?? '')
       : await supabase.from('schedule_entries').insert(payload);
 
     if (response.error && /column/i.test(response.error.message)) {
@@ -225,7 +231,11 @@ export default function SchedulerPage() {
       delete legacyPayload.is_day_off;
       delete legacyPayload.notes;
       response = existing
-        ? await supabase.from('schedule_entries').update(legacyPayload).eq('id', existing.id)
+        ? await supabase
+            .from('schedule_entries')
+            .update(legacyPayload)
+            .eq('id', existing.id)
+            .eq('org_id', currentUser?.orgId ?? '')
         : await supabase.from('schedule_entries').insert(legacyPayload);
     }
 
@@ -245,7 +255,11 @@ export default function SchedulerPage() {
     if (!supabase) return;
     const existing = scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
     if (!existing) { setDialogOpen(false); return; }
-    const { error } = await supabase.from('schedule_entries').delete().eq('id', existing.id);
+    const { error } = await supabase
+      .from('schedule_entries')
+      .delete()
+      .eq('id', existing.id)
+      .eq('org_id', currentUser?.orgId ?? '');
     if (error) { toast.error('Delete failed', { description: error.message }); return; }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
     setDialogOpen(false);
@@ -469,6 +483,7 @@ export default function SchedulerPage() {
                           }
 
                           const style = STATUS_STYLES[entry.status] ?? STATUS_STYLES.scheduled;
+                          const entryNotes = (entry as ScheduleEntry & { notes?: string | null }).notes;
                           return (
                             <td key={day.date} className={`px-2 py-2 ${isToday ? 'bg-primary/5' : ''}`}>
                               <button
@@ -481,6 +496,7 @@ export default function SchedulerPage() {
                                   <>
                                     <div className="font-semibold text-[11px]">{entry.shiftStart}–{entry.shiftEnd}</div>
                                     <div className="text-[10px] opacity-70">{shiftHours(entry.shiftStart, entry.shiftEnd).toFixed(1)}h</div>
+                                    {entryNotes ? <div className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{entryNotes}</div> : null}
                                   </>
                                 ) : (
                                   <div className="font-medium capitalize">{style.label}</div>
@@ -619,11 +635,11 @@ export default function SchedulerPage() {
             )}
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Notes</label>
-              <Input
+              <Textarea
                 value={draft.notes}
                 onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
                 placeholder="Optional shift note"
-                className="mt-1"
+                className="mt-1 min-h-20 resize-y"
                 data-testid="input-shift-notes"
               />
             </div>

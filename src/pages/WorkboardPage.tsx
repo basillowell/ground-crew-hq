@@ -142,6 +142,19 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
   'in-progress': <Radio className="h-3.5 w-3.5 text-blue-500 animate-pulse" />,
 };
 
+type PendingTaskRequest = {
+  id: string;
+  org_id?: string | null;
+  employee_id?: string | null;
+  property_id?: string | null;
+  date: string;
+  title: string;
+  description?: string | null;
+  status: string;
+  priority: string;
+  created_at?: string | null;
+};
+
 export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -192,10 +205,10 @@ export default function WorkboardPage() {
 
   const propertiesQuery = useProperties();
   const employeesQuery = useEmployees(effectivePropertyId);
-  const assignmentsQuery = useAssignments(boardDate, effectivePropertyId);
-  const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId);
+  const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, currentUser?.orgId);
+  const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, currentUser?.orgId);
   const tasksQuery = useTasks(effectivePropertyId, currentUser?.orgId);
-  const equipmentQuery = useEquipmentUnits(effectivePropertyId);
+  const equipmentQuery = useEquipmentUnits(effectivePropertyId, currentUser?.orgId);
   const notesQuery = useNotes(effectivePropertyId);
   const tasksLoading = tasksQuery.isLoading;
 
@@ -211,6 +224,27 @@ export default function WorkboardPage() {
         : normalized;
     },
     staleTime: 1000 * 60 * 2,
+    refetchInterval: 1000 * 30,
+  });
+
+  const pendingTaskRequestsQuery = useQuery({
+    queryKey: ['task-requests-pending', new Date().toISOString().slice(0, 10), effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    queryFn: async () => {
+      if (!supabase) return [] as PendingTaskRequest[];
+      const today = new Date().toISOString().slice(0, 10);
+      let query = supabase
+        .from('task_requests')
+        .select('*')
+        .eq('status', 'pending')
+        .eq('date', today)
+        .order('created_at', { ascending: true });
+      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
+      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as PendingTaskRequest[];
+    },
+    staleTime: 1000 * 60,
     refetchInterval: 1000 * 30,
   });
 
@@ -261,6 +295,7 @@ export default function WorkboardPage() {
   const equipmentList = equipmentQuery.data ?? [];
   const noteList = notesQuery.data ?? [];
   const taskRequests = taskRequestsQuery.data ?? [];
+  const pendingTaskRequests = pendingTaskRequestsQuery.data ?? [];
   const weatherLogs = weatherLogsQuery.data ?? [];
   const weatherLocations = weatherLocationsQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
@@ -608,6 +643,55 @@ export default function WorkboardPage() {
     await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
   }
 
+  async function approveRequestToAssignment(request: PendingTaskRequest) {
+    if (!supabase || !currentUser?.orgId || !request.employee_id) return;
+    const resolvedPropertyId =
+      (request.property_id && request.property_id !== 'all' ? request.property_id : null) ??
+      (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null);
+    if (!resolvedPropertyId) {
+      toast.error('Cannot approve request', { description: 'Missing property context.' });
+      return;
+    }
+
+    const orderIndex = dayAssignments.filter((a) => a.employeeId === request.employee_id).length + 1;
+    const notes = [request.title, request.description].filter(Boolean).join(' — ');
+    const { error: assignmentError } = await supabase.from('assignments').insert({
+      id: makeId('assign'),
+      org_id: currentUser.orgId,
+      employee_id: request.employee_id,
+      property_id: resolvedPropertyId,
+      task_id: null,
+      date: request.date,
+      status: 'planned',
+      notes: notes || null,
+      order_index: orderIndex,
+      location: 'Requested',
+      duration: 60,
+      start_time: '05:30',
+    });
+    if (assignmentError) {
+      toast.error('Approve failed', { description: assignmentError.message });
+      return;
+    }
+
+    const { error: requestError } = await supabase
+      .from('task_requests')
+      .update({ status: 'approved' })
+      .eq('id', request.id)
+      .eq('org_id', currentUser.orgId);
+    if (requestError) {
+      toast.error('Assignment created, request update failed', { description: requestError.message });
+      return;
+    }
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+      queryClient.invalidateQueries({ queryKey: ['task-requests'] }),
+      queryClient.invalidateQueries({ queryKey: ['task-requests-pending'] }),
+    ]);
+    toast.success('Request approved and assigned');
+  }
+
   async function saveNote() {
     if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !noteDraft.title.trim() || !noteDraft.content.trim()) return;
     const { error } = await supabase.from('notes').insert({
@@ -765,6 +849,48 @@ export default function WorkboardPage() {
 
         {/* Crew board */}
         <div className="flex-1 overflow-auto p-4">
+          {pendingTaskRequests.length > 0 && (
+            <div className="mb-4 rounded-3xl border bg-card/80 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Requests</h3>
+                  <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
+                    {pendingTaskRequests.length}
+                  </Badge>
+                </div>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Today</span>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {pendingTaskRequests.map((request) => {
+                  const requestEmployee = employeeList.find((e) => e.id === request.employee_id);
+                  return (
+                    <div key={request.id} className={`rounded-2xl border p-3 ${PRIORITY_COLOR[request.priority] ?? 'bg-muted/20 border-border'}`}>
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">{request.title}</span>
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] capitalize">
+                          {request.priority}
+                        </Badge>
+                      </div>
+                      {request.description ? <p className="mb-2 text-xs text-muted-foreground">{request.description}</p> : null}
+                      <div className="mb-2 text-[11px] text-muted-foreground">
+                        {requestEmployee ? `${requestEmployee.firstName} ${requestEmployee.lastName}` : 'Unassigned crew'} · {request.date}
+                      </div>
+                      <Button
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        onClick={() => void approveRequestToAssignment(request)}
+                        data-testid={`button-approve-request-${request.id}`}
+                      >
+                        Approve → Assign
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {orderedDispatchBoard.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center gap-3">
               <Users className="h-10 w-10 text-muted-foreground/40" />
