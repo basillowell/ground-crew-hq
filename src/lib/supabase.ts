@@ -16,3 +16,20 @@ export const supabase = hasSupabaseConfig
       },
     })
   : null;
+
+export async function refreshSessionWithRetry() {
+  if (!supabase) return { data: null, error: new Error('Supabase client is not configured.') };
+
+  let attempts = 0;
+  let lastError: unknown = null;
+  while (attempts < 2) {
+    attempts += 1;
+    const result = await supabase.auth.refreshSession();
+    if (!result.error) return result;
+    lastError = result.error;
+  }
+  return {
+    data: null,
+    error: lastError instanceof Error ? lastError : new Error('Session refresh failed.'),
+  };
+}

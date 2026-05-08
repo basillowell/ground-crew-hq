@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import {
   Building2,
   Clock,
@@ -17,29 +19,21 @@ import {
   useAppUsers,
   useApplicationAreas,
   useAssignments,
-  useDepartmentOptions,
   useEmployees,
-  useGroupOptions,
-  useJobDescriptions,
-  useLanguageOptions,
-  useOvertimeRules,
   useProgramSettings,
   useProperties,
   usePropertyClassOptions,
-  useRoleOptions,
   useScheduleEntries,
-  useShiftTemplates,
   useTasks,
   useWeatherLocations,
-  useWorkerTypes,
-  useWageCategories,
-  useWorkLocations,
-  useEmploymentStatuses,
 } from '@/lib/supabase-queries';
+import { useWorkforceFramework, useInvalidateWorkforceFramework } from '@/lib/workforce-framework';
+import { computeWorkforceReadiness, computeScheduleCoverage } from '@/lib/operational-intelligence';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
-import { useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { refreshSessionWithRetry, supabase } from '@/lib/supabase';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { buildOpsContext } from '@/lib/skills';
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const themePresets = [
@@ -91,21 +85,21 @@ export type ActivePage =
 
 const NAV_GROUPS: { label: string; items: { id: ActivePage; label: string; icon: typeof Settings }[] }[] = [
   {
-    label: 'Workspace',
+    label: 'Organization',
     items: [
       { id: 'brand', label: 'Brand & Identity', icon: Palette },
       { id: 'properties', label: 'Properties & Locations', icon: Building2 },
     ],
   },
   {
-    label: 'People',
+    label: 'Workforce',
     items: [
-      { id: 'people', label: 'Departments • Groups • Roles • Worker Types', icon: FolderTree },
+      { id: 'people', label: 'Workforce Structure', icon: FolderTree },
       { id: 'shifts', label: 'Shift Templates', icon: Clock },
     ],
   },
   {
-    label: 'Access',
+    label: 'Communications',
     items: [{ id: 'access', label: 'Portal Users • Permissions', icon: KeyRound }],
   },
   {
@@ -113,9 +107,11 @@ const NAV_GROUPS: { label: string; items: { id: ActivePage; label: string; icon:
     items: [{ id: 'operations', label: 'Weather Defaults • Task Groups • Equipment Categories', icon: Cpu }],
   },
   {
-    label: 'Agent Skills',
+    label: 'Automation',
     items: [{ id: 'agentSkills', label: 'Skills References & Prompt Helper', icon: Sparkles }],
   },
+  { label: 'Intelligence', items: [] },
+  { label: 'Integrations', items: [] },
 ];
 
 function makeId(prefix: string) {
@@ -220,51 +216,87 @@ function buildDefaultProgramSetting(orgName?: string): ProgramSettings {
 
 export default function ProgramSetupHubPage() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const invalidateWorkforceFramework = useInvalidateWorkforceFramework();
   const [searchParams] = useSearchParams();
   const todayDate = new Date().toISOString().slice(0, 10);
+  const [settingsQueryReady, setSettingsQueryReady] = useState(false);
+  const scopedOrgId = settingsQueryReady ? currentUser?.orgId : undefined;
 
-  const programSettingQuery = useProgramSettings(currentUser?.orgId);
+  const programSettingQuery = useProgramSettings(scopedOrgId);
   const programSettingData = programSettingQuery.data ?? null;
-  const departmentOptionsQuery = useDepartmentOptions(currentUser?.orgId);
-  const departmentOptionsData = departmentOptionsQuery.data ?? [];
-  const groupOptionsQuery = useGroupOptions(currentUser?.orgId);
-  const groupOptionsData = groupOptionsQuery.data ?? [];
-  const roleOptionsQuery = useRoleOptions(currentUser?.orgId);
-  const roleOptionsData = roleOptionsQuery.data ?? [];
-  const workerTypesQuery = useWorkerTypes(currentUser?.orgId);
-  const workerTypesData = workerTypesQuery.data ?? [];
-  const jobDescriptionsQuery = useJobDescriptions(currentUser?.orgId);
-  const jobDescriptionsData = jobDescriptionsQuery.data ?? [];
-  const employmentStatusesQuery = useEmploymentStatuses(currentUser?.orgId);
-  const employmentStatusesData = employmentStatusesQuery.data ?? [];
-  const wageCategoriesQuery = useWageCategories(currentUser?.orgId);
-  const wageCategoriesData = wageCategoriesQuery.data ?? [];
-  const overtimeRulesQuery = useOvertimeRules(currentUser?.orgId);
-  const overtimeRulesData = overtimeRulesQuery.data ?? [];
-  const languageOptionsQuery = useLanguageOptions(currentUser?.orgId);
-  const languageOptionsData = languageOptionsQuery.data ?? [];
-  const propertiesQuery = useProperties(currentUser?.orgId);
+  const workforceFramework = useWorkforceFramework(scopedOrgId, undefined);
+  const departmentOptionsData = workforceFramework.departments;
+  const groupOptionsData = workforceFramework.groups.map((entry) => ({ id: entry.id, name: entry.name, color: 'hsl(var(--primary))' }));
+  const roleOptionsData = workforceFramework.workforceRoles;
+  const workerTypesData = workforceFramework.workerTypes;
+  const jobDescriptionsData = workforceFramework.jobDescriptions;
+  const employmentStatusesData = workforceFramework.employmentStatuses;
+  const wageCategoriesData = workforceFramework.wageCategories;
+  const overtimeRulesData = workforceFramework.overtimeRules;
+  const languageOptionsData = workforceFramework.languages;
+  const propertiesQuery = useProperties(scopedOrgId);
   const propertiesData = propertiesQuery.data ?? [];
-  const workLocationsQuery = useWorkLocations(undefined, currentUser?.orgId);
-  const workLocationsData = workLocationsQuery.data ?? [];
-  const shiftTemplatesQuery = useShiftTemplates(currentUser?.orgId);
-  const shiftTemplatesData = shiftTemplatesQuery.data ?? [];
-  const appUsersQuery = useAppUsers(currentUser?.orgId);
+  const workLocationsData = workforceFramework.workLocations.map((entry) => ({ id: entry.id, name: entry.name }));
+  const shiftTemplatesData = workforceFramework.shiftTemplates.map((entry) => ({ id: entry.id, name: entry.name, start: '06:00', end: '14:30', days: [] }));
+  const appUsersQuery = useAppUsers(scopedOrgId);
   const appUsersData = appUsersQuery.data ?? [];
-  const propertyClassesQuery = usePropertyClassOptions();
+  const propertyClassesQuery = useQuery({
+    queryKey: ['property-class-options', scopedOrgId],
+    enabled: Boolean(scopedOrgId),
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      if (!supabase || !scopedOrgId) return [];
+      const { data, error } = await supabase
+        .from('property_class_options')
+        .select('*')
+        .eq('org_id', scopedOrgId)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const propertyClassesData = propertyClassesQuery.data ?? [];
-  const employeesQuery = useEmployees(undefined, currentUser?.orgId);
+  const employeesQuery = useEmployees(undefined, scopedOrgId);
   const employeesData = employeesQuery.data ?? [];
-  const tasksQuery = useTasks(undefined, currentUser?.orgId);
+  const tasksQuery = useTasks(undefined, scopedOrgId);
   const tasksData = tasksQuery.data ?? [];
-  const schedulesQuery = useScheduleEntries(todayDate, undefined, currentUser?.orgId);
+  const schedulesQuery = useScheduleEntries(todayDate, undefined, scopedOrgId);
   const schedulesData = schedulesQuery.data ?? [];
-  const assignmentsQuery = useAssignments(todayDate, undefined, currentUser?.orgId);
+  const assignmentsQuery = useAssignments(todayDate, undefined, scopedOrgId);
   const assignmentsData = assignmentsQuery.data ?? [];
-  const weatherLocationsQuery = useWeatherLocations();
+  const weatherLocationsQuery = useQuery({
+    queryKey: ['weather-locations', scopedOrgId],
+    enabled: Boolean(scopedOrgId),
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      if (!supabase || !scopedOrgId) return [];
+      const { data, error } = await supabase
+        .from('weather_locations')
+        .select('*')
+        .eq('org_id', scopedOrgId)
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const weatherLocationsData = weatherLocationsQuery.data ?? [];
-  const applicationAreasQuery = useApplicationAreas();
+  const applicationAreasQuery = useQuery({
+    queryKey: ['application-areas', scopedOrgId],
+    enabled: Boolean(scopedOrgId),
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      if (!supabase || !scopedOrgId) return [];
+      const { data, error } = await supabase
+        .from('application_areas')
+        .select('*')
+        .eq('org_id', scopedOrgId)
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const applicationAreasData = applicationAreasQuery.data ?? [];
 
   const [programSetting, setProgramSetting] = useState<ProgramSettings | null>(null);
@@ -286,6 +318,29 @@ export default function ProgramSetupHubPage() {
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+
+  useEffect(() => {
+    setSettingsQueryReady(Boolean(currentUser?.orgId));
+  }, [currentUser?.orgId]);
+
+  useEffect(() => {
+    queryClient.setQueryDefaults(['program-settings'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['workforce-framework'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['properties'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['app-users'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['employees'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['tasks'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['schedule-entries'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['assignments'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['weather-locations'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['application-areas'], { staleTime: 1000 * 60 * 10 });
+    queryClient.setQueryDefaults(['property-class-options'], { staleTime: 1000 * 60 * 10 });
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (!currentUser?.orgId || !settingsQueryReady) return;
+    void refreshSessionWithRetry();
+  }, [currentUser?.orgId, settingsQueryReady]);
 
   useEffect(() => {
     const section = searchParams.get('section');
@@ -338,16 +393,45 @@ export default function ProgramSetupHubPage() {
     };
   }, [appUsers, assignmentsData, applicationAreasData, employees, properties, propertyClasses, schedulesData, tasksData, weatherLocationsData]);
 
-  const navGroups = useMemo(() => {
-    if (currentUser?.role === 'admin') return NAV_GROUPS;
-    return NAV_GROUPS.filter((group) => group.label !== 'Agent Skills');
-  }, [currentUser?.role]);
+  const navGroups = useMemo(() => NAV_GROUPS.slice(0, 0), []);
 
   useEffect(() => {
     if (activePage !== 'agentSkills') return;
     if (currentUser?.role === 'admin') return;
     setActivePage('brand');
   }, [activePage, currentUser?.role]);
+
+  const workforceReadiness = useMemo(
+    () =>
+      computeWorkforceReadiness({
+        activeCrewCount: liveCounts.activeEmployees,
+        departmentsCount: departmentOptions.length,
+        rolesCount: roleOptions.length,
+        workerTypesCount: workerTypes.length,
+        shiftTemplatesCount: shiftTemplates.length,
+      }),
+    [departmentOptions.length, liveCounts.activeEmployees, roleOptions.length, shiftTemplates.length, workerTypes.length],
+  );
+
+  const scheduleCoverage = useMemo(
+    () =>
+      computeScheduleCoverage({
+        employees,
+        scheduleEntries: schedulesData,
+        date: todayDate,
+      }),
+    [employees, schedulesData, todayDate],
+  );
+
+  const completionIndicators = useMemo(
+    () => [
+      { key: 'workforce', label: 'Workforce configured', complete: roleOptions.length > 0 && workerTypes.length > 0 },
+      { key: 'scheduling', label: 'Scheduling configured', complete: shiftTemplates.length > 0 },
+      { key: 'properties', label: 'Properties configured', complete: properties.length > 0 },
+      { key: 'weather', label: 'Weather configured', complete: liveCounts.weatherAreas > 0 },
+    ],
+    [liveCounts.weatherAreas, properties.length, roleOptions.length, shiftTemplates.length, workerTypes.length],
+  );
 
   async function saveGeneralSettings() {
     if (!programSetting) return;
@@ -444,15 +528,7 @@ export default function ProgramSetupHubPage() {
       return;
     }
 
-    await queryClient.invalidateQueries({ queryKey: ['department-options'] });
-    await queryClient.invalidateQueries({ queryKey: ['group-options'] });
-    await queryClient.invalidateQueries({ queryKey: ['role-options'] });
-    await queryClient.invalidateQueries({ queryKey: ['worker-types'] });
-    await queryClient.invalidateQueries({ queryKey: ['job-descriptions'] });
-    await queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
-    await queryClient.invalidateQueries({ queryKey: ['wage-categories'] });
-    await queryClient.invalidateQueries({ queryKey: ['overtime-rules'] });
-    await queryClient.invalidateQueries({ queryKey: ['language-options'] });
+    await invalidateWorkforceFramework(currentUser?.orgId);
     toast('Workforce structure saved', {
       description: 'Workforce framework is now aligned across Employees, Scheduler, Workboard, and Reports.',
     });
@@ -618,12 +694,26 @@ export default function ProgramSetupHubPage() {
     return (programSetting?.enabledModules ?? [...DEFAULT_ENABLED_MODULES]).includes(id);
   }
 
+  async function handleCopyOpsContext() {
+    if (!supabase || !currentUser?.orgId) return;
+    try {
+      const context = await buildOpsContext(supabase, currentUser.orgId);
+      await navigator.clipboard.writeText(JSON.stringify(context, null, 2));
+      toast('Ops context copied', {
+        description: 'Current org operations context is ready to paste into Claude.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Could not copy context', { description: message });
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 p-6">
       <div className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Settings</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">Operations Control Center</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Define your facility framework here. These options power Employees, Scheduler, Workboard, Equipment, Weather, and Reports.
             </p>
@@ -645,10 +735,98 @@ export default function ProgramSetupHubPage() {
             <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Active Crew</div>
             <div className="mt-1 text-lg font-semibold">{liveCounts.activeEmployees}</div>
           </div>
+          <div className="rounded-xl border bg-muted/30 px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Workforce Readiness</div>
+            <div className="mt-1 text-lg font-semibold">{workforceReadiness.score}%</div>
+          </div>
+          <div className="rounded-xl border bg-muted/30 px-4 py-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Scheduler Readiness</div>
+            <div className="mt-1 text-lg font-semibold">{scheduleCoverage.score}%</div>
+          </div>
         </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Badge variant="secondary">Admin Control Center</Badge>
+        {completionIndicators.map((status) => (
+          <Badge key={status.key} variant={status.complete ? 'secondary' : 'outline'}>
+            {status.complete ? '✓' : '○'} {status.label}
+          </Badge>
+        ))}
       </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="rounded-2xl border bg-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold">Workforce</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Manage people configuration and jump to employee and equipment pages.</p>
+            </div>
+            <FolderTree className="h-5 w-5 text-primary" />
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button size="sm" onClick={() => navigate('/app/employees')}>Employees</Button>
+            <Button size="sm" variant="outline" onClick={() => navigate('/app/equipment')}>Equipment</Button>
+          </div>
+        </Card>
+        <Card className="rounded-2xl border bg-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold">Operations</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Open shift templates editor inline and launch weather setup for this property.</p>
+            </div>
+            <Cpu className="h-5 w-5 text-primary" />
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button size="sm" onClick={() => setActivePage('shifts')}>Shift Templates</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                navigate(
+                  `/app/weather?setup=true${
+                    currentPropertyId && currentPropertyId !== 'all' ? `&propertyId=${currentPropertyId}` : ''
+                  }`,
+                )
+              }
+            >
+              Weather Setup
+            </Button>
+          </div>
+        </Card>
+        <Card className="rounded-2xl border bg-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold">Workspace</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Brand & Identity controls for app name, logo, theme, and navigation labels.</p>
+            </div>
+            <Palette className="h-5 w-5 text-primary" />
+          </div>
+          <div className="mt-4">
+            <Button size="sm" onClick={() => setActivePage('brand')}>Open Brand & Identity</Button>
+          </div>
+        </Card>
+        <Card className="rounded-2xl border bg-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold">Agent Skills</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Open skill docs and prompt helpers for focused admin and implementation workflows.</p>
+            </div>
+            <Sparkles className="h-5 w-5 text-primary" />
+          </div>
+          <div className="mt-4">
+            <Button size="sm" onClick={() => setActivePage('agentSkills')} disabled={currentUser?.role !== 'admin'}>
+              Open Skill Docs
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-2"
+              onClick={handleCopyOpsContext}
+              disabled={currentUser?.role !== 'admin' || !currentUser?.orgId}
+            >
+              Copy Context
+            </Button>
+          </div>
+        </Card>
       </div>
       <ProgramSetupHubPanels
         activePage={activePage}

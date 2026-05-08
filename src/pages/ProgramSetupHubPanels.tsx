@@ -125,7 +125,7 @@ const SECTION_META: Record<ActivePage, { title: string; description: string; aud
     audience: 'Client Operations',
   },
   people: {
-    title: 'People',
+    title: 'Workforce Structure',
     description: 'Departments, groups, roles, worker types, and workforce taxonomy.',
     audience: 'Admin / System',
   },
@@ -193,6 +193,13 @@ const SECTION_WORKFLOW: Record<
 };
 
 const GROUP_META: Record<string, string> = {
+  Organization: 'Core identity and property configuration.',
+  Workforce: 'Labor structure, roles, and shift foundations.',
+  Communications: 'Portal access and communication controls.',
+  Operations: 'Operational defaults and execution categories.',
+  Automation: 'Prompt helpers and documented workflow accelerators.',
+  Intelligence: 'Readiness metrics and recommendation controls.',
+  Integrations: 'External systems and data exchange points.',
   'Client Operations': 'Daily workspace setup used by on-site teams.',
   'Admin / System': 'Organization controls, permissions, and account governance.',
 };
@@ -369,6 +376,11 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                     </button>
                   );
                 })}
+                {group.items.length === 0 ? (
+                  <div className="rounded-lg border border-dashed px-2.5 py-2 text-[11px] text-muted-foreground">
+                    Framework section staging. No controls enabled yet.
+                  </div>
+                ) : null}
               </nav>
             </div>
           ))}
