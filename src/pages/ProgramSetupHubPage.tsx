@@ -791,11 +791,8 @@ export default function ProgramSetupHubPage() {
             </div>
             <LifeBuoy className="h-5 w-5 text-primary" />
           </div>
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4">
             <Badge variant="outline">Coming soon</Badge>
-            <Button size="sm" variant="outline" onClick={() => setActivePage('help')}>
-              View Help Topics
-            </Button>
           </div>
         </Card>
       </div>

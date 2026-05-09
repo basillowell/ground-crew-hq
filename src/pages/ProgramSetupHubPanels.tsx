@@ -1637,12 +1637,11 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {[
-                  'How to set up crews',
-                  'How to create shift templates',
-                  'How to prepare a daily workboard',
-                  'How to configure weather defaults',
-                  'How to manage equipment readiness',
-                  'How to run operations reports',
+                  'Set up your crew and roles',
+                  'Create shift templates',
+                  'Configure weather for your property',
+                  'Manage equipment readiness',
+                  'Prepare the daily workboard',
                 ].map((topic) => (
                   <div key={topic} className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                     {topic}

@@ -30,8 +30,8 @@ export type PropertyWeather = {
 
 export const DEFAULT_WEATHER_LOCATION = {
   label: 'Sarasota Polo Club, Sarasota, FL',
-  latitude: 27.316,
-  longitude: -82.402,
+  latitude: 27.3364,
+  longitude: -82.5307,
 } as const;
 
 async function fetchOpenMeteoPayload(lat: number, lng: number) {

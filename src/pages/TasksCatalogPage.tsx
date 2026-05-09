@@ -135,6 +135,7 @@ export default function TasksCatalogPage() {
         name: task.name,
         description: task.notes ?? null,
         category: task.category,
+        color: task.color,
         status: task.status ?? 'active',
         priority: task.priority ?? 1,
         property_id: currentPropertyId,

@@ -18,25 +18,17 @@ function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function startOfWeek(date: Date) {
-  const next = new Date(date);
-  const day = next.getDay();
-  const diff = -day;
-  next.setDate(next.getDate() + diff);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
 function getWeekStart(date: Date) {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = d.getDate() - day;
-  d.setDate(diff);
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
 }
 
-function buildWeekDays(anchorDate: Date) {
-  const start = startOfWeek(anchorDate);
+function buildWeekDays(weekStartDate: string) {
+  const start = new Date(`${weekStartDate}T00:00:00`);
   return Array.from({ length: 7 }, (_, i) => {
     const next = new Date(start);
     next.setDate(start.getDate() + i);
@@ -70,12 +62,7 @@ export default function SchedulerPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
-  const weekAnchor = useMemo(() => {
-    const anchor = new Date(`${weekStart}T00:00:00`);
-    return startOfWeek(anchor);
-  }, [weekStart]);
-
-  const weekDays = useMemo(() => buildWeekDays(weekAnchor), [weekAnchor]);
+  const weekDays = useMemo(() => buildWeekDays(weekStart), [weekStart]);
   const today = useMemo(() => toDateKey(new Date()), []);
   const thisWeekStart = useMemo(() => getWeekStart(new Date()), []);
 
@@ -116,7 +103,7 @@ export default function SchedulerPage() {
 
   const [draft, setDraft] = useState({
     employeeId: '',
-    date: toDateKey(weekAnchor),
+    date: weekStart,
     shiftStart: '05:00',
     shiftEnd: '13:30',
     status: 'scheduled' as ScheduleEntry['status'],
@@ -160,7 +147,7 @@ export default function SchedulerPage() {
     const targetEmp = employeeId ?? activeEmployees[0]?.id ?? '';
     setDraft({
       employeeId: targetEmp,
-      date: date ?? weekDays[0]?.date ?? toDateKey(weekAnchor),
+      date: date ?? weekDays[0]?.date ?? weekStart,
       shiftStart: '05:00',
       shiftEnd: '13:30',
       status: 'scheduled',

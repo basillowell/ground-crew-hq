@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { refreshSessionWithRetry, supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { initOrgSettings } from '@/lib/initOrgSettings';
 
 type AuthRole = 'admin' | 'manager' | 'employee';
 
@@ -37,6 +38,8 @@ type AuthContextValue = {
     | 'network-timeout'
     | 'profile-error';
   hasSession: boolean;
+  isOrgReady: boolean;
+  orgId: string | null;
   isPlanActive: () => boolean;
   isAdmin: boolean;
   isManager: boolean;
@@ -88,55 +91,28 @@ function timeoutResult<T>(ms: number, fallback: T): Promise<T> {
   });
 }
 
-function decodeJwtPayload(accessToken?: string | null): Record<string, unknown> | null {
-  if (!accessToken) return null;
-  const parts = accessToken.split('.');
-  if (parts.length < 2) return null;
-  try {
-    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
-    const decoded = atob(padded);
-    return JSON.parse(decoded) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-async function readSessionOrgClaim(): Promise<string | null> {
-  if (!supabase) return null;
-  const { data } = await supabase.auth.getSession();
-  const payload = decodeJwtPayload(data.session?.access_token ?? null);
-  const claim = payload?.org_id;
-  return typeof claim === 'string' ? claim : null;
-}
-
 function isForbiddenError(error: unknown) {
   const code = (error as { code?: string } | null)?.code;
   const status = (error as { status?: number } | null)?.status;
+  const httpStatus = (error as { __isAuthError?: boolean; statusCode?: number } | null)?.statusCode;
   const message = String((error as { message?: string } | null)?.message ?? '').toLowerCase();
-  return code === '403' || status === 403 || message.includes('forbidden') || message.includes('permission denied');
+  return (
+    code === '403' ||
+    status === 403 ||
+    httpStatus === 403 ||
+    message.includes('forbidden') ||
+    message.includes('permission denied')
+  );
 }
 
-async function ensureOrgClaim(userId: string, orgId: string): Promise<boolean> {
-  if (!supabase) return false;
-
-  const existingClaim = await readSessionOrgClaim();
-  if (existingClaim === orgId) return true;
-
-  const setClaimResult = await supabase.rpc('set_claim', {
-    uid: userId,
-    claim: 'org_id',
-    value: orgId,
-  });
-  if (setClaimResult.error && isDev) {
-    console.warn('[Auth] set_claim RPC did not succeed (continuing with refresh fallback)', {
-      error: setClaimResult.error.message,
-    });
-  }
-
-  await refreshSessionWithRetry();
-  const refreshedClaim = await readSessionOrgClaim();
-  return refreshedClaim === orgId;
+async function fetchAppUserRow(userId: string): Promise<{ row: AppUserRow | null; error: unknown }> {
+  if (!supabase) return { row: null, error: new Error('Supabase client is not configured.') };
+  const result = await supabase
+    .from('app_users')
+    .select('id, employee_id, org_id, role, department, status')
+    .eq('id', userId)
+    .maybeSingle();
+  return { row: (result.data as AppUserRow | null) ?? null, error: result.error };
 }
 
 async function loadAuthProfile(user: User | null): Promise<{
@@ -152,24 +128,17 @@ async function loadAuthProfile(user: User | null): Promise<{
     });
   }
   try {
-    let appUserQuery = await supabase
-      .from('app_users')
-      .select('id, employee_id, org_id, role, department, status')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (appUserQuery.error && isForbiddenError(appUserQuery.error)) {
+    let appUserLookup = await fetchAppUserRow(user.id);
+    if (appUserLookup.error && isForbiddenError(appUserLookup.error)) {
       if (isDev) {
-        console.warn('[Auth] app_users query returned 403, refreshing session and retrying once');
+        console.warn('[Auth] app_users query returned 403, refreshing session once and retrying');
       }
-      await refreshSessionWithRetry();
-      appUserQuery = await supabase
-        .from('app_users')
-        .select('id, employee_id, org_id, role, department, status')
-        .eq('id', user.id)
-        .maybeSingle();
+      await supabase.auth.refreshSession();
+      appUserLookup = await fetchAppUserRow(user.id);
     }
 
-    const { data, error } = appUserQuery;
+    const data = appUserLookup.row;
+    const error = appUserLookup.error as { message?: string } | null;
 
     if (error || !data) {
       if (isDev) {
@@ -194,27 +163,39 @@ async function loadAuthProfile(user: User | null): Promise<{
         orgId: row.org_id,
       });
     }
-    const hasOrgClaim = await ensureOrgClaim(user.id, row.org_id);
-    if (!hasOrgClaim) {
+
+    try {
+      await initOrgSettings({ orgId: row.org_id });
+    } catch (initError) {
       if (isDev) {
-        console.warn('[Auth] org_id JWT claim missing after claim sync attempt', {
-          userId: user.id,
+        console.warn('[Auth] program_settings init skipped due to error', {
           orgId: row.org_id,
+          error: (initError as { message?: string } | null)?.message ?? String(initError),
         });
       }
-      return {
-        profile: null,
-        debugMessage: `Signed in, but org access claim is not ready yet for ${getSupabaseProjectLabel()}. Please retry.`,
-        reason: 'error',
-      };
     }
 
-    const { data: employeeData } = await supabase
+    const employeeResult = await supabase
       .from('employees')
       .select('id, property_id, first_name, last_name, role, email, phone, department')
       .eq('id', row.employee_id)
       .maybeSingle();
-    const employee = (employeeData as EmployeeRow | null) ?? null;
+    if (employeeResult.error) {
+      if (isDev) {
+        console.warn('[Auth] employee query failed', {
+          authUserId: user.id,
+          employeeId: row.employee_id,
+          error: employeeResult.error.message,
+        });
+      }
+      return {
+        profile: null,
+        debugMessage:
+          'Signed in, but your profile access is restricted right now. Contact your administrator to verify employee permissions.',
+        reason: 'error',
+      };
+    }
+    const employee = (employeeResult.data as EmployeeRow | null) ?? null;
     if (!employee) {
       if (isDev) {
         console.warn('[Auth] linked employee row missing', {
@@ -235,12 +216,27 @@ async function loadAuthProfile(user: User | null): Promise<{
       });
     }
 
-    const { data: organizationData } = await supabase
+    const organizationResult = await supabase
       .from('organizations')
       .select('id, subscription_status')
       .eq('id', row.org_id)
       .maybeSingle();
-    const organization = (organizationData as OrganizationRow | null) ?? null;
+    if (organizationResult.error) {
+      if (isDev) {
+        console.warn('[Auth] organization query failed', {
+          authUserId: user.id,
+          orgId: row.org_id,
+          error: organizationResult.error.message,
+        });
+      }
+      return {
+        profile: null,
+        debugMessage:
+          'Signed in, but organization access is restricted right now. Contact your administrator to resolve organization permissions.',
+        reason: 'error',
+      };
+    }
+    const organization = (organizationResult.data as OrganizationRow | null) ?? null;
     if (!organization) {
       if (isDev) {
         console.warn('[Auth] linked organization row missing', {
@@ -307,6 +303,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [authDebugMessage, setAuthDebugMessage] = useState('');
   const [hasSession, setHasSession] = useState(false);
+  const [isOrgReady, setIsOrgReady] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null);
   const [authState, setAuthState] = useState<AuthContextValue['authState']>('checking-session');
   const retryHydrationRef = useRef<() => Promise<void>>(async () => {});
   const currentAuthUserIdRef = useRef<string | null>(null);
@@ -321,6 +319,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       setAuthState('profile-error');
       setAuthDebugMessage(`Missing Supabase configuration for ${getSupabaseProjectLabel()}.`);
+      setIsOrgReady(false);
+      setOrgId(null);
       return;
     }
 
@@ -349,6 +349,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!sessionUser) {
           if (!mounted) return;
           setHasSession(false);
+          setIsOrgReady(false);
+          setOrgId(null);
           setCurrentUser(null);
           setCurrentPropertyIdState('');
           setAuthDebugMessage('');
@@ -382,9 +384,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (profileResult.profile) {
           setCurrentUser(profileResult.profile);
+          setOrgId(profileResult.profile.orgId);
+          setIsOrgReady(true);
           currentAuthUserIdRef.current = profileResult.profile.authUser.id;
         } else if (!currentUserRef.current) {
           setCurrentUser(null);
+          setOrgId(null);
+          setIsOrgReady(false);
           currentAuthUserIdRef.current = null;
         }
         setAuthDebugMessage(profileResult.debugMessage);
@@ -403,6 +409,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
         if (!currentUserRef.current) {
           setCurrentUser(null);
+          setOrgId(null);
+          setIsOrgReady(false);
           setCurrentPropertyIdState('');
           currentAuthUserIdRef.current = null;
         }
@@ -464,6 +472,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!supabase) return;
         await supabase.auth.signOut();
         setCurrentUser(null);
+        setOrgId(null);
+        setIsOrgReady(false);
         setCurrentPropertyIdState('');
         setAuthDebugMessage('');
         setHasSession(false);
@@ -475,6 +485,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authDebugMessage,
       authState,
       hasSession,
+      isOrgReady,
+      orgId,
       isPlanActive: () => ['active', 'trialing'].includes(currentUser?.subscriptionStatus ?? ''),
       isAdmin: currentRole === 'admin',
       isManager: currentRole === 'manager',
@@ -482,7 +494,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       hasProfileIssue: !isLoading && !currentUser && Boolean(authDebugMessage),
     };
-  }, [authDebugMessage, authState, currentPropertyId, currentUser, hasSession, isLoading]);
+  }, [authDebugMessage, authState, currentPropertyId, currentUser, hasSession, isLoading, isOrgReady, orgId]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

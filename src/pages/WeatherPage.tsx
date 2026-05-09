@@ -311,8 +311,8 @@ export default function WeatherPage() {
   const settingsDefaultWeather = useMemo(() => {
     const locationName = programSetting?.weatherDefaultLocationName?.trim() || 'Sarasota Polo Club';
     const address = programSetting?.weatherDefaultAddress?.trim() || '8201 Polo Club Lane, Sarasota, FL 34240';
-    const latitude = Number.isFinite(programSetting?.weatherDefaultLatitude) ? Number(programSetting?.weatherDefaultLatitude) : 27.316;
-    const longitude = Number.isFinite(programSetting?.weatherDefaultLongitude) ? Number(programSetting?.weatherDefaultLongitude) : -82.402;
+    const latitude = Number.isFinite(programSetting?.weatherDefaultLatitude) ? Number(programSetting?.weatherDefaultLatitude) : 27.3364;
+    const longitude = Number.isFinite(programSetting?.weatherDefaultLongitude) ? Number(programSetting?.weatherDefaultLongitude) : -82.5307;
     const panels = programSetting?.weatherEnabledPanels?.length ? programSetting.weatherEnabledPanels : [...DEFAULT_SETTINGS_PANELS];
     return { locationName, address, latitude, longitude, panels };
   }, [programSetting]);
@@ -1032,7 +1032,6 @@ export default function WeatherPage() {
     }
     const areaName = onboardingAreaName.trim() || currentProperty.name;
     const existingAreaCount = propertyScopedWeatherLocations.length;
-    const resolvedAddress = onboardingSelectedLabel.trim() || settingsDefaultWeather.address;
     setOnboardingSaving(true);
     try {
       const newLocationId = crypto.randomUUID();
@@ -1043,12 +1042,7 @@ export default function WeatherPage() {
           id: newLocationId,
           name: areaName,
           property: currentProperty.name,
-          property_id: weatherScopePropertyId,
           area: areaName,
-          latitude: resolvedLatitude,
-          longitude: resolvedLongitude,
-          org_id: currentUser.orgId,
-          address: resolvedAddress,
         })
         .select('id')
         .single();
@@ -1402,9 +1396,10 @@ export default function WeatherPage() {
     if (currentUser?.orgId) {
       await supabase.from('weather_locations').upsert(
         nextLocations.map(location => ({
-          ...location,
-          org_id: currentUser.orgId,
-          property_id: location.propertyId,
+          id: location.id,
+          name: location.name,
+          property: location.property,
+          area: location.area,
         }))
       );
       await supabase.from('weather_stations').upsert(
@@ -1471,9 +1466,10 @@ export default function WeatherPage() {
     if (currentUser?.orgId) {
       await supabase.from('weather_locations').upsert(
         weatherLocations.map(location => ({
-          ...location,
-          org_id: currentUser.orgId,
-          property_id: location.propertyId,
+          id: location.id,
+          name: location.name,
+          property: location.property,
+          area: location.area,
         }))
       );
       queryClient.invalidateQueries({ queryKey: ['weather-locations'] });

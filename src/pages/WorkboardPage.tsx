@@ -539,7 +539,7 @@ export default function WorkboardPage() {
     : weatherLocations[0];
 
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
-  const todayDateKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [todayDateKey] = useState(() => new Date().toISOString().slice(0, 10));
 
   const newRequestsCount = propertyRequests.filter((r) => r.status === 'new').length;
 
