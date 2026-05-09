@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { refreshSessionWithRetry, supabase } from '@/lib/supabase';
 
 type AuthRole = 'admin' | 'manager' | 'employee';
 
@@ -88,6 +88,57 @@ function timeoutResult<T>(ms: number, fallback: T): Promise<T> {
   });
 }
 
+function decodeJwtPayload(accessToken?: string | null): Record<string, unknown> | null {
+  if (!accessToken) return null;
+  const parts = accessToken.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    const decoded = atob(padded);
+    return JSON.parse(decoded) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function readSessionOrgClaim(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  const payload = decodeJwtPayload(data.session?.access_token ?? null);
+  const claim = payload?.org_id;
+  return typeof claim === 'string' ? claim : null;
+}
+
+function isForbiddenError(error: unknown) {
+  const code = (error as { code?: string } | null)?.code;
+  const status = (error as { status?: number } | null)?.status;
+  const message = String((error as { message?: string } | null)?.message ?? '').toLowerCase();
+  return code === '403' || status === 403 || message.includes('forbidden') || message.includes('permission denied');
+}
+
+async function ensureOrgClaim(userId: string, orgId: string): Promise<boolean> {
+  if (!supabase) return false;
+
+  const existingClaim = await readSessionOrgClaim();
+  if (existingClaim === orgId) return true;
+
+  const setClaimResult = await supabase.rpc('set_claim', {
+    uid: userId,
+    claim: 'org_id',
+    value: orgId,
+  });
+  if (setClaimResult.error && isDev) {
+    console.warn('[Auth] set_claim RPC did not succeed (continuing with refresh fallback)', {
+      error: setClaimResult.error.message,
+    });
+  }
+
+  await refreshSessionWithRetry();
+  const refreshedClaim = await readSessionOrgClaim();
+  return refreshedClaim === orgId;
+}
+
 async function loadAuthProfile(user: User | null): Promise<{
   profile: AuthProfile | null;
   debugMessage: string;
@@ -101,11 +152,24 @@ async function loadAuthProfile(user: User | null): Promise<{
     });
   }
   try {
-    const { data, error } = await supabase
+    let appUserQuery = await supabase
       .from('app_users')
       .select('id, employee_id, org_id, role, department, status')
       .eq('id', user.id)
       .maybeSingle();
+    if (appUserQuery.error && isForbiddenError(appUserQuery.error)) {
+      if (isDev) {
+        console.warn('[Auth] app_users query returned 403, refreshing session and retrying once');
+      }
+      await refreshSessionWithRetry();
+      appUserQuery = await supabase
+        .from('app_users')
+        .select('id, employee_id, org_id, role, department, status')
+        .eq('id', user.id)
+        .maybeSingle();
+    }
+
+    const { data, error } = appUserQuery;
 
     if (error || !data) {
       if (isDev) {
@@ -130,6 +194,21 @@ async function loadAuthProfile(user: User | null): Promise<{
         orgId: row.org_id,
       });
     }
+    const hasOrgClaim = await ensureOrgClaim(user.id, row.org_id);
+    if (!hasOrgClaim) {
+      if (isDev) {
+        console.warn('[Auth] org_id JWT claim missing after claim sync attempt', {
+          userId: user.id,
+          orgId: row.org_id,
+        });
+      }
+      return {
+        profile: null,
+        debugMessage: `Signed in, but org access claim is not ready yet for ${getSupabaseProjectLabel()}. Please retry.`,
+        reason: 'error',
+      };
+    }
+
     const { data: employeeData } = await supabase
       .from('employees')
       .select('id, property_id, first_name, last_name, role, email, phone, department')

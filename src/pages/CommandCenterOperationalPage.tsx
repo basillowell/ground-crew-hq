@@ -7,22 +7,11 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { ArrowRight, Calendar, CheckCircle2, Circle, CloudRain, MapPin, Plus, Users, Wrench } from 'lucide-react';
-import {
-  useAssignments,
-  useClockEvents,
-  useEmployees,
-  useEquipmentUnits,
-  useNotes,
-  useProperties,
-  useScheduleEntries,
-  useScheduleEntriesRange,
-  useTasks,
-  useWeatherLocations,
-} from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather } from '@/lib/weather';
+import { useDashboardData } from '@/hooks/useDashboardData';
 
 function SummaryCard({
   title,
@@ -177,33 +166,28 @@ export default function CommandCenterOperationalPage() {
     return date.toISOString().slice(0, 10);
   }, [currentDate]);
 
-  const propertiesQuery = useProperties(currentUser?.orgId);
-  const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
-  const assignmentsQuery = useAssignments(todayKey, propertyScope, currentUser?.orgId);
-  const scheduleEntriesQuery = useScheduleEntries(todayKey, propertyScope, currentUser?.orgId);
-  const scheduleEntriesRangeQuery = useScheduleEntriesRange(start30Date, todayKey, propertyScope, currentUser?.orgId);
-  const equipmentUnitsQuery = useEquipmentUnits(propertyScope, currentUser?.orgId);
-  const tasksQuery = useTasks(propertyScope, currentUser?.orgId);
-  const weatherLocationsQuery = useWeatherLocations(propertyScope === 'all' ? undefined : propertyScope);
-  const notesQuery = useNotes(propertyScope, currentUser?.orgId);
-  const clockEventsQuery = useClockEvents(todayKey, propertyScope, currentUser?.orgId);
+  const dashboardDataQuery = useDashboardData({
+    orgId: currentUser?.orgId,
+    propertyScope,
+    todayKey,
+    start30Date,
+  });
 
-  const allProperties = propertiesQuery.data ?? [];
+  const allProperties = dashboardDataQuery.data?.properties ?? [];
   const properties = useMemo(() => {
     if (isAdmin || isManager) return allProperties;
     if (!currentUser?.propertyId) return [];
     return allProperties.filter((property) => property.id === currentUser.propertyId);
   }, [allProperties, currentUser?.propertyId, isAdmin, isManager]);
 
-  const employees = employeesQuery.data ?? [];
-  const assignments = assignmentsQuery.data ?? [];
-  const scheduleEntries = scheduleEntriesQuery.data ?? [];
-  const scheduleEntriesLast30 = scheduleEntriesRangeQuery.data ?? [];
-  const equipmentUnits = equipmentUnitsQuery.data ?? [];
-  const tasks = tasksQuery.data ?? [];
-  const weatherLocations = weatherLocationsQuery.data ?? [];
-  const notes = notesQuery.data ?? [];
-  const clockEvents = clockEventsQuery.data ?? [];
+  const employees = dashboardDataQuery.data?.employees ?? [];
+  const assignments = dashboardDataQuery.data?.assignments ?? [];
+  const scheduleEntries = dashboardDataQuery.data?.scheduleEntries ?? [];
+  const scheduleEntriesLast30 = dashboardDataQuery.data?.scheduleEntriesLast30 ?? [];
+  const equipmentUnits = dashboardDataQuery.data?.equipmentUnits ?? [];
+  const tasks = dashboardDataQuery.data?.tasks ?? [];
+  const weatherLocations = dashboardDataQuery.data?.weatherLocations ?? [];
+  const notes = dashboardDataQuery.data?.notes ?? [];
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   useEffect(() => {
@@ -219,20 +203,20 @@ export default function CommandCenterOperationalPage() {
     const channel = supabase
       .channel('dashboard-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `date=eq.${todayKey}` }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['schedule-entries', todayKey] });
+        void dashboardDataQuery.refetch();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments', filter: `date=eq.${todayKey}` }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['assignments', todayKey] });
+        void dashboardDataQuery.refetch();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clock_events' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['clock-events', todayKey] });
+        void dashboardDataQuery.refetch();
       })
       .subscribe();
 
     return () => {
       void channel.unsubscribe();
     };
-  }, [queryClient, todayKey]);
+  }, [dashboardDataQuery, queryClient, todayKey]);
 
   const activeEmployees = useMemo(
     () => employees.filter((employee) => employee.status === 'active'),
@@ -414,12 +398,7 @@ export default function CommandCenterOperationalPage() {
     };
   }, [notes, openIssuesCount, unassignedScheduledCount]);
 
-  const isLoading =
-    propertiesQuery.isLoading ||
-    employeesQuery.isLoading ||
-    assignmentsQuery.isLoading ||
-    scheduleEntriesQuery.isLoading ||
-    equipmentUnitsQuery.isLoading;
+  const isLoading = dashboardDataQuery.isLoading;
 
   async function handleGenerateBrief() {
     if (!supabase || !currentUser?.orgId || (!isAdmin && !isManager)) return;
@@ -499,7 +478,19 @@ export default function CommandCenterOperationalPage() {
         </p>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {isLoading ? (
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Card key={`ops-skeleton-${index}`} className="rounded-2xl border p-5 shadow-sm">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="mt-3 h-8 w-40" />
+              <Skeleton className="mt-2 h-3 w-56" />
+            </Card>
+          ))}
+        </div>
+      ) : null}
+
+      {!isLoading ? <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <OpsSignalCard
           title="Today's Crew Readiness"
           value={crewScheduledCount === 0 ? 'No crew scheduled' : `${crewScheduledCount} scheduled`}
@@ -548,7 +539,7 @@ export default function CommandCenterOperationalPage() {
           subtitle={blockersSummary.subtitle}
           tone={blockersSummary.tone}
         />
-      </div>
+      </div> : null}
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
         <SummaryCard title="Crew Scheduled Today" value={crewScheduledCount} onClick={() => navigate('/app/scheduler')} />
@@ -646,7 +637,7 @@ export default function CommandCenterOperationalPage() {
         )}
       </Card>
 
-      {selectedProperty ? (
+      {!isLoading && selectedProperty ? (
         <PropertySummaryCard
           property={selectedProperty}
           onOpenWeatherSettings={() => navigate('/app/weather')}
@@ -657,7 +648,7 @@ export default function CommandCenterOperationalPage() {
         />
       ) : (
         <Card className="rounded-2xl border p-6 shadow-sm">
-          <div className="text-sm text-muted-foreground">No properties available yet.</div>
+          <div className="text-sm text-muted-foreground">{isLoading ? 'Loading property...' : 'No properties available yet.'}</div>
         </Card>
       )}
 

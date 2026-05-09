@@ -1010,14 +1010,29 @@ export default function WeatherPage() {
   }
 
   async function handleSaveOnboardingWeatherArea() {
-    if (!currentUser?.orgId || !weatherScopePropertyId || !currentProperty || onboardingSelectedLat === null || onboardingSelectedLng === null) {
+    if (!currentUser?.orgId || !weatherScopePropertyId || !currentProperty) {
       toast('Unable to save setup', {
         description: 'Missing property or user scope. Refresh and try again.',
       });
       return;
     }
+    const resolvedLatitude =
+      onboardingSelectedLat ??
+      (hasValidCoordinates(currentProperty.latitude, currentProperty.longitude) ? currentProperty.latitude : null) ??
+      settingsDefaultWeather.latitude;
+    const resolvedLongitude =
+      onboardingSelectedLng ??
+      (hasValidCoordinates(currentProperty.latitude, currentProperty.longitude) ? currentProperty.longitude : null) ??
+      settingsDefaultWeather.longitude;
+    if (!hasValidCoordinates(resolvedLatitude, resolvedLongitude)) {
+      toast('Unable to save setup', {
+        description: 'No valid coordinates were found. Search or enter a location first.',
+      });
+      return;
+    }
     const areaName = onboardingAreaName.trim() || currentProperty.name;
     const existingAreaCount = propertyScopedWeatherLocations.length;
+    const resolvedAddress = onboardingSelectedLabel.trim() || settingsDefaultWeather.address;
     setOnboardingSaving(true);
     try {
       const newLocationId = crypto.randomUUID();
@@ -1030,9 +1045,10 @@ export default function WeatherPage() {
           property: currentProperty.name,
           property_id: weatherScopePropertyId,
           area: areaName,
-          latitude: onboardingSelectedLat,
-          longitude: onboardingSelectedLng,
+          latitude: resolvedLatitude,
+          longitude: resolvedLongitude,
           org_id: currentUser.orgId,
+          address: resolvedAddress,
         })
         .select('id')
         .single();
@@ -1048,8 +1064,8 @@ export default function WeatherPage() {
         provider: 'Open-Meteo',
         provider_type: 'open-meteo',
         station_code: `${weatherScopePropertyId.slice(0, 8).toUpperCase()}-${String(existingAreaCount + 1).padStart(2, '0')}`,
-        latitude: onboardingSelectedLat,
-        longitude: onboardingSelectedLng,
+        latitude: resolvedLatitude,
+        longitude: resolvedLongitude,
         time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         is_primary: existingAreaCount === 0,
         status: 'online',
