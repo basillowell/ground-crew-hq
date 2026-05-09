@@ -353,14 +353,13 @@ export default function WeatherPage() {
     }
   }, [rainfallEntriesQuery.data, weatherLocationsQuery.data, weatherLogsQuery.data, weatherStationsQuery.data]);
 
+  const currentProperty = properties.find((property) => property.id === weatherScopePropertyId) ?? null;
+  const hasLocation = hasValidCoordinates(currentProperty?.latitude, currentProperty?.longitude);
   useEffect(() => {
     if (currentProperty?.name && !onboardingAreaName.trim()) {
       setOnboardingAreaName(currentProperty.name);
     }
   }, [currentProperty?.name, onboardingAreaName]);
-
-  const currentProperty = properties.find((property) => property.id === weatherScopePropertyId) ?? null;
-  const hasLocation = hasValidCoordinates(currentProperty?.latitude, currentProperty?.longitude);
   const propertyScopedWeatherLocations = useMemo(() => {
     if (!currentProperty) return [];
     const propertyName = currentProperty.name.trim().toLowerCase();

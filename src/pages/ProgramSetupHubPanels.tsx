@@ -16,8 +16,6 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { AGENT_SKILLS } from '@/lib/agentSkills';
-import { toast } from '@/components/ui/sonner';
 import { GripVertical, MapPin, MoreHorizontal, Plus, Settings, Trash2 } from 'lucide-react';
 import type { AppUser, DepartmentOption, Employee, GroupOption, ProgramSettings, Property, PropertyClassOption, ShiftTemplate, WeatherLocation, WorkLocation } from '@/data/seedData';
 import type { ActivePage } from './ProgramSetupHubPage';
@@ -144,10 +142,10 @@ const SECTION_META: Record<ActivePage, { title: string; description: string; aud
     description: 'Reusable shift patterns for scheduling and labor planning.',
     audience: 'Client Operations',
   },
-  agentSkills: {
-    title: 'Agent Skills',
-    description: 'Operational and coding skill references for admins.',
-    audience: 'Admin / System',
+  help: {
+    title: 'Help',
+    description: 'Product guidance and setup help for operations teams.',
+    audience: 'Client Operations',
   },
 };
 
@@ -185,9 +183,9 @@ const SECTION_WORKFLOW: Record<
     saveScope: 'Shift templates only',
     editPattern: 'list',
   },
-  agentSkills: {
-    helper: 'Skill references keep prompts and coding workflows aligned to the current architecture.',
-    saveScope: 'Documentation links and prompt helpers',
+  help: {
+    helper: 'Product help topics for daily setup and operational workflows. AI chat is not enabled yet.',
+    saveScope: 'Help and onboarding guidance only',
     editPattern: 'inline',
   },
 };
@@ -197,14 +195,14 @@ const GROUP_META: Record<string, string> = {
   Workforce: 'Labor structure, roles, and shift foundations.',
   Communications: 'Portal access and communication controls.',
   Operations: 'Operational defaults and execution categories.',
-  Automation: 'Prompt helpers and documented workflow accelerators.',
+  Help: 'Operational help topics and setup guidance.',
   Intelligence: 'Readiness metrics and recommendation controls.',
   Integrations: 'External systems and data exchange points.',
   'Client Operations': 'Daily workspace setup used by on-site teams.',
   'Admin / System': 'Organization controls, permissions, and account governance.',
 };
 
-const ADMIN_ONLY_PAGES: ActivePage[] = ['people', 'access', 'operations', 'agentSkills'];
+const ADMIN_ONLY_PAGES: ActivePage[] = ['people', 'access', 'operations'];
 
 function roleBadgeClass(role: AppUser['role']) {
   if (role === 'admin') return 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200';
@@ -1620,10 +1618,10 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
           </div>
         )}
 
-        {activePage === 'agentSkills' && (
+        {activePage === 'help' && (
           <div className="mx-auto max-w-5xl space-y-6">
             <SectionIntro
-              title="Agent Skills"
+              title="Operations Assistant"
               audience={sectionMeta.audience}
               helper={sectionWorkflow.helper}
               saveScope={sectionWorkflow.saveScope}
@@ -1631,53 +1629,31 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
             />
             <Card className="p-4">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold">Loaded skill references</h3>
-                <Badge variant="outline">Admin Only</Badge>
+                <h3 className="text-sm font-semibold">Operations Assistant</h3>
+                <Badge variant="outline">Coming soon</Badge>
               </div>
-              <div className="space-y-3">
-                {AGENT_SKILLS.map((skill) => (
-                  <div key={skill.id} className="rounded-lg border p-3">
-                    <div>
-                      <div className="text-sm font-medium">{skill.title}</div>
-                      <p className="text-xs text-muted-foreground">{skill.description}</p>
-                      <div className="mt-2 text-[11px] text-muted-foreground">
-                        Related: {skill.relatedPages.join(' • ')}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">Active</Badge>
-                      <a
-                        className="text-xs font-medium text-primary hover:underline"
-                        href={`https://github.com/basillowell/ground-crew-hq/blob/main/${skill.docPath}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View Docs
-                      </a>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(skill.recommendedCodexPromptTemplate);
-                            toast('Prompt copied', { description: `${skill.title} template copied to clipboard.` });
-                          } catch {
-                            toast.error('Copy failed', { description: 'Clipboard access was blocked by your browser.' });
-                          }
-                        }}
-                      >
-                        Copy Prompt
-                      </Button>
-                    </div>
+              <p className="text-xs text-muted-foreground">
+                Get quick help with setup, workflows, and operational best practices directly inside Ground Crew HQ.
+              </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {[
+                  'How to set up crews',
+                  'How to create shift templates',
+                  'How to prepare a daily workboard',
+                  'How to configure weather defaults',
+                  'How to manage equipment readiness',
+                  'How to run operations reports',
+                ].map((topic) => (
+                  <div key={topic} className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    {topic}
                   </div>
                 ))}
               </div>
             </Card>
             <Card className="border-dashed p-4">
-              <h4 className="text-sm font-semibold">Copy prompt helper</h4>
+              <h4 className="text-sm font-semibold">Setup guide</h4>
               <p className="mt-1 text-xs text-muted-foreground">
-                Use AGENTS.md and the matching docs/skills file before changes to keep prompts consistent and architecture-safe.
+                Guided onboarding and best-practice playbooks are planned for a future release.
               </p>
             </Card>
           </div>

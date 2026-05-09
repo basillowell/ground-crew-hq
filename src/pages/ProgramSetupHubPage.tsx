@@ -9,8 +9,8 @@ import {
   FolderTree,
   KeyRound,
   Palette,
+  LifeBuoy,
   Settings,
-  Sparkles,
 } from 'lucide-react';
 import { ProgramSetupHubPanels } from '@/pages/ProgramSetupHubPanels';
 import { toast } from '@/components/ui/sonner';
@@ -33,7 +33,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { refreshSessionWithRetry, supabase } from '@/lib/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { buildOpsContext } from '@/lib/skills';
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const themePresets = [
@@ -79,7 +78,7 @@ export type ActivePage =
   | 'people'
   | 'access'
   | 'operations'
-  | 'agentSkills'
+  | 'help'
   | 'shifts'
   ;
 
@@ -107,8 +106,8 @@ const NAV_GROUPS: { label: string; items: { id: ActivePage; label: string; icon:
     items: [{ id: 'operations', label: 'Weather Defaults • Task Groups • Equipment Categories', icon: Cpu }],
   },
   {
-    label: 'Automation',
-    items: [{ id: 'agentSkills', label: 'Skills References & Prompt Helper', icon: Sparkles }],
+    label: 'Help',
+    items: [{ id: 'help', label: 'Operations Assistant (Coming soon)', icon: LifeBuoy }],
   },
   { label: 'Intelligence', items: [] },
   { label: 'Integrations', items: [] },
@@ -348,7 +347,7 @@ export default function ProgramSetupHubPage() {
     if (section === 'people') setActivePage('people');
     if (section === 'access') setActivePage('access');
     if (section === 'operations') setActivePage('operations');
-    if (section === 'skills') setActivePage('agentSkills');
+    if (section === 'help') setActivePage('help');
   }, [searchParams]);
 
   useEffect(() => {
@@ -394,12 +393,6 @@ export default function ProgramSetupHubPage() {
   }, [appUsers, assignmentsData, applicationAreasData, employees, properties, propertyClasses, schedulesData, tasksData, weatherLocationsData]);
 
   const navGroups = useMemo(() => NAV_GROUPS.slice(0, 0), []);
-
-  useEffect(() => {
-    if (activePage !== 'agentSkills') return;
-    if (currentUser?.role === 'admin') return;
-    setActivePage('brand');
-  }, [activePage, currentUser?.role]);
 
   const workforceReadiness = useMemo(
     () =>
@@ -694,20 +687,6 @@ export default function ProgramSetupHubPage() {
     return (programSetting?.enabledModules ?? [...DEFAULT_ENABLED_MODULES]).includes(id);
   }
 
-  async function handleCopyOpsContext() {
-    if (!supabase || !currentUser?.orgId) return;
-    try {
-      const context = await buildOpsContext(supabase, currentUser.orgId);
-      await navigator.clipboard.writeText(JSON.stringify(context, null, 2));
-      toast('Ops context copied', {
-        description: 'Current org operations context is ready to paste into Claude.',
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error('Could not copy context', { description: message });
-    }
-  }
-
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 p-6">
       <div className="rounded-2xl border bg-card p-6 shadow-sm">
@@ -807,23 +786,15 @@ export default function ProgramSetupHubPage() {
         <Card className="rounded-2xl border bg-card p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-base font-semibold">Agent Skills</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Open skill docs and prompt helpers for focused admin and implementation workflows.</p>
+              <h3 className="text-base font-semibold">Operations Assistant</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Get quick help with setup, workflows, and operational best practices.</p>
             </div>
-            <Sparkles className="h-5 w-5 text-primary" />
+            <LifeBuoy className="h-5 w-5 text-primary" />
           </div>
-          <div className="mt-4">
-            <Button size="sm" onClick={() => setActivePage('agentSkills')} disabled={currentUser?.role !== 'admin'}>
-              Open Skill Docs
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="ml-2"
-              onClick={handleCopyOpsContext}
-              disabled={currentUser?.role !== 'admin' || !currentUser?.orgId}
-            >
-              Copy Context
+          <div className="mt-4 flex items-center gap-2">
+            <Badge variant="outline">Coming soon</Badge>
+            <Button size="sm" variant="outline" onClick={() => setActivePage('help')}>
+              View Help Topics
             </Button>
           </div>
         </Card>
