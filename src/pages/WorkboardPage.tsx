@@ -155,6 +155,15 @@ type PendingTaskRequest = {
   created_at?: string | null;
 };
 
+type WorkOrderBoardItem = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  source: 'work_order' | 'schedule_fallback';
+  employeeName?: string;
+};
+
 export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -282,6 +291,19 @@ export default function WorkboardPage() {
     },
     staleTime: 1000 * 60 * 5,
   });
+  const workOrdersQuery = useQuery({
+    queryKey: ['work-orders', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    queryFn: async () => {
+      if (!supabase) return [] as Array<Record<string, unknown>>;
+      let query = supabase.from('work_orders').select('*').order('created_at', { ascending: false });
+      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as Array<Record<string, unknown>>;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
 
   const workLocationsQuery = useQuery({
     queryKey: ['work-locations', effectivePropertyId ?? 'all'],
@@ -314,6 +336,7 @@ export default function WorkboardPage() {
   const weatherLogs = weatherLogsQuery.data ?? [];
   const weatherLocations = weatherLocationsQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
+  const workOrders = workOrdersQuery.data ?? [];
 
   useEffect(() => {
     if (assignmentsQuery.dataUpdatedAt || taskRequestsQuery.dataUpdatedAt) {
@@ -440,6 +463,30 @@ export default function WorkboardPage() {
     () => assignmentList.filter((a) => a.date === boardDate),
     [assignmentList, boardDate],
   );
+  const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
+    if (workOrders.length > 0) {
+      return workOrders.slice(0, 6).map((row) => ({
+        id: String(row.id ?? ''),
+        title: String(row.title ?? 'Untitled work order'),
+        status: String(row.status ?? 'open'),
+        priority: String(row.priority ?? 'medium'),
+        source: 'work_order',
+      }));
+    }
+
+    const byEmployeeId = new Map(employeeList.map((employee) => [employee.id, `${employee.firstName} ${employee.lastName}`]));
+    return scheduleList
+      .filter((entry) => entry.date === boardDate)
+      .slice(0, 6)
+      .map((entry) => ({
+        id: `sched-${entry.id}`,
+        title: `Crew shift coverage ${entry.shiftStart} - ${entry.shiftEnd}`,
+        status: 'planned',
+        priority: 'medium',
+        source: 'schedule_fallback',
+        employeeName: byEmployeeId.get(entry.employeeId) ?? 'Scheduled crew',
+      }));
+  }, [boardDate, employeeList, scheduleList, workOrders]);
 
   const assignedEmployeeIds = useMemo(
     () => new Set(dayAssignments.map((a) => a.employeeId)),
@@ -802,7 +849,8 @@ export default function WorkboardPage() {
     scheduleQuery.isLoading ||
     tasksQuery.isLoading ||
     equipmentQuery.isLoading ||
-    notesQuery.isLoading;
+    notesQuery.isLoading ||
+    workOrdersQuery.isLoading;
   const boardErrorMessage =
     (propertiesQuery.error as { message?: string } | null)?.message ||
     (employeesQuery.error as { message?: string } | null)?.message ||
@@ -1024,6 +1072,40 @@ export default function WorkboardPage() {
               </div>
             </div>
           )}
+          <div className="mb-4 rounded-3xl border bg-card/80 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">
+                  {workOrders.length > 0 ? 'Work Orders' : 'Work Orders (Schedule fallback)'}
+                </h3>
+              </div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{boardDate}</span>
+            </div>
+            {workOrderBoardItems.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No work orders or schedule entries found for this date.</p>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2">
+                {workOrderBoardItems.map((item) => (
+                  <div key={item.id} className={`rounded-2xl border p-3 ${PRIORITY_COLOR[item.priority] ?? 'bg-muted/20 border-border'}`}>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{item.title}</span>
+                      <Badge variant="outline" className="h-5 px-1.5 text-[10px] capitalize">
+                        {item.priority}
+                      </Badge>
+                    </div>
+                    {item.employeeName ? <p className="mb-1 text-xs text-muted-foreground">{item.employeeName}</p> : null}
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px] capitalize">
+                        {item.status}
+                      </Badge>
+                      {item.source === 'schedule_fallback' ? <span>Derived from schedule entries</span> : <span>From work_orders</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {orderedDispatchBoard.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center gap-3">

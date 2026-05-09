@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CloudSun, Crosshair, Droplets, MapPin, MapPinned, MoreHorizontal, PencilLine, Plus, Radar, RefreshCcw, Save, Search, Trash2 } from 'lucide-react';
+import { CloudSun, Crosshair, Droplets, MapPin, MapPinned, MoreHorizontal, PencilLine, Plus, Radar, RefreshCcw, Save, Search, Settings, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,9 +11,10 @@ import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
+import { OperationsView, type WeatherWidgetId, type WeatherWidgetLiveData } from '@/components/weather/OperationsView';
+import { WeatherSettingsDrawer } from '@/components/weather/WeatherSettingsDrawer';
 import {
   type ManualRainfallEntry,
   type Property,
@@ -141,6 +142,17 @@ const DEFAULT_SETTINGS_PANELS = [
   'alerts',
   'turf-risk-notes',
 ] as const;
+const DEFAULT_WIDGETS: WeatherWidgetId[] = [
+  'current',
+  'hourly_forecast',
+  'wind',
+  'precipitation',
+  'humidity',
+  'uv_index',
+  'feels_like',
+  '7day_forecast',
+];
+const SARASOTA_WIDGET_FALLBACK = { latitude: 27.3364, longitude: -82.5307 };
 
 export default function WeatherPage() {
   const queryClient = useQueryClient();
@@ -271,7 +283,10 @@ export default function WeatherPage() {
   const [showOperationalDecisionCards, setShowOperationalDecisionCards] = useState(true);
   const [showDetailedDiagnostics, setShowDetailedDiagnostics] = useState(false);
   const [showOperationsControls, setShowOperationsControls] = useState(false);
-  const [activeTab, setActiveTab] = useState<'daily' | 'manage'>('daily');
+  const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
+  const [prefsDraftWidgets, setPrefsDraftWidgets] = useState<WeatherWidgetId[]>([]);
+  const [prefsDraftEnabledWidgets, setPrefsDraftEnabledWidgets] = useState<WeatherWidgetId[]>([]);
+  const [prefsDraftLocationId, setPrefsDraftLocationId] = useState('');
   const [showLocationSetup, setShowLocationSetup] = useState(false);
   const [locationQuery, setLocationQuery] = useState('');
   const [locationSearchResults, setLocationSearchResults] = useState<Array<{ label: string; latitude: number; longitude: number }>>([]);
@@ -291,6 +306,7 @@ export default function WeatherPage() {
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [onboardingSheetOpen, setOnboardingSheetOpen] = useState(false);
   const [removeAreaId, setRemoveAreaId] = useState<string | null>(null);
+  const [widgetPrefsId, setWidgetPrefsId] = useState<string | null>(null);
 
   const settingsDefaultWeather = useMemo(() => {
     const locationName = programSetting?.weatherDefaultLocationName?.trim() || 'Sarasota Polo Club';
@@ -537,6 +553,125 @@ export default function WeatherPage() {
   const isPrimaryStationActiveSource =
     hasValidCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude) &&
     !isLegacyPlaceholderCoordinates(selectedLocationPrimary?.latitude, selectedLocationPrimary?.longitude);
+  const weatherDisplayPrefsQuery = useQuery({
+    queryKey: ['weather-display-prefs', currentUser?.orgId ?? 'all-orgs', currentUser?.appUserId ?? currentUser?.authUser?.id ?? 'no-user'],
+    enabled: Boolean(currentUser?.orgId && (currentUser?.appUserId || currentUser?.authUser?.id)),
+    queryFn: async () => {
+      const userId = currentUser?.appUserId ?? currentUser?.authUser?.id;
+      if (!userId || !currentUser?.orgId) {
+        return {
+          id: null as string | null,
+          enabledWidgets: [...DEFAULT_WIDGETS],
+          widgetOrder: [...DEFAULT_WIDGETS],
+          locationId: selectedLocation?.id ?? null,
+        };
+      }
+      const { data, error } = await supabase
+        .from('weather_display_prefs')
+        .select('*')
+        .eq('org_id', currentUser.orgId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error && (error as { code?: string } | null)?.code !== '42P01') throw error;
+      const row = (data as Record<string, unknown> | null) ?? null;
+      const enabledWidgets = Array.isArray(row?.enabled_widgets)
+        ? (row!.enabled_widgets as string[]).filter((widget): widget is WeatherWidgetId => DEFAULT_WIDGETS.includes(widget as WeatherWidgetId))
+        : [...DEFAULT_WIDGETS];
+      const widgetOrder = Array.isArray(row?.widget_order)
+        ? (row!.widget_order as string[]).filter((widget): widget is WeatherWidgetId => DEFAULT_WIDGETS.includes(widget as WeatherWidgetId))
+        : [];
+      return {
+        id: row?.id ? String(row.id) : null,
+        enabledWidgets: enabledWidgets.length ? enabledWidgets : [...DEFAULT_WIDGETS],
+        widgetOrder,
+        locationId: row?.location_id ? String(row.location_id) : null,
+      };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const widgetLiveDataQuery = useQuery({
+    queryKey: [
+      'weather-widget-live-data',
+      liveWeatherCoordinates?.latitude ?? SARASOTA_WIDGET_FALLBACK.latitude,
+      liveWeatherCoordinates?.longitude ?? SARASOTA_WIDGET_FALLBACK.longitude,
+    ],
+    enabled: true,
+    queryFn: async (): Promise<WeatherWidgetLiveData> => {
+      const latitude = liveWeatherCoordinates?.latitude ?? SARASOTA_WIDGET_FALLBACK.latitude;
+      const longitude = liveWeatherCoordinates?.longitude ?? SARASOTA_WIDGET_FALLBACK.longitude;
+      const params = new URLSearchParams({
+        latitude: String(latitude),
+        longitude: String(longitude),
+        current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index',
+        hourly: 'temperature_2m,precipitation_probability,wind_speed_10m',
+        daily: 'temperature_2m_max,temperature_2m_min,precipitation_sum',
+        temperature_unit: 'fahrenheit',
+        wind_speed_unit: 'mph',
+        precipitation_unit: 'inch',
+        forecast_days: '7',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+      });
+      const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+      if (!response.ok) throw new Error(`Open-Meteo request failed with status ${response.status}`);
+      const payload = await response.json();
+      const hourlyTime: string[] = Array.isArray(payload?.hourly?.time) ? payload.hourly.time : [];
+      const hourlyTemp: number[] = Array.isArray(payload?.hourly?.temperature_2m) ? payload.hourly.temperature_2m : [];
+      const hourlyRainProb: number[] = Array.isArray(payload?.hourly?.precipitation_probability) ? payload.hourly.precipitation_probability : [];
+      const hourlyWind: number[] = Array.isArray(payload?.hourly?.wind_speed_10m) ? payload.hourly.wind_speed_10m : [];
+      const dailyTime: string[] = Array.isArray(payload?.daily?.time) ? payload.daily.time : [];
+      const dailyMax: number[] = Array.isArray(payload?.daily?.temperature_2m_max) ? payload.daily.temperature_2m_max : [];
+      const dailyMin: number[] = Array.isArray(payload?.daily?.temperature_2m_min) ? payload.daily.temperature_2m_min : [];
+      const dailyRain: number[] = Array.isArray(payload?.daily?.precipitation_sum) ? payload.daily.precipitation_sum : [];
+      return {
+        source: 'Open-Meteo',
+        locationLabel: liveWeatherCoordinates?.label ?? 'Sarasota Polo Club',
+        lastUpdatedLabel: new Date().toLocaleString(),
+        current: {
+          temperature: Number(payload?.current?.temperature_2m ?? 0),
+          feelsLike: Number(payload?.current?.apparent_temperature ?? 0),
+          humidity: Number(payload?.current?.relative_humidity_2m ?? 0),
+          windSpeed: Number(payload?.current?.wind_speed_10m ?? 0),
+          windGust: Number(payload?.current?.wind_gusts_10m ?? 0),
+          windDirection: Number(payload?.current?.wind_direction_10m ?? 0),
+          precipitation: Number(payload?.current?.precipitation ?? 0),
+          uvIndex: Number(payload?.current?.uv_index ?? 0),
+        },
+        hourly: hourlyTime.slice(0, 24).map((time, index) => ({
+          time,
+          temperature: Number(hourlyTemp[index] ?? 0),
+          windSpeed: Number(hourlyWind[index] ?? 0),
+          precipitationProbability: Number(hourlyRainProb[index] ?? 0),
+        })),
+        daily: dailyTime.slice(0, 7).map((date, index) => ({
+          date,
+          tempMax: Number(dailyMax[index] ?? 0),
+          tempMin: Number(dailyMin[index] ?? 0),
+          precipitationSum: Number(dailyRain[index] ?? 0),
+        })),
+      };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const weatherWidgetIds = useMemo<WeatherWidgetId[]>(() => {
+    const enabled = weatherDisplayPrefsQuery.data?.enabledWidgets ?? DEFAULT_WIDGETS;
+    const order = weatherDisplayPrefsQuery.data?.widgetOrder ?? [];
+    const ordered = order.filter((widget) => enabled.includes(widget));
+    const remainder = enabled.filter((widget) => !ordered.includes(widget));
+    return [...ordered, ...remainder];
+  }, [weatherDisplayPrefsQuery.data]);
+  const isWeatherAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+
+  useEffect(() => {
+    if (weatherDisplayPrefsQuery.data?.id) {
+      setWidgetPrefsId(weatherDisplayPrefsQuery.data.id);
+    }
+  }, [weatherDisplayPrefsQuery.data?.id]);
+  useEffect(() => {
+    if (!settingsDrawerOpen) return;
+    setPrefsDraftWidgets(weatherWidgetIds);
+    setPrefsDraftEnabledWidgets(weatherDisplayPrefsQuery.data?.enabledWidgets ?? [...DEFAULT_WIDGETS]);
+    setPrefsDraftLocationId(weatherDisplayPrefsQuery.data?.locationId ?? selectedLocation?.id ?? '');
+  }, [settingsDrawerOpen, selectedLocation?.id, weatherDisplayPrefsQuery.data?.enabledWidgets, weatherDisplayPrefsQuery.data?.locationId, weatherWidgetIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -930,7 +1065,7 @@ export default function WeatherPage() {
       await weatherLocationsQuery.refetch();
       await weatherStationsQuery.refetch();
       setSelectedLocationId(locationInsert.data.id);
-      setActiveTab('daily');
+      setSettingsDrawerOpen(false);
       setOnboardingStep(1);
       setOnboardingMethod('none');
       setOnboardingSearchResults([]);
@@ -1137,7 +1272,7 @@ export default function WeatherPage() {
         latitude: Number(position.coords.latitude.toFixed(4)),
         longitude: Number(position.coords.longitude.toFixed(4)),
       });
-      setActiveTab('daily');
+      setSettingsDrawerOpen(false);
       toast('Device location ready', {
         description: 'Live weather can now use this device location as a fallback.',
       });
@@ -1164,7 +1299,7 @@ export default function WeatherPage() {
     const nextLocations = [...weatherLocations, nextLocation];
     void persistWeatherSetup(nextLocations, weatherStations);
     setSelectedLocationId(nextLocation.id);
-    setActiveTab('manage');
+    setSettingsDrawerOpen(true);
     toast('Weather area created', {
       description: 'Now add a station to enable live weather for this area.',
     });
@@ -1370,7 +1505,7 @@ export default function WeatherPage() {
   function addFirstStationFromSetup() {
     if (selectedLocation) {
       addStationForLocation(selectedLocation.id);
-      setActiveTab('manage');
+      setSettingsDrawerOpen(true);
       return;
     }
     const fallbackLocation = weatherLocations[0];
@@ -1380,7 +1515,7 @@ export default function WeatherPage() {
     }
     setSelectedLocationId(fallbackLocation.id);
     addStationForLocation(fallbackLocation.id);
-    setActiveTab('manage');
+    setSettingsDrawerOpen(true);
   }
 
   function updateStation(stationId: string, patch: Partial<WeatherStation>) {
@@ -1748,6 +1883,90 @@ export default function WeatherPage() {
     </Card>
   ) : null;
 
+  function toggleDraftWidget(widgetId: WeatherWidgetId, checked: boolean) {
+    setPrefsDraftEnabledWidgets((current) => {
+      if (checked) {
+        return current.includes(widgetId) ? current : [...current, widgetId];
+      }
+      return current.filter((widget) => widget !== widgetId);
+    });
+  }
+
+  function moveDraftWidget(widgetId: WeatherWidgetId, direction: 'up' | 'down') {
+    setPrefsDraftWidgets((current) => {
+      const index = current.indexOf(widgetId);
+      if (index < 0) return current;
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= current.length) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(targetIndex, 0, item);
+      return next;
+    });
+  }
+
+  async function saveDrawerWeatherPrefs() {
+    const userId = currentUser?.appUserId ?? currentUser?.authUser?.id;
+    if (!currentUser?.orgId || !userId) return;
+    const nextId =
+      widgetPrefsId ??
+      (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : null);
+    const orderedEnabled = prefsDraftWidgets.filter((widget) => prefsDraftEnabledWidgets.includes(widget));
+    const payload: Record<string, unknown> = {
+      org_id: currentUser.orgId,
+      user_id: userId,
+      location_id: prefsDraftLocationId || null,
+      enabled_widgets: prefsDraftEnabledWidgets,
+      widget_order: orderedEnabled,
+      updated_at: new Date().toISOString(),
+    };
+    if (nextId) payload.id = nextId;
+    const { error } = await supabase.from('weather_display_prefs').upsert(payload);
+    if (error) {
+      toast.error('Could not save weather display preferences', { description: error.message });
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ['weather-display-prefs'] });
+    if (prefsDraftLocationId) {
+      setSelectedLocationId(prefsDraftLocationId);
+    }
+  }
+
+  async function handleSettingsDrawerOpenChange(open: boolean) {
+    if (!open && settingsDrawerOpen) {
+      await saveDrawerWeatherPrefs();
+    }
+    setSettingsDrawerOpen(open);
+  }
+
+  async function disableWeatherWidget(widgetId: WeatherWidgetId) {
+    const userId = currentUser?.appUserId ?? currentUser?.authUser?.id;
+    if (!currentUser?.orgId || !userId) return;
+    const nextId =
+      widgetPrefsId ??
+      (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : null);
+    const nextEnabled = weatherWidgetIds.filter((widget) => widget !== widgetId);
+    const payload: Record<string, unknown> = {
+      org_id: currentUser.orgId,
+      user_id: userId,
+      location_id: selectedLocation?.id ?? null,
+      enabled_widgets: nextEnabled,
+      widget_order: nextEnabled,
+      updated_at: new Date().toISOString(),
+    };
+    if (nextId) payload.id = nextId;
+    const { error } = await supabase.from('weather_display_prefs').upsert(payload);
+    if (error) {
+      toast.error('Could not update widget preferences', { description: error.message });
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ['weather-display-prefs'] });
+  }
+
   if (needsPropertyWeatherOnboarding && !isInitialWeatherSetupLoading && !hasWeatherSetupError) {
     return (
       <div className="p-4 max-w-3xl mx-auto min-h-[70vh] flex items-center">
@@ -2048,7 +2267,7 @@ export default function WeatherPage() {
                   return;
                 }
                 addStation();
-                setActiveTab('manage');
+                setSettingsDrawerOpen(true);
               }}
             >
               <Radar className="h-3.5 w-3.5" /> Add Station
@@ -2073,23 +2292,34 @@ export default function WeatherPage() {
         </div>
       ) : null}
       {locationSetupBlock}
+      <OperationsView
+        widgets={weatherWidgetIds}
+        data={widgetLiveDataQuery.data ?? null}
+        loading={weatherDisplayPrefsQuery.isLoading || widgetLiveDataQuery.isLoading}
+        errorMessage={
+          ((weatherDisplayPrefsQuery.error as { message?: string } | null)?.message ||
+            (widgetLiveDataQuery.error as { message?: string } | null)?.message ||
+            undefined)
+        }
+        onDisableWidget={(widgetId) => {
+          void disableWeatherWidget(widgetId);
+        }}
+      />
       <PageHeader
         title="Weather"
         subtitle={
           selectedProperty
-            ? `Operations View: live conditions and forecast for ${selectedProperty.name}. Weather Management: station and area setup.`
-            : 'Operations View for day-to-day weather decisions, plus Weather Management for setup and controls.'
+            ? `Operations View: live conditions and forecast for ${selectedProperty.name}. Use the settings drawer for station and area setup.`
+            : 'Operations View for day-to-day weather decisions, with a settings drawer for setup and controls.'
         }
         badge={<Badge variant="secondary">{weatherLocations.length} locations</Badge>}
-      />
+      >
+        <Button size="icon" variant="outline" onClick={() => setSettingsDrawerOpen(true)} aria-label="Open weather settings">
+          <Settings className="h-4 w-4" />
+        </Button>
+      </PageHeader>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'daily' | 'manage')} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="daily">Operations View</TabsTrigger>
-          <TabsTrigger value="manage">Weather Management</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="daily" className="space-y-4">
+      <div className="space-y-4">
           <Card className="p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -2281,7 +2511,7 @@ export default function WeatherPage() {
                 <p>No live coordinates available yet.</p>
                 <p className="text-xs">Set station coordinates, set area coordinates, or allow browser location to load forecast data.</p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setActiveTab('manage')}>
+                  <Button size="sm" variant="outline" className="gap-1" onClick={() => setSettingsDrawerOpen(true)}>
                     <Radar className="h-3.5 w-3.5" /> Open Weather Management
                   </Button>
                   <Button size="sm" variant="outline" className="gap-1" onClick={() => void applyDeviceLocationFallback()}>
@@ -2713,9 +2943,50 @@ export default function WeatherPage() {
               </div>
             </div>
           ) : null}
-        </TabsContent>
+        </div>
 
-        <TabsContent value="manage" className="space-y-4">
+      <WeatherSettingsDrawer
+        open={settingsDrawerOpen}
+        onOpenChange={(open) => {
+          void handleSettingsDrawerOpenChange(open);
+        }}
+        isAdmin={isWeatherAdminUser}
+        widgets={prefsDraftWidgets.length ? prefsDraftWidgets : weatherWidgetIds}
+        enabledWidgets={prefsDraftEnabledWidgets.length ? prefsDraftEnabledWidgets : weatherWidgetIds}
+        onToggleWidget={toggleDraftWidget}
+        onMoveWidget={moveDraftWidget}
+        locationOptions={weatherLocations.map((location) => ({ id: location.id, label: `${location.name} · ${location.property}` }))}
+        selectedLocationId={prefsDraftLocationId}
+        onSelectLocationId={setPrefsDraftLocationId}
+        adminStationAreaContent={
+          isWeatherAdminUser ? (
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p>Area config, station setup, and diagnostics are managed here.</p>
+              <div className="rounded-md border bg-muted/30 px-2 py-1">
+                {weatherLocations.length} areas · {weatherStations.length} stations configured
+              </div>
+            </div>
+          ) : null
+        }
+        adminManualFallbackContent={
+          isWeatherAdminUser ? (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">
+                Manual rainfall totals are tracked from daily entries and roll up into weekly, monthly, and yearly accumulations.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => openDialog('rainfall')}>
+                  <Droplets className="h-3.5 w-3.5" /> Manual Rainfall
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1" onClick={() => openDialog('override')}>
+                  <CloudSun className="h-3.5 w-3.5" /> Manual Override
+                </Button>
+              </div>
+            </div>
+          ) : null
+        }
+      >
+      <div className="space-y-4">
       <Card className="p-5">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -3210,8 +3481,8 @@ export default function WeatherPage() {
           )}
         </div>
       </div>
-        </TabsContent>
-      </Tabs>
+      </div>
+      </WeatherSettingsDrawer>
 
       <Sheet open={onboardingSheetOpen} onOpenChange={setOnboardingSheetOpen}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
