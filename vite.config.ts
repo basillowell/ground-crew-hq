@@ -27,17 +27,31 @@ export default defineConfig(() => ({
         start_url: "/",
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        globPatterns: ["**/*.{html,css}", "assets/vendor-react*.js", "assets/index*.js"],
+        globIgnores: ["**/assets/vendor-charts*.js", "**/assets/MobileFieldMap*.js", "**/assets/*Page-*.js"],
       },
     }),
   ].filter(Boolean),
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-ui": ["@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu"],
-          "vendor-charts": ["recharts"],
-          "vendor-query": ["@tanstack/react-query"],
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("/react/") || id.includes("\\react\\") || id.includes("react-dom") || id.includes("react-router-dom")) {
+            return "vendor-react";
+          }
+          if (id.includes("@supabase/supabase-js")) {
+            return "vendor-supabase";
+          }
+          if (id.includes("@radix-ui")) {
+            return "vendor-ui";
+          }
+          if (id.includes("recharts")) {
+            return "vendor-charts";
+          }
+          if (id.includes("@tanstack/react-query") || id.includes("@tanstack/query-core")) {
+            return "vendor-query";
+          }
         },
       },
     },

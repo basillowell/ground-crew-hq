@@ -17,10 +17,127 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@GroundCrewHQ" />
     <meta name="twitter:image" content="/favicon.svg" />
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #f6f8f6;
+      }
+
+      .boot-shell {
+        display: flex;
+        min-height: 100vh;
+        width: 100%;
+        background: #f6f8f6;
+      }
+
+      .boot-sidebar {
+        width: 272px;
+        min-width: 272px;
+        background: #1a1f2e;
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .boot-main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .boot-header {
+        height: 56px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #ffffff;
+      }
+
+      .boot-content {
+        flex: 1;
+        padding: 24px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 248, 246, 1));
+      }
+
+      .boot-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .boot-card {
+        border-radius: 16px;
+        background: #e5e7eb;
+        height: 152px;
+        animation: boot-pulse 1.2s ease-in-out infinite;
+      }
+
+      .boot-card:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+
+      .boot-card:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+
+      @media (max-width: 1024px) {
+        .boot-sidebar {
+          width: 84px;
+          min-width: 84px;
+        }
+
+        .boot-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 768px) {
+        .boot-sidebar {
+          display: none;
+        }
+
+        .boot-content {
+          padding: 16px;
+        }
+
+        .boot-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @keyframes boot-pulse {
+        0% {
+          opacity: 0.55;
+        }
+        50% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.55;
+        }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-shell" aria-hidden="true">
+        <aside class="boot-sidebar"></aside>
+        <section class="boot-main">
+          <header class="boot-header"></header>
+          <main class="boot-content">
+            <div class="boot-grid">
+              <div class="boot-card"></div>
+              <div class="boot-card"></div>
+              <div class="boot-card"></div>
+            </div>
+          </main>
+        </section>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

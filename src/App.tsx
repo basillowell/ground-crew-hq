@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -23,7 +24,7 @@ const MessagingPage = lazy(() => import("./pages/MessagingPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const TasksPage = lazy(() => import("./pages/TasksCatalogPage"));
 const SafetyPage = lazy(() => import("./pages/SafetyPage"));
-import ProgramSetupHubPage from "./pages/ProgramSetupHubPage";
+const ProgramSetupHubPage = lazy(() => import("./pages/ProgramSetupHubPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const ApplicationsPage = lazy(() => import("./pages/ApplicationsPage"));
 const MobileFieldPage = lazy(() => import("./pages/MobileFieldWorkspacePage"));
@@ -61,14 +62,7 @@ function RouteFallback() {
 }
 
 function PageRouteFallback() {
-  return (
-    <div className="p-6">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        Loading page...
-      </div>
-    </div>
-  );
+  return <PageSkeleton />;
 }
 
 class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; message: string }> {
@@ -183,7 +177,7 @@ function AppRoutes() {
           <Route path="reports" element={<Suspense fallback={<PageRouteFallback />}><ReportsPage /></Suspense>} />
           <Route path="tasks" element={<Suspense fallback={<PageRouteFallback />}><TasksPage /></Suspense>} />
           <Route path="safety" element={<Suspense fallback={<PageRouteFallback />}><SafetyPage /></Suspense>} />
-          <Route path="settings" element={<ProgramSetupHubPage />} />
+          <Route path="settings" element={<Suspense fallback={<PageRouteFallback />}><ProgramSetupHubPage /></Suspense>} />
           <Route path="field" element={<Suspense fallback={<PageRouteFallback />}><MobileFieldPage /></Suspense>} />
         </Routes>
       </AppLayout>
