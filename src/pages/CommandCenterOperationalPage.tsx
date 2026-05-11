@@ -155,7 +155,7 @@ function PropertySummaryCard({
 export default function CommandCenterOperationalPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentPropertyId, setCurrentPropertyId, currentUser, isAdmin, isManager, isReady } = useAuth();
+  const { currentPropertyId, setCurrentPropertyId, currentUser, isAdmin, isManager, isReady, orgId } = useAuth();
   const [currentDate] = useState(() => new Date());
   const [queryTimeoutReached, setQueryTimeoutReached] = useState(false);
 
@@ -168,7 +168,7 @@ export default function CommandCenterOperationalPage() {
   }, [currentDate]);
 
   const dashboardDataQuery = useDashboardData({
-    orgId: currentUser?.orgId,
+    orgId: orgId ?? undefined,
     propertyScope,
     todayKey,
     start30Date,
@@ -400,7 +400,7 @@ export default function CommandCenterOperationalPage() {
   }, [notes, openIssuesCount, unassignedScheduledCount]);
 
   const isLoading = dashboardDataQuery.isLoading;
-  const canLoadDashboard = isReady && Boolean(currentUser?.orgId);
+  const canLoadDashboard = isReady && Boolean(orgId);
 
   useEffect(() => {
     if (!canLoadDashboard || !isLoading) {
@@ -422,13 +422,13 @@ export default function CommandCenterOperationalPage() {
     );
   }
 
-  if (!currentUser?.orgId) {
+  if (!orgId) {
     return (
       <div className="h-full overflow-auto bg-background p-6">
         <Card className="rounded-2xl border p-5 shadow-sm">
           <h2 className="text-lg font-semibold">Unable to load workspace</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Account not found — contact support.
+            Account not found — contact support
           </p>
         </Card>
       </div>

@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { initOrgSettings } from '@/lib/initOrgSettings';
@@ -22,8 +22,9 @@ type AuthProfile = {
 };
 
 type AuthContextValue = {
-  user: AuthProfile | null;
-  userRole: AuthRole;
+  user: User | null;
+  orgId: string | null;
+  userRole: AuthRole | null;
   isReady: boolean;
   currentUser: AuthProfile | null;
   currentRole: AuthRole;
@@ -42,7 +43,6 @@ type AuthContextValue = {
     | 'profile-error';
   hasSession: boolean;
   isOrgReady: boolean;
-  orgId: string | null;
   isPlanActive: () => boolean;
   isAdmin: boolean;
   isManager: boolean;
@@ -52,456 +52,263 @@ type AuthContextValue = {
 };
 
 type AppUserRow = {
-  id: string;
-  employee_id: string;
   org_id: string;
   role: AuthRole;
-  department: string | null;
-  status: string;
+  employee_id: string | null;
 };
 
 type EmployeeRow = {
   id: string;
-  property_id: string;
-  first_name: string;
-  last_name: string;
-  role: string;
+  property_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  role: string | null;
   email: string | null;
   phone: string | null;
-  department: string;
+  department: string | null;
 };
 
 type OrganizationRow = {
   id: string;
-  subscription_status: string;
+  subscription_status: string | null;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const isDev = import.meta.env.DEV;
 
-function getSupabaseProjectLabel() {
-  try {
-    const url = new URL(import.meta.env.VITE_SUPABASE_URL ?? '');
-    return url.hostname;
-  } catch {
-    return 'unknown-supabase-project';
-  }
-}
-
-function timeoutResult<T>(ms: number, fallback: T): Promise<T> {
-  return new Promise<T>((resolve) => {
-    setTimeout(() => resolve(fallback), ms);
-  });
-}
-
-function isForbiddenError(error: unknown) {
-  const code = (error as { code?: string } | null)?.code;
-  const status = (error as { status?: number } | null)?.status;
-  const httpStatus = (error as { __isAuthError?: boolean; statusCode?: number } | null)?.statusCode;
-  const message = String((error as { message?: string } | null)?.message ?? '').toLowerCase();
-  return (
-    code === '403' ||
-    status === 403 ||
-    httpStatus === 403 ||
-    message.includes('forbidden') ||
-    message.includes('permission denied')
-  );
-}
-
-async function fetchAppUserRow(userId: string): Promise<{ row: AppUserRow | null; error: unknown }> {
-  if (!supabase) return { row: null, error: new Error('Supabase client is not configured.') };
-  const result = await supabase
-    .from('app_users')
-    .select('id, employee_id, org_id, role, department, status')
-    .eq('id', userId)
-    .maybeSingle();
-  return { row: (result.data as AppUserRow | null) ?? null, error: result.error };
-}
-
-async function loadAuthProfile(user: User | null): Promise<{
-  profile: AuthProfile | null;
-  debugMessage: string;
-  reason: 'ok' | 'missing-app-user' | 'missing-employee' | 'missing-organization' | 'error';
-}> {
-  if (!supabase || !user) return { profile: null, debugMessage: '', reason: 'error' };
-  if (isDev) {
-    console.info('[Auth] Loading app profile for auth user', {
-      userId: user.id,
-      email: user.email ?? null,
-    });
-  }
-  try {
-    let appUserLookup = await fetchAppUserRow(user.id);
-    if (appUserLookup.error && isForbiddenError(appUserLookup.error)) {
-      if (isDev) {
-        console.warn('[Auth] app_users query returned 403, refreshing session once and retrying');
-      }
-      await supabase.auth.refreshSession();
-      appUserLookup = await fetchAppUserRow(user.id);
-    }
-
-    const data = appUserLookup.row;
-    const error = appUserLookup.error as { message?: string } | null;
-
-    if (error || !data) {
-      if (isDev) {
-        console.warn('[Auth] app_users row missing for auth user', {
-          userId: user.id,
-          email: user.email ?? null,
-          error: error?.message ?? null,
-        });
-      }
-      return {
-        profile: null,
-        debugMessage: 'Account not found — contact support.',
-        reason: 'missing-app-user',
-      };
-    }
-
-    const row = data as AppUserRow;
-    if (isDev) {
-      console.info('[Auth] app_users loaded', {
-        appUserId: row.id,
-        employeeId: row.employee_id,
-        orgId: row.org_id,
-      });
-    }
-
-    try {
-      await initOrgSettings({ orgId: row.org_id });
-    } catch (initError) {
-      if (isDev) {
-        console.warn('[Auth] program_settings init skipped due to error', {
-          orgId: row.org_id,
-          error: (initError as { message?: string } | null)?.message ?? String(initError),
-        });
-      }
-    }
-
-    const employeeResult = await supabase
-      .from('employees')
-      .select('id, property_id, first_name, last_name, role, email, phone, department')
-      .eq('id', row.employee_id)
-      .maybeSingle();
-    if (employeeResult.error) {
-      if (isDev) {
-        console.warn('[Auth] employee query failed', {
-          authUserId: user.id,
-          employeeId: row.employee_id,
-          error: employeeResult.error.message,
-        });
-      }
-      return {
-        profile: null,
-        debugMessage:
-          'Signed in, but your profile access is restricted right now. Contact your administrator to verify employee permissions.',
-        reason: 'error',
-      };
-    }
-    const employee = (employeeResult.data as EmployeeRow | null) ?? null;
-    if (!employee) {
-      if (isDev) {
-        console.warn('[Auth] linked employee row missing', {
-          authUserId: user.id,
-          employeeId: row.employee_id,
-        });
-      }
-      return {
-        profile: null,
-        debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked employee record ${row.employee_id} is missing.`,
-        reason: 'missing-employee',
-      };
-    }
-    if (isDev) {
-      console.info('[Auth] employee loaded', {
-        employeeId: employee.id,
-        propertyId: employee.property_id,
-      });
-    }
-
-    const organizationResult = await supabase
-      .from('organizations')
-      .select('id, subscription_status')
-      .eq('id', row.org_id)
-      .maybeSingle();
-    if (organizationResult.error) {
-      if (isDev) {
-        console.warn('[Auth] organization query failed', {
-          authUserId: user.id,
-          orgId: row.org_id,
-          error: organizationResult.error.message,
-        });
-      }
-      return {
-        profile: null,
-        debugMessage:
-          'Signed in, but organization access is restricted right now. Contact your administrator to resolve organization permissions.',
-        reason: 'error',
-      };
-    }
-    const organization = (organizationResult.data as OrganizationRow | null) ?? null;
-    if (!organization) {
-      if (isDev) {
-        console.warn('[Auth] linked organization row missing', {
-          authUserId: user.id,
-          orgId: row.org_id,
-        });
-      }
-      return {
-        profile: null,
-        debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but the linked organization ${row.org_id} is missing.`,
-        reason: 'missing-organization',
-      };
-    }
-    if (isDev) {
-      console.info('[Auth] organization loaded', {
-        orgId: organization.id,
-        subscriptionStatus: organization.subscription_status ?? null,
-      });
-    }
-
-    if (isDev) {
-      console.info('[Auth] Profile hydration complete', {
-        authUserId: user.id,
-        appUserId: row.id,
-        employeeId: row.employee_id,
-        orgId: row.org_id,
-        role: row.role,
-      });
-    }
-    return {
-      profile: {
-        authUser: user,
-        appUserId: row.id,
-        employeeId: row.employee_id,
-        orgId: row.org_id,
-        role: row.role,
-        status: row.status,
-        subscriptionStatus: organization.subscription_status ?? 'trialing',
-        department: row.department ?? employee.department ?? 'Maintenance',
-        propertyId: employee.property_id ?? '',
-        fullName: `${employee.first_name} ${employee.last_name}`.trim() || (user.email ?? 'WorkForce User'),
-        title: employee.role ?? row.role,
-        email: employee.email ?? user.email ?? '',
-        phone: employee.phone ?? '',
-      },
-      debugMessage: '',
-      reason: 'ok',
-    };
-  } catch (error) {
-    if (isDev) {
-      console.error('[Auth] Unexpected profile hydration error', error);
-    }
-    return {
-      profile: null,
-      debugMessage: `Could not load profile data from ${getSupabaseProjectLabel()}. Please refresh and try again.`,
-      reason: 'error',
-    };
-  }
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<AuthProfile | null>(null);
-  const [currentPropertyId, setCurrentPropertyIdState] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [authDebugMessage, setAuthDebugMessage] = useState('');
-  const [hasSession, setHasSession] = useState(false);
-  const [isOrgReady, setIsOrgReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<AuthRole | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthProfile | null>(null);
+  const [currentPropertyId, setCurrentPropertyId] = useState('');
+  const [isReady, setIsReady] = useState(false);
+  const [authDebugMessage, setAuthDebugMessage] = useState('');
   const [authState, setAuthState] = useState<AuthContextValue['authState']>('checking-session');
-  const retryHydrationRef = useRef<() => Promise<void>>(async () => {});
-  const currentAuthUserIdRef = useRef<string | null>(null);
-  const currentUserRef = useRef<AuthProfile | null>(null);
+  const [hasSession, setHasSession] = useState(false);
 
-  useEffect(() => {
-    currentUserRef.current = currentUser;
-  }, [currentUser]);
+  async function buildProfile(authUser: User, appUser: AppUserRow): Promise<AuthProfile> {
+    let employee: EmployeeRow | null = null;
+    let organization: OrganizationRow | null = null;
 
-  useEffect(() => {
+    if (supabase && appUser.employee_id) {
+      const employeeResult = await supabase
+        .from('employees')
+        .select('id, property_id, first_name, last_name, role, email, phone, department')
+        .eq('id', appUser.employee_id)
+        .maybeSingle();
+      employee = (employeeResult.data as EmployeeRow | null) ?? null;
+    }
+
+    if (supabase) {
+      const organizationResult = await supabase
+        .from('organizations')
+        .select('id, subscription_status')
+        .eq('id', appUser.org_id)
+        .maybeSingle();
+      organization = (organizationResult.data as OrganizationRow | null) ?? null;
+    }
+
+    const fullName = `${employee?.first_name ?? ''} ${employee?.last_name ?? ''}`.trim() || authUser.email || 'Ground Crew User';
+    return {
+      authUser,
+      appUserId: authUser.id,
+      employeeId: appUser.employee_id ?? '',
+      orgId: appUser.org_id,
+      role: appUser.role,
+      status: 'active',
+      subscriptionStatus: organization?.subscription_status ?? 'trialing',
+      department: employee?.department ?? 'Maintenance',
+      propertyId: employee?.property_id ?? '',
+      fullName,
+      title: employee?.role ?? appUser.role,
+      email: employee?.email ?? authUser.email ?? '',
+      phone: employee?.phone ?? '',
+    };
+  }
+
+  async function loadAppUser(userId: string, authUser: User) {
     if (!supabase) {
-      setIsLoading(false);
-      setAuthState('profile-error');
-      setAuthDebugMessage(`Missing Supabase configuration for ${getSupabaseProjectLabel()}.`);
-      setIsOrgReady(false);
       setOrgId(null);
+      setUserRole(null);
+      setCurrentUser(null);
+      setHasSession(false);
+      setAuthState('profile-error');
+      setAuthDebugMessage('Missing Supabase configuration. Contact support.');
+      setIsReady(true);
       return;
     }
 
-    let mounted = true;
+    setAuthState('loading-profile');
+    setAuthDebugMessage('');
 
-    async function hydrateAuth(userOverride?: User | null, options?: { blockUi?: boolean }) {
-      const shouldBlockUi = options?.blockUi ?? !currentUserRef.current;
-      if (isDev) {
-        console.info('[Auth] Starting initial auth hydration');
-      }
-      if (shouldBlockUi) {
-        setIsLoading(true);
-        setAuthState('checking-session');
-      }
-      try {
-        const sessionUser =
-          typeof userOverride === 'undefined'
-            ? (await supabase.auth.getSession()).data.session?.user ?? null
-            : userOverride;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('org_id, role, employee_id')
+        .eq('id', userId)
+        .single();
+
+      if (data) {
+        const appUser = data as AppUserRow;
+        setOrgId(appUser.org_id);
+        setUserRole(appUser.role);
+        setHasSession(true);
+        setAuthState('authenticated');
         if (isDev) {
-          console.info('[Auth] Initial session lookup finished', {
-            hasSessionUser: Boolean(sessionUser),
-            sessionUserId: sessionUser?.id ?? null,
+          console.log('[Auth] app_users loaded', { orgId: appUser.org_id, role: appUser.role });
+        }
+
+        try {
+          await initOrgSettings({ orgId: appUser.org_id });
+        } catch (initError) {
+          if (isDev) {
+            console.warn('[Auth] initOrgSettings skipped', initError);
+          }
+        }
+
+        try {
+          const profile = await buildProfile(authUser, appUser);
+          setCurrentUser(profile);
+          setCurrentPropertyId((current) => current || (profile.role === 'admin' || profile.role === 'manager' ? 'all' : profile.propertyId));
+        } catch (profileError) {
+          if (isDev) {
+            console.warn('[Auth] profile hydration fallback', profileError);
+          }
+          setCurrentUser({
+            authUser,
+            appUserId: authUser.id,
+            employeeId: appUser.employee_id ?? '',
+            orgId: appUser.org_id,
+            role: appUser.role,
+            status: 'active',
+            subscriptionStatus: 'trialing',
+            department: 'Maintenance',
+            propertyId: '',
+            fullName: authUser.email ?? 'Ground Crew User',
+            title: appUser.role,
+            email: authUser.email ?? '',
+            phone: '',
           });
         }
-        if (!sessionUser) {
-          if (!mounted) return;
-          setHasSession(false);
-          setIsOrgReady(false);
-          setOrgId(null);
-          setCurrentUser(null);
-          setCurrentPropertyIdState('');
-          setAuthDebugMessage('');
-          setAuthState('no-session');
-          return;
-        }
 
-        if (!mounted) return;
-        setHasSession(true);
-        if (shouldBlockUi) {
-          setAuthState('loading-profile');
-        }
+        setIsReady(true);
+        return;
+      }
 
-        const profileResult = await Promise.race([
-          loadAuthProfile(sessionUser),
-          timeoutResult(20000, {
-            profile: null,
-            debugMessage: `Authentication timed out while connecting to ${getSupabaseProjectLabel()}. Please try again.`,
-            reason: 'error' as const,
-          }),
-        ]);
-        if (!mounted) return;
-        if (!profileResult.profile && profileResult.debugMessage.includes('timed out')) {
-          if (!currentUserRef.current) {
-            setCurrentUser(null);
-          }
-          setAuthDebugMessage(profileResult.debugMessage);
-          setAuthState('network-timeout');
-          return;
-        }
+      if (isDev) {
+        console.warn('[Auth] app_users lookup failed', { attempt, error: error?.message ?? null });
+      }
 
-        if (profileResult.profile) {
-          setCurrentUser(profileResult.profile);
-          setOrgId(profileResult.profile.orgId);
-          setIsOrgReady(true);
-          currentAuthUserIdRef.current = profileResult.profile.authUser.id;
-        } else if (!currentUserRef.current) {
-          setCurrentUser(null);
-          setOrgId(null);
-          setIsOrgReady(false);
-          currentAuthUserIdRef.current = null;
-        }
-        setAuthDebugMessage(profileResult.debugMessage);
-        if (profileResult.profile || currentUserRef.current) setAuthState('authenticated');
-        else if (profileResult.reason === 'missing-app-user' || profileResult.reason === 'missing-employee' || profileResult.reason === 'missing-organization') setAuthState('profile-missing');
-        else setAuthState('profile-error');
-        setCurrentPropertyIdState((current) => {
-          if (!profileResult.profile) return '';
-          if (current) return current;
-          return profileResult.profile.role === 'admin' || profileResult.profile.role === 'manager' ? 'all' : profileResult.profile.propertyId;
-        });
-      } catch (error) {
-        if (isDev) {
-          console.error('[Auth] Initial auth hydration failed', error);
-        }
-        if (!mounted) return;
-        if (!currentUserRef.current) {
-          setCurrentUser(null);
-          setOrgId(null);
-          setIsOrgReady(false);
-          setCurrentPropertyIdState('');
-          currentAuthUserIdRef.current = null;
-        }
-        setAuthDebugMessage(`Could not connect to ${getSupabaseProjectLabel()}. Please try again.`);
-        setAuthState('profile-error');
-      } finally {
-        if (mounted && shouldBlockUi) {
-          setIsLoading(false);
-          if (isDev) {
-            console.info('[Auth] Initial auth hydration finished');
-          }
-        }
+      if (attempt < 3) {
+        await delay(1000);
       }
     }
 
-    void hydrateAuth(undefined, { blockUi: true });
-    retryHydrationRef.current = async () => {
-      await hydrateAuth(undefined, { blockUi: true });
-    };
+    setOrgId(null);
+    setUserRole(null);
+    setCurrentUser(null);
+    setAuthState('profile-missing');
+    setAuthDebugMessage('Account not found — contact support.');
+    setIsReady(true);
+    console.error('app_users not found after 3 attempts for userId:', userId);
+  }
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (isDev) {
-        console.info('[Auth] Supabase auth state changed', {
-          event: _event,
-          hasSessionUser: Boolean(session?.user),
-          sessionUserId: session?.user?.id ?? null,
-        });
-      }
-      if (
-        _event === 'TOKEN_REFRESHED' &&
-        session?.user?.id &&
-        currentAuthUserIdRef.current === session.user.id
-      ) {
-        if (isDev) {
-          console.info('[Auth] Skipping profile re-hydration on token refresh for active user');
-        }
+  useEffect(() => {
+    if (!supabase) {
+      setIsReady(true);
+      setAuthState('profile-error');
+      setAuthDebugMessage('Missing Supabase configuration. Contact support.');
+      return;
+    }
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null);
+        setCurrentUser(null);
+        setOrgId(null);
+        setUserRole(null);
+        setCurrentPropertyId('');
+        setHasSession(false);
+        setAuthState('no-session');
+        setAuthDebugMessage('');
+        setIsReady(true);
         return;
       }
-      await hydrateAuth(session?.user ?? null, { blockUi: !currentUserRef.current });
-      if (isDev) {
-        console.info('[Auth] Auth state processing finished');
+
+      if (session.user) {
+        setIsReady(false);
+        setUser(session.user);
+        await loadAppUser(session.user.id, session.user);
+      }
+    });
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setIsReady(false);
+        setUser(session.user);
+        await loadAppUser(session.user.id, session.user);
+      } else {
+        setHasSession(false);
+        setAuthState('no-session');
+        setIsReady(true);
       }
     });
 
     return () => {
-      mounted = false;
-      subscription.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
-  const value = useMemo<AuthContextValue>(() => {
-    const currentRole = currentUser?.role ?? 'employee';
-    const isReady = !isLoading && authState !== 'checking-session' && authState !== 'loading-profile';
-    return {
-      user: currentUser,
-      userRole: currentRole,
+  const currentRole: AuthRole = currentUser?.role ?? userRole ?? 'employee';
+  const isLoading = !isReady;
+  const isOrgReady = isReady && Boolean(orgId);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      orgId,
+      userRole,
       isReady,
       currentUser,
       currentRole,
       currentPropertyId,
-      setCurrentPropertyId: setCurrentPropertyIdState,
+      setCurrentPropertyId,
       signOut: async () => {
         if (!supabase) return;
         await supabase.auth.signOut();
-        setCurrentUser(null);
-        setOrgId(null);
-        setIsOrgReady(false);
-        setCurrentPropertyIdState('');
-        setAuthDebugMessage('');
-        setHasSession(false);
-        setAuthState('no-session');
       },
       retryAuthHydration: async () => {
-        await retryHydrationRef.current();
+        if (!supabase) return;
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user) {
+          setIsReady(false);
+          setUser(data.session.user);
+          await loadAppUser(data.session.user.id, data.session.user);
+        } else {
+          setIsReady(true);
+          setAuthState('no-session');
+        }
       },
       authDebugMessage,
       authState,
       hasSession,
       isOrgReady,
-      orgId,
-      isPlanActive: () => ['active', 'trialing'].includes(currentUser?.subscriptionStatus ?? ''),
+      isPlanActive: () => ['active', 'trialing'].includes(currentUser?.subscriptionStatus ?? 'trialing'),
       isAdmin: currentRole === 'admin',
       isManager: currentRole === 'manager',
       isEmployee: currentRole === 'employee',
       isLoading,
-      hasProfileIssue: !isLoading && !currentUser && Boolean(authDebugMessage),
-    };
-  }, [authDebugMessage, authState, currentPropertyId, currentUser, hasSession, isLoading, isOrgReady, orgId]);
+      hasProfileIssue: isReady && !orgId,
+    }),
+    [authDebugMessage, authState, currentPropertyId, currentRole, currentUser, hasSession, isLoading, isOrgReady, isReady, orgId, user, userRole],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
