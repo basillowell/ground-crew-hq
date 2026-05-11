@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { AreaChart, Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CloudSun, Crosshair, Droplets, MapPin, MapPinned, MoreHorizontal, PencilLine, Plus, Radar, RefreshCcw, Save, Search, Settings, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { OperationsView, type WeatherWidgetId, type WeatherWidgetLiveData } from '@/components/weather/OperationsView';
+import { RainfallTracker } from '@/components/weather/RainfallTracker';
 import { WeatherSettingsDrawer } from '@/components/weather/WeatherSettingsDrawer';
 import {
   type ManualRainfallEntry,
@@ -289,8 +290,10 @@ export default function WeatherPage() {
   const [showStationManagement, setShowStationManagement] = useState(false);
   const [showPropertyWeatherCards, setShowPropertyWeatherCards] = useState(true);
   const [showManualRainfallHistory, setShowManualRainfallHistory] = useState(false);
-  const [showOperationalDecisionCards, setShowOperationalDecisionCards] = useState(true);
   const [showDetailedDiagnostics, setShowDetailedDiagnostics] = useState(false);
+  const [showHourlyTempMetric, setShowHourlyTempMetric] = useState(true);
+  const [showHourlyRainMetric, setShowHourlyRainMetric] = useState(true);
+  const [showHourlyWindMetric, setShowHourlyWindMetric] = useState(true);
   const [showOperationsControls, setShowOperationsControls] = useState(false);
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
   const [prefsDraftWidgets, setPrefsDraftWidgets] = useState<WeatherWidgetId[]>([]);
@@ -1695,6 +1698,32 @@ export default function WeatherPage() {
       }),
   });
   const liveForecastHours = useMemo(() => liveForecastQuery.data?.hourly ?? [], [liveForecastQuery.data?.hourly]);
+  const hourlyForecastChartData = useMemo(
+    () =>
+      liveForecastHours.slice(0, 24).map((point, index) => {
+        const date = new Date(point.time);
+        const hourLabel = date.toLocaleTimeString([], { hour: 'numeric' });
+        return {
+          id: `${point.time}-${index}`,
+          hourLabel,
+          index,
+          timeMs: date.getTime(),
+          temperature: Math.round(point.temperature),
+          precipitationProbability: Math.round(point.precipitationProbability ?? 0),
+          windSpeed: Math.round(point.windSpeed),
+        };
+      }),
+    [liveForecastHours],
+  );
+  const currentHourChartLabel = useMemo(() => {
+    if (!hourlyForecastChartData.length) return null;
+    const now = Date.now();
+    const closest = hourlyForecastChartData.reduce((best, point) => {
+      if (!best) return point;
+      return Math.abs(point.timeMs - now) < Math.abs(best.timeMs - now) ? point : best;
+    }, hourlyForecastChartData[0]);
+    return closest?.hourLabel ?? null;
+  }, [hourlyForecastChartData]);
 
   useEffect(() => {
     async function syncLiveForecastLog() {
@@ -1709,27 +1738,44 @@ export default function WeatherPage() {
       );
 
       const payload = {
-        location_id: selectedLocation.id,
+        locationId: selectedLocation.id,
         date: today,
-        org_id: currentUser.orgId,
-        captured_at: new Date().toISOString(),
-        current_conditions: getWeatherConditionMeta(current.weatherCode).label,
+        orgId: currentUser.orgId,
+        capturedAt: new Date().toISOString(),
+        currentConditions: getWeatherConditionMeta(current.weatherCode).label,
         forecast: 'Live forecast from Open-Meteo.',
-        rainfall_total: expectedRain,
+        rainfallTotal: expectedRain,
         temperature: current.temperature,
         humidity: latestStoredLog?.humidity ?? null,
         wind: current.windSpeed,
-        wind_gust: latestStoredLog?.windGust ?? current.windSpeed,
+        windGust: latestStoredLog?.windGust ?? current.windSpeed,
         et: latestStoredLog?.et ?? null,
-        source: 'station',
+        source: 'open-meteo',
         notes: 'Auto-updated from Open-Meteo forecast fetch.',
       };
 
-      const { error } = await supabase
-        .from('weather_daily_logs')
-        .upsert(payload, { onConflict: 'location_id,date' });
-      if (error) {
-        console.warn('[weather] live log upsert failed', error.message);
+      const result = await supabase.from('weather_daily_logs').upsert(payload, { onConflict: 'locationId,date' });
+      if (result.error) {
+        const fallbackPayload = {
+          location_id: selectedLocation.id,
+          date: today,
+          org_id: currentUser.orgId,
+          captured_at: new Date().toISOString(),
+          current_conditions: getWeatherConditionMeta(current.weatherCode).label,
+          forecast: 'Live forecast from Open-Meteo.',
+          rainfall_total: expectedRain,
+          temperature: current.temperature,
+          humidity: latestStoredLog?.humidity ?? null,
+          wind: current.windSpeed,
+          wind_gust: latestStoredLog?.windGust ?? current.windSpeed,
+          et: latestStoredLog?.et ?? null,
+          source: 'open-meteo',
+          notes: 'Auto-updated from Open-Meteo forecast fetch.',
+        };
+        const fallbackResult = await supabase.from('weather_daily_logs').upsert(fallbackPayload, { onConflict: 'location_id,date' });
+        if (fallbackResult.error) {
+          console.warn('[weather] live log upsert failed', fallbackResult.error.message);
+        }
       }
     }
 
@@ -2438,45 +2484,16 @@ export default function WeatherPage() {
       </PageHeader>
 
       <div className="space-y-4">
-          <Card className="p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Operations Overview</p>
-                <h2 className="mt-1 text-xl font-semibold">
-                  {selectedProperty ? `${selectedProperty.name} Weather Command` : 'Property Weather Command'}
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Live source transparency, short-horizon forecast signals, and decision-ready weather context.
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Badge variant={liveStatusBadgeVariant}>{liveStatusLabel}</Badge>
-                  <Badge variant={selectedLiveSourceVariant}>Source Type: {activeLiveSourceTypeLabel}</Badge>
-                  <Badge variant="outline">Source Detail: {selectedLiveSourceLabel}</Badge>
-                  <Badge variant="outline">Provider: {activeProviderLabel}</Badge>
-                  <Badge variant="outline">Last Updated: {latestCaptureLabel}</Badge>
-                  <Badge variant="outline">Active Live Source: {activeLiveSourceCoordinatesLabel}</Badge>
-                  <Badge variant="outline">Area: {selectedLocation.name}</Badge>
-                  <Badge variant="outline">Logs: {locationLogs.length}</Badge>
-                </div>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs">
-                  <div className="text-muted-foreground">Next 8h Rainfall</div>
-                  <div className="text-sm font-semibold">{next8HourRainEstimate.toFixed(2)} in</div>
-                </div>
-                <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs">
-                  <div className="text-muted-foreground">Next 8h Avg Wind</div>
-                  <div className="text-sm font-semibold">{next8HourAvgWind !== null ? `${next8HourAvgWind} mph` : '--'}</div>
-                </div>
-                <Button size="sm" variant="outline" className="gap-1" onClick={refreshLiveWeather}>
-                  <RefreshCcw className="h-3.5 w-3.5" /> Refresh Live Weather
-                </Button>
-                <Button size="sm" variant="outline" className="gap-1" onClick={() => openDialog('rainfall')}>
-                  <Droplets className="h-3.5 w-3.5" /> Add Rain Entry
-                </Button>
-              </div>
-            </div>
-          </Card>
+          <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2">
+            <p className="truncate text-xs text-muted-foreground">
+              {(selectedLocation?.name ?? 'Sarasota Polo Club')} · {activeProviderLabel} · Last updated {latestCaptureLabel}
+              {liveCurrentTemperatureF !== null ? ` · ${liveCurrentTemperatureF}°F` : ''}{' '}
+              {liveConditionMeta.label}
+            </p>
+            <Button size="icon" variant="ghost" onClick={refreshLiveWeather} aria-label="Refresh live weather">
+              <RefreshCcw className="h-4 w-4" />
+            </Button>
+          </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="p-4">
@@ -2583,10 +2600,6 @@ export default function WeatherPage() {
                   <Switch checked={showManualRainfallHistory} onCheckedChange={setShowManualRainfallHistory} />
                 </label>
                 <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
-                  <span>Operational Decision Cards</span>
-                  <Switch checked={showOperationalDecisionCards} onCheckedChange={setShowOperationalDecisionCards} />
-                </label>
-                <label className="flex items-center justify-between rounded-xl border bg-background/70 px-3 py-2 text-xs">
                   <span>Detailed Diagnostics</span>
                   <Switch checked={showDetailedDiagnostics} onCheckedChange={setShowDetailedDiagnostics} />
                 </label>
@@ -2658,42 +2671,85 @@ export default function WeatherPage() {
                     <div className="mt-2 text-xs text-muted-foreground">
                       Active Live Source: {activeLiveSourceTypeLabel} · {selectedLiveSourceLabel} ({activeLiveSourceCoordinatesLabel})
                     </div>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                      <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
-                        <div className="text-muted-foreground">8h Rain</div>
-                        <div className="font-semibold">{next8HourRainEstimate.toFixed(2)} in</div>
-                      </div>
-                      <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
-                        <div className="text-muted-foreground">8h Avg Wind</div>
-                        <div className="font-semibold">{next8HourAvgWind !== null ? `${next8HourAvgWind} mph` : '--'}</div>
-                      </div>
-                      <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
-                        <div className="text-muted-foreground">Data Source</div>
-                        <div className="font-semibold truncate">{primaryStation?.provider ?? 'Fallback'}</div>
-                      </div>
-                    </div>
                   </div>
                   ) : null}
 
                   {showHourlyForecast ? (
                     <div className="rounded-2xl border bg-background/70 p-5">
                       <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Hourly Forecast</div>
-                      <div className="mt-4 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
-                        {(liveForecastHours.length ? liveForecastHours : []).map((point) => {
-                          const pointMeta = getWeatherConditionMeta(point.weatherCode);
-                          const PointIcon = pointMeta.icon;
-                          return (
-                            <div key={point.time} className="rounded-xl bg-muted/25 px-3 py-3 text-center">
-                              <div className="text-[11px] font-medium text-muted-foreground">
-                                {new Date(point.time).toLocaleTimeString([], { hour: 'numeric' })}
-                              </div>
-                              <PointIcon className="mx-auto mt-2 h-4 w-4 text-primary" />
-                              <div className="mt-2 text-sm font-semibold">{Math.round(point.temperature)}F</div>
-                              <div className="mt-1 text-[11px] text-muted-foreground">{point.precipitationProbability}% rain</div>
-                              <div className="text-[11px] text-muted-foreground">{Math.round(point.windSpeed)} mph wind</div>
-                            </div>
-                          );
-                        })}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant={showHourlyTempMetric ? 'default' : 'outline'} onClick={() => setShowHourlyTempMetric((current) => !current)}>
+                          Temp
+                        </Button>
+                        <Button size="sm" variant={showHourlyRainMetric ? 'default' : 'outline'} onClick={() => setShowHourlyRainMetric((current) => !current)}>
+                          Rain %
+                        </Button>
+                        <Button size="sm" variant={showHourlyWindMetric ? 'default' : 'outline'} onClick={() => setShowHourlyWindMetric((current) => !current)}>
+                          Wind
+                        </Button>
+                      </div>
+                      <div className="mt-4 overflow-x-auto">
+                        <div style={{ minWidth: `${Math.max(960, hourlyForecastChartData.length * 48)}px` }}>
+                          <ResponsiveContainer width="100%" height={160}>
+                            <ComposedChart data={hourlyForecastChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis
+                                dataKey="hourLabel"
+                                tick={{ fontSize: 11 }}
+                                interval={1}
+                                tickFormatter={(_, index) => (index % 2 === 0 ? String(hourlyForecastChartData[index]?.hourLabel ?? '') : '')}
+                              />
+                              <YAxis
+                                yAxisId="temp"
+                                tick={{ fontSize: 11 }}
+                                width={34}
+                                tickFormatter={(value) => `${value}°`}
+                              />
+                              <YAxis
+                                yAxisId="conditions"
+                                orientation="right"
+                                tick={{ fontSize: 11 }}
+                                width={34}
+                                tickFormatter={(value) => `${value}`}
+                              />
+                              <Tooltip
+                                formatter={(value: number, name) => {
+                                  if (name === 'Temperature') return [`${value}°F`, name];
+                                  if (name === 'Rain %') return [`${value}%`, name];
+                                  if (name === 'Wind') return [`${value} mph`, name];
+                                  return [value, name];
+                                }}
+                                labelFormatter={(label) => `${label}`}
+                              />
+                              {currentHourChartLabel ? (
+                                <ReferenceLine x={currentHourChartLabel} stroke="#475569" strokeDasharray="4 4" yAxisId="temp" />
+                              ) : null}
+                              {showHourlyRainMetric ? (
+                                <Bar yAxisId="conditions" dataKey="precipitationProbability" name="Rain %" fill="#3b82f6" fillOpacity={0.35} radius={[4, 4, 0, 0]} />
+                              ) : null}
+                              {showHourlyTempMetric ? (
+                                <Line yAxisId="temp" type="monotone" dataKey="temperature" name="Temperature" stroke="#166534" strokeWidth={2} dot={false} />
+                              ) : null}
+                              {showHourlyWindMetric ? (
+                                <Line yAxisId="conditions" type="monotone" dataKey="windSpeed" name="Wind" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
+                              ) : null}
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
+                          <div className="text-muted-foreground">8h Rain</div>
+                          <div className="font-semibold">{next8HourRainEstimate.toFixed(2)} in</div>
+                        </div>
+                        <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
+                          <div className="text-muted-foreground">8h Avg Wind</div>
+                          <div className="font-semibold">{next8HourAvgWind !== null ? `${next8HourAvgWind} mph` : '--'}</div>
+                        </div>
+                        <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
+                          <div className="text-muted-foreground">Data Source</div>
+                          <div className="font-semibold truncate">{primaryStation?.provider ?? 'Fallback'}</div>
+                        </div>
                       </div>
                     </div>
                   ) : null}
@@ -2813,27 +2869,15 @@ export default function WeatherPage() {
             </Card>
             ) : null}
 
-            {showOperationalDecisionCards && showTurfRiskNotes ? (
-            <Card className="p-5">
-              <div className="mb-4">
-                <p className="text-sm font-semibold">Decision Cards</p>
-                <p className="text-xs text-muted-foreground">
-                  Event, spray, and traffic risk guidance based on current weather signals.
-                </p>
-              </div>
-              <div className="space-y-3">
-                {decisionCards
-                  .filter((card) => (showTurfRiskNotes ? true : card.label !== 'Traffic Risk'))
-                  .map((card) => (
-                  <div key={card.label} className="rounded-xl border bg-background/70 p-4">
-                    <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{card.label}</div>
-                    <div className="mt-2 text-base font-semibold">{card.value}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{card.detail}</div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-            ) : null}
+            <RainfallTracker
+              loading={weatherLogsQuery.isLoading || weatherLogsQuery.isFetching}
+              logs={locationLogs.map((log) => ({
+                date: log.date,
+                rainfallTotal: Number(log.rainfallTotal ?? 0),
+                source: log.source,
+                notes: log.notes,
+              }))}
+            />
           </div>
 
           {showManualRainfallHistory ? (
