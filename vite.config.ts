@@ -46,9 +46,6 @@ export default defineConfig(() => ({
           if (id.includes("@radix-ui")) {
             return "vendor-ui";
           }
-          if (id.includes("recharts")) {
-            return "vendor-charts";
-          }
           if (id.includes("@tanstack/react-query") || id.includes("@tanstack/query-core")) {
             return "vendor-query";
           }
