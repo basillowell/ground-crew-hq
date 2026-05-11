@@ -22,6 +22,9 @@ type AuthProfile = {
 };
 
 type AuthContextValue = {
+  user: AuthProfile | null;
+  userRole: AuthRole;
+  isReady: boolean;
   currentUser: AuthProfile | null;
   currentRole: AuthRole;
   currentPropertyId: string;
@@ -150,7 +153,7 @@ async function loadAuthProfile(user: User | null): Promise<{
       }
       return {
         profile: null,
-        debugMessage: `Signed in to ${getSupabaseProjectLabel()}, but no app user profile was found for ${user.email ?? user.id}.`,
+        debugMessage: 'Account not found — contact support.',
         reason: 'missing-app-user',
       };
     }
@@ -463,7 +466,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => {
     const currentRole = currentUser?.role ?? 'employee';
+    const isReady = !isLoading && authState !== 'checking-session' && authState !== 'loading-profile';
     return {
+      user: currentUser,
+      userRole: currentRole,
+      isReady,
       currentUser,
       currentRole,
       currentPropertyId,

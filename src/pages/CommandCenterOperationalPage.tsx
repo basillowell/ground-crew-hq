@@ -155,8 +155,9 @@ function PropertySummaryCard({
 export default function CommandCenterOperationalPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentPropertyId, setCurrentPropertyId, currentUser, isAdmin, isManager } = useAuth();
+  const { currentPropertyId, setCurrentPropertyId, currentUser, isAdmin, isManager, isReady } = useAuth();
   const [currentDate] = useState(() => new Date());
+  const [queryTimeoutReached, setQueryTimeoutReached] = useState(false);
 
   const todayKey = currentDate.toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
@@ -399,6 +400,40 @@ export default function CommandCenterOperationalPage() {
   }, [notes, openIssuesCount, unassignedScheduledCount]);
 
   const isLoading = dashboardDataQuery.isLoading;
+  const canLoadDashboard = isReady && Boolean(currentUser?.orgId);
+
+  useEffect(() => {
+    if (!canLoadDashboard || !isLoading) {
+      setQueryTimeoutReached(false);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setQueryTimeoutReached(true), 8000);
+    return () => window.clearTimeout(timeoutId);
+  }, [canLoadDashboard, isLoading]);
+
+  if (!isReady) {
+    return (
+      <div className="h-full overflow-auto bg-background p-6">
+        <div className="rounded-2xl border bg-card p-4 shadow-sm">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="mt-3 h-4 w-96" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser?.orgId) {
+    return (
+      <div className="h-full overflow-auto bg-background p-6">
+        <Card className="rounded-2xl border p-5 shadow-sm">
+          <h2 className="text-lg font-semibold">Unable to load workspace</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Account not found — contact support.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   async function handleGenerateBrief() {
     if (!supabase || !currentUser?.orgId || (!isAdmin && !isManager)) return;
@@ -478,7 +513,7 @@ export default function CommandCenterOperationalPage() {
         </p>
       </div>
 
-      {isLoading ? (
+      {isLoading && !queryTimeoutReached ? (
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <Card key={`ops-skeleton-${index}`} className="rounded-2xl border p-5 shadow-sm">
@@ -490,7 +525,14 @@ export default function CommandCenterOperationalPage() {
         </div>
       ) : null}
 
-      {!isLoading ? <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {isLoading && queryTimeoutReached ? (
+        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+          <h3 className="text-base font-semibold">Taking longer than expected</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Try refreshing.</p>
+        </Card>
+      ) : null}
+
+      {!isLoading && !queryTimeoutReached ? <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <OpsSignalCard
           title="Today's Crew Readiness"
           value={crewScheduledCount === 0 ? 'No crew scheduled' : `${crewScheduledCount} scheduled`}
