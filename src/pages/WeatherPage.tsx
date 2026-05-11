@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
-import { OperationsView, type WeatherWidgetId, type WeatherWidgetLiveData } from '@/components/weather/OperationsView';
+import { type WeatherWidgetId, type WeatherWidgetLiveData } from '@/components/weather/OperationsView';
 import { RainfallTracker } from '@/components/weather/RainfallTracker';
 import { WeatherSettingsDrawer } from '@/components/weather/WeatherSettingsDrawer';
 import {
@@ -2447,28 +2447,7 @@ export default function WeatherPage() {
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">
-      {!shouldShowLocationSetup && hasLocation ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>📍 {propertyLocationLabel}</span>
-          <button type="button" className="font-medium text-primary hover:underline" onClick={() => setShowLocationSetup(true)}>
-            Change location
-          </button>
-        </div>
-      ) : null}
       {locationSetupBlock}
-      <OperationsView
-        widgets={weatherWidgetIds}
-        data={widgetLiveDataQuery.data ?? null}
-        loading={weatherDisplayPrefsQuery.isLoading || widgetLiveDataQuery.isLoading}
-        errorMessage={
-          ((weatherDisplayPrefsQuery.error as { message?: string } | null)?.message ||
-            (widgetLiveDataQuery.error as { message?: string } | null)?.message ||
-            undefined)
-        }
-        onDisableWidget={(widgetId) => {
-          void disableWeatherWidget(widgetId);
-        }}
-      />
       <PageHeader
         title="Weather"
         subtitle={
@@ -2483,7 +2462,7 @@ export default function WeatherPage() {
         </Button>
       </PageHeader>
 
-      <div className="space-y-4">
+      <div className="hidden space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2">
             <p className="truncate text-xs text-muted-foreground">
               {(selectedLocation?.name ?? 'Sarasota Polo Club')} · {activeProviderLabel} · Last updated {latestCaptureLabel}
@@ -3106,6 +3085,116 @@ export default function WeatherPage() {
             </div>
           ) : null}
         </div>
+
+      <div className="space-y-4">
+        <Card className="overflow-hidden border-0 bg-[#166534] text-white">
+          <div className="grid gap-4 p-4 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <p className="text-5xl font-semibold leading-none">{liveCurrentTemperatureF !== null ? `${liveCurrentTemperatureF}°F` : '--'}</p>
+              <p className="mt-1 text-sm text-white/70">{liveConditionMeta.label}</p>
+              <p className="mt-1 text-xs text-white/60">Feels like {liveForecastQuery.data?.current?.apparentTemperature ? `${Math.round(liveForecastQuery.data.current.apparentTemperature)}°F` : '--'}</p>
+              <div className="mt-3 flex items-center gap-2 text-xs text-white/80">
+                <span>{selectedLocation?.name ?? 'Sarasota Polo Club'} · Open-Meteo · {latestCaptureLabel}</span>
+                <Button size="icon" variant="ghost" onClick={refreshLiveWeather} className="h-7 w-7 text-white hover:bg-white/10 hover:text-white" aria-label="Refresh live weather">
+                  <RefreshCcw className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <span className="rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs">☁ {liveConditionMeta.label}</span>
+              <span className="rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs">💨 {Math.round(liveForecastQuery.data?.current.windSpeed ?? 0)} mph · Gust {Math.round(liveForecastQuery.data?.current.windGust ?? liveForecastQuery.data?.current.windSpeed ?? 0)} mph</span>
+              <span className="rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs">💧 {Math.round(latestLog?.humidity ?? 0)}% humidity</span>
+              <span className="rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs">☀ UV {liveForecastQuery.data?.current?.uvIndex ? Number(liveForecastQuery.data.current.uvIndex).toFixed(1) : '--'}</span>
+              <span className="rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs sm:col-span-2">🌧 {(liveForecastQuery.data?.current?.precipitation ?? 0).toFixed(2)} in/hr precip</span>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="border-[#e5e7eb] bg-white p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-[#111827]">Next 24 Hours</p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant={showHourlyTempMetric ? 'default' : 'outline'} className={showHourlyTempMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyTempMetric((current) => !current)}>Temp</Button>
+              <Button size="sm" variant={showHourlyRainMetric ? 'default' : 'outline'} className={showHourlyRainMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyRainMetric((current) => !current)}>Rain %</Button>
+              <Button size="sm" variant={showHourlyWindMetric ? 'default' : 'outline'} className={showHourlyWindMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyWindMetric((current) => !current)}>Wind</Button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <div style={{ minWidth: `${Math.max(960, hourlyForecastChartData.length * 48)}px` }}>
+              <ResponsiveContainer width="100%" height={160}>
+                <ComposedChart data={hourlyForecastChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" />
+                  <XAxis dataKey="hourLabel" tick={{ fontSize: 11 }} interval={1} tickFormatter={(_, index) => (index % 2 === 0 ? String(hourlyForecastChartData[index]?.hourLabel ?? '') : '')} />
+                  <YAxis yAxisId="temp" tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}°`} />
+                  <YAxis yAxisId="conditions" orientation="right" tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}`} />
+                  <Tooltip formatter={(value: number, name) => (name === 'Temperature' ? [`${value}°F`, name] : name === 'Rain %' ? [`${value}%`, name] : name === 'Wind' ? [`${value} mph`, name] : [value, name])} labelFormatter={(label) => `${label}`} />
+                  {currentHourChartLabel ? <ReferenceLine x={currentHourChartLabel} stroke="#166534" strokeDasharray="4 4" yAxisId="temp" /> : null}
+                  {showHourlyRainMetric ? <Bar yAxisId="conditions" dataKey="precipitationProbability" name="Rain %" fill="#3b82f6" fillOpacity={0.25} radius={[4, 4, 0, 0]} /> : null}
+                  {showHourlyTempMetric ? <Line yAxisId="temp" type="monotone" dataKey="temperature" name="Temperature" stroke="#166534" strokeWidth={2} dot={false} /> : null}
+                  {showHourlyWindMetric ? <Line yAxisId="conditions" type="monotone" dataKey="windSpeed" name="Wind" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 4" dot={false} /> : null}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1 text-[#6b7280]">8h Rain {next8HourRainEstimate.toFixed(2)} in</span>
+            <span className="rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1 text-[#6b7280]">8h Avg Wind {next8HourAvgWind !== null ? `${next8HourAvgWind} mph` : '--'}</span>
+            <span className="rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1 text-[#6b7280]">Open-Meteo</span>
+          </div>
+        </Card>
+
+        <Card className="border-[#e5e7eb] bg-white p-4">
+          <div className="overflow-x-auto">
+            <div className="flex min-w-[740px] gap-3">
+              {(liveForecastQuery.data?.daily ?? []).slice(0, 7).map((day) => (
+                <div key={day.date} className="w-[100px] rounded-lg border border-[#e5e7eb] bg-white p-3 text-center">
+                  <p className="text-xs font-medium text-[#6b7280]">{new Date(day.date).toLocaleDateString([], { weekday: 'short' })}</p>
+                  <p className="mt-1 text-lg">{day.precipitationSum > 0.05 ? '🌧️' : '☀️'}</p>
+                  <p className="mt-1 text-sm font-semibold text-[#111827]">{Math.round(day.tempMax)}° / {Math.round(day.tempMin)}°</p>
+                  <p className={`mt-1 text-xs ${day.precipitationSum > 0 ? 'text-[#3b82f6]' : 'text-[#6b7280]'}`}>{day.precipitationSum.toFixed(2)} in</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+          <RainfallTracker
+            loading={weatherLogsQuery.isLoading || weatherLogsQuery.isFetching}
+            logs={locationLogs.map((log) => ({
+              date: log.date,
+              rainfallTotal: Number(log.rainfallTotal ?? 0),
+              source: log.source,
+              notes: log.notes,
+            }))}
+          />
+          <Card className="border-[#e5e7eb] bg-white p-5">
+            <p className="text-sm font-semibold text-[#111827]">Wind & Conditions Summary</p>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2">
+                <div className="text-xs text-[#6b7280]">WIND NOW</div>
+                <div className="mt-1 font-semibold text-[#111827]">{Math.round(liveForecastQuery.data?.current.windSpeed ?? 0)} mph · Gust {Math.round(liveForecastQuery.data?.current.windGust ?? liveForecastQuery.data?.current.windSpeed ?? 0)} mph · Direction {Math.round(liveForecastQuery.data?.current.windDirection ?? 0)}°</div>
+              </div>
+              <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2">
+                <div className="text-xs text-[#6b7280]">AVG 8H WIND</div>
+                <div className="mt-1 font-semibold text-[#111827]">{next8HourAvgWind !== null ? `${next8HourAvgWind} mph` : '--'}</div>
+              </div>
+              <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2">
+                <div className="text-xs text-[#6b7280]">SPRAY WINDOW</div>
+                {((liveForecastQuery.data?.current.windSpeed ?? 0) < 15 && (liveForecastQuery.data?.current.precipitation ?? 0) < 0.1) ? (
+                  <Badge className="mt-1 bg-green-600 text-white hover:bg-green-600">Open</Badge>
+                ) : (
+                  <Badge className="mt-1 bg-red-600 text-white hover:bg-red-600">Closed</Badge>
+                )}
+              </div>
+              <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2">
+                <div className="text-xs text-[#6b7280]">UV TODAY</div>
+                <div className="mt-1 font-semibold text-[#111827]">{liveForecastQuery.data?.current?.uvIndex ? `${Number(liveForecastQuery.data.current.uvIndex).toFixed(1)} — High` : '--'}</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
 
       <WeatherSettingsDrawer
         open={settingsDrawerOpen}

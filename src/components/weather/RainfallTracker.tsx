@@ -141,7 +141,13 @@ export function RainfallTracker({ logs, loading = false }: Props) {
         <p className="text-sm font-semibold">Rainfall Tracker</p>
         <div className="flex items-center gap-2">
           {(['day', 'week', 'month', 'year'] as Period[]).map((value) => (
-            <Button key={value} size="sm" variant={period === value ? 'default' : 'outline'} onClick={() => setPeriod(value)}>
+            <Button
+              key={value}
+              size="sm"
+              variant={period === value ? 'default' : 'outline'}
+              className={period === value ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+              onClick={() => setPeriod(value)}
+            >
               {value[0].toUpperCase() + value.slice(1)}
             </Button>
           ))}
