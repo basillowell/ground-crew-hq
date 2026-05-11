@@ -878,7 +878,7 @@ async function fetchWorkLocations(): Promise<WorkLocation[]> {
 export async function fetchWeatherLocations(propertyId?: string, orgId?: string, activeOnly = false): Promise<WeatherLocation[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let query = client.from('weather_locations').select('*').order('name');
+  let query = client.from('weather_locations').select('*, weather_stations(*)').order('name');
   if (orgId) query = query.eq('org_id', orgId);
   if (activeOnly) query = query.eq('is_active', true);
   const { data, error } = await query;

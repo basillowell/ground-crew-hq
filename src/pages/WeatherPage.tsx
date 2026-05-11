@@ -178,7 +178,7 @@ export default function WeatherPage() {
   const programSetting = programSettingQuery.data ?? null;
   const workLocationsQuery = useWorkLocations();
   const workLocations = useMemo(() => workLocationsQuery.data ?? [], [workLocationsQuery.data]);
-  const weatherLocationsQuery = useWeatherLocations(weatherScopePropertyId, currentUser?.orgId, true);
+  const weatherLocationsQuery = useWeatherLocations(undefined, currentUser?.orgId, true);
   const weatherStationsQuery = useQuery({
     queryKey: ['weather-stations-full', currentUser?.orgId ?? 'all-orgs'],
     enabled: Boolean(currentUser),
@@ -319,6 +319,7 @@ export default function WeatherPage() {
   const [onboardingSheetOpen, setOnboardingSheetOpen] = useState(false);
   const [removeAreaId, setRemoveAreaId] = useState<string | null>(null);
   const [widgetPrefsId, setWidgetPrefsId] = useState<string | null>(null);
+  const [weatherLoadTimedOut, setWeatherLoadTimedOut] = useState(false);
 
   const settingsDefaultWeather = useMemo(() => {
     const locationName = programSetting?.weatherDefaultLocationName?.trim() || 'Sarasota Polo Club';
@@ -493,6 +494,17 @@ export default function WeatherPage() {
       ].filter(Boolean) as string[],
     [rainfallEntriesQuery.error, weatherLocationsQuery.error, weatherLogsQuery.error, weatherStationsQuery.error],
   );
+
+  useEffect(() => {
+    if (!isInitialWeatherSetupLoading) {
+      setWeatherLoadTimedOut(false);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setWeatherLoadTimedOut(true);
+    }, 10000);
+    return () => window.clearTimeout(timeoutId);
+  }, [isInitialWeatherSetupLoading]);
   const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? null;
   const liveWeatherCoordinates = useMemo(() => {
     if (
@@ -1476,7 +1488,7 @@ export default function WeatherPage() {
 
   async function saveSelectedLocation() {
     if (currentUser?.orgId) {
-      await supabase.from('weather_locations').upsert(
+      const { error } = await supabase.from('weather_locations').upsert(
         weatherLocations.map(location => ({
           id: location.id,
           name: location.name,
@@ -1490,6 +1502,7 @@ export default function WeatherPage() {
           is_active: true,
         }))
       );
+      if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['weather-locations'] });
     }
     toast('Weather area saved', { description: 'Area naming and property details have been updated.' });
@@ -2045,15 +2058,23 @@ export default function WeatherPage() {
     await queryClient.invalidateQueries({ queryKey: ['weather-display-prefs'] });
   }
 
-  function handleDrawerLocationChange(name: string, address: string) {
+  async function handleDrawerLocationChange(name: string, address: string): Promise<boolean> {
     if (!selectedLocation) {
       setOnboardingAreaName(name);
       setOnboardingSearchQuery(address);
       setOnboardingSheetOpen(true);
-      return;
+      return true;
     }
     updateSelectedLocation({ name, address });
-    void saveSelectedLocation();
+    try {
+      await saveSelectedLocation();
+      return true;
+    } catch (error) {
+      toast.error('Could not save weather area', {
+        description: (error as Error)?.message ?? 'Unknown save failure',
+      });
+      return false;
+    }
   }
 
   function moveDraftWidget(widgetId: WeatherWidgetId, direction: 'up' | 'down') {
@@ -2386,6 +2407,15 @@ export default function WeatherPage() {
         <div className="p-4 max-w-7xl mx-auto space-y-3">
           <Skeleton className="h-24 rounded-2xl" />
           <Skeleton className="h-48 rounded-2xl" />
+          {weatherLoadTimedOut ? (
+            <Card className="p-4 text-sm">
+              <p className="font-medium">Weather data is taking longer than expected.</p>
+              <p className="mt-1 text-muted-foreground">You can refresh weather data without reloading your session.</p>
+              <Button className="mt-3" size="sm" variant="outline" onClick={refreshLiveWeather}>
+                Refresh
+              </Button>
+            </Card>
+          ) : null}
         </div>
       );
     }

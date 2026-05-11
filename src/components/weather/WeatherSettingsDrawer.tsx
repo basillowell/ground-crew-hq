@@ -1,4 +1,4 @@
-import { ChevronDown, Settings2 } from 'lucide-react';
+import { ChevronDown, Settings2, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Card } from '@/components/ui/card';
@@ -20,7 +20,7 @@ type Props = {
   } | null;
   enabledPanels: string[];
   onTogglePanel: (panelId: string, checked: boolean) => void;
-  onChangeLocation: (name: string, address: string) => void;
+  onChangeLocation: (name: string, address: string) => Promise<boolean> | boolean;
   onRefreshLiveWeather: () => void;
   onAddManualRainEntry: () => void;
 };
@@ -62,28 +62,41 @@ export function WeatherSettingsDrawer(props: Props) {
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [locationName, setLocationName] = useState(activeLocation?.name ?? '');
   const [locationAddress, setLocationAddress] = useState(activeLocation?.address ?? '');
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setLocationName(activeLocation?.name ?? '');
     setLocationAddress(activeLocation?.address ?? '');
     setShowLocationForm(false);
+    setLocationError(null);
   }, [activeLocation?.address, activeLocation?.name, open]);
 
-  function handleSaveLocation() {
+  async function handleSaveLocation() {
     const trimmedName = locationName.trim();
     if (!trimmedName) return;
-    onChangeLocation(trimmedName, locationAddress.trim());
-    setShowLocationForm(false);
+    setLocationError(null);
+    const saved = await onChangeLocation(trimmedName, locationAddress.trim());
+    if (saved) {
+      setShowLocationForm(false);
+      onOpenChange(false);
+      return;
+    }
+    setLocationError('Could not save location. Please try again.');
   }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-[400px]">
         <SheetHeader className="px-4 pt-4">
-          <SheetTitle className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4" /> Weather Settings
-          </SheetTitle>
+          <div className="flex items-center justify-between gap-2">
+            <SheetTitle className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4" /> Weather Settings
+            </SheetTitle>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => onOpenChange(false)} aria-label="Close weather settings">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </SheetHeader>
         <div className="mt-3">
           <section className="border-b p-4">
@@ -110,9 +123,12 @@ export function WeatherSettingsDrawer(props: Props) {
               <div className="mt-3 space-y-2">
                 <Input value={locationName} onChange={(event) => setLocationName(event.target.value)} placeholder="Location name" />
                 <Input value={locationAddress} onChange={(event) => setLocationAddress(event.target.value)} placeholder="Address" />
-                <Button className="w-full" onClick={handleSaveLocation} disabled={!locationName.trim()}>
+                <Button className="w-full" onClick={() => void handleSaveLocation()} disabled={!locationName.trim()}>
                   Save location
                 </Button>
+                {locationError ? (
+                  <p className="text-xs text-destructive">{locationError}</p>
+                ) : null}
               </div>
             ) : null}
           </section>
