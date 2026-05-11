@@ -1,42 +1,43 @@
-import { ChevronDown, GripVertical, Settings2 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ChevronDown, Settings2 } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import type { WeatherWidgetId } from '@/components/weather/OperationsView';
+import { Input } from '@/components/ui/input';
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isAdmin: boolean;
-  widgets: WeatherWidgetId[];
-  enabledWidgets: WeatherWidgetId[];
-  onToggleWidget: (widget: WeatherWidgetId, checked: boolean) => void;
-  onMoveWidget: (widget: WeatherWidgetId, direction: 'up' | 'down') => void;
-  locationOptions: Array<{ id: string; label: string }>;
-  selectedLocationId: string;
-  onSelectLocationId: (id: string) => void;
-  adminStationAreaContent?: ReactNode;
-  adminManualFallbackContent?: ReactNode;
-  children?: ReactNode;
+  activeLocation: {
+    name: string;
+    address?: string;
+    latitude?: number;
+    longitude?: number;
+    isActive: boolean;
+  } | null;
+  enabledPanels: string[];
+  onTogglePanel: (panelId: string, checked: boolean) => void;
+  onChangeLocation: (name: string, address: string) => void;
+  onRefreshLiveWeather: () => void;
+  onAddManualRainEntry: () => void;
 };
 
-const LABELS: Record<WeatherWidgetId, string> = {
-  current: 'Current conditions',
-  hourly_forecast: 'Hourly forecast',
-  wind: 'Wind',
-  precipitation: 'Precipitation',
-  humidity: 'Humidity',
-  uv_index: 'UV index',
-  feels_like: 'Feels like',
-  '7day_forecast': '7-day forecast',
-};
+const PANEL_OPTIONS: Array<{ id: string; label: string }> = [
+  { id: 'current-conditions', label: 'Current Conditions' },
+  { id: 'hourly-forecast', label: 'Hourly Forecast' },
+  { id: 'daily-forecast', label: '7-Day Forecast' },
+  { id: 'wind', label: 'Wind' },
+  { id: 'rain', label: 'Rainfall' },
+  { id: 'alerts', label: 'Weather Alerts' },
+  { id: 'turf-risk-notes', label: 'Turf Risk Notes' },
+];
 
 function CollapsibleSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <details open className="group rounded-xl border bg-card">
+    <details className="group rounded-xl border bg-card">
       <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold">
         {title}
         <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
@@ -51,86 +52,98 @@ export function WeatherSettingsDrawer(props: Props) {
     open,
     onOpenChange,
     isAdmin,
-    widgets,
-    enabledWidgets,
-    onToggleWidget,
-    onMoveWidget,
-    locationOptions,
-    selectedLocationId,
-    onSelectLocationId,
-    adminStationAreaContent,
-    adminManualFallbackContent,
-    children,
+    activeLocation,
+    enabledPanels,
+    onTogglePanel,
+    onChangeLocation,
+    onRefreshLiveWeather,
+    onAddManualRainEntry,
   } = props;
+  const [showLocationForm, setShowLocationForm] = useState(false);
+  const [locationName, setLocationName] = useState(activeLocation?.name ?? '');
+  const [locationAddress, setLocationAddress] = useState(activeLocation?.address ?? '');
+
+  useEffect(() => {
+    if (!open) return;
+    setLocationName(activeLocation?.name ?? '');
+    setLocationAddress(activeLocation?.address ?? '');
+    setShowLocationForm(false);
+  }, [activeLocation?.address, activeLocation?.name, open]);
+
+  function handleSaveLocation() {
+    const trimmedName = locationName.trim();
+    if (!trimmedName) return;
+    onChangeLocation(trimmedName, locationAddress.trim());
+    setShowLocationForm(false);
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-        <SheetHeader>
+      <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-[400px]">
+        <SheetHeader className="px-4 pt-4">
           <SheetTitle className="flex items-center gap-2">
             <Settings2 className="h-4 w-4" /> Weather Settings
           </SheetTitle>
         </SheetHeader>
-        <div className="mt-4 space-y-3">
-          <CollapsibleSection title="1. Widget preferences">
-            <div className="space-y-2">
-              {widgets.map((widget, index) => (
-                <Card key={widget} className="flex items-center justify-between rounded-xl p-2">
-                  <div className="flex items-center gap-2">
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                    <Checkbox
-                      checked={enabledWidgets.includes(widget)}
-                      onCheckedChange={(checked) => onToggleWidget(widget, Boolean(checked))}
-                    />
-                    <span className="text-sm">{LABELS[widget]}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button size="sm" variant="outline" disabled={index === 0} onClick={() => onMoveWidget(widget, 'up')}>
-                      Up
-                    </Button>
-                    <Button size="sm" variant="outline" disabled={index === widgets.length - 1} onClick={() => onMoveWidget(widget, 'down')}>
-                      Down
-                    </Button>
-                  </div>
-                </Card>
+        <div className="mt-3">
+          <section className="border-b p-4">
+            <h3 className="text-sm font-semibold">Active Location</h3>
+            <Card className="mt-3 rounded-xl p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{activeLocation?.name ?? 'No location configured'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {typeof activeLocation?.latitude === 'number' && typeof activeLocation?.longitude === 'number'
+                      ? `${activeLocation.latitude.toFixed(4)}, ${activeLocation.longitude.toFixed(4)}`
+                      : 'Coordinates unavailable'}
+                  </p>
+                </div>
+                <Badge variant={activeLocation?.isActive ? 'secondary' : 'outline'}>
+                  {activeLocation?.isActive ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+            </Card>
+            <Button className="mt-3 w-full" variant="outline" onClick={() => setShowLocationForm((current) => !current)}>
+              Change location
+            </Button>
+            {showLocationForm ? (
+              <div className="mt-3 space-y-2">
+                <Input value={locationName} onChange={(event) => setLocationName(event.target.value)} placeholder="Location name" />
+                <Input value={locationAddress} onChange={(event) => setLocationAddress(event.target.value)} placeholder="Address" />
+                <Button className="w-full" onClick={handleSaveLocation} disabled={!locationName.trim()}>
+                  Save location
+                </Button>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="border-b p-4">
+            <h3 className="text-sm font-semibold">Display Panels</h3>
+            <p className="mt-1 text-xs text-muted-foreground">What to show on the weather page</p>
+            <div className="mt-3 space-y-2">
+              {PANEL_OPTIONS.map((panel) => (
+                <label key={panel.id} className="flex items-center justify-between rounded-lg border p-2 text-sm">
+                  <span>{panel.label}</span>
+                  <Checkbox checked={enabledPanels.includes(panel.id)} onCheckedChange={(checked) => onTogglePanel(panel.id, Boolean(checked))} />
+                </label>
               ))}
             </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection title="2. Location filter">
-            <div className="space-y-2">
-              <select
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={selectedLocationId}
-                onChange={(event) => onSelectLocationId(event.target.value)}
-              >
-                <option value="">Default location</option>
-                {locationOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">Choose which weather area feeds the operations widgets.</p>
-            </div>
-          </CollapsibleSection>
+          </section>
 
           {isAdmin ? (
-            <>
-              <CollapsibleSection title="3. Station & area setup">
-                <div className="space-y-3">
-                  {adminStationAreaContent}
-                  {children}
+            <section className="p-4">
+              <CollapsibleSection title="Advanced">
+                <div className="space-y-2">
+                  <Button className="w-full" variant="outline" onClick={onRefreshLiveWeather}>
+                    Refresh Live Weather
+                  </Button>
+                  <Button className="w-full" variant="outline" onClick={onAddManualRainEntry}>
+                    Add Manual Rain Entry
+                  </Button>
                 </div>
               </CollapsibleSection>
-              <CollapsibleSection title="4. Manual fallback">{adminManualFallbackContent}</CollapsibleSection>
-            </>
-          ) : (
-            <Card className="rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
-              <Badge variant="outline">Standard User</Badge>
-              <p className="mt-2">Station, area, and manual fallback controls are visible to admins/managers only.</p>
-            </Card>
-          )}
+            </section>
+          ) : null}
         </div>
       </SheetContent>
     </Sheet>

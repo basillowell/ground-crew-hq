@@ -153,6 +153,15 @@ const DEFAULT_WIDGETS: WeatherWidgetId[] = [
   '7day_forecast',
 ];
 const SARASOTA_WIDGET_FALLBACK = { latitude: 27.3364, longitude: -82.5307 };
+const PANEL_TO_WIDGET: Record<string, WeatherWidgetId> = {
+  'current-conditions': 'current',
+  'hourly-forecast': 'hourly_forecast',
+  'daily-forecast': '7day_forecast',
+  wind: 'wind',
+  rain: 'precipitation',
+  alerts: 'uv_index',
+  'turf-risk-notes': 'feels_like',
+};
 
 export default function WeatherPage() {
   const queryClient = useQueryClient();
@@ -1469,7 +1478,13 @@ export default function WeatherPage() {
           id: location.id,
           name: location.name,
           property: location.property,
+          property_id: location.propertyId ?? null,
           area: location.area,
+          address: location.address ?? null,
+          latitude: location.latitude ?? null,
+          longitude: location.longitude ?? null,
+          org_id: currentUser.orgId,
+          is_active: true,
         }))
       );
       queryClient.invalidateQueries({ queryKey: ['weather-locations'] });
@@ -1942,6 +1957,57 @@ export default function WeatherPage() {
       }
       return current.filter((widget) => widget !== widgetId);
     });
+  }
+
+  const enabledPanelPrefs = useMemo(() => {
+    const nextPanels = Object.entries(PANEL_TO_WIDGET)
+      .filter(([, widgetId]) => prefsDraftEnabledWidgets.includes(widgetId))
+      .map(([panelId]) => panelId);
+    return nextPanels.length ? nextPanels : [...DEFAULT_SETTINGS_PANELS];
+  }, [prefsDraftEnabledWidgets]);
+
+  async function togglePanelPreference(panelId: string, checked: boolean) {
+    const mappedWidget = PANEL_TO_WIDGET[panelId];
+    if (!mappedWidget) return;
+    const nextWidgets = checked
+      ? Array.from(new Set([...prefsDraftEnabledWidgets, mappedWidget]))
+      : prefsDraftEnabledWidgets.filter((widget) => widget !== mappedWidget);
+    setPrefsDraftEnabledWidgets(nextWidgets);
+
+    const userId = currentUser?.appUserId ?? currentUser?.authUser?.id;
+    if (!currentUser?.orgId || !userId) return;
+    const nextId =
+      widgetPrefsId ??
+      (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : null);
+    const orderedEnabled = prefsDraftWidgets.filter((widget) => nextWidgets.includes(widget));
+    const payload: Record<string, unknown> = {
+      org_id: currentUser.orgId,
+      user_id: userId,
+      location_id: prefsDraftLocationId || selectedLocation?.id || null,
+      enabled_widgets: nextWidgets,
+      widget_order: orderedEnabled,
+      updated_at: new Date().toISOString(),
+    };
+    if (nextId) payload.id = nextId;
+    const { error } = await supabase.from('weather_display_prefs').upsert(payload);
+    if (error) {
+      toast.error('Could not save panel preference', { description: error.message });
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ['weather-display-prefs'] });
+  }
+
+  function handleDrawerLocationChange(name: string, address: string) {
+    if (!selectedLocation) {
+      setOnboardingAreaName(name);
+      setOnboardingSearchQuery(address);
+      setOnboardingSheetOpen(true);
+      return;
+    }
+    updateSelectedLocation({ name, address });
+    void saveSelectedLocation();
   }
 
   function moveDraftWidget(widgetId: WeatherWidgetId, direction: 'up' | 'down') {
@@ -3003,538 +3069,25 @@ export default function WeatherPage() {
           void handleSettingsDrawerOpenChange(open);
         }}
         isAdmin={isWeatherAdminUser}
-        widgets={prefsDraftWidgets.length ? prefsDraftWidgets : weatherWidgetIds}
-        enabledWidgets={prefsDraftEnabledWidgets.length ? prefsDraftEnabledWidgets : weatherWidgetIds}
-        onToggleWidget={toggleDraftWidget}
-        onMoveWidget={moveDraftWidget}
-        locationOptions={weatherLocations.map((location) => ({ id: location.id, label: `${location.name} · ${location.property}` }))}
-        selectedLocationId={prefsDraftLocationId}
-        onSelectLocationId={setPrefsDraftLocationId}
-        adminStationAreaContent={
-          isWeatherAdminUser ? (
-            <div className="space-y-2 text-xs text-muted-foreground">
-              <p>Area config, station setup, and diagnostics are managed here.</p>
-              <div className="rounded-md border bg-muted/30 px-2 py-1">
-                {weatherLocations.length} areas · {weatherStations.length} stations configured
-              </div>
-            </div>
-          ) : null
+        activeLocation={
+          selectedLocation
+            ? {
+                name: selectedLocation.name || selectedLocation.area || 'Weather area',
+                address: selectedLocation.address,
+                latitude: selectedLocation.latitude,
+                longitude: selectedLocation.longitude,
+                isActive: true,
+              }
+            : null
         }
-        adminManualFallbackContent={
-          isWeatherAdminUser ? (
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">
-                Manual rainfall totals are tracked from daily entries and roll up into weekly, monthly, and yearly accumulations.
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" className="gap-1" onClick={() => openDialog('rainfall')}>
-                  <Droplets className="h-3.5 w-3.5" /> Manual Rainfall
-                </Button>
-                <Button size="sm" variant="outline" className="gap-1" onClick={() => openDialog('override')}>
-                  <CloudSun className="h-3.5 w-3.5" /> Manual Override
-                </Button>
-              </div>
-            </div>
-          ) : null
-        }
-      >
-      <div className="space-y-4">
-      <Card className="p-5">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Weather Management</p>
-            <h2 className="mt-1 text-xl font-semibold">Areas, Stations, and Manual Fallback</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Configure weather areas, choose primary stations, and maintain manual weather continuity.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{weatherLocations.length} areas</Badge>
-            <Badge variant="outline">{weatherStations.length} stations</Badge>
-          </div>
-        </div>
-      </Card>
-      <Card className="p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold">Setup Diagnostics</p>
-            <p className="text-xs text-muted-foreground">Troubleshooting details for weather setup resolution and query health.</p>
-          </div>
-          <Badge variant="outline">Management Only</Badge>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs">
-            <div className="text-muted-foreground">Selected Property</div>
-            <div className="mt-1 font-medium">{selectedProperty?.name ?? 'Unresolved'}</div>
-            <div className="text-muted-foreground">{selectedProperty?.id ?? 'No property id'}</div>
-          </div>
-          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs">
-            <div className="text-muted-foreground">Resolved Weather Area</div>
-            <div className="mt-1 font-medium">{selectedLocation?.name ?? 'Unresolved'}</div>
-            <div className="text-muted-foreground">{selectedLocation?.id ?? 'No area id'}</div>
-          </div>
-          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs">
-            <div className="text-muted-foreground">Stations in Area</div>
-            <div className="mt-1 font-medium">{locationStations.length}</div>
-            <div className="text-muted-foreground">
-              Primary: {selectedLocationPrimary ? selectedLocationPrimary.name : 'Not set'}
-            </div>
-          </div>
-          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs">
-            <div className="text-muted-foreground">Live Forecast Coordinates</div>
-            <div className="mt-1 font-medium">{liveWeatherCoordinates ? 'Available' : 'Missing'}</div>
-            <div className="text-muted-foreground">
-              {liveWeatherCoordinates ? `${liveWeatherCoordinates.latitude}, ${liveWeatherCoordinates.longitude}` : 'No resolved coordinates'}
-            </div>
-          </div>
-          <div className="rounded-xl border bg-muted/20 px-3 py-2 text-xs md:col-span-2 xl:col-span-2">
-            <div className="text-muted-foreground">Query Errors</div>
-            {weatherQueryErrors.length > 0 ? (
-              <ul className="mt-1 space-y-1">
-                {weatherQueryErrors.map((message, index) => (
-                  <li key={`${message}-${index}`} className="font-medium text-foreground/90">
-                    {message}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="mt-1 font-medium text-foreground/90">No active weather query errors.</div>
-            )}
-          </div>
-        </div>
-      </Card>
-      <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <div className="space-y-3">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">Weather Areas</p>
-                <p className="text-xs text-muted-foreground">Manage zones for this property.</p>
-              </div>
-              <Button size="sm" className="gap-1" onClick={startAddAreaFlow}>
-                <Plus className="h-3.5 w-3.5" /> Add area
-              </Button>
-            </div>
-          </Card>
-          <Card className="p-4 space-y-3">
-            <div>
-              <p className="text-sm font-semibold">Build Weather Areas</p>
-              <p className="text-xs text-muted-foreground">
-                Define weather areas from Program Setup locations or add a custom area for a property or zone.
-              </p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Use Program Setup Location</label>
-              <div className="mt-1 flex gap-2">
-                <select
-                  className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm"
-                  value={selectedWorkLocationId}
-                  onChange={(event) => setSelectedWorkLocationId(event.target.value)}
-                >
-                  {availableWorkLocations.length === 0 ? (
-                    <option value="">All locations already linked</option>
-                  ) : (
-                    availableWorkLocations.map((location) => (
-                      <option key={location.id} value={location.id}>{location.name}</option>
-                    ))
-                  )}
-                </select>
-                <Button size="sm" className="gap-1" onClick={addWeatherAreaFromLocation} disabled={availableWorkLocations.length === 0}>
-                  <Plus className="h-3.5 w-3.5" /> Add
-                </Button>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Create Custom Weather Area</label>
-              <div className="mt-1 flex gap-2">
-                <Input
-                  value={customAreaName}
-                  onChange={(event) => setCustomAreaName(event.target.value)}
-                  placeholder="Back Nine, Practice Center"
-                />
-                <Button size="sm" variant="outline" className="gap-1" onClick={addCustomWeatherArea}>
-                  <Plus className="h-3.5 w-3.5" /> Create
-                </Button>
-              </div>
-            </div>
-          </Card>
-          {weatherLocations.map((location) => {
-            const primaryStation = weatherStations.find((station) => station.locationId === location.id && station.isPrimary)
-              ?? weatherStations.find((station) => station.locationId === location.id);
-            const locationProperty = properties.find((property) => property.id === location.propertyId);
-            return (
-              <Card
-                key={location.id}
-                className={`cursor-pointer p-4 transition-colors ${selectedLocationId === location.id ? 'bg-accent/40' : 'hover:bg-muted/30'}`}
-                style={selectedLocationId === location.id && locationProperty?.color ? { borderColor: `${locationProperty.color}66` } : undefined}
-                onClick={() => setSelectedLocationId(location.id)}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold">{location.name}</p>
-                    <p className="text-xs text-muted-foreground">{location.property} - {location.area}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={primaryStation?.status === 'online' ? 'secondary' : 'outline'}>
-                      {primaryStation?.provider ?? 'No provider'} — {primaryStation?.status === 'online' ? 'Online' : 'Offline'}
-                    </Badge>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost" onClick={(event) => event.stopPropagation()}>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-                        <DropdownMenuItem onClick={() => void setPrimaryStationForArea(location.id)}>
-                          Set as primary
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onClick={() => setRemoveAreaId(location.id)}>
-                          Remove area
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-                <div className="mt-3 text-xs text-muted-foreground">
-                  {primaryStation ? `${primaryStation.name} · ${primaryStation.provider}` : 'No station selected'}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-
-        <div className="space-y-4">
-          <Card className="p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">Weather Management Actions</p>
-                <p className="text-xs text-muted-foreground">
-                  Admin setup controls for area definitions, station hierarchy, source selection, and manual fallback continuity.
-                </p>
-              </div>
-              <Badge variant="secondary">Admin Workflow</Badge>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              <Button size="sm" variant="outline" className="gap-1" onClick={() => openDialog('rainfall')}>
-                <Droplets className="h-3.5 w-3.5" /> Manual Rainfall
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1" onClick={() => openDialog('override')}>
-                <CloudSun className="h-3.5 w-3.5" /> Manual Override
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1" onClick={refreshLiveWeather}>
-                <RefreshCcw className="h-3.5 w-3.5" /> Refresh Live Weather
-              </Button>
-              <Button size="sm" className="gap-1" onClick={saveSelectedLocation} disabled={!selectedLocation}>
-                <Save className="h-3.5 w-3.5" /> Save Area
-              </Button>
-              <Button size="sm" className="gap-1" onClick={saveStations} disabled={!selectedLocation}>
-                <Save className="h-3.5 w-3.5" /> Save Stations
-              </Button>
-            </div>
-          </Card>
-
-          {selectedLocation && (
-            <Card className="p-5">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold">Area + Station Setup</p>
-                  <p className="text-xs text-muted-foreground">
-                    Choose the station that should provide live weather for this area and keep manual fallback available.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="gap-1" onClick={refreshLiveWeather}>
-                    <RefreshCcw className="h-3.5 w-3.5" /> Refresh Live Weather
-                  </Button>
-                  <Button size="sm" className="gap-1" onClick={saveSelectedLocation}>
-                    <Save className="h-3.5 w-3.5" /> Save Area
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-                <div className="space-y-4">
-                  {selectedProperty ? (
-                    <div
-                      className="rounded-2xl border bg-muted/20 p-4"
-                      style={{ borderColor: `${selectedProperty.color}55` }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" style={{ borderColor: selectedProperty.color, color: selectedProperty.color }}>
-                          {selectedProperty.shortName}
-                        </Badge>
-                        <span className="text-sm font-medium">{selectedProperty.name}</span>
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Use this property&apos;s address and current location to find the nearest live stations and improve rainfall accuracy for agronomic decisions.
-                      </p>
-                    </div>
-                  ) : null}
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Area Name</label>
-                      <Input className="mt-1" value={selectedLocation.name} onChange={(event) => updateSelectedLocation({ name: event.target.value })} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Property</label>
-                      <select
-                        className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        value={selectedLocation.propertyId || ''}
-                        onChange={(event) => {
-                          const property = properties.find((entry) => entry.id === event.target.value);
-                          updateSelectedLocation({
-                            propertyId: property?.id,
-                            property: property?.name || selectedLocation.property,
-                            address: property ? `${property.address}, ${property.city}, ${property.state}` : selectedLocation.address,
-                          });
-                        }}
-                      >
-                        <option value="">No property linked</option>
-                        {properties.map((property) => (
-                          <option key={property.id} value={property.id}>{property.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Coverage Zone</label>
-                    <Input className="mt-1" value={selectedLocation.area} onChange={(event) => updateSelectedLocation({ area: event.target.value })} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Address / Search Anchor</label>
-                    <Input className="mt-1" value={selectedLocation.address ?? ''} onChange={(event) => updateSelectedLocation({ address: event.target.value })} placeholder="Property or area address" />
-                  </div>
-                  <div className="rounded-xl border bg-muted/20 p-4">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Live Source</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge variant={selectedLiveSourceVariant}>{activeLiveSourceTypeLabel}</Badge>
-                      <Badge variant="outline">{selectedLiveSourceLabel}</Badge>
-                      <Badge variant="outline">{activeLiveSourceCoordinatesLabel}</Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {liveStatus === 'loading' && 'Fetching live station conditions now.'}
-                      {liveStatus === 'ready' && 'Live station data is active for this weather area.'}
-                      {liveStatus === 'error' && 'Live fetch failed, so the page is falling back to stored history or manual override.'}
-                      {liveStatus === 'idle' && 'Use an online Open-Meteo station with coordinates for live data.'}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border bg-muted/20 p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold">Find Nearby Live Stations</p>
-                        <p className="text-xs text-muted-foreground">Search by property address or use current location to find the best station options for rainfall monitoring.</p>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <Input
-                        value={stationSearchQuery}
-                        onChange={(event) => setStationSearchQuery(event.target.value)}
-                        placeholder={selectedProperty ? `${selectedProperty.address}, ${selectedProperty.city}` : 'Search by address'}
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => void searchStationsByAddress(stationSearchQuery || selectedLocation.address || `${selectedProperty?.address ?? ''} ${selectedProperty?.city ?? ''}`)}
-                      >
-                        Search
-                      </Button>
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <Button size="sm" variant="outline" className="gap-1" onClick={() => void searchStationsByCurrentLocation()}>
-                        <Crosshair className="h-3.5 w-3.5" /> Use Current Location
-                      </Button>
-                      {selectedProperty?.address ? (
-                        <Button size="sm" variant="outline" onClick={() => void searchStationsByAddress(`${selectedProperty.address}, ${selectedProperty.city}, ${selectedProperty.state}`)}>
-                          Search Property Address
-                        </Button>
-                      ) : null}
-                    </div>
-                    {discoveryAnchor ? (
-                      <div className="mt-3 rounded-xl border bg-background/70 p-3 text-xs text-muted-foreground">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline">Search Anchor Coordinates</Badge>
-                          <span>{discoveryAnchor.label}</span>
-                          <span>
-                            ({discoveryAnchor.latitude.toFixed(4)}, {discoveryAnchor.longitude.toFixed(4)})
-                          </span>
-                        </div>
-                        <p className="mt-2">
-                          Search anchor is only a helper until you explicitly apply it to area/station coordinates or use it as the live source.
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={activateSearchAnchorAsLiveSource}>
-                            Use As Live Source
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={applyDiscoveryAnchorToSelectedArea}>
-                            Apply To Area Coordinates
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={applyDiscoveryAnchorToPrimaryStation} disabled={locationStations.length === 0}>
-                            Apply To Primary Station
-                          </Button>
-                        </div>
-                      </div>
-                    ) : null}
-                    {stationSearchStatus === 'loading' ? <p className="mt-3 text-sm text-muted-foreground">Searching live station candidates…</p> : null}
-                    {stationSuggestions.length > 0 ? (
-                      <div className="mt-3 space-y-2">
-                        {stationSuggestions.map((suggestion, index) => (
-                          <div key={suggestion.id} className="rounded-xl border bg-background/80 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <div className="text-sm font-medium">{suggestion.name}</div>
-                                  <Badge variant="outline">{suggestion.provider}</Badge>
-                                  {index === 0 ? <Badge>Best fit</Badge> : null}
-                                </div>
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                  {suggestion.provider} · {suggestion.reason}
-                                  {typeof suggestion.distanceMiles === 'number' ? ` · ${suggestion.distanceMiles} mi` : ''}
-                                </div>
-                              </div>
-                              <Button size="sm" variant="outline" onClick={() => addSuggestedStation(suggestion)}>
-                                Add Station
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">Station Manager</p>
-                      <p className="text-xs text-muted-foreground">Add stations, set provider coordinates, and mark one as the live primary feed.</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="gap-1" onClick={addStation}>
-                        <Plus className="h-3.5 w-3.5" /> Add Station
-                      </Button>
-                      <Button size="sm" className="gap-1" onClick={saveStations}>
-                        <Save className="h-3.5 w-3.5" /> Save Stations
-                      </Button>
-                    </div>
-                  </div>
-
-                  {!showStationManagement ? (
-                    <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                      Station management is hidden in focused mode.
-                      <div className="mt-2">
-                        <Button size="sm" variant="outline" onClick={() => setShowStationManagement(true)}>
-                          Show Station Manager
-                        </Button>
-                      </div>
-                    </div>
-                  ) : locationStations.length === 0 ? (
-                    <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                      No stations are configured for this area yet.
-                    </div>
-                  ) : (
-                    locationStations.map((station) => (
-                      <div key={station.id} className="rounded-xl border bg-background/70 p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            {station.isPrimary && <Badge>Live Primary</Badge>}
-                            <Badge variant={station.status === 'online' ? 'secondary' : 'outline'}>{station.status}</Badge>
-                          </div>
-                          <div className="flex gap-2">
-                            {!station.isPrimary && (
-                              <Button size="sm" variant="outline" onClick={() => setPrimaryStation(station.id)}>
-                                Use For Live Data
-                              </Button>
-                            )}
-                            <Button size="icon" variant="ghost" onClick={() => removeStation(station.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div>
-                            <label className="text-xs font-medium text-muted-foreground">Station Name</label>
-                            <Input className="mt-1" value={station.name} onChange={(event) => updateStation(station.id, { name: event.target.value })} />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-muted-foreground">Provider Label</label>
-                            <Input className="mt-1" value={station.provider} onChange={(event) => updateStation(station.id, { provider: event.target.value })} />
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div>
-                            <label className="text-xs font-medium text-muted-foreground">Provider Type</label>
-                            <select
-                              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                              value={station.providerType ?? 'manual'}
-                              onChange={(event) => updateStation(station.id, { providerType: event.target.value as WeatherStation['providerType'] })}
-                            >
-                              <option value="manual">manual</option>
-                              <option value="open-meteo">open-meteo</option>
-                              <option value="davis">davis</option>
-                              <option value="noaa">noaa</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-muted-foreground">Station Code</label>
-                            <Input className="mt-1" value={station.stationCode} onChange={(event) => updateStation(station.id, { stationCode: event.target.value })} />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-muted-foreground">Status</label>
-                            <select
-                              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                              value={station.status}
-                              onChange={(event) => updateStation(station.id, { status: event.target.value as WeatherStation['status'] })}
-                            >
-                              <option value="online">online</option>
-                              <option value="offline">offline</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div>
-                            <label className="text-xs font-medium text-muted-foreground">Latitude</label>
-                            <Input className="mt-1" type="number" step="0.0001" value={station.latitude ?? ''} onChange={(event) => updateStation(station.id, { latitude: event.target.value ? Number(event.target.value) : undefined })} />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-muted-foreground">Longitude</label>
-                            <Input className="mt-1" type="number" step="0.0001" value={station.longitude ?? ''} onChange={(event) => updateStation(station.id, { longitude: event.target.value ? Number(event.target.value) : undefined })} />
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-muted-foreground">Time Zone</label>
-                            <Input className="mt-1" value={station.timeZone ?? ''} onChange={(event) => updateStation(station.id, { timeZone: event.target.value })} />
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1"
-                            onClick={() => void setDeviceLocationForStation(station.id)}
-                            disabled={geoLoadingStationId === station.id}
-                          >
-                            <Crosshair className="h-3.5 w-3.5" />
-                            {geoLoadingStationId === station.id ? 'Locating…' : 'Use Current Device Location'}
-                          </Button>
-                          {station.providerType === 'open-meteo' && station.latitude && station.longitude && (
-                            <span className="self-center text-[11px] text-muted-foreground">
-                              Live weather uses {station.latitude}, {station.longitude}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </Card>
-          )}
-        </div>
-      </div>
-      </div>
-      </WeatherSettingsDrawer>
+        enabledPanels={enabledPanelPrefs}
+        onTogglePanel={(panelId, checked) => {
+          void togglePanelPreference(panelId, checked);
+        }}
+        onChangeLocation={handleDrawerLocationChange}
+        onRefreshLiveWeather={refreshLiveWeather}
+        onAddManualRainEntry={() => openDialog('rainfall')}
+      />
 
       <Sheet open={onboardingSheetOpen} onOpenChange={setOnboardingSheetOpen}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
