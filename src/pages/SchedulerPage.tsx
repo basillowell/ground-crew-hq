@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,6 +68,25 @@ export default function SchedulerPage() {
 
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
+  const schedulerDefaultsQuery = useQuery({
+    queryKey: ['scheduler-settings', currentUser?.orgId ?? 'no-org'],
+    enabled: Boolean(currentUser?.orgId),
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return null as { default_shift_start?: string; default_shift_end?: string } | null;
+      const { data, error } = await supabase
+        .from('scheduler_settings')
+        .select('default_shift_start, default_shift_end')
+        .eq('org_id', currentUser.orgId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as { default_shift_start?: string; default_shift_end?: string } | null) ?? null;
+    },
+  });
+  const schedulerDefaultStart = schedulerDefaultsQuery.data?.default_shift_start?.slice(0, 5) || '05:00';
+  const schedulerDefaultEnd = schedulerDefaultsQuery.data?.default_shift_end?.slice(0, 5) || '13:30';
 
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
@@ -104,8 +123,8 @@ export default function SchedulerPage() {
   const [draft, setDraft] = useState({
     employeeId: '',
     date: weekStart,
-    shiftStart: '05:00',
-    shiftEnd: '13:30',
+    shiftStart: schedulerDefaultStart,
+    shiftEnd: schedulerDefaultEnd,
     status: 'scheduled' as ScheduleEntry['status'],
     notes: '',
   });
@@ -148,8 +167,8 @@ export default function SchedulerPage() {
     setDraft({
       employeeId: targetEmp,
       date: date ?? weekDays[0]?.date ?? weekStart,
-      shiftStart: '05:00',
-      shiftEnd: '13:30',
+      shiftStart: schedulerDefaultStart,
+      shiftEnd: schedulerDefaultEnd,
       status: 'scheduled',
       notes: '',
     });

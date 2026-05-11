@@ -82,6 +82,31 @@ type PanelsProps = {
   navGroups: { label: string; items: { id: ActivePage; label: string; icon: typeof Settings }[] }[];
   planLimits: { properties: number; employees: number; portalUsers: number };
   currentPlanName: string;
+  schedulerSettings: {
+    id: string;
+    org_id: string;
+    default_shift_start: string | null;
+    default_shift_end: string | null;
+    default_shift_days: string[] | null;
+    min_shift_hours: number | null;
+    max_shift_hours: number | null;
+    overtime_threshold_hours: number | null;
+    crew_start_time_buffer_minutes: number | null;
+    notes: string | null;
+  } | null;
+  setSchedulerSettings: Dispatch<SetStateAction<{
+    id: string;
+    org_id: string;
+    default_shift_start: string | null;
+    default_shift_end: string | null;
+    default_shift_days: string[] | null;
+    min_shift_hours: number | null;
+    max_shift_hours: number | null;
+    overtime_threshold_hours: number | null;
+    crew_start_time_buffer_minutes: number | null;
+    notes: string | null;
+  } | null>>;
+  saveSchedulerSettings: () => void;
 };
 
 const MODULE_ROWS: {
@@ -308,6 +333,9 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
     navGroups,
     planLimits,
     currentPlanName,
+    schedulerSettings,
+    setSchedulerSettings,
+    saveSchedulerSettings,
   } = props;
 
   const editingProperty = propertySheetId ? properties.find((p) => p.id === propertySheetId) : undefined;
@@ -856,6 +884,118 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                     );
                   })}
                 </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <h3 className="text-sm font-semibold">Scheduler Defaults</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                These defaults pre-fill the Add Shift modal on the Scheduler page.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Default shift start time</label>
+                  <Input
+                    className="mt-1"
+                    type="time"
+                    value={schedulerSettings?.default_shift_start ?? '05:00'}
+                    onChange={(event) =>
+                      setSchedulerSettings((current) =>
+                        current ? { ...current, default_shift_start: event.target.value } : current,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Default shift end time</label>
+                  <Input
+                    className="mt-1"
+                    type="time"
+                    value={schedulerSettings?.default_shift_end ?? '13:30'}
+                    onChange={(event) =>
+                      setSchedulerSettings((current) =>
+                        current ? { ...current, default_shift_end: event.target.value } : current,
+                      )
+                    }
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-xs font-medium text-muted-foreground">Default work days</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                    {[
+                      { id: 'mon', label: 'Mon' },
+                      { id: 'tue', label: 'Tue' },
+                      { id: 'wed', label: 'Wed' },
+                      { id: 'thu', label: 'Thu' },
+                      { id: 'fri', label: 'Fri' },
+                      { id: 'sat', label: 'Sat' },
+                      { id: 'sun', label: 'Sun' },
+                    ].map((day) => {
+                      const enabled = (schedulerSettings?.default_shift_days ?? ['mon', 'tue', 'wed', 'thu', 'fri']).includes(day.id);
+                      return (
+                        <label key={day.id} className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+                          <span>{day.label}</span>
+                          <Switch
+                            checked={enabled}
+                            onCheckedChange={(checked) =>
+                              setSchedulerSettings((current) => {
+                                if (!current) return current;
+                                const next = new Set(current.default_shift_days ?? ['mon', 'tue', 'wed', 'thu', 'fri']);
+                                if (checked) next.add(day.id);
+                                else next.delete(day.id);
+                                return { ...current, default_shift_days: [...next] };
+                              })
+                            }
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Min shift hours</label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="0.5"
+                    value={schedulerSettings?.min_shift_hours ?? 4}
+                    onChange={(event) =>
+                      setSchedulerSettings((current) =>
+                        current ? { ...current, min_shift_hours: event.target.value ? Number(event.target.value) : 4 } : current,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Max shift hours</label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="0.5"
+                    value={schedulerSettings?.max_shift_hours ?? 10}
+                    onChange={(event) =>
+                      setSchedulerSettings((current) =>
+                        current ? { ...current, max_shift_hours: event.target.value ? Number(event.target.value) : 10 } : current,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Overtime threshold hours</label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="1"
+                    value={schedulerSettings?.overtime_threshold_hours ?? 40}
+                    onChange={(event) =>
+                      setSchedulerSettings((current) =>
+                        current ? { ...current, overtime_threshold_hours: event.target.value ? Number(event.target.value) : 40 } : current,
+                      )
+                    }
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={saveSchedulerSettings}>Save scheduler defaults</Button>
               </div>
             </Card>
             <div className="grid gap-4 md:grid-cols-2">

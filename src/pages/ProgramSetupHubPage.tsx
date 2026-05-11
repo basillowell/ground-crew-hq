@@ -82,6 +82,19 @@ export type ActivePage =
   | 'shifts'
   ;
 
+type SchedulerSettings = {
+  id: string;
+  org_id: string;
+  default_shift_start: string | null;
+  default_shift_end: string | null;
+  default_shift_days: string[] | null;
+  min_shift_hours: number | null;
+  max_shift_hours: number | null;
+  overtime_threshold_hours: number | null;
+  crew_start_time_buffer_minutes: number | null;
+  notes: string | null;
+};
+
 const NAV_GROUPS: { label: string; items: { id: ActivePage; label: string; icon: typeof Settings }[] }[] = [
   {
     label: 'Organization',
@@ -317,6 +330,7 @@ export default function ProgramSetupHubPage() {
   const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [schedulerSettings, setSchedulerSettings] = useState<SchedulerSettings | null>(null);
 
   useEffect(() => {
     setSettingsQueryReady(Boolean(currentUser?.orgId));
@@ -374,6 +388,40 @@ export default function ProgramSetupHubPage() {
   useEffect(() => setShiftTemplates(shiftTemplatesData), [shiftTemplatesData]);
   useEffect(() => setAppUsers(appUsersData), [appUsersData]);
   useEffect(() => setEmployees(employeesData), [employeesData]);
+  useEffect(() => {
+    if (!scopedOrgId || !supabase) return;
+    let isMounted = true;
+    void supabase
+      .from('scheduler_settings')
+      .select('*')
+      .eq('org_id', scopedOrgId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!isMounted) return;
+        if (error) return;
+        if (data) {
+          setSchedulerSettings(data as SchedulerSettings);
+          return;
+        }
+        setSchedulerSettings({
+          id: makeUuid(),
+          org_id: scopedOrgId,
+          default_shift_start: '05:00',
+          default_shift_end: '13:30',
+          default_shift_days: ['mon', 'tue', 'wed', 'thu', 'fri'],
+          min_shift_hours: 4,
+          max_shift_hours: 10,
+          overtime_threshold_hours: 40,
+          crew_start_time_buffer_minutes: 0,
+          notes: '',
+        });
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [makeUuid, scopedOrgId]);
 
   const liveCounts = useMemo(() => {
     return {
@@ -453,6 +501,38 @@ export default function ProgramSetupHubPage() {
     toast('Program setup saved', {
       description: `${nextSetting.organizationName} now drives the active club and brand profile.`,
     });
+  }
+
+  async function saveSchedulerSettings() {
+    if (!supabase || !currentUser?.orgId || !schedulerSettings) return;
+    const payload = {
+      id: schedulerSettings.id,
+      org_id: currentUser.orgId,
+      default_shift_start: schedulerSettings.default_shift_start || '05:00',
+      default_shift_end: schedulerSettings.default_shift_end || '13:30',
+      default_shift_days: schedulerSettings.default_shift_days && schedulerSettings.default_shift_days.length > 0
+        ? schedulerSettings.default_shift_days
+        : ['mon', 'tue', 'wed', 'thu', 'fri'],
+      min_shift_hours: schedulerSettings.min_shift_hours ?? 4,
+      max_shift_hours: schedulerSettings.max_shift_hours ?? 10,
+      overtime_threshold_hours: schedulerSettings.overtime_threshold_hours ?? 40,
+      crew_start_time_buffer_minutes: schedulerSettings.crew_start_time_buffer_minutes ?? 0,
+      notes: schedulerSettings.notes?.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await supabase
+      .from('scheduler_settings')
+      .upsert(payload)
+      .select('*')
+      .maybeSingle();
+    if (error) {
+      toast.error('Failed to save scheduler defaults', { description: error.message });
+      return;
+    }
+    if (data) {
+      setSchedulerSettings(data as SchedulerSettings);
+    }
+    toast.success('Scheduler defaults saved');
   }
 
   async function saveStructures() {
@@ -861,6 +941,9 @@ export default function ProgramSetupHubPage() {
         navGroups={navGroups}
         planLimits={PLAN_LIMITS}
         currentPlanName={CURRENT_PLAN_NAME}
+        schedulerSettings={schedulerSettings}
+        setSchedulerSettings={setSchedulerSettings}
+        saveSchedulerSettings={saveSchedulerSettings}
       />
     </div>
   );
