@@ -350,6 +350,12 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
       null
     );
   }, [editingProperty, weatherLocations]);
+  const activeWeatherLocation = useMemo(() => {
+    const withCoordinates = weatherLocations.find(
+      (location) => typeof location.latitude === 'number' && typeof location.longitude === 'number',
+    );
+    return withCoordinates ?? weatherLocations[0] ?? null;
+  }, [weatherLocations]);
   const sectionMeta = SECTION_META[activePage];
   const sectionWorkflow = SECTION_WORKFLOW[activePage];
   const activeIsAdminSection = ADMIN_ONLY_PAGES.includes(activePage);
@@ -803,6 +809,24 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               <p className="mt-1 text-xs text-muted-foreground">
                 This saved operations location is used as the reliable default weather source.
               </p>
+              <div className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs">
+                <p className="font-medium text-foreground">Active weather location</p>
+                {activeWeatherLocation ? (
+                  <>
+                    <p className="mt-1">{activeWeatherLocation.name || activeWeatherLocation.area || 'Weather area'}</p>
+                    <p className="text-muted-foreground">
+                      {typeof activeWeatherLocation.latitude === 'number' && typeof activeWeatherLocation.longitude === 'number'
+                        ? `${activeWeatherLocation.latitude.toFixed(4)}, ${activeWeatherLocation.longitude.toFixed(4)}`
+                        : 'Coordinates not saved yet'}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-muted-foreground">No weather location is configured yet.</p>
+                )}
+                <Button size="sm" variant="outline" className="mt-2" onClick={() => navigate('/app/weather?setup=true')}>
+                  Add location
+                </Button>
+              </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Default Location Name</label>

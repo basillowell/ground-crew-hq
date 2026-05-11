@@ -168,7 +168,7 @@ export default function WeatherPage() {
   const programSetting = programSettingQuery.data ?? null;
   const workLocationsQuery = useWorkLocations();
   const workLocations = useMemo(() => workLocationsQuery.data ?? [], [workLocationsQuery.data]);
-  const weatherLocationsQuery = useWeatherLocations(weatherScopePropertyId);
+  const weatherLocationsQuery = useWeatherLocations(weatherScopePropertyId, currentUser?.orgId, true);
   const weatherStationsQuery = useQuery({
     queryKey: ['weather-stations-full', currentUser?.orgId ?? 'all-orgs'],
     enabled: Boolean(currentUser),
@@ -1680,6 +1680,46 @@ export default function WeatherPage() {
       }),
   });
   const liveForecastHours = useMemo(() => liveForecastQuery.data?.hourly ?? [], [liveForecastQuery.data?.hourly]);
+
+  useEffect(() => {
+    async function syncLiveForecastLog() {
+      if (!selectedLocation?.id || !currentUser?.orgId || !liveForecastQuery.data) return;
+      const current = liveForecastQuery.data.current;
+      const today = todayIsoDate();
+      const expectedRain = Number(
+        (liveForecastQuery.data.hourly ?? [])
+          .slice(0, 8)
+          .reduce((sum, point) => sum + (Number(point.precipitationProbability ?? 0) / 100) * 0.1, 0)
+          .toFixed(2),
+      );
+
+      const payload = {
+        location_id: selectedLocation.id,
+        date: today,
+        org_id: currentUser.orgId,
+        captured_at: new Date().toISOString(),
+        current_conditions: getWeatherConditionMeta(current.weatherCode).label,
+        forecast: 'Live forecast from Open-Meteo.',
+        rainfall_total: expectedRain,
+        temperature: current.temperature,
+        humidity: latestStoredLog?.humidity ?? null,
+        wind: current.windSpeed,
+        wind_gust: latestStoredLog?.windGust ?? current.windSpeed,
+        et: latestStoredLog?.et ?? null,
+        source: 'station',
+        notes: 'Auto-updated from Open-Meteo forecast fetch.',
+      };
+
+      const { error } = await supabase
+        .from('weather_daily_logs')
+        .upsert(payload, { onConflict: 'location_id,date' });
+      if (error) {
+        console.warn('[weather] live log upsert failed', error.message);
+      }
+    }
+
+    void syncLiveForecastLog();
+  }, [currentUser?.orgId, latestStoredLog?.et, latestStoredLog?.humidity, latestStoredLog?.windGust, liveForecastQuery.data, selectedLocation?.id]);
 
   const fallbackLiveLog = useMemo<WeatherDailyLog | null>(() => {
     if (!selectedLocation || !liveForecastQuery.data) return null;

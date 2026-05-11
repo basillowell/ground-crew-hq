@@ -228,6 +228,8 @@ type DbWeatherLocation = {
   propertyId?: string | null;
   property_id?: string | null;
   area: string;
+  org_id?: string | null;
+  is_active?: boolean | null;
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -873,10 +875,13 @@ async function fetchWorkLocations(): Promise<WorkLocation[]> {
   return rows.map(toWorkLocation);
 }
 
-export async function fetchWeatherLocations(propertyId?: string): Promise<WeatherLocation[]> {
+export async function fetchWeatherLocations(propertyId?: string, orgId?: string, activeOnly = false): Promise<WeatherLocation[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  const { data, error } = await client.from('weather_locations').select('*').order('name');
+  let query = client.from('weather_locations').select('*').order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  if (activeOnly) query = query.eq('is_active', true);
+  const { data, error } = await query;
   if (error) throw error;
   const rows = (data as DbWeatherLocation[]) ?? [];
   if (!scopedPropertyId) return rows.map(toWeatherLocation);
@@ -1290,10 +1295,10 @@ export function useWorkLocations(propertyId?: string, orgId?: string) {
   });
 }
 
-export function useWeatherLocations(propertyId?: string) {
+export function useWeatherLocations(propertyId?: string, orgId?: string, activeOnly = false) {
   return useQuery({
-    queryKey: ['weather-locations', propertyId ?? 'all'],
-    queryFn: () => fetchWeatherLocations(propertyId),
+    queryKey: ['weather-locations', propertyId ?? 'all', orgId ?? 'all-orgs', activeOnly ? 'active' : 'all-statuses'],
+    queryFn: () => fetchWeatherLocations(propertyId, orgId, activeOnly),
     staleTime: 1000 * 60 * 10,
   });
 }
