@@ -1,216 +1,319 @@
-# Ground Crew HQ — Codex Operating Rules
-
-> Read this file at the start of every session before writing any code.
-> These rules exist to prevent schema drift, deployment floods, and auth loops.
-
----
-
-## The Golden Rule
-
-**Codex owns the frontend. Supabase is managed externally.**
-
-Claude (the supervisor) applies all schema changes directly to the live database.
-Codex writes TypeScript, React components, hooks, and pages — never SQL migrations
-for structural changes.
+[# Ground Crew HQ — Codex Operating Rules
+# Version: 2.5 · Last updated: May 2026
+# Maintained by: Claude (supervisor) + Basil Lowell (product owner)
+#
+# These rules exist to prevent the four failure modes we've hit:
+#   1. Schema drift (DB and GitHub out of sync)
+#   2. Deployment floods (every branch triggers Vercel)
+#   3. Auth loops (stale sessions, race conditions)
+#   4. JSX corruption (incremental patches on broken files)
+#
+# AGENTS.md is a developer reference — keep it in the repo.
+# These rules govern what Codex builds, not what Claude supervises.
 
 ---
 
-## Rule 1 — No SQL migrations for schema changes
+## The Core Split
+
+**Claude (supervisor):** Handles all schema, RLS, migrations, DB seeds,
+foreign keys, and index changes — directly via Supabase MCP. Never Codex.
+
+**Codex:** Writes TypeScript, React components, hooks, pages, and styles.
+Never touches the database directly.
+
+**Basil (product owner):** Tells Claude what to build. Claude checks the DB,
+fixes anything structural, then writes the Codex prompt with confirmed context.
+Codex gets a prompt with the right schema state already confirmed — no investigation needed.
+
+---
+
+## Rule 1 — No SQL migrations for structural changes
 
 NEVER create migration files that:
-- Create or drop tables
-- Add, rename, or drop columns
-- Add or modify foreign keys
-- Create or modify RLS policies
-- Create or modify database functions
+- Create, rename, or drop tables or columns
+- Add or modify foreign keys or indexes
+- Create or modify RLS policies or functions
 - Insert seed data with hardcoded UUIDs
 
-WHY: Schema changes applied via migration files do not automatically run against
-the live Supabase database. This creates drift between GitHub and production,
-breaking the app in ways that are hard to trace.
+INSTEAD: If a schema change is needed, add an inline comment:
+```tsx
+// SCHEMA NEEDED: add column X to table Y — flag for Claude session
+```
+Flag it in your response. Claude applies it directly to Supabase.
 
-INSTEAD: When a schema change is needed, add a comment in the code:
-```
-// SCHEMA NEEDED: add column X to table Y — request from Claude session
-```
-Then flag it in your response so the supervisor (Claude) can apply it directly.
+EXCEPTION: Documentation-only migration files (comments, version notes)
+for tracking purposes are fine. Never executable structural SQL from Codex.
 
 ---
 
-## Rule 2 — Never hardcode UUIDs
+## Rule 2 — Never hardcode UUIDs or environment values
 
-NEVER hardcode org IDs, user IDs, property IDs, or any UUID in:
-- Migration files
-- Seed files
-- Component code
-- Hook defaults
+NEVER hardcode in any file:
+- Org IDs, user IDs, property IDs, location IDs, station IDs
+- Supabase project URLs or anon keys
+- Environment-specific values of any kind
 
-ALWAYS read these from auth context:
+ALWAYS read from context:
 ```typescript
-const { orgId, user } = useAuth()
+const { orgId, user, userRole } = useAuth()
 ```
-
-The one exception: the supervisor may provide a UUID explicitly for a targeted
-fix — use it only in that specific context, never as a permanent default.
 
 ---
 
-## Rule 3 — One branch, always main
+## Rule 3 — One branch only: main
 
-NEVER create new branches. All work goes directly to `main`.
+NEVER create new branches. All work goes to `main` directly.
 
-WHY: Every branch Codex pushes triggers a new Vercel preview deployment.
-With multiple branches active, Vercel spawns dozens of deployments and it
-becomes impossible to know which URL is production.
+WHY: Every branch triggers a new Vercel preview deployment.
+Multiple active branches = dozens of dead deployments.
 
-If git refuses a direct push to main, use:
-```
+If git refuses a direct push:
+```bash
 git push origin HEAD:main --force-with-lease
 ```
 
----
-
-## Rule 4 — Auth context is the only source of org_id
-
-NEVER query Supabase without scoping to org:
-```typescript
-// WRONG
-const { data } = await supabase.from('employees').select('*')
-
-// RIGHT
-const { orgId } = useAuth()
-const { data } = await supabase.from('employees').select('*').eq('org_id', orgId)
-```
-
-NEVER use JWT custom claims for org_id. The correct pattern is:
-```typescript
-// RLS policies use this function (already in DB):
-// SELECT org_id FROM app_users WHERE id = auth.uid()
-```
-
-NEVER call set_claim(), refreshSessionWithRetry(), or any JWT manipulation.
-Auth is: signIn → session → query app_users → done.
+Production URL: **ground-crew-hq.vercel.app**
+Supabase project: **fjqeekwisnbpxgebrnpl.supabase.co**
 
 ---
 
-## Rule 5 — Supabase joins require foreign keys
+## Rule 4 — Auth context is read-only: do not modify
 
-NEVER use PostgREST nested select syntax unless the FK exists:
+The auth pattern is implemented and working. Do not touch it.
+
+**Current working pattern:**
 ```typescript
-// Only works if weather_stations.locationId FK → weather_locations.id exists
+// On mount: getSession() → 200ms delay → loadAppUser() with 3 retries
+// onAuthStateChange: SIGNED_IN → loadAppUser(), SIGNED_OUT → clear state
+// Safety timeout: 12s → force isReady=true
+// Context exports: { user, orgId, userRole, isReady }
+// isReadyRef tracks isReady in timeout closures
+```
+
+**Never:**
+- Call `set_claim()` or any JWT manipulation
+- Call `refreshSessionWithRetry()` or custom retry wrappers
+- Read `org_id` from JWT — always read from `app_users` table
+- Modify AuthContext.tsx without explicit Claude instruction
+
+If auth appears broken: flag it for Claude. Every Codex auth fix
+in this project has introduced a new loading loop.
+
+---
+
+## Rule 5 — Supabase queries: two calls, never nested select
+
+PostgREST nested selects require a foreign key in the DB.
+When in doubt, use two queries and join in TypeScript.
+
+```typescript
+// WRONG — crashes without FK:
 const { data } = await supabase
   .from('weather_locations')
-  .select('*, weather_stations(*)')  // ← requires FK in DB
-```
+  .select('*, weather_stations(*)')
 
-If a join fails with "could not find relationship in schema cache":
-- Do NOT use the nested select
-- Use two separate queries and join in TypeScript instead:
-```typescript
-const { data: locations } = await supabase.from('weather_locations').select('*').eq('org_id', orgId)
-const { data: stations } = await supabase.from('weather_stations').select('*')
+// RIGHT — always safe:
+const { data: locations } = await supabase
+  .from('weather_locations')
+  .select('*')
+  .eq('org_id', orgId)
+
+const { data: stations } = await supabase
+  .from('weather_stations')
+  .select('*')
+
 const joined = locations?.map(loc => ({
   ...loc,
-  stations: stations?.filter(s => s.locationId === loc.id)
+  stations: stations?.filter(s => s.locationId === loc.id) ?? []
 }))
 ```
 
----
-
-## Rule 6 — Never block the UI on failed queries
-
-ALWAYS separate loading states:
+**All queries must be org-scoped:**
 ```typescript
-const [isAuthReady, setIsAuthReady] = useState(false)   // from AuthContext
-const [isDataLoading, setIsDataLoading] = useState(true) // local to page
+.eq('org_id', orgId)           // tables with org_id column
+.in('locationId', locationIds) // tables linked via location
+```
 
-// Pattern:
-if (!isAuthReady) return <PageSkeleton />
+---
+
+## Rule 6 — Loading states: never blank, never infinite
+
+```typescript
+if (!isReady) return <PageSkeleton />
 if (isDataLoading) return <ContentSkeleton />
-if (error) return <ErrorState onRetry={refetch} />
-return <PageContent />
+if (error) return <ErrorState onRetry={refetch} message={error} />
+return <PageContent data={data} />
 ```
 
-NEVER let a failed data fetch re-trigger auth validation.
-NEVER show an infinite spinner — always show a Retry button after 10s.
+- Data fetch timeout: **8 seconds** → show error + Retry button
+- Auth timeout: **12 seconds** → force isReady, show "Clear session" option
+- Retry button must actually re-trigger the fetch (use useCallback)
+- Never show a dead end with no escape
 
 ---
 
-## Rule 7 — Build must pass before commit
+## Rule 7 — Corrupted files: full rewrite, never patch
 
-ALWAYS run `npm run build` before committing.
-NEVER commit if the build has errors.
-If build fails due to TypeScript errors: fix them, do not use `// @ts-ignore`.
+If a file has JSX parsing errors, encoding issues, or mismatched tags:
+**Delete the entire file content. Rewrite from scratch.**
 
----
+Never apply str_replace to a broken file. Corruption compounds.
 
-## Rule 8 — Commit naming convention
+Signs a file needs rewrite (not a patch):
+- Build fails with "Unexpected token" in that file
+- str_replace cannot find its target string
+- Multiple consecutive patch attempts fail on same file
+- File has been edited 10+ times across sessions (check git log)
 
-```
-feat: short description (ver2.X.Y)     ← new feature
-fix: short description (ver2.X.Y)      ← bug fix
-chore: short description (ver2.X.Y)    ← cleanup, refactor, deps
-```
-
-Bump the patch version (Y) for each commit to main.
-Never use vague messages like "update" or "fix bug".
+Current known corrupted file: `ProgramSetupHubPage.tsx` — always rewrite.
 
 ---
 
-## Current DB State (updated by supervisor)
+## Rule 8 — UI language: product only, zero developer terms
+
+| Never render... | Render instead... |
+|---|---|
+| "Agent Skills" | "Operations Assistant — Coming soon" |
+| "Codex", "Claude", "AI prompt" | (remove entirely) |
+| "Set weather_default_latitude" | "Configure weather for your property" |
+| "Configure employees table" | "Set up your crew" |
+| "RLS", "migration", "schema" | (never in UI) |
+| "skill", "SKILL", "prompt helper" | (never in UI) |
+
+AGENTS.md lives in the repo as a developer reference.
+Never import or render its content in the app UI.
+
+---
+
+## Rule 9 — Build must pass before every commit
+
+```bash
+npm run build  # 0 errors required
+```
+
+- Fix all TypeScript errors — no `// @ts-ignore`
+- Missing component → create a simple placeholder, not an error
+- Never commit a broken build
+
+---
+
+## Rule 10 — Commit format
+
+```
+feat: description (ver2.X.Y)      ← new feature
+fix: description (ver2.X.Y)       ← bug fix
+refactor: description (ver2.X.Y)  ← rewrite/cleanup
+chore: description (ver2.X.Y)     ← config, docs, deps
+```
+
+Bump patch (Y) per commit. Check package.json for current version.
+
+---
+
+## Live DB State
+*Maintained by Claude — confirmed May 12, 2026*
 
 **Project:** fjqeekwisnbpxgebrnpl.supabase.co
-**Org ID:** read from auth context — never hardcode
-**Production URL:** ground-crew-hq.vercel.app
-**Branch:** main
+**Org:** Ground Crew HQ · Plan: starter
+**Active property:** Sarasota Polo Club (b50b42cd-903e-4280-9373-1d9cae97b2b3)
 
-### Tables (37 total — all have RLS enabled)
-app_users, application_areas, assignments, chemical_application_logs,
-chemical_application_tank_mix_items, chemical_products, clock_events,
-department_options, departments, employee_groups, employees,
-employment_statuses, equipment_types, equipment_units, group_options,
-job_descriptions, manual_rainfall_entries, notes, organizations,
-overtime_rules, program_settings, properties, property_class_options,
-schedule_entries, scheduler_settings, shift_templates, task_requests,
-tasks, wage_categories, weather_daily_logs, weather_display_prefs,
-weather_locations, weather_stations, work_locations, work_orders,
-worker_types, workforce_roles
+### Auth & RLS
+```typescript
+// app_users policy: auth.uid() = id OR auth.role() = 'service_role'
+// All 37 tables have RLS enabled — no exceptions
+```
 
-### Key relationships
-- app_users.org_id → organizations.id
-- weather_stations.locationId → weather_locations.id (FK added)
-- weather_locations.org_id → organizations.id
-- employees linked via app_users.employee_id
-
-### RLS pattern (use this everywhere)
+### Helper functions (SECURITY DEFINER — never redefine from Codex)
 ```sql
--- SELECT
+current_org_id()      → SELECT org_id FROM app_users WHERE id = auth.uid()
+current_user_role()   → SELECT role FROM app_users WHERE id = auth.uid()
+current_employee_id() → SELECT employee_id FROM app_users WHERE id = auth.uid()
+auth_app_user_id()    → SELECT id FROM app_users WHERE id = auth.uid()
+```
+
+### All 37 tables (all RLS on)
+```
+app_users · application_areas · assignments
+chemical_application_logs · chemical_application_tank_mix_items
+chemical_products · clock_events · department_options · departments
+employee_groups · employees · employment_statuses
+equipment_types · equipment_units · group_options · job_descriptions
+manual_rainfall_entries · notes · organizations · overtime_rules
+program_settings · properties · property_class_options
+schedule_entries · scheduler_settings · shift_templates
+task_requests · tasks · wage_categories
+weather_daily_logs · weather_display_prefs · weather_locations
+weather_stations · work_locations · work_orders
+worker_types · workforce_roles
+```
+
+### Key foreign keys (confirmed in DB)
+```
+weather_stations.locationId → weather_locations.id ✓
+weather_locations.org_id    → organizations.id ✓
+scheduler_settings.property_id → properties.id ✓
+app_users.employee_id → employees.id ✓
+```
+
+### Scheduler settings (id: 48336e91)
+```
+operational_day_start: 05:00    operational_day_end: 18:00
+default_shift_start: 05:00      default_shift_end: 13:30
+operational_days: mon/tue/wed/thu/fri/sat
+min_shift_hours: 4   max_shift_hours: 10   overtime_threshold: 40h
+property_id: b50b42cd (Sarasota Polo Club)
+```
+
+### Weather
+```
+Location:  Sarasota Polo Club · id: 8c4f9cf0 · lat: 27.3364 · lng: -82.5307
+Station:   Sarasota Polo Club Station · id: 7b98c31e · provider: Open-Meteo
+Display:   7 panels enabled in weather_display_prefs
+Daily logs: 11 rows, 7 in 2026 · YTD rainfall: 3.69 in
+```
+
+### Standard RLS policy pattern
+```sql
+-- Tables with org_id:
 USING (org_id = (SELECT org_id FROM app_users WHERE id = auth.uid())
   OR auth.role() = 'service_role')
 
--- For app_users table specifically (no org_id self-reference):
+-- app_users (no self-reference):
 USING (auth.uid() = id OR auth.role() = 'service_role')
-```
 
-### Helper functions (already in DB — do not redefine)
-- `current_org_id()` → reads app_users by auth.uid()
-- `current_user_role()` → reads app_users by auth.uid()
-- `current_employee_id()` → reads app_users by auth.uid()
-- `auth_app_user_id()` → reads app_users by auth.uid()
+-- weather_daily_logs (linked via locationId):
+USING (
+  "locationId" IN (
+    SELECT id FROM weather_locations
+    WHERE org_id = (SELECT org_id FROM app_users WHERE id = auth.uid())
+  ) OR auth.role() = 'service_role'
+)
+```
 
 ---
 
-## How to use this file
+## How to invoke these rules
 
-**At the start of every Codex session, paste:**
+### Every Codex session — paste this first:
 ```
-Read CODEX_RULES.md before writing any code. Follow all rules exactly.
-Schema changes are managed externally — flag them in comments, never in migrations.
-```
-
-**When starting a task, paste:**
-```
-Read CODEX_RULES.md. Task: [your task here]
+Read CODEX_RULES.md before writing any code.
+No migrations. No new branches. Main only.
+Task: [your task]
 ```
 
-That's it. Codex will read the file from the repo and apply the rules to everything it writes.
+### Corrupted file rewrite:
+```
+Read CODEX_RULES.md — Rule 7 applies to [filename].
+Full rewrite required. Delete all existing content. Rewrite from scratch.
+[new spec here]
+```
+
+### Auth issue:
+Do not send to Codex. Send screenshot + console error to Claude.
+
+### DB/RLS issue:
+Do not send to Codex. Claude fixes directly in Supabase — usually 10 seconds.
+
+### New feature:
+Tell Claude what you want. Claude checks DB, fixes schema if needed,
+then writes the Codex prompt with confirmed context already embedded.]
