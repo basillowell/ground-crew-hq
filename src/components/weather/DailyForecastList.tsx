@@ -45,6 +45,10 @@ function rainBadgeLabel(amount: number, probability: number) {
 }
 
 export function DailyForecastList({ daily, range, onRangeChange }: DailyForecastListProps) {
+  if (!daily || daily.length === 0) {
+    return <div className="rounded-2xl border bg-white p-4 text-sm text-muted-foreground">Loading 10-day forecast...</div>;
+  }
+
   const rows = daily.slice(0, 10);
 
   return (
@@ -68,7 +72,15 @@ export function DailyForecastList({ daily, range, onRangeChange }: DailyForecast
 
       <div className="divide-y rounded-xl border">
         {rows.map((day, index) => {
-          const showRainBadge = day.precipitationSum > 0 || day.precipitationProbabilityMax > 20;
+          const high = typeof day.tempMax === 'number' && !Number.isNaN(day.tempMax) ? Math.round(day.tempMax) : '--';
+          const low = typeof day.tempMin === 'number' && !Number.isNaN(day.tempMin) ? Math.round(day.tempMin) : '--';
+          const rain = typeof day.precipitationSum === 'number' && !Number.isNaN(day.precipitationSum) ? day.precipitationSum : 0;
+          const rainProb =
+            typeof day.precipitationProbabilityMax === 'number' && !Number.isNaN(day.precipitationProbabilityMax)
+              ? day.precipitationProbabilityMax
+              : 0;
+          const code = typeof day.weatherCode === 'number' && !Number.isNaN(day.weatherCode) ? day.weatherCode : 0;
+          const showRainBadge = rain > 0 || rainProb > 20;
           return (
             <div
               key={`${day.date}-${index}`}
@@ -76,18 +88,18 @@ export function DailyForecastList({ daily, range, onRangeChange }: DailyForecast
                 index === 0 ? 'bg-[#f0fdf4]' : 'bg-white'
               }`}
             >
-              <div className="text-xl">{weatherEmoji(day.weatherCode)}</div>
+              <div className="text-xl">{weatherEmoji(code)}</div>
               <div>
                 <div className="text-sm font-medium text-[#111827]">{dayLabel(day.date, index)}</div>
-                <div className="text-xs text-[#6b7280]">{weatherCondition(day.weatherCode)}</div>
+                <div className="text-xs text-[#6b7280]">{weatherCondition(code)}</div>
               </div>
               <div className="text-sm font-semibold text-[#111827]">
-                {Math.round(day.tempMax)}° / {Math.round(day.tempMin)}°
+                {String(high)}° / {String(low)}°
               </div>
               <div>
                 {showRainBadge ? (
                   <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
-                    {rainBadgeLabel(day.precipitationSum, day.precipitationProbabilityMax)}
+                    {rainBadgeLabel(rain, rainProb)}
                   </span>
                 ) : (
                   <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500">0%</span>
@@ -100,4 +112,3 @@ export function DailyForecastList({ daily, range, onRangeChange }: DailyForecast
     </div>
   );
 }
-

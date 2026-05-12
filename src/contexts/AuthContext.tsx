@@ -211,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.warn(`[Auth] attempt ${attempt} failed:`, error?.message ?? null);
 
       if (attempt < 3) {
-        const backoffMs = attempt === 1 ? 200 : 500;
+        const backoffMs = attempt === 1 ? 300 : 800;
         await delay(backoffMs);
       }
     }
@@ -270,7 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setIsReady(false);
       setUser(session.user);
-      await delay(100);
+      await delay(150);
       if (mounted) {
         await loadAppUser(session.user.id, session.user);
       }
@@ -291,7 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthState((state) => (state === 'authenticated' ? state : 'network-timeout'));
       setIsReady(true);
       console.error('[Auth] isReady timeout — forcing ready state');
-    }, 15000);
+    }, 20000);
     return () => window.clearTimeout(timeoutId);
   }, [isReady]);
 

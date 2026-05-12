@@ -40,21 +40,33 @@ export function HourlyForecastChart({
   onToggleRain,
   onToggleWind,
 }: HourlyForecastChartProps) {
+  if (!hourly || hourly.length === 0) {
+    return <div className="rounded-2xl border bg-white p-4 text-sm text-muted-foreground">Loading forecast data...</div>;
+  }
+
   const hours = range === '12h' ? 12 : range === '48h' ? 48 : 24;
-  const displayData = useMemo(
+  const safeData = useMemo(
     () =>
       hourly.slice(0, hours).map((point, index) => {
         const date = new Date(point.time);
+        const safeTemp = typeof point.temperature === 'number' && !Number.isNaN(point.temperature) ? Math.round(point.temperature) : null;
+        const safeRainProb =
+          typeof point.precipitationProbability === 'number' && !Number.isNaN(point.precipitationProbability)
+            ? Math.round(point.precipitationProbability)
+            : 0;
+        const safePrecip = typeof point.precipitation === 'number' && !Number.isNaN(point.precipitation) ? Number(point.precipitation) : 0;
+        const safeWind = typeof point.windSpeed === 'number' && !Number.isNaN(point.windSpeed) ? Math.round(point.windSpeed) : null;
+        const safeWindDir = typeof point.windDirection === 'number' && !Number.isNaN(point.windDirection) ? Number(point.windDirection) : 0;
         return {
           id: `${point.time}-${index}`,
           hourLabel: date.toLocaleTimeString([], { hour: 'numeric' }),
           dayLabel: date.toLocaleDateString([], { weekday: 'short', day: 'numeric' }),
           timeMs: date.getTime(),
-          temperature: Math.round(point.temperature),
-          precipitationProbability: Math.round(point.precipitationProbability ?? 0),
-          precipitation: Number(point.precipitation ?? 0),
-          windSpeed: Math.round(point.windSpeed),
-          windDirection: Number(point.windDirection ?? 0),
+          temperature: safeTemp,
+          precipitationProbability: safeRainProb,
+          precipitation: safePrecip,
+          windSpeed: safeWind,
+          windDirection: safeWindDir,
           showDayBoundary: index > 0 && new Date(hourly[index - 1]?.time ?? point.time).getDate() !== date.getDate(),
         };
       }),
@@ -62,14 +74,18 @@ export function HourlyForecastChart({
   );
 
   const currentHourLabel = useMemo(() => {
-    if (!displayData.length) return null;
+    if (!safeData.length) return null;
     const now = Date.now();
-    const closest = displayData.reduce((best, point) => {
+    const closest = safeData.reduce((best, point) => {
       if (!best) return point;
       return Math.abs(point.timeMs - now) < Math.abs(best.timeMs - now) ? point : best;
-    }, displayData[0]);
+    }, safeData[0]);
     return closest.hourLabel;
-  }, [displayData]);
+  }, [safeData]);
+
+  if (!safeData.length) {
+    return <div className="rounded-2xl border bg-white p-4 text-sm text-muted-foreground">Loading forecast data...</div>;
+  }
 
   return (
     <div className="rounded-2xl border bg-white p-4">
@@ -94,13 +110,13 @@ export function HourlyForecastChart({
       </div>
 
       <div style={{ overflowX: 'auto', width: '100%' }}>
-        <div style={{ width: `${Math.max(1, displayData.length) * 60}px`, minWidth: '100%' }}>
+        <div style={{ width: `${Math.max(1, safeData.length) * 60}px`, minWidth: '100%' }}>
           <ResponsiveContainer width="100%" height={190}>
-            <ComposedChart data={displayData} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
+            <ComposedChart data={safeData} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" />
               <XAxis dataKey="hourLabel" tick={{ fontSize: 11 }} interval={0} />
-              <YAxis yAxisId="temp" tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}°`} />
-              <YAxis yAxisId="conditions" orientation="right" tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}`} />
+              <YAxis yAxisId="temp" domain={['auto', 'auto']} tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}°`} />
+              <YAxis yAxisId="conditions" domain={['auto', 'auto']} orientation="right" tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}`} />
               <Tooltip
                 formatter={(value: number, name) => {
                   if (name === 'Temperature') return [`${value}°F`, name];
@@ -115,7 +131,7 @@ export function HourlyForecastChart({
                 }}
               />
               {currentHourLabel ? <ReferenceLine x={currentHourLabel} stroke="#166534" strokeDasharray="4 4" yAxisId="temp" /> : null}
-              {displayData
+              {safeData
                 .filter((point) => point.showDayBoundary)
                 .map((point) => (
                   <ReferenceLine key={`${point.id}-boundary`} x={point.hourLabel} stroke="#e5e7eb" />
@@ -130,11 +146,11 @@ export function HourlyForecastChart({
       </div>
 
       <div className="mt-2 overflow-x-auto">
-        <div style={{ width: `${Math.max(1, displayData.length) * 60}px` }} className="flex text-[11px] text-[#6b7280]">
-          {displayData.map((point) => (
+        <div style={{ width: `${Math.max(1, safeData.length) * 60}px` }} className="flex text-[11px] text-[#6b7280]">
+          {safeData.map((point) => (
             <div key={`${point.id}-wind`} className="w-[60px] text-center">
-              {directionArrow(point.windDirection)}
-              {point.windSpeed}
+              {directionArrow(point.windDirection ?? 0)}
+              {point.windSpeed ?? '--'}
             </div>
           ))}
         </div>
@@ -142,4 +158,3 @@ export function HourlyForecastChart({
     </div>
   );
 }
-
