@@ -30,6 +30,7 @@ import { toast } from '@/components/ui/sonner';
 import { fetchPrimaryStationSnapshot, fetchStationForecastDetail, fetchWeatherStationSuggestions, type GeocodeResult, type WeatherForecastDetail } from '@/lib/weatherProviders';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { DEFAULT_WEATHER_LOCATION, useWeather, getWeatherIconMeta } from '@/lib/weather';
+import { fetchAndLogOpenMeteoWeather } from '@/lib/weather/fetchAndLog';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperties, useProgramSettings, useWeatherLocations, useWorkLocations } from '@/lib/supabase-queries';
@@ -294,6 +295,7 @@ export default function WeatherPage() {
   const [showHourlyTempMetric, setShowHourlyTempMetric] = useState(true);
   const [showHourlyRainMetric, setShowHourlyRainMetric] = useState(true);
   const [showHourlyWindMetric, setShowHourlyWindMetric] = useState(true);
+  const [forecastHours, setForecastHours] = useState<'12h' | '24h' | '48h'>('24h');
   const [showOperationsControls, setShowOperationsControls] = useState(false);
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
   const [prefsDraftWidgets, setPrefsDraftWidgets] = useState<WeatherWidgetId[]>([]);
@@ -1711,9 +1713,10 @@ export default function WeatherPage() {
       }),
   });
   const liveForecastHours = useMemo(() => liveForecastQuery.data?.hourly ?? [], [liveForecastQuery.data?.hourly]);
+  const forecastHourCount = forecastHours === '12h' ? 12 : forecastHours === '48h' ? 48 : 24;
   const hourlyForecastChartData = useMemo(
     () =>
-      liveForecastHours.slice(0, 24).map((point, index) => {
+      liveForecastHours.slice(0, forecastHourCount).map((point, index) => {
         const date = new Date(point.time);
         const hourLabel = date.toLocaleTimeString([], { hour: 'numeric' });
         return {
@@ -1726,7 +1729,7 @@ export default function WeatherPage() {
           windSpeed: Math.round(point.windSpeed),
         };
       }),
-    [liveForecastHours],
+    [forecastHourCount, liveForecastHours],
   );
   const currentHourChartLabel = useMemo(() => {
     if (!hourlyForecastChartData.length) return null;
@@ -1742,58 +1745,30 @@ export default function WeatherPage() {
     async function syncLiveForecastLog() {
       if (!selectedLocation?.id || !currentUser?.orgId || !liveForecastQuery.data) return;
       const current = liveForecastQuery.data.current;
-      const today = todayIsoDate();
-      const expectedRain = Number(
-        (liveForecastQuery.data.hourly ?? [])
-          .slice(0, 8)
-          .reduce((sum, point) => sum + (Number(point.precipitationProbability ?? 0) / 100) * 0.1, 0)
-          .toFixed(2),
-      );
-
-      const payload = {
-        locationId: selectedLocation.id,
-        date: today,
+      await fetchAndLogOpenMeteoWeather({
         orgId: currentUser.orgId,
-        capturedAt: new Date().toISOString(),
-        currentConditions: getWeatherConditionMeta(current.weatherCode).label,
-        forecast: 'Live forecast from Open-Meteo.',
-        rainfallTotal: expectedRain,
-        temperature: current.temperature,
-        humidity: latestStoredLog?.humidity ?? null,
-        wind: current.windSpeed,
-        windGust: latestStoredLog?.windGust ?? current.windSpeed,
-        et: latestStoredLog?.et ?? null,
-        source: 'open-meteo',
-        notes: 'Auto-updated from Open-Meteo forecast fetch.',
-      };
-
-      const result = await supabase.from('weather_daily_logs').upsert(payload, { onConflict: 'locationId,date' });
-      if (result.error) {
-        const fallbackPayload = {
-          location_id: selectedLocation.id,
-          date: today,
-          org_id: currentUser.orgId,
-          captured_at: new Date().toISOString(),
-          current_conditions: getWeatherConditionMeta(current.weatherCode).label,
-          forecast: 'Live forecast from Open-Meteo.',
-          rainfall_total: expectedRain,
-          temperature: current.temperature,
-          humidity: latestStoredLog?.humidity ?? null,
-          wind: current.windSpeed,
-          wind_gust: latestStoredLog?.windGust ?? current.windSpeed,
-          et: latestStoredLog?.et ?? null,
+        data: {
           source: 'open-meteo',
-          notes: 'Auto-updated from Open-Meteo forecast fetch.',
-        };
-        const fallbackResult = await supabase.from('weather_daily_logs').upsert(fallbackPayload, { onConflict: 'location_id,date' });
-        if (fallbackResult.error) {
-          console.warn('[weather] live log upsert failed', fallbackResult.error.message);
-        }
-      }
+          locationLabel: selectedLocation.name ?? selectedLocation.area ?? 'Weather area',
+          locationId: selectedLocation.id,
+          current: {
+            temperature: current.temperature,
+            humidity: latestStoredLog?.humidity ?? 0,
+            windSpeed: current.windSpeed,
+            precipitation: current.precipitation ?? 0,
+          },
+          daily: (liveForecastQuery.data.daily ?? []).map((day) => ({
+            date: day.date,
+            tempMax: day.tempMax,
+            tempMin: day.tempMin,
+            precipitationSum: day.precipitationSum,
+          })),
+        },
+      });
     }
 
     void syncLiveForecastLog();
-  }, [currentUser?.orgId, latestStoredLog?.et, latestStoredLog?.humidity, latestStoredLog?.windGust, liveForecastQuery.data, selectedLocation?.id]);
+  }, [currentUser?.orgId, latestStoredLog?.humidity, liveForecastQuery.data, selectedLocation?.area, selectedLocation?.id, selectedLocation?.name]);
 
   const fallbackLiveLog = useMemo<WeatherDailyLog | null>(() => {
     if (!selectedLocation || !liveForecastQuery.data) return null;
@@ -2687,6 +2662,17 @@ export default function WeatherPage() {
                     <div className="rounded-2xl border bg-background/70 p-5">
                       <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Hourly Forecast</div>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {(['12h', '24h', '48h'] as const).map((range) => (
+                          <Button
+                            key={range}
+                            size="sm"
+                            variant={forecastHours === range ? 'default' : 'outline'}
+                            className={forecastHours === range ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+                            onClick={() => setForecastHours(range)}
+                          >
+                            {range}
+                          </Button>
+                        ))}
                         <Button size="sm" variant={showHourlyTempMetric ? 'default' : 'outline'} onClick={() => setShowHourlyTempMetric((current) => !current)}>
                           Temp
                         </Button>
@@ -3144,6 +3130,17 @@ export default function WeatherPage() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-[#111827]">Next 24 Hours</p>
             <div className="flex items-center gap-2">
+              {(['12h', '24h', '48h'] as const).map((range) => (
+                <Button
+                  key={range}
+                  size="sm"
+                  variant={forecastHours === range ? 'default' : 'outline'}
+                  className={forecastHours === range ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+                  onClick={() => setForecastHours(range)}
+                >
+                  {range}
+                </Button>
+              ))}
               <Button size="sm" variant={showHourlyTempMetric ? 'default' : 'outline'} className={showHourlyTempMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyTempMetric((current) => !current)}>Temp</Button>
               <Button size="sm" variant={showHourlyRainMetric ? 'default' : 'outline'} className={showHourlyRainMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyRainMetric((current) => !current)}>Rain %</Button>
               <Button size="sm" variant={showHourlyWindMetric ? 'default' : 'outline'} className={showHourlyWindMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyWindMetric((current) => !current)}>Wind</Button>

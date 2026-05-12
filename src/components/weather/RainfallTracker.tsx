@@ -1,9 +1,13 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 type RainfallLogRow = {
   date: string;
@@ -15,7 +19,7 @@ type RainfallLogRow = {
 type Period = 'day' | 'week' | 'month' | 'year';
 
 type Props = {
-  logs: RainfallLogRow[];
+  logs?: RainfallLogRow[];
   loading?: boolean;
 };
 
@@ -23,10 +27,120 @@ function formatMonthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function RainfallTracker({ logs, loading = false }: Props) {
+function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function RainfallTracker({ logs: fallbackLogs = [], loading = false }: Props) {
+  const { orgId } = useAuth();
+  const currentYear = new Date().getFullYear();
   const [period, setPeriod] = useState<Period>('month');
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [showTable, setShowTable] = useState(false);
   const [page, setPage] = useState(1);
+
+  const activeLocationQuery = useQuery({
+    queryKey: ['rainfall-active-location', orgId],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('weather_locations')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .limit(1);
+
+      if (error) throw error;
+      return data?.[0]?.id ? String(data[0].id) : null;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const rainfallLogsQuery = useQuery({
+    queryKey: ['rainfall-logs', orgId, activeLocationQuery.data ?? 'none', selectedYear],
+    enabled: Boolean(orgId && activeLocationQuery.data),
+    queryFn: async () => {
+      const locationId = activeLocationQuery.data;
+      if (!locationId) return [] as RainfallLogRow[];
+
+      const yearStart = `${selectedYear}-01-01`;
+      const yearEnd = `${selectedYear}-12-31`;
+
+      const primaryResult = await supabase
+        .from('weather_daily_logs')
+        .select('date, rainfallTotal, source, notes')
+        .eq('locationId', locationId)
+        .gte('date', yearStart)
+        .lte('date', yearEnd)
+        .order('date', { ascending: true });
+
+      if (!primaryResult.error) {
+        return (primaryResult.data ?? []).map((row: any) => ({
+          date: String(row.date),
+          rainfallTotal: Number(row.rainfallTotal ?? 0),
+          source: row.source ? String(row.source) : undefined,
+          notes: row.notes ? String(row.notes) : undefined,
+        }));
+      }
+
+      const fallbackResult = await supabase
+        .from('weather_daily_logs')
+        .select('date, rainfall_total, source, notes')
+        .eq('location_id', locationId)
+        .gte('date', yearStart)
+        .lte('date', yearEnd)
+        .order('date', { ascending: true });
+
+      if (fallbackResult.error) throw fallbackResult.error;
+
+      return (fallbackResult.data ?? []).map((row: any) => ({
+        date: String(row.date),
+        rainfallTotal: Number(row.rainfall_total ?? 0),
+        source: row.source ? String(row.source) : undefined,
+        notes: row.notes ? String(row.notes) : undefined,
+      }));
+    },
+    staleTime: 1000 * 60,
+  });
+
+  const yearOptionsQuery = useQuery({
+    queryKey: ['rainfall-years', orgId, activeLocationQuery.data ?? 'none'],
+    enabled: Boolean(orgId && activeLocationQuery.data),
+    queryFn: async () => {
+      const locationId = activeLocationQuery.data;
+      if (!locationId) return [] as number[];
+
+      const primaryResult = await supabase
+        .from('weather_daily_logs')
+        .select('date')
+        .eq('locationId', locationId)
+        .order('date', { ascending: false });
+
+      const rows = primaryResult.error
+        ? (
+            await supabase
+              .from('weather_daily_logs')
+              .select('date')
+              .eq('location_id', locationId)
+              .order('date', { ascending: false })
+          ).data ?? []
+        : primaryResult.data ?? [];
+
+      const years = Array.from(
+        new Set(
+          rows
+            .map((row: any) => Number(String(row.date).slice(0, 4)))
+            .filter((year) => Number.isFinite(year)),
+        ),
+      ).sort((a, b) => b - a);
+
+      return years.length ? years : [currentYear];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const logs = rainfallLogsQuery.data?.length ? rainfallLogsQuery.data : fallbackLogs;
+  const combinedLoading = loading || activeLocationQuery.isLoading || rainfallLogsQuery.isLoading;
 
   const parsedLogs = useMemo(
     () =>
@@ -42,18 +156,14 @@ export function RainfallTracker({ logs, loading = false }: Props) {
   );
 
   const now = new Date();
-  const yearStart = new Date(now.getFullYear(), 0, 1);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthStart = new Date(selectedYear, now.getMonth(), 1);
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   sevenDaysAgo.setHours(0, 0, 0, 0);
 
-  const ytdTotal = useMemo(
-    () =>
-      parsedLogs
-        .filter((log) => log.dateObj >= yearStart)
-        .reduce((sum, log) => sum + log.rainfallTotal, 0),
-    [parsedLogs, yearStart],
+  const yearTotal = useMemo(
+    () => parsedLogs.reduce((sum, log) => sum + log.rainfallTotal, 0),
+    [parsedLogs],
   );
   const monthTotal = useMemo(
     () =>
@@ -74,18 +184,18 @@ export function RainfallTracker({ logs, loading = false }: Props) {
     if (!parsedLogs.length) return [];
     if (period === 'day') {
       const today = new Date();
-      const todayKey = today.toISOString().slice(0, 10);
+      const todayKey = toIsoDate(today);
       const dayTotal = parsedLogs
         .filter((log) => log.date === todayKey)
         .reduce((sum, log) => sum + log.rainfallTotal, 0);
       return [{ label: today.toLocaleDateString([], { month: 'numeric', day: 'numeric' }), rainfall: dayTotal }];
     }
     if (period === 'week') {
-      const buckets = Array.from({ length: 7 }).map((_, idx) => {
+      return Array.from({ length: 7 }).map((_, idx) => {
         const day = new Date();
         day.setDate(day.getDate() - (6 - idx));
         day.setHours(0, 0, 0, 0);
-        const key = day.toISOString().slice(0, 10);
+        const key = toIsoDate(day);
         const rainfall = parsedLogs
           .filter((log) => log.date === key)
           .reduce((sum, log) => sum + log.rainfallTotal, 0);
@@ -94,14 +204,15 @@ export function RainfallTracker({ logs, loading = false }: Props) {
           rainfall,
         };
       });
-      return buckets;
     }
     if (period === 'month') {
-      const buckets = Array.from({ length: 30 }).map((_, idx) => {
-        const day = new Date();
-        day.setDate(day.getDate() - (29 - idx));
-        day.setHours(0, 0, 0, 0);
-        const key = day.toISOString().slice(0, 10);
+      const start = new Date(selectedYear, 0, 1);
+      const end = new Date(selectedYear, 11, 31);
+      const days = Math.min(30, Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1));
+      return Array.from({ length: days }).map((_, idx) => {
+        const day = new Date(start);
+        day.setDate(start.getDate() + idx);
+        const key = toIsoDate(day);
         const rainfall = parsedLogs
           .filter((log) => log.date === key)
           .reduce((sum, log) => sum + log.rainfallTotal, 0);
@@ -110,15 +221,15 @@ export function RainfallTracker({ logs, loading = false }: Props) {
           rainfall,
         };
       });
-      return buckets;
     }
+
     const monthBuckets = new Map<string, number>();
     for (let i = 0; i < 12; i += 1) {
-      const d = new Date(now.getFullYear(), i, 1);
+      const d = new Date(selectedYear, i, 1);
       monthBuckets.set(formatMonthKey(d), 0);
     }
     parsedLogs.forEach((log) => {
-      if (log.dateObj.getFullYear() !== now.getFullYear()) return;
+      if (log.dateObj.getFullYear() !== selectedYear) return;
       const key = formatMonthKey(log.dateObj);
       monthBuckets.set(key, (monthBuckets.get(key) ?? 0) + log.rainfallTotal);
     });
@@ -127,13 +238,15 @@ export function RainfallTracker({ logs, loading = false }: Props) {
       const d = new Date(year, month - 1, 1);
       return { label: d.toLocaleDateString([], { month: 'short' }), rainfall };
     });
-  }, [now, parsedLogs, period]);
+  }, [parsedLogs, period, selectedYear]);
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * 10;
     return parsedLogs.slice(start, start + 10);
   }, [page, parsedLogs]);
   const totalPages = Math.max(1, Math.ceil(parsedLogs.length / 10));
+  const yearOptions = yearOptionsQuery.data?.length ? yearOptionsQuery.data : [currentYear];
+  const totalLabel = selectedYear === currentYear ? 'YTD Total' : `${selectedYear} Total`;
 
   return (
     <Card className="p-5">
@@ -151,13 +264,31 @@ export function RainfallTracker({ logs, loading = false }: Props) {
               {value[0].toUpperCase() + value.slice(1)}
             </Button>
           ))}
+          <Select
+            value={String(selectedYear)}
+            onValueChange={(value) => {
+              setSelectedYear(Number(value));
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-9 w-[110px]">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border bg-muted/20 px-4 py-3">
-          <div className="text-xs text-muted-foreground">YTD Total</div>
-          <div className="mt-1 text-lg font-semibold">{ytdTotal.toFixed(2)} in</div>
+          <div className="text-xs text-muted-foreground">{totalLabel}</div>
+          <div className="mt-1 text-lg font-semibold">{yearTotal.toFixed(2)} in</div>
         </div>
         <div className="rounded-xl border bg-muted/20 px-4 py-3">
           <div className="text-xs text-muted-foreground">This Month</div>
@@ -170,7 +301,7 @@ export function RainfallTracker({ logs, loading = false }: Props) {
       </div>
 
       <div className="mt-4 h-56 rounded-xl border bg-background/70 p-3">
-        {loading ? (
+        {combinedLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading rainfall...</div>
         ) : chartData.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

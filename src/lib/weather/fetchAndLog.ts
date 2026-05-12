@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 type WeatherWidgetLiveData = {
   source: string;
   locationLabel: string;
+  locationId?: string;
   current: {
     temperature: number;
     humidity: number;
@@ -31,42 +32,34 @@ export async function fetchAndLogOpenMeteoWeather(args: LogArgs): Promise<void> 
   if (!supabase || !orgId || !data) return;
 
   const locationNameToken = data.locationLabel.split('·')[0]?.trim().toLowerCase();
+  let selectedLocation: { id: string } | null = data.locationId ? { id: data.locationId } : null;
 
-  const { data: locations, error: locationError } = await supabase
-    .from('weather_locations')
-    .select('id, name, property, org_id')
-    .eq('org_id', orgId);
-  if (locationError || !locations?.length) return;
+  if (!selectedLocation) {
+    const { data: locations, error: locationError } = await supabase
+      .from('weather_locations')
+      .select('id, name, property, org_id, is_active')
+      .eq('org_id', orgId)
+      .eq('is_active', true);
+    if (locationError || !locations?.length) return;
 
-  const selectedLocation =
-    locations.find((entry) => String(entry.name ?? '').trim().toLowerCase() === locationNameToken) ??
-    locations.find((entry) => String(entry.property ?? '').trim().toLowerCase().includes(locationNameToken ?? '')) ??
-    locations[0];
+    selectedLocation =
+      locations.find((entry) => String(entry.name ?? '').trim().toLowerCase() === locationNameToken) ??
+      locations.find((entry) => String(entry.property ?? '').trim().toLowerCase().includes(locationNameToken ?? '')) ??
+      locations[0];
+  }
+
   if (!selectedLocation?.id) return;
 
   const { data: stationRows } = await supabase
     .from('weather_stations')
-    .select('id, location_id, is_primary')
+    .select('id, locationId, location_id, isPrimary, is_primary')
     .eq('org_id', orgId)
-    .eq('location_id', selectedLocation.id)
-    .order('is_primary', { ascending: false })
+    .or(`locationId.eq.${selectedLocation.id},location_id.eq.${selectedLocation.id}`)
+    .order('isPrimary', { ascending: false })
     .limit(1);
   const primaryStationId = stationRows?.[0]?.id ?? null;
 
   const date = data.daily[0]?.date ?? todayDateIso();
-  const { data: existingRow } = await supabase
-    .from('weather_daily_logs')
-    .select('id, source')
-    .eq('org_id', orgId)
-    .eq('location_id', selectedLocation.id)
-    .eq('date', date)
-    .maybeSingle();
-
-  // Log once per day per location; preserve existing non-manual rows.
-  if (existingRow && String(existingRow.source ?? '') !== 'manual') {
-    return;
-  }
-
   const rainfallTotal = Number(data.daily[0]?.precipitationSum ?? data.current.precipitation ?? 0);
   const forecast = data.daily
     .slice(0, 3)
@@ -74,13 +67,13 @@ export async function fetchAndLogOpenMeteoWeather(args: LogArgs): Promise<void> 
     .join(' | ');
 
   const upsertPayload = {
-    org_id: orgId,
-    location_id: selectedLocation.id,
-    station_id: primaryStationId,
+    orgId,
+    locationId: selectedLocation.id,
+    stationId: primaryStationId,
     date,
-    current_conditions: 'Open-Meteo live weather',
+    currentConditions: 'Open-Meteo live weather',
     forecast,
-    rainfall_total: rainfallTotal,
+    rainfallTotal,
     temperature: Number(data.current.temperature ?? 0),
     humidity: Number(data.current.humidity ?? 0),
     wind: Number(data.current.windSpeed ?? 0),
@@ -89,7 +82,29 @@ export async function fetchAndLogOpenMeteoWeather(args: LogArgs): Promise<void> 
     notes: `Auto-logged from Open-Meteo (${data.source})`,
   };
 
-  await supabase
+  const upsertResult = await supabase
     .from('weather_daily_logs')
-    .upsert(upsertPayload, { onConflict: 'location_id,date' });
+    .upsert(upsertPayload, { onConflict: 'locationId,date' });
+
+  if (upsertResult.error) {
+    const fallbackPayload = {
+      org_id: orgId,
+      location_id: selectedLocation.id,
+      station_id: primaryStationId,
+      date,
+      current_conditions: 'Open-Meteo live weather',
+      forecast,
+      rainfall_total: rainfallTotal,
+      temperature: Number(data.current.temperature ?? 0),
+      humidity: Number(data.current.humidity ?? 0),
+      wind: Number(data.current.windSpeed ?? 0),
+      et: 0,
+      source: 'open-meteo',
+      notes: `Auto-logged from Open-Meteo (${data.source})`,
+    };
+
+    await supabase
+      .from('weather_daily_logs')
+      .upsert(fallbackPayload, { onConflict: 'location_id,date' });
+  }
 }
