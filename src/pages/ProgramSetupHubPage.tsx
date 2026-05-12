@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -85,9 +85,13 @@ export type ActivePage =
 type SchedulerSettings = {
   id: string;
   org_id: string;
+  property_id?: string | null;
   default_shift_start: string | null;
   default_shift_end: string | null;
   default_shift_days: string[] | null;
+  operational_day_start?: string | null;
+  operational_day_end?: string | null;
+  operational_days?: string[] | null;
   min_shift_hours: number | null;
   max_shift_hours: number | null;
   overtime_threshold_hours: number | null;
@@ -331,6 +335,7 @@ export default function ProgramSetupHubPage() {
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [schedulerSettings, setSchedulerSettings] = useState<SchedulerSettings | null>(null);
+  const sectionParamHydratedRef = useRef(false);
 
   useEffect(() => {
     setSettingsQueryReady(Boolean(currentUser?.orgId));
@@ -356,12 +361,14 @@ export default function ProgramSetupHubPage() {
   }, [currentUser?.orgId, settingsQueryReady]);
 
   useEffect(() => {
+    if (sectionParamHydratedRef.current) return;
     const section = searchParams.get('section');
     if (section === 'properties') setActivePage('properties');
     if (section === 'people') setActivePage('people');
     if (section === 'access') setActivePage('access');
     if (section === 'operations') setActivePage('operations');
     if (section === 'help') setActivePage('help');
+    sectionParamHydratedRef.current = true;
   }, [searchParams]);
 
   useEffect(() => {
@@ -408,9 +415,13 @@ export default function ProgramSetupHubPage() {
         setSchedulerSettings({
           id: makeUuid(),
           org_id: scopedOrgId,
+          property_id: propertiesData[0]?.id ?? null,
           default_shift_start: '05:00',
           default_shift_end: '13:30',
           default_shift_days: ['mon', 'tue', 'wed', 'thu', 'fri'],
+          operational_day_start: '05:00',
+          operational_day_end: '18:00',
+          operational_days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
           min_shift_hours: 4,
           max_shift_hours: 10,
           overtime_threshold_hours: 40,
@@ -422,6 +433,59 @@ export default function ProgramSetupHubPage() {
       isMounted = false;
     };
   }, [makeUuid, scopedOrgId]);
+
+  const metricsQuery = useQuery({
+    queryKey: ['settings-metrics', currentUser?.orgId ?? 'no-org'],
+    enabled: Boolean(currentUser?.orgId),
+    staleTime: 1000 * 60 * 2,
+    queryFn: async () => {
+      const orgId = currentUser?.orgId;
+      if (!orgId) {
+        return { propertiesCount: 0, portalUsersCount: 0, activeCrewCount: 0, readiness: 0, schedulerReadiness: 0 };
+      }
+      const today = new Date();
+      const weekStart = new Date(today);
+      const offset = (weekStart.getDay() + 6) % 7;
+      weekStart.setDate(weekStart.getDate() - offset);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const weekStartKey = weekStart.toISOString().slice(0, 10);
+      const weekEndKey = weekEnd.toISOString().slice(0, 10);
+
+      const [propertiesResult, appUsersResult, activeEmployeesResult, employeesResult, scheduleEntriesResult] = await Promise.all([
+        supabase.from('properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+        supabase.from('app_users').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', 'active'),
+        supabase.from('employees').select('id, role, department').eq('org_id', orgId),
+        supabase.from('schedule_entries').select('id').eq('org_id', orgId).gte('date', weekStartKey).lte('date', weekEndKey),
+      ]);
+      const firstError =
+        propertiesResult.error ||
+        appUsersResult.error ||
+        activeEmployeesResult.error ||
+        employeesResult.error ||
+        scheduleEntriesResult.error;
+      if (firstError) throw firstError;
+
+      const employeesRows = employeesResult.data ?? [];
+      const filledEmployees = employeesRows.filter((employee) => {
+        return Boolean(String(employee.role ?? '').trim()) && Boolean(String(employee.department ?? '').trim());
+      }).length;
+      const employeeTotal = employeesRows.length;
+      const workforceReadiness = employeeTotal > 0 ? Math.round((filledEmployees / employeeTotal) * 100) : 0;
+      const activeCrewCount = activeEmployeesResult.count ?? 0;
+      const schedulerTarget = Math.max(activeCrewCount * 5, 1);
+      const schedulerReadiness = Math.round(((scheduleEntriesResult.data?.length ?? 0) / schedulerTarget) * 100);
+
+      return {
+        propertiesCount: propertiesResult.count ?? 0,
+        portalUsersCount: appUsersResult.count ?? 0,
+        activeCrewCount,
+        readiness: workforceReadiness,
+        schedulerReadiness: Math.max(0, Math.min(100, schedulerReadiness)),
+      };
+    },
+  });
 
   const liveCounts = useMemo(() => {
     return {
@@ -473,6 +537,10 @@ export default function ProgramSetupHubPage() {
     ],
     [liveCounts.weatherAreas, properties.length, roleOptions.length, shiftTemplates.length, workerTypes.length],
   );
+  const operationalReadyPercent = useMemo(() => {
+    const completed = completionIndicators.filter((item) => item.complete).length;
+    return Math.round((completed / completionIndicators.length) * 100);
+  }, [completionIndicators]);
 
   async function saveGeneralSettings() {
     if (!programSetting) return;
@@ -508,11 +576,17 @@ export default function ProgramSetupHubPage() {
     const payload = {
       id: schedulerSettings.id,
       org_id: currentUser.orgId,
+      property_id: schedulerSettings.property_id ?? null,
       default_shift_start: schedulerSettings.default_shift_start || '05:00',
       default_shift_end: schedulerSettings.default_shift_end || '13:30',
       default_shift_days: schedulerSettings.default_shift_days && schedulerSettings.default_shift_days.length > 0
         ? schedulerSettings.default_shift_days
         : ['mon', 'tue', 'wed', 'thu', 'fri'],
+      operational_day_start: schedulerSettings.operational_day_start || '05:00',
+      operational_day_end: schedulerSettings.operational_day_end || '18:00',
+      operational_days: schedulerSettings.operational_days && schedulerSettings.operational_days.length > 0
+        ? schedulerSettings.operational_days
+        : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
       min_shift_hours: schedulerSettings.min_shift_hours ?? 4,
       max_shift_hours: schedulerSettings.max_shift_hours ?? 10,
       overtime_threshold_hours: schedulerSettings.overtime_threshold_hours ?? 40,
@@ -784,27 +858,27 @@ export default function ProgramSetupHubPage() {
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border bg-muted/30 px-4 py-3">
             <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Properties</div>
-            <div className="mt-1 text-lg font-semibold">{liveCounts.properties}</div>
+            <div className="mt-1 text-lg font-semibold">{metricsQuery.data?.propertiesCount ?? liveCounts.properties}</div>
           </div>
           <div className="rounded-xl border bg-muted/30 px-4 py-3">
             <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Portal Users</div>
-            <div className="mt-1 text-lg font-semibold">{liveCounts.activeAppUsers}</div>
+            <div className="mt-1 text-lg font-semibold">{metricsQuery.data?.portalUsersCount ?? liveCounts.activeAppUsers}</div>
           </div>
           <div className="rounded-xl border bg-muted/30 px-4 py-3">
             <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Active Crew</div>
-            <div className="mt-1 text-lg font-semibold">{liveCounts.activeEmployees}</div>
+            <div className="mt-1 text-lg font-semibold">{metricsQuery.data?.activeCrewCount ?? liveCounts.activeEmployees}</div>
           </div>
           <div className="rounded-xl border bg-muted/30 px-4 py-3">
             <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Workforce Readiness</div>
-            <div className="mt-1 text-lg font-semibold">{workforceReadiness.score}%</div>
+            <div className="mt-1 text-lg font-semibold">{metricsQuery.data?.readiness ?? workforceReadiness.score}%</div>
           </div>
           <div className="rounded-xl border bg-muted/30 px-4 py-3">
             <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Scheduler Readiness</div>
-            <div className="mt-1 text-lg font-semibold">{scheduleCoverage.score}%</div>
+            <div className="mt-1 text-lg font-semibold">{metricsQuery.data?.schedulerReadiness ?? scheduleCoverage.score}%</div>
           </div>
         </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">Admin Control Center</Badge>
+        <Badge variant="secondary">{operationalReadyPercent}% Operational Ready</Badge>
         {completionIndicators.map((status) => (
           <Badge key={status.key} variant={status.complete ? 'secondary' : 'outline'}>
             {status.complete ? '✓' : '○'} {status.label}

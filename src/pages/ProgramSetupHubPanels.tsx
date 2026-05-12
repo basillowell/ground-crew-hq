@@ -85,9 +85,13 @@ type PanelsProps = {
   schedulerSettings: {
     id: string;
     org_id: string;
+    property_id?: string | null;
     default_shift_start: string | null;
     default_shift_end: string | null;
     default_shift_days: string[] | null;
+    operational_day_start?: string | null;
+    operational_day_end?: string | null;
+    operational_days?: string[] | null;
     min_shift_hours: number | null;
     max_shift_hours: number | null;
     overtime_threshold_hours: number | null;
@@ -97,9 +101,13 @@ type PanelsProps = {
   setSchedulerSettings: Dispatch<SetStateAction<{
     id: string;
     org_id: string;
+    property_id?: string | null;
     default_shift_start: string | null;
     default_shift_end: string | null;
     default_shift_days: string[] | null;
+    operational_day_start?: string | null;
+    operational_day_end?: string | null;
+    operational_days?: string[] | null;
     min_shift_hours: number | null;
     max_shift_hours: number | null;
     overtime_threshold_hours: number | null;
@@ -911,11 +919,88 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               </div>
             </Card>
             <Card className="p-4">
-              <h3 className="text-sm font-semibold">Scheduler Defaults</h3>
+              <h3 className="text-sm font-semibold">Operational Day</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                These defaults pre-fill the Add Shift modal on the Scheduler page.
+                Define your property's standard operating window. This drives scheduler defaults and workboard planning.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground">Property</label>
+                  <select
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={schedulerSettings?.property_id ?? properties[0]?.id ?? ''}
+                    onChange={(event) =>
+                      setSchedulerSettings((current) =>
+                        current ? { ...current, property_id: event.target.value } : current,
+                      )
+                    }
+                  >
+                    {properties.map((property) => (
+                      <option key={property.id} value={property.id}>{property.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Operations start</label>
+                  <Input
+                    className="mt-1"
+                    type="time"
+                    value={schedulerSettings?.operational_day_start ?? '05:00'}
+                    onChange={(event) =>
+                      setSchedulerSettings((current) =>
+                        current ? { ...current, operational_day_start: event.target.value } : current,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Operations end</label>
+                  <Input
+                    className="mt-1"
+                    type="time"
+                    value={schedulerSettings?.operational_day_end ?? '18:00'}
+                    onChange={(event) =>
+                      setSchedulerSettings((current) =>
+                        current ? { ...current, operational_day_end: event.target.value } : current,
+                      )
+                    }
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-xs font-medium text-muted-foreground">Active days</p>
+                  <div className="mt-2 grid grid-cols-7 gap-2">
+                    {[
+                      { id: 'mon', label: 'M' },
+                      { id: 'tue', label: 'T' },
+                      { id: 'wed', label: 'W' },
+                      { id: 'thu', label: 'T' },
+                      { id: 'fri', label: 'F' },
+                      { id: 'sat', label: 'S' },
+                      { id: 'sun', label: 'S' },
+                    ].map((day) => {
+                      const enabled = (schedulerSettings?.operational_days ?? ['mon', 'tue', 'wed', 'thu', 'fri', 'sat']).includes(day.id);
+                      return (
+                        <Button
+                          key={day.id}
+                          type="button"
+                          size="sm"
+                          variant={enabled ? 'default' : 'outline'}
+                          onClick={() =>
+                            setSchedulerSettings((current) => {
+                              if (!current) return current;
+                              const next = new Set(current.operational_days ?? ['mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
+                              if (enabled) next.delete(day.id);
+                              else next.add(day.id);
+                              return { ...current, operational_days: [...next] };
+                            })
+                          }
+                        >
+                          {day.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Default shift start time</label>
                   <Input
@@ -943,7 +1028,7 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <p className="text-xs font-medium text-muted-foreground">Default work days</p>
+                  <p className="text-xs font-medium text-muted-foreground">Default shift days</p>
                   <div className="mt-2 grid gap-2 sm:grid-cols-4">
                     {[
                       { id: 'mon', label: 'Mon' },
@@ -1020,6 +1105,53 @@ export function ProgramSetupHubPanels(props: PanelsProps) {
               </div>
               <div className="mt-4 flex justify-end">
                 <Button onClick={saveSchedulerSettings}>Save scheduler defaults</Button>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Shift Templates</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Template definitions used by scheduler forms.</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  onClick={() =>
+                    setShiftTemplates((current) => [
+                      ...current,
+                      {
+                        id: makeId('shift'),
+                        name: `Shift ${current.length + 1}`,
+                        start: schedulerSettings?.default_shift_start ?? '05:00',
+                        end: schedulerSettings?.default_shift_end ?? '13:30',
+                        days: (schedulerSettings?.default_shift_days ?? ['mon', 'tue', 'wed', 'thu', 'fri']).map((day) => day[0].toUpperCase() + day.slice(1, 3)),
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="h-3 w-3" /> Add template
+                </Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {shiftTemplates.map((shift) => (
+                  <div key={shift.id} className="rounded-lg border bg-muted/20 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{shift.name}</span>
+                      <code className="rounded bg-background px-2 py-1 text-xs">{shift.start} - {shift.end}</code>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {shift.days.map((day) => (
+                        <Badge key={`${shift.id}-${day}`} variant="outline" className="text-[10px]">
+                          {day}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={saveShiftPlans}>Save shift templates</Button>
               </div>
             </Card>
             <div className="grid gap-4 md:grid-cols-2">
