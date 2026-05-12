@@ -13,6 +13,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
+import { HourlyForecastChart } from '@/components/weather/HourlyForecastChart';
+import { DailyForecastList } from '@/components/weather/DailyForecastList';
 import { type WeatherWidgetId, type WeatherWidgetLiveData } from '@/components/weather/OperationsView';
 import { RainfallTracker } from '@/components/weather/RainfallTracker';
 import { WeatherSettingsDrawer } from '@/components/weather/WeatherSettingsDrawer';
@@ -295,7 +297,7 @@ export default function WeatherPage() {
   const [showHourlyTempMetric, setShowHourlyTempMetric] = useState(true);
   const [showHourlyRainMetric, setShowHourlyRainMetric] = useState(true);
   const [showHourlyWindMetric, setShowHourlyWindMetric] = useState(true);
-  const [forecastHours, setForecastHours] = useState<'12h' | '24h' | '48h'>('24h');
+  const [forecastHours, setForecastHours] = useState<'12h' | '24h' | '48h' | '10d'>('24h');
   const [showOperationsControls, setShowOperationsControls] = useState(false);
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
   const [prefsDraftWidgets, setPrefsDraftWidgets] = useState<WeatherWidgetId[]>([]);
@@ -2659,94 +2661,25 @@ export default function WeatherPage() {
                   ) : null}
 
                   {showHourlyForecast ? (
-                    <div className="rounded-2xl border bg-background/70 p-5">
-                      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Hourly Forecast</div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {(['12h', '24h', '48h'] as const).map((range) => (
-                          <Button
-                            key={range}
-                            size="sm"
-                            variant={forecastHours === range ? 'default' : 'outline'}
-                            className={forecastHours === range ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
-                            onClick={() => setForecastHours(range)}
-                          >
-                            {range}
-                          </Button>
-                        ))}
-                        <Button size="sm" variant={showHourlyTempMetric ? 'default' : 'outline'} onClick={() => setShowHourlyTempMetric((current) => !current)}>
-                          Temp
-                        </Button>
-                        <Button size="sm" variant={showHourlyRainMetric ? 'default' : 'outline'} onClick={() => setShowHourlyRainMetric((current) => !current)}>
-                          Rain %
-                        </Button>
-                        <Button size="sm" variant={showHourlyWindMetric ? 'default' : 'outline'} onClick={() => setShowHourlyWindMetric((current) => !current)}>
-                          Wind
-                        </Button>
-                      </div>
-                      <div className="mt-4 overflow-x-auto">
-                        <div style={{ minWidth: `${Math.max(960, hourlyForecastChartData.length * 48)}px` }}>
-                          <ResponsiveContainer width="100%" height={160}>
-                            <ComposedChart data={hourlyForecastChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis
-                                dataKey="hourLabel"
-                                tick={{ fontSize: 11 }}
-                                interval={1}
-                                tickFormatter={(_, index) => (index % 2 === 0 ? String(hourlyForecastChartData[index]?.hourLabel ?? '') : '')}
-                              />
-                              <YAxis
-                                yAxisId="temp"
-                                tick={{ fontSize: 11 }}
-                                width={34}
-                                tickFormatter={(value) => `${value}°`}
-                              />
-                              <YAxis
-                                yAxisId="conditions"
-                                orientation="right"
-                                tick={{ fontSize: 11 }}
-                                width={34}
-                                tickFormatter={(value) => `${value}`}
-                              />
-                              <Tooltip
-                                formatter={(value: number, name) => {
-                                  if (name === 'Temperature') return [`${value}°F`, name];
-                                  if (name === 'Rain %') return [`${value}%`, name];
-                                  if (name === 'Wind') return [`${value} mph`, name];
-                                  return [value, name];
-                                }}
-                                labelFormatter={(label) => `${label}`}
-                              />
-                              {currentHourChartLabel ? (
-                                <ReferenceLine x={currentHourChartLabel} stroke="#475569" strokeDasharray="4 4" yAxisId="temp" />
-                              ) : null}
-                              {showHourlyRainMetric ? (
-                                <Bar yAxisId="conditions" dataKey="precipitationProbability" name="Rain %" fill="#3b82f6" fillOpacity={0.35} radius={[4, 4, 0, 0]} />
-                              ) : null}
-                              {showHourlyTempMetric ? (
-                                <Line yAxisId="temp" type="monotone" dataKey="temperature" name="Temperature" stroke="#166534" strokeWidth={2} dot={false} />
-                              ) : null}
-                              {showHourlyWindMetric ? (
-                                <Line yAxisId="conditions" type="monotone" dataKey="windSpeed" name="Wind" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
-                              ) : null}
-                            </ComposedChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
-                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                        <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
-                          <div className="text-muted-foreground">8h Rain</div>
-                          <div className="font-semibold">{next8HourRainEstimate.toFixed(2)} in</div>
-                        </div>
-                        <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
-                          <div className="text-muted-foreground">8h Avg Wind</div>
-                          <div className="font-semibold">{next8HourAvgWind !== null ? `${next8HourAvgWind} mph` : '--'}</div>
-                        </div>
-                        <div className="rounded-xl border bg-muted/25 px-3 py-2 text-xs">
-                          <div className="text-muted-foreground">Data Source</div>
-                          <div className="font-semibold truncate">{primaryStation?.provider ?? 'Fallback'}</div>
-                        </div>
-                      </div>
-                    </div>
+                    forecastHours === '10d' ? (
+                      <DailyForecastList
+                        daily={liveForecastQuery.data?.daily ?? []}
+                        range={forecastHours}
+                        onRangeChange={setForecastHours}
+                      />
+                    ) : (
+                      <HourlyForecastChart
+                        hourly={liveForecastQuery.data?.hourly ?? []}
+                        range={forecastHours}
+                        onRangeChange={setForecastHours}
+                        showTemp={showHourlyTempMetric}
+                        showRain={showHourlyRainMetric}
+                        showWind={showHourlyWindMetric}
+                        onToggleTemp={() => setShowHourlyTempMetric((current) => !current)}
+                        onToggleRain={() => setShowHourlyRainMetric((current) => !current)}
+                        onToggleWind={() => setShowHourlyWindMetric((current) => !current)}
+                      />
+                    )
                   ) : null}
                 </div>
               </>
@@ -3126,49 +3059,25 @@ export default function WeatherPage() {
           </div>
         </Card>
 
-        <Card className="border-[#e5e7eb] bg-white p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-[#111827]">Next 24 Hours</p>
-            <div className="flex items-center gap-2">
-              {(['12h', '24h', '48h'] as const).map((range) => (
-                <Button
-                  key={range}
-                  size="sm"
-                  variant={forecastHours === range ? 'default' : 'outline'}
-                  className={forecastHours === range ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
-                  onClick={() => setForecastHours(range)}
-                >
-                  {range}
-                </Button>
-              ))}
-              <Button size="sm" variant={showHourlyTempMetric ? 'default' : 'outline'} className={showHourlyTempMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyTempMetric((current) => !current)}>Temp</Button>
-              <Button size="sm" variant={showHourlyRainMetric ? 'default' : 'outline'} className={showHourlyRainMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyRainMetric((current) => !current)}>Rain %</Button>
-              <Button size="sm" variant={showHourlyWindMetric ? 'default' : 'outline'} className={showHourlyWindMetric ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''} onClick={() => setShowHourlyWindMetric((current) => !current)}>Wind</Button>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <div style={{ minWidth: `${Math.max(960, hourlyForecastChartData.length * 48)}px` }}>
-              <ResponsiveContainer width="100%" height={160}>
-                <ComposedChart data={hourlyForecastChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" />
-                  <XAxis dataKey="hourLabel" tick={{ fontSize: 11 }} interval={1} tickFormatter={(_, index) => (index % 2 === 0 ? String(hourlyForecastChartData[index]?.hourLabel ?? '') : '')} />
-                  <YAxis yAxisId="temp" tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}°`} />
-                  <YAxis yAxisId="conditions" orientation="right" tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}`} />
-                  <Tooltip formatter={(value: number, name) => (name === 'Temperature' ? [`${value}°F`, name] : name === 'Rain %' ? [`${value}%`, name] : name === 'Wind' ? [`${value} mph`, name] : [value, name])} labelFormatter={(label) => `${label}`} />
-                  {currentHourChartLabel ? <ReferenceLine x={currentHourChartLabel} stroke="#166534" strokeDasharray="4 4" yAxisId="temp" /> : null}
-                  {showHourlyRainMetric ? <Bar yAxisId="conditions" dataKey="precipitationProbability" name="Rain %" fill="#3b82f6" fillOpacity={0.25} radius={[4, 4, 0, 0]} /> : null}
-                  {showHourlyTempMetric ? <Line yAxisId="temp" type="monotone" dataKey="temperature" name="Temperature" stroke="#166534" strokeWidth={2} dot={false} /> : null}
-                  {showHourlyWindMetric ? <Line yAxisId="conditions" type="monotone" dataKey="windSpeed" name="Wind" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 4" dot={false} /> : null}
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1 text-[#6b7280]">8h Rain {next8HourRainEstimate.toFixed(2)} in</span>
-            <span className="rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1 text-[#6b7280]">8h Avg Wind {next8HourAvgWind !== null ? `${next8HourAvgWind} mph` : '--'}</span>
-            <span className="rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1 text-[#6b7280]">Open-Meteo</span>
-          </div>
-        </Card>
+        {forecastHours === '10d' ? (
+          <DailyForecastList
+            daily={liveForecastQuery.data?.daily ?? []}
+            range={forecastHours}
+            onRangeChange={setForecastHours}
+          />
+        ) : (
+          <HourlyForecastChart
+            hourly={liveForecastQuery.data?.hourly ?? []}
+            range={forecastHours}
+            onRangeChange={setForecastHours}
+            showTemp={showHourlyTempMetric}
+            showRain={showHourlyRainMetric}
+            showWind={showHourlyWindMetric}
+            onToggleTemp={() => setShowHourlyTempMetric((current) => !current)}
+            onToggleRain={() => setShowHourlyRainMetric((current) => !current)}
+            onToggleWind={() => setShowHourlyWindMetric((current) => !current)}
+          />
+        )}
 
         <Card className="border-[#e5e7eb] bg-white p-4">
           <div className="overflow-x-auto">
