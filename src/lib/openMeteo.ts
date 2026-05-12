@@ -16,6 +16,7 @@ export type WeatherCoordinates = {
   longitude: number;
   label?: string;
   timezone?: string;
+  signal?: AbortSignal;
 };
 
 export type OpenMeteoHourlyPoint = {
@@ -76,6 +77,7 @@ export async function fetchOpenMeteoWeather({
   latitude,
   longitude,
   timezone = 'auto',
+  signal,
 }: WeatherCoordinates): Promise<OpenMeteoWeatherPayload> {
   const params = new URLSearchParams({
     latitude: String(latitude),
@@ -90,7 +92,7 @@ export async function fetchOpenMeteoWeather({
     forecast_days: '10',
   });
 
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`, { signal });
   if (!response.ok) {
     throw new Error(`Open-Meteo request failed with status ${response.status}`);
   }

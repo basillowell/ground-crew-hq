@@ -430,7 +430,7 @@ export default function CommandCenterOperationalPage() {
           <p className="mt-1 text-sm text-muted-foreground">We couldn&apos;t load your organization profile yet.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => window.location.reload()}>
-              Refresh page
+              Retry
             </Button>
             <Button
               onClick={() => {
@@ -441,7 +441,7 @@ export default function CommandCenterOperationalPage() {
                 void supabase.auth.signOut().finally(() => navigate('/'));
               }}
             >
-              Sign out and try again
+              Clear session and sign in fresh
             </Button>
           </div>
         </Card>

@@ -499,16 +499,6 @@ export default function WeatherPage() {
     [rainfallEntriesQuery.error, weatherLocationsQuery.error, weatherLogsQuery.error, weatherStationsQuery.error],
   );
 
-  useEffect(() => {
-    if (!isInitialWeatherSetupLoading) {
-      setWeatherLoadTimedOut(false);
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setWeatherLoadTimedOut(true);
-    }, 10000);
-    return () => window.clearTimeout(timeoutId);
-  }, [isInitialWeatherSetupLoading]);
   const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? null;
   const liveWeatherCoordinates = useMemo(() => {
     if (
@@ -857,6 +847,7 @@ export default function WeatherPage() {
   }
 
   function refreshLiveWeather() {
+    setWeatherLoadTimedOut(false);
     setRefreshTick((current) => current + 1);
     void weatherLocationsQuery.refetch();
     void weatherStationsQuery.refetch();
@@ -1697,12 +1688,41 @@ export default function WeatherPage() {
     staleTime: 1000 * 60 * 30,
     retry: 1,
     refetchOnWindowFocus: false,
-    queryFn: async () =>
-      fetchOpenMeteoWeather({
-        latitude: liveWeatherCoordinates!.latitude!,
-        longitude: liveWeatherCoordinates!.longitude!,
-      }),
+    queryFn: async () => {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+      try {
+        return await fetchOpenMeteoWeather({
+          latitude: liveWeatherCoordinates!.latitude!,
+          longitude: liveWeatherCoordinates!.longitude!,
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+    },
   });
+  const isLiveForecastLoading = Boolean(selectedLocation) && (liveForecastQuery.isLoading || liveForecastQuery.isFetching);
+  const liveForecastErrorMessage = (() => {
+    if (!liveForecastQuery.isError) return null;
+    const message = String((liveForecastQuery.error as { message?: string } | null)?.message ?? '').toLowerCase();
+    if (message.includes('abort') || message.includes('timed out') || message.includes('timeout')) {
+      return 'Request timed out — tap Refresh to try again.';
+    }
+    return 'Could not load weather data — tap Refresh to try again.';
+  })();
+
+  useEffect(() => {
+    if (!isInitialWeatherSetupLoading && !isLiveForecastLoading) {
+      setWeatherLoadTimedOut(false);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setWeatherLoadTimedOut(true);
+    }, 10000);
+    return () => window.clearTimeout(timeoutId);
+  }, [isInitialWeatherSetupLoading, isLiveForecastLoading]);
+
   const onboardingPreviewQuery = useQuery({
     queryKey: ['weather-onboarding-preview', onboardingSelectedLat, onboardingSelectedLng],
     enabled: onboardingStep === 2 && onboardingSelectedLat !== null && onboardingSelectedLng !== null,
@@ -2685,7 +2705,7 @@ export default function WeatherPage() {
               </>
             ) : liveForecastQuery.isError ? (
               <div className="rounded-2xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground space-y-3">
-                <p>Live forecast is temporarily unavailable.</p>
+                <p>{liveForecastErrorMessage ?? 'Live forecast is temporarily unavailable.'}</p>
                 <p className="text-xs">
                   {latestStoredLog
                     ? `Showing stored weather context from ${latestStoredLog.date} while live data recovers.`

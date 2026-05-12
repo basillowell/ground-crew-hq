@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { initOrgSettings } from '@/lib/initOrgSettings';
@@ -90,6 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authDebugMessage, setAuthDebugMessage] = useState('');
   const [authState, setAuthState] = useState<AuthContextValue['authState']>('checking-session');
   const [hasSession, setHasSession] = useState(false);
+  const isReadyRef = useRef(false);
+
+  useEffect(() => {
+    isReadyRef.current = isReady;
+  }, [isReady]);
 
   async function buildProfile(authUser: User, appUser: AppUserRow): Promise<AuthProfile> {
     let employee: EmployeeRow | null = null;
@@ -249,19 +254,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (session.user) {
+      if (event === 'SIGNED_IN' && session.user) {
         setIsReady(false);
         setUser(session.user);
+        await delay(200);
         await loadAppUser(session.user.id, session.user);
       }
     });
 
     let mounted = true;
     async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (!mounted) return;
 
-      if (!session?.user) {
+      if (sessionError || !session?.user) {
+        setUser(null);
+        setOrgId(null);
+        setUserRole(null);
+        setCurrentUser(null);
         setHasSession(false);
         setAuthState('no-session');
         setIsReady(true);
@@ -270,16 +280,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setIsReady(false);
       setUser(session.user);
-      await delay(150);
+      await delay(200);
       if (mounted) {
         await loadAppUser(session.user.id, session.user);
       }
     }
 
     void init();
+    const safetyTimer = window.setTimeout(() => {
+      if (mounted && !isReadyRef.current) {
+        setOrgId(null);
+        setIsReady(true);
+      }
+    }, 12000);
 
     return () => {
       mounted = false;
+      window.clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, []);
