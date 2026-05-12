@@ -147,6 +147,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthDebugMessage('');
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setHasSession(false);
+        setAuthState('no-session');
+        setIsReady(true);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('app_users')
         .select('org_id, role, employee_id')
@@ -200,12 +208,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (isDev) {
-        console.warn('[Auth] app_users lookup failed', { attempt, error: error?.message ?? null });
-      }
+      console.warn(`[Auth] attempt ${attempt} failed:`, error?.message ?? null);
 
       if (attempt < 3) {
-        await delay(1000);
+        const backoffMs = attempt === 1 ? 200 : 500;
+        await delay(backoffMs);
       }
     }
 
@@ -249,22 +256,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setIsReady(false);
-        setUser(session.user);
-        await loadAppUser(session.user.id, session.user);
-      } else {
+    let mounted = true;
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (!session?.user) {
         setHasSession(false);
         setAuthState('no-session');
         setIsReady(true);
+        return;
       }
-    });
+
+      setIsReady(false);
+      setUser(session.user);
+      await delay(100);
+      if (mounted) {
+        await loadAppUser(session.user.id, session.user);
+      }
+    }
+
+    void init();
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (isReady) return;
+    const timeoutId = window.setTimeout(() => {
+      setAuthDebugMessage((current) => current || 'Auth initialization timed out. You can refresh or sign in again.');
+      setAuthState((state) => (state === 'authenticated' ? state : 'network-timeout'));
+      setIsReady(true);
+      console.error('[Auth] isReady timeout — forcing ready state');
+    }, 15000);
+    return () => window.clearTimeout(timeoutId);
+  }, [isReady]);
 
   const currentRole: AuthRole = currentUser?.role ?? userRole ?? 'employee';
   const isLoading = !isReady;

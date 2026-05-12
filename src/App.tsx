@@ -1,8 +1,8 @@
-import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect } from "react";
+import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect, useState } from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -113,6 +113,33 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { currentUser, isLoading, hasSession, authState, authDebugMessage, retryAuthHydration } = useAuth();
+  const navigate = useNavigate();
+  const [loadingTimeoutReached, setLoadingTimeoutReached] = useState(false);
+
+  useEffect(() => {
+    const shouldTrackLoadingTimeout =
+      !currentUser && (isLoading || authState === "checking-session" || authState === "loading-profile");
+    if (!shouldTrackLoadingTimeout) {
+      setLoadingTimeoutReached(false);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setLoadingTimeoutReached(true);
+      navigate("/", { replace: true });
+    }, 15000);
+    return () => window.clearTimeout(timeoutId);
+  }, [authState, currentUser, isLoading, navigate]);
+
+  if (loadingTimeoutReached) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(244,247,245,1))] p-4">
+        <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="text-lg font-semibold">Still loading your workspace</div>
+          <p className="mt-2 text-sm text-muted-foreground">We&apos;re redirecting you to sign in again.</p>
+        </div>
+      </div>
+    );
+  }
   if (!currentUser && (isLoading || authState === "checking-session" || authState === "loading-profile")) return <RouteFallback />;
   if (!currentUser && hasSession) {
     return (

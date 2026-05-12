@@ -427,9 +427,23 @@ export default function CommandCenterOperationalPage() {
       <div className="h-full overflow-auto bg-background p-6">
         <Card className="rounded-2xl border p-5 shadow-sm">
           <h2 className="text-lg font-semibold">Unable to load workspace</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Account not found — contact support
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">We couldn&apos;t load your organization profile yet.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Refresh page
+            </Button>
+            <Button
+              onClick={() => {
+                if (!supabase) {
+                  navigate('/');
+                  return;
+                }
+                void supabase.auth.signOut().finally(() => navigate('/'));
+              }}
+            >
+              Sign out and try again
+            </Button>
+          </div>
         </Card>
       </div>
     );
