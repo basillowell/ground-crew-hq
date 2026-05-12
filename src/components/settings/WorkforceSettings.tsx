@@ -34,7 +34,7 @@ export function WorkforceSettings({ orgId }: WorkforceSettingsProps) {
         .from('workforce_roles')
         .select('id, name, active')
         .eq('org_id', orgId)
-        .order('name', { ascending: true });
+        .order('created_at', { ascending: true });
       if (error) throw error;
       return (data ?? []) as WorkforceRoleRow[];
     },
@@ -76,9 +76,10 @@ export function WorkforceSettings({ orgId }: WorkforceSettingsProps) {
   }
 
   if (rolesQuery.error) {
+    const message = String((rolesQuery.error as { message?: string } | null)?.message ?? 'Unknown error');
     return (
       <div className="space-y-3 rounded-xl border p-4">
-        <p className="text-sm text-destructive">Unable to load workforce roles.</p>
+        <p className="text-sm text-destructive">Failed to load: {message}</p>
         <Button variant="outline" size="sm" onClick={() => void rolesQuery.refetch()}>
           Retry
         </Button>
@@ -109,6 +110,9 @@ export function WorkforceSettings({ orgId }: WorkforceSettingsProps) {
             rolesQuery.data.map((role) => (
               <span key={role.id} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm">
                 {role.name}
+                <span className={`rounded-full px-2 py-0.5 text-[11px] ${role.active ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-muted-foreground'}`}>
+                  {role.active ? 'Active' : 'Inactive'}
+                </span>
                 <button
                   type="button"
                   onClick={() => void deleteRole(role.id)}

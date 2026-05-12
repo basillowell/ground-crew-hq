@@ -27,13 +27,14 @@ type WeatherPrefsRow = {
 };
 
 const PANEL_OPTIONS = [
-  { id: 'current-conditions', label: 'Current Conditions' },
-  { id: 'hourly-forecast', label: 'Hourly Forecast' },
-  { id: 'daily-forecast', label: '7-Day Forecast' },
+  { id: 'current', label: 'Current Conditions' },
+  { id: 'hourly_forecast', label: 'Hourly Forecast' },
+  { id: '7day_forecast', label: '7-Day Forecast' },
   { id: 'wind', label: 'Wind' },
-  { id: 'rain', label: 'Rainfall' },
-  { id: 'alerts', label: 'Weather Alerts' },
-  { id: 'turf-risk-notes', label: 'Turf Risk Notes' },
+  { id: 'precipitation', label: 'Rainfall' },
+  { id: 'humidity', label: 'Humidity' },
+  { id: 'uv_index', label: 'UV Index' },
+  { id: 'feels_like', label: 'Feels Like' },
 ] as const;
 
 export function WeatherSettings({ orgId }: WeatherSettingsProps) {
@@ -92,8 +93,10 @@ export function WeatherSettings({ orgId }: WeatherSettingsProps) {
   const togglePanel = async (panelId: string, enabled: boolean) => {
     if (!supabase) return;
     setErrorMessage('');
+    const previous = enabledPanels;
     const next = enabled ? [...enabledPanels, panelId] : enabledPanels.filter((panel) => panel !== panelId);
     setEnabledPanels(next);
+
     const payload = {
       org_id: orgId,
       enabled_widgets: next,
@@ -105,8 +108,8 @@ export function WeatherSettings({ orgId }: WeatherSettingsProps) {
       : supabase.from('weather_display_prefs').insert(payload);
     const { error } = await query;
     if (error) {
+      setEnabledPanels(previous);
       setErrorMessage(error.message);
-      setEnabledPanels(enabledPanels);
       return;
     }
     await prefsQuery.refetch();
@@ -117,10 +120,7 @@ export function WeatherSettings({ orgId }: WeatherSettingsProps) {
     setErrorMessage('');
     const { error } = await supabase
       .from('weather_locations')
-      .update({
-        name: locationName.trim() || locationQuery.data.name,
-        address: locationAddress.trim() || null,
-      })
+      .update({ name: locationName.trim() || locationQuery.data.name })
       .eq('id', locationQuery.data.id)
       .eq('org_id', orgId);
     if (error) {
@@ -137,9 +137,14 @@ export function WeatherSettings({ orgId }: WeatherSettingsProps) {
   }
 
   if (anyError) {
+    const message = String(
+      (locationQuery.error as { message?: string } | null)?.message ??
+        (prefsQuery.error as { message?: string } | null)?.message ??
+        'Unknown error',
+    );
     return (
       <div className="space-y-3 rounded-xl border p-4">
-        <p className="text-sm text-destructive">Unable to load weather settings.</p>
+        <p className="text-sm text-destructive">Failed to load: {message}</p>
         <Button
           variant="outline"
           size="sm"
@@ -162,8 +167,7 @@ export function WeatherSettings({ orgId }: WeatherSettingsProps) {
           <div className="rounded-lg border bg-muted/30 p-3 text-sm">
             <p className="font-medium">{activeLocation.name ?? 'Weather location'}</p>
             <p className="text-muted-foreground">
-              {activeLocation.latitude ?? '--'}, {activeLocation.longitude ?? '--'} ·{' '}
-              {activeLocation.is_active ? 'Active' : 'Inactive'}
+              {activeLocation.latitude ?? '--'}, {activeLocation.longitude ?? '--'} · {activeLocation.is_active ? 'Active' : 'Inactive'}
             </p>
           </div>
         ) : (
@@ -171,7 +175,7 @@ export function WeatherSettings({ orgId }: WeatherSettingsProps) {
         )}
         <div className="grid gap-2 sm:grid-cols-2">
           <Input value={locationName} onChange={(event) => setLocationName(event.target.value)} placeholder="Location name" />
-          <Input value={locationAddress} onChange={(event) => setLocationAddress(event.target.value)} placeholder="Address" />
+          <Input value={locationAddress} onChange={(event) => setLocationAddress(event.target.value)} placeholder="Address (display only)" />
         </div>
         <Button onClick={() => void saveLocation()} className="w-fit">
           Change location
@@ -198,7 +202,7 @@ export function WeatherSettings({ orgId }: WeatherSettingsProps) {
           })}
         </div>
       </div>
-      {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+      {errorMessage ? <p className="text-sm text-destructive">Failed to load: {errorMessage}</p> : null}
     </div>
   );
 }

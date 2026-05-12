@@ -23,6 +23,8 @@ type MetricsResult = {
   schedulerReadyPercent: number;
   schedulerConfigured: boolean;
   weatherConfigured: boolean;
+  orgName: string;
+  orgPlan: string;
 };
 
 const TABS: Array<{ id: SettingsTabId; label: string }> = [
@@ -44,9 +46,10 @@ function getWeekRange() {
   weekStart.setDate(now.getDate() + diffToMonday);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
-  const start = weekStart.toISOString().slice(0, 10);
-  const end = weekEnd.toISOString().slice(0, 10);
-  return { start, end };
+  return {
+    start: weekStart.toISOString().slice(0, 10),
+    end: weekEnd.toISOString().slice(0, 10),
+  };
 }
 
 function percentage(value: number) {
@@ -62,10 +65,8 @@ export default function ProgramSetupHubPage() {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('workspace');
 
   useEffect(() => {
-    const fromStorage = window.localStorage.getItem(STORAGE_KEY) as SettingsTabId | null;
-    if (fromStorage && TABS.some((tab) => tab.id === fromStorage)) {
-      setActiveTab(fromStorage);
-    }
+    const stored = window.localStorage.getItem(STORAGE_KEY) as SettingsTabId | null;
+    if (stored && TABS.some((tab) => tab.id === stored)) setActiveTab(stored);
   }, []);
 
   useEffect(() => {
@@ -87,45 +88,41 @@ export default function ProgramSetupHubPage() {
         scheduleResult,
         schedulerSettingsResult,
         weatherLocationsResult,
+        organizationResult,
+        programSettingsResult,
       ] = await Promise.all([
         supabase.from('properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
         supabase.from('app_users').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
-        supabase
-          .from('employees')
-          .select('id', { count: 'exact', head: true })
-          .eq('org_id', orgId)
-          .eq('status', 'active'),
-        supabase.from('employees').select('id, role, department').eq('org_id', orgId).eq('status', 'active'),
+        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', 'active'),
+        supabase.from('employees').select('id, role, department').eq('org_id', orgId),
         supabase.from('schedule_entries').select('id').eq('org_id', orgId).gte('date', start).lte('date', end),
         supabase.from('scheduler_settings').select('id').eq('org_id', orgId).limit(1).maybeSingle(),
-        supabase
-          .from('weather_locations')
-          .select('id')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle(),
+        supabase.from('weather_locations').select('id').eq('org_id', orgId).eq('is_active', true).limit(1).maybeSingle(),
+        supabase.from('organizations').select('name, plan').eq('id', orgId).single(),
+        supabase.from('program_settings').select('app_name').eq('org_id', orgId).single(),
       ]);
 
-      const possibleError =
+      const error =
         propertiesResult.error ||
         appUsersResult.error ||
         activeEmployeesResult.error ||
         employeesResult.error ||
         scheduleResult.error ||
         schedulerSettingsResult.error ||
-        weatherLocationsResult.error;
-      if (possibleError) throw possibleError;
+        weatherLocationsResult.error ||
+        organizationResult.error ||
+        programSettingsResult.error;
+      if (error) throw error;
 
       const activeCrewCount = activeEmployeesResult.count ?? 0;
       const employees = employeesResult.data ?? [];
       const workforceReadyCount = employees.filter(
         (employee) => Boolean((employee.role ?? '').trim()) && Boolean((employee.department ?? '').trim()),
       ).length;
-      const workforceReadyPercent = activeCrewCount ? (workforceReadyCount / activeCrewCount) * 100 : 0;
+      const workforceReadyPercent = employees.length ? (workforceReadyCount / employees.length) * 100 : 0;
       const scheduleEntriesThisWeek = scheduleResult.data?.length ?? 0;
-      const schedulerTarget = activeCrewCount * 5;
-      const schedulerReadyPercent = schedulerTarget > 0 ? (scheduleEntriesThisWeek / schedulerTarget) * 100 : 0;
+      const schedulerTarget = Math.max((activeCrewCount || 0) * 5, 1);
+      const schedulerReadyPercent = (scheduleEntriesThisWeek / schedulerTarget) * 100;
 
       return {
         propertiesCount: propertiesResult.count ?? 0,
@@ -135,6 +132,8 @@ export default function ProgramSetupHubPage() {
         schedulerReadyPercent: percentage(schedulerReadyPercent),
         schedulerConfigured: Boolean(schedulerSettingsResult.data?.id),
         weatherConfigured: Boolean(weatherLocationsResult.data?.id),
+        orgName: organizationResult.data?.name ?? programSettingsResult.data?.app_name ?? 'Ground Crew HQ',
+        orgPlan: organizationResult.data?.plan ?? 'starter',
       };
     },
   });
@@ -142,7 +141,7 @@ export default function ProgramSetupHubPage() {
   const metrics = metricsQuery.data;
 
   const readinessSegments = useMemo(() => {
-    const workforceConfigured = Boolean((metrics?.activeCrewCount ?? 0) > 0 && (metrics?.workforceReadyPercent ?? 0) > 50);
+    const workforceConfigured = Boolean((metrics?.activeCrewCount ?? 0) > 0);
     const schedulerConfigured = Boolean(metrics?.schedulerConfigured);
     const propertiesConfigured = Boolean((metrics?.propertiesCount ?? 0) > 0);
     const weatherConfigured = Boolean(metrics?.weatherConfigured);
@@ -156,8 +155,7 @@ export default function ProgramSetupHubPage() {
       readinessSegments.propertiesConfigured,
       readinessSegments.weatherConfigured,
     ];
-    const done = values.filter(Boolean).length;
-    return Math.round((done / values.length) * 100);
+    return Math.round((values.filter(Boolean).length / 4) * 100);
   }, [readinessSegments]);
 
   if (!isReady) {
@@ -186,7 +184,11 @@ export default function ProgramSetupHubPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Operations Control Center</h1>
-          <p className="text-sm text-muted-foreground">Configure your workspace · Ground Crew HQ</p>
+          <p className="text-sm text-muted-foreground">
+            {metricsQuery.isLoading
+              ? 'Loading organization...'
+              : `${metrics?.orgName ?? 'Ground Crew HQ'} · ${metrics?.orgPlan ?? 'starter'} plan`}
+          </p>
         </div>
         <p className="text-sm text-muted-foreground">{user.email}</p>
       </div>
@@ -196,7 +198,9 @@ export default function ProgramSetupHubPage() {
           Array.from({ length: 5 }).map((_, index) => <Skeleton key={`metric-${index}`} className="h-24 rounded-xl" />)
         ) : metricsQuery.error ? (
           <Card className="col-span-full p-4">
-            <p className="text-sm text-destructive">Unable to load readiness metrics.</p>
+            <p className="text-sm text-destructive">
+              Failed to load: {String((metricsQuery.error as { message?: string } | null)?.message ?? 'Unknown error')}
+            </p>
             <Button className="mt-3" variant="outline" size="sm" onClick={() => void metricsQuery.refetch()}>
               Retry
             </Button>
@@ -205,23 +209,23 @@ export default function ProgramSetupHubPage() {
           <>
             <Card className="rounded-xl p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Properties</p>
-              <p className="mt-2 text-2xl font-semibold">{metrics?.propertiesCount ?? 0}</p>
+              <p className="mt-2 text-2xl font-semibold">{metrics?.propertiesCount ?? 0} Properties</p>
             </Card>
             <Card className="rounded-xl p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Portal Users</p>
-              <p className="mt-2 text-2xl font-semibold">{metrics?.portalUsersCount ?? 0}</p>
+              <p className="mt-2 text-2xl font-semibold">{metrics?.portalUsersCount ?? 0} Users</p>
             </Card>
             <Card className="rounded-xl p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Active Crew</p>
-              <p className="mt-2 text-2xl font-semibold">{metrics?.activeCrewCount ?? 0}</p>
+              <p className="mt-2 text-2xl font-semibold">{metrics?.activeCrewCount ?? 0} Crew</p>
             </Card>
             <Card className="rounded-xl p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Workforce Ready</p>
-              <p className="mt-2 text-2xl font-semibold">{metrics?.workforceReadyPercent ?? 0}%</p>
+              <p className="mt-2 text-2xl font-semibold">{metrics?.workforceReadyPercent ?? 0}% Workforce</p>
             </Card>
             <Card className="rounded-xl p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Scheduler Ready</p>
-              <p className="mt-2 text-2xl font-semibold">{metrics?.schedulerReadyPercent ?? 0}%</p>
+              <p className="mt-2 text-2xl font-semibold">{metrics?.schedulerReadyPercent ?? 0}% Scheduler</p>
             </Card>
           </>
         )}
