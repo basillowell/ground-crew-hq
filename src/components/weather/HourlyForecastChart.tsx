@@ -26,7 +26,7 @@ type HourlyPoint = {
   dayLabel: string;
 };
 
-const BAR_HEIGHT = 40;
+const BAR_HEIGHT = 80;
 
 function safe(value: number | null | undefined, fallback = 0) {
   return value != null && Number.isFinite(value) ? value : fallback;
@@ -82,8 +82,7 @@ export function HourlyForecastChart({
   });
 
   const next8Hours = chartData.slice(0, 8);
-  const next8HourRainInches =
-    next8Hours.reduce((sum, point) => sum + (safe(point.precip) / 100) * 0.1, 0);
+  const next8HourRainInches = next8Hours.reduce((sum, point) => sum + (safe(point.precip) / 100) * 0.1, 0);
   const next8HourAvgWind = next8Hours.length
     ? Math.round(next8Hours.reduce((sum, point) => sum + safe(point.wind), 0) / next8Hours.length)
     : 0;
@@ -132,16 +131,16 @@ export function HourlyForecastChart({
       </div>
 
       <div style={{ overflowX: 'auto', width: '100%' }}>
-        <div style={{ display: 'flex', minWidth: `${hours * 64}px`, gap: '0' }}>
+        <div style={{ display: 'flex', minWidth: `${hours * 72}px`, gap: '0' }}>
           {chartData.map((point, index) => {
             const precip = safe(point.precip);
             const wind = safe(point.wind, 0);
-            const barHeight = precip > 0 ? Math.max((precip / 100) * BAR_HEIGHT, 2) : 0;
+            const barHeight = precip > 0 ? Math.max((precip / 100) * BAR_HEIGHT, 3) : 0;
             return (
               <div
                 key={`${point.rawDate.toISOString()}-${index}`}
                 style={{
-                  width: '64px',
+                  width: '72px',
                   padding: '0 6px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -149,44 +148,44 @@ export function HourlyForecastChart({
                   borderLeft: currentHourIndex === index ? '2px solid #166534' : '2px solid transparent',
                 }}
               >
-                <div style={{ minHeight: '18px', fontSize: '13px', fontWeight: 700, color: '#166534' }}>
-                  {showTemp ? `${Math.round(safe(point.temp, 0))}°` : '--'}
-                </div>
+                {showTemp ? (
+                  <div style={{ minHeight: '18px', fontSize: '13px', fontWeight: 700, color: '#166534' }}>
+                    {`${Math.round(safe(point.temp, 0))}°`}
+                  </div>
+                ) : null}
 
-                <div
-                  style={{
-                    position: 'relative',
-                    height: `${BAR_HEIGHT}px`,
-                    width: '100%',
-                    display: showRain ? 'flex' : 'none',
-                    alignItems: 'flex-end',
-                    justifyContent: 'center',
-                    borderRadius: '6px',
-                    background: '#f8fafc',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {barHeight > 0 ? (
-                    <div
-                      style={{
-                        width: '100%',
-                        height: `${barHeight}px`,
-                        background: '#bfdbfe',
-                        borderTopLeftRadius: '6px',
-                        borderTopRightRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {precip > 5 ? <span style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600 }}>{precip}%</span> : null}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div style={{ marginTop: '6px', fontSize: '11px', color: '#9ca3af', minHeight: '16px' }}>
-                  {showWind ? `↗ ${Math.round(wind)}` : '--'}
-                </div>
+                {showRain ? (
+                  <div
+                    style={{
+                      position: 'relative',
+                      height: `${BAR_HEIGHT}px`,
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      justifyContent: 'center',
+                      borderRadius: '6px',
+                      background: '#f8fafc',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {barHeight > 0 ? (
+                      <div
+                        style={{
+                          width: '100%',
+                          height: `${barHeight}px`,
+                          background: '#bfdbfe',
+                          borderTopLeftRadius: '6px',
+                          borderTopRightRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {precip > 5 ? <span style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600 }}>{precip}%</span> : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div
                   style={{
@@ -203,6 +202,12 @@ export function HourlyForecastChart({
                   <div>{point.time}</div>
                   {point.isMidnight ? <div>{point.dayLabel}</div> : null}
                 </div>
+
+                {showWind ? (
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#9ca3af', minHeight: '16px' }}>
+                    {`↗ ${Math.round(wind)}`}
+                  </div>
+                ) : null}
               </div>
             );
           })}

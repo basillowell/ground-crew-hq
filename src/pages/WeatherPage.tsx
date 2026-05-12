@@ -2684,6 +2684,7 @@ export default function WeatherPage() {
                     forecastHours === '10d' ? (
                       <DailyForecastList
                         daily={liveForecastQuery.data?.daily ?? []}
+                        hourlyData={liveForecastQuery.data?.hourly ?? []}
                         range={forecastHours}
                         onRangeChange={setForecastHours}
                       />
@@ -3082,6 +3083,7 @@ export default function WeatherPage() {
         {forecastHours === '10d' ? (
           <DailyForecastList
             daily={liveForecastQuery.data?.daily ?? []}
+            hourlyData={liveForecastQuery.data?.hourly ?? []}
             range={forecastHours}
             onRangeChange={setForecastHours}
           />
