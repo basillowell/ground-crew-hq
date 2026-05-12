@@ -40,57 +40,54 @@ export function HourlyForecastChart({
   onToggleRain,
   onToggleWind,
 }: HourlyForecastChartProps) {
-  if (!hourly || hourly.length === 0) {
-    return <div className="rounded-2xl border bg-white p-4 text-sm text-muted-foreground">Loading forecast data...</div>;
+  if (!hourly || !Array.isArray(hourly) || hourly.length === 0) {
+    return <div style={{ padding: '1rem', color: '#6b7280' }}>Loading forecast...</div>;
   }
 
-  const hours = range === '12h' ? 12 : range === '48h' ? 48 : 24;
-  const safeData = useMemo(
+  const displayHours = range === '12h' ? 12 : range === '48h' ? 48 : 24;
+  const chartData = useMemo(
     () =>
-      hourly.slice(0, hours).map((point, index) => {
+      hourly.slice(0, displayHours).map((point, index) => {
         const date = new Date(point.time);
-        const safeTemp = typeof point.temperature === 'number' && !Number.isNaN(point.temperature) ? Math.round(point.temperature) : null;
-        const safeRainProb =
-          typeof point.precipitationProbability === 'number' && !Number.isNaN(point.precipitationProbability)
-            ? Math.round(point.precipitationProbability)
-            : 0;
-        const safePrecip = typeof point.precipitation === 'number' && !Number.isNaN(point.precipitation) ? Number(point.precipitation) : 0;
-        const safeWind = typeof point.windSpeed === 'number' && !Number.isNaN(point.windSpeed) ? Math.round(point.windSpeed) : null;
+        const safeTemp = Number.isFinite(point.temperature) ? Math.round(point.temperature) : null;
+        const safePrecip = Number.isFinite(point.precipitation) ? Number(point.precipitation) : 0;
+        const safeWind = Number.isFinite(point.windSpeed) ? Math.round(point.windSpeed) : null;
+        const safeRainProb = Number.isFinite(point.precipitationProbability) ? Math.round(point.precipitationProbability) : 0;
         const safeWindDir = typeof point.windDirection === 'number' && !Number.isNaN(point.windDirection) ? Number(point.windDirection) : 0;
         return {
           id: `${point.time}-${index}`,
           hourLabel: date.toLocaleTimeString([], { hour: 'numeric' }),
           dayLabel: date.toLocaleDateString([], { weekday: 'short', day: 'numeric' }),
           timeMs: date.getTime(),
-          temperature: safeTemp,
+          temp: safeTemp,
+          precip: safePrecip,
+          wind: safeWind,
           precipitationProbability: safeRainProb,
-          precipitation: safePrecip,
-          windSpeed: safeWind,
           windDirection: safeWindDir,
           showDayBoundary: index > 0 && new Date(hourly[index - 1]?.time ?? point.time).getDate() !== date.getDate(),
         };
       }),
-    [hourly, hours],
+    [displayHours, hourly],
   );
 
   const currentHourLabel = useMemo(() => {
-    if (!safeData.length) return null;
+    if (!chartData.length) return null;
     const now = Date.now();
-    const closest = safeData.reduce((best, point) => {
+    const closest = chartData.reduce((best, point) => {
       if (!best) return point;
       return Math.abs(point.timeMs - now) < Math.abs(best.timeMs - now) ? point : best;
-    }, safeData[0]);
+    }, chartData[0]);
     return closest.hourLabel;
-  }, [safeData]);
+  }, [chartData]);
 
-  if (!safeData.length) {
-    return <div className="rounded-2xl border bg-white p-4 text-sm text-muted-foreground">Loading forecast data...</div>;
+  if (!chartData.length) {
+    return <div style={{ padding: '1rem', color: '#6b7280' }}>Loading forecast...</div>;
   }
 
   return (
     <div className="rounded-2xl border bg-white p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#111827]">Next {hours} Hours</p>
+        <p className="text-sm font-semibold text-[#111827]">Next {displayHours} Hours</p>
         <div className="flex flex-wrap items-center gap-2">
           {(['12h', '24h', '48h', '10d'] as const).map((nextRange) => (
             <Button
@@ -110,9 +107,9 @@ export function HourlyForecastChart({
       </div>
 
       <div style={{ overflowX: 'auto', width: '100%' }}>
-        <div style={{ width: `${Math.max(1, safeData.length) * 60}px`, minWidth: '100%' }}>
+        <div style={{ width: `${Math.max(1, chartData.length) * 60}px`, minWidth: '100%' }}>
           <ResponsiveContainer width="100%" height={190}>
-            <ComposedChart data={safeData} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" />
               <XAxis dataKey="hourLabel" tick={{ fontSize: 11 }} interval={0} />
               <YAxis yAxisId="temp" domain={['auto', 'auto']} tick={{ fontSize: 11 }} width={34} tickFormatter={(value) => `${value}°`} />
@@ -131,26 +128,26 @@ export function HourlyForecastChart({
                 }}
               />
               {currentHourLabel ? <ReferenceLine x={currentHourLabel} stroke="#166534" strokeDasharray="4 4" yAxisId="temp" /> : null}
-              {safeData
+              {chartData
                 .filter((point) => point.showDayBoundary)
                 .map((point) => (
                   <ReferenceLine key={`${point.id}-boundary`} x={point.hourLabel} stroke="#e5e7eb" />
                 ))}
               {showRain ? <Area yAxisId="conditions" type="monotone" dataKey="precipitationProbability" name="Rain %" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} strokeWidth={1.5} /> : null}
-              {showRain ? <Bar yAxisId="conditions" dataKey="precipitation" name="Rain" fill="#14b8a6" fillOpacity={0.35} barSize={12} radius={[4, 4, 0, 0]} /> : null}
-              {showTemp ? <Line yAxisId="temp" type="monotone" dataKey="temperature" name="Temperature" stroke="#166534" strokeWidth={1.8} strokeDasharray="5 4" dot={false} /> : null}
-              {showWind ? <Line yAxisId="conditions" type="monotone" dataKey="windSpeed" name="Wind" stroke="#6b7280" strokeWidth={1.4} dot={false} /> : null}
+              {showRain ? <Bar yAxisId="conditions" dataKey="precip" name="Rain" fill="#14b8a6" fillOpacity={0.35} barSize={12} radius={[4, 4, 0, 0]} /> : null}
+              {showTemp ? <Line yAxisId="temp" type="monotone" dataKey="temp" name="Temperature" stroke="#166534" strokeWidth={1.8} strokeDasharray="5 4" dot={false} /> : null}
+              {showWind ? <Line yAxisId="conditions" type="monotone" dataKey="wind" name="Wind" stroke="#6b7280" strokeWidth={1.4} dot={false} /> : null}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div className="mt-2 overflow-x-auto">
-        <div style={{ width: `${Math.max(1, safeData.length) * 60}px` }} className="flex text-[11px] text-[#6b7280]">
-          {safeData.map((point) => (
+        <div style={{ width: `${Math.max(1, chartData.length) * 60}px` }} className="flex text-[11px] text-[#6b7280]">
+          {chartData.map((point) => (
             <div key={`${point.id}-wind`} className="w-[60px] text-center">
               {directionArrow(point.windDirection ?? 0)}
-              {point.windSpeed ?? '--'}
+              {point.wind ?? '--'}
             </div>
           ))}
         </div>

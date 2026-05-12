@@ -45,8 +45,8 @@ function rainBadgeLabel(amount: number, probability: number) {
 }
 
 export function DailyForecastList({ daily, range, onRangeChange }: DailyForecastListProps) {
-  if (!daily || daily.length === 0) {
-    return <div className="rounded-2xl border bg-white p-4 text-sm text-muted-foreground">Loading 10-day forecast...</div>;
+  if (!daily || !Array.isArray(daily) || daily.length === 0) {
+    return <div style={{ padding: '1rem', color: '#6b7280' }}>Loading forecast...</div>;
   }
 
   const rows = daily.slice(0, 10);
