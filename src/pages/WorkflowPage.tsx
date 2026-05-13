@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Bell, Check, ChevronLeft, ChevronRight, Circle, Copy, MinusCircle, RefreshCw, Save, StickyNote, Trash2 } from 'lucide-react';
 
-type AssignmentStatus = 'pending' | 'in_progress' | 'done';
+type AssignmentStatus = 'planned' | 'pending' | 'in_progress' | 'done';
 
 type LaborEmployee = {
   id: string;
@@ -52,12 +52,21 @@ type CrewRow = {
 
 type AddTaskDraft = {
   open: boolean;
-  title: string;
+  taskId: string;
   estimatedHours: string;
   location: string;
+  notes: string;
 };
 
-const STATUS_ORDER: AssignmentStatus[] = ['pending', 'in_progress', 'done'];
+type TaskLibraryItem = {
+  id: string;
+  name: string;
+  category: string | null;
+  priority: number | null;
+  estimated_hours: number | null;
+};
+
+const STATUS_ORDER: AssignmentStatus[] = ['planned', 'in_progress', 'done'];
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -107,6 +116,7 @@ function nextStatus(status: AssignmentStatus): AssignmentStatus {
 function statusPill(status: AssignmentStatus) {
   if (status === 'done') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
   if (status === 'in_progress') return 'bg-amber-100 text-amber-700 border-amber-200';
+  if (status === 'planned') return 'bg-blue-100 text-blue-700 border-blue-200';
   return 'bg-muted text-muted-foreground border-border';
 }
 
@@ -123,6 +133,9 @@ export default function WorkflowPage() {
   const [addTaskDrafts, setAddTaskDrafts] = useState<Record<string, AddTaskDraft>>({});
   const [copyTargetDate, setCopyTargetDate] = useState('');
   const [showCopyPanel, setShowCopyPanel] = useState(false);
+  const [taskLibrary, setTaskLibrary] = useState<TaskLibraryItem[]>([]);
+  const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
+  const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
 
   const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : currentUser?.propertyId ?? null;
 
@@ -221,6 +234,44 @@ export default function WorkflowPage() {
     void fetchBoard();
   }, [fetchBoard]);
 
+  const fetchTaskLibrary = useCallback(async () => {
+    if (!supabase || !orgId) return;
+    setTaskLibraryLoading(true);
+    setTaskLibraryError(null);
+    const { data, error: fetchError } = await supabase
+      .from('tasks')
+      .select('id, name, category, priority, estimated_hours')
+      .eq('org_id', orgId)
+      .order('priority', { ascending: true })
+      .order('name', { ascending: true });
+    if (fetchError) {
+      setTaskLibraryError(fetchError.message);
+      setTaskLibrary([]);
+      setTaskLibraryLoading(false);
+      return;
+    }
+    setTaskLibrary((data ?? []) as TaskLibraryItem[]);
+    setTaskLibraryLoading(false);
+  }, [orgId]);
+
+  useEffect(() => {
+    void fetchTaskLibrary();
+  }, [fetchTaskLibrary]);
+
+  const groupedTaskLibrary = useMemo(() => {
+    return taskLibrary.reduce<Record<string, TaskLibraryItem[]>>((acc, task) => {
+      const key = task.category?.trim() || 'General';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(task);
+      return acc;
+    }, {});
+  }, [taskLibrary]);
+
+  const orderedTaskCategories = useMemo(
+    () => Object.keys(groupedTaskLibrary).sort((a, b) => a.localeCompare(b)),
+    [groupedTaskLibrary],
+  );
+
   const totalEstimatedHours = useMemo(
     () =>
       crewRows
@@ -312,9 +363,10 @@ export default function WorkflowPage() {
       ...current,
       [employeeId]: {
         open: true,
-        title: '',
+        taskId: taskLibrary[0]?.id ?? '',
         estimatedHours: '1',
         location: '',
+        notes: '',
       },
     }));
   };
@@ -324,9 +376,10 @@ export default function WorkflowPage() {
       ...current,
       [employeeId]: {
         open: false,
-        title: '',
+        taskId: '',
         estimatedHours: '1',
         location: '',
+        notes: '',
       },
     }));
   };
@@ -334,8 +387,13 @@ export default function WorkflowPage() {
   const saveAddTask = async (employeeId: string) => {
     if (!supabase || !orgId) return;
     const draft = addTaskDrafts[employeeId];
-    if (!draft?.title.trim()) {
-      toast.error('Task title is required.');
+    if (!draft?.taskId) {
+      toast.error('Select a task before saving.');
+      return;
+    }
+    const selectedTask = taskLibrary.find((task) => task.id === draft.taskId);
+    if (!selectedTask) {
+      toast.error('Selected task not found.');
       return;
     }
     const orderIndex =
@@ -344,11 +402,13 @@ export default function WorkflowPage() {
       org_id: orgId,
       employee_id: employeeId,
       property_id: propertyId,
+      task_id: selectedTask.id,
       date: selectedDate,
-      title: draft.title.trim(),
+      title: selectedTask.name,
       estimated_hours: Number(draft.estimatedHours || '0'),
       location: draft.location.trim() || null,
-      status: 'pending' as AssignmentStatus,
+      status: 'planned',
+      notes: draft.notes.trim() || null,
       order_index: orderIndex,
       completed_at: null,
     };
@@ -587,17 +647,43 @@ export default function WorkflowPage() {
                     </div>
 
                     {addDraft?.open ? (
-                      <div className="grid grid-cols-1 md:grid-cols-[1fr_120px_1fr_auto_auto] gap-2 rounded border border-dashed p-3">
-                        <Input
-                          placeholder="Task title"
-                          value={addDraft.title}
+                      <div className="grid grid-cols-1 md:grid-cols-[1fr_120px_1fr_1fr_auto_auto] gap-2 rounded border border-dashed p-3">
+                        <select
+                          value={addDraft.taskId}
                           onChange={(e) =>
-                            setAddTaskDrafts((current) => ({
-                              ...current,
-                              [row.employee.id]: { ...(current[row.employee.id] ?? addDraft), title: e.target.value },
-                            }))
+                            setAddTaskDrafts((current) => {
+                              const nextTaskId = e.target.value;
+                              const nextTask = taskLibrary.find((task) => task.id === nextTaskId);
+                              const nextHours = Number(nextTask?.estimated_hours ?? 0);
+                              return {
+                                ...current,
+                                [row.employee.id]: {
+                                  ...(current[row.employee.id] ?? addDraft),
+                                  taskId: nextTaskId,
+                                  estimatedHours: nextHours > 0 ? String(nextHours) : (current[row.employee.id] ?? addDraft).estimatedHours,
+                                },
+                              };
+                            })
                           }
-                        />
+                          className="rounded-md border border-input bg-background px-3 text-sm h-10"
+                        >
+                          {taskLibraryLoading ? <option value="">Loading tasks…</option> : null}
+                          {!taskLibraryLoading && taskLibrary.length === 0 ? <option value="">No tasks available</option> : null}
+                          {orderedTaskCategories.map((category) => (
+                            <optgroup key={category} label={category}>
+                              {groupedTaskLibrary[category].map((task) => (
+                                <option key={task.id} value={task.id}>
+                                  {task.name} ({Number(task.estimated_hours ?? 0)}h)
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        {taskLibraryError ? (
+                          <button type="button" className="text-xs text-primary underline text-left" onClick={() => void fetchTaskLibrary()}>
+                            Retry tasks
+                          </button>
+                        ) : null}
                         <Input
                           placeholder="Hours"
                           value={addDraft.estimatedHours}
@@ -615,6 +701,16 @@ export default function WorkflowPage() {
                             setAddTaskDrafts((current) => ({
                               ...current,
                               [row.employee.id]: { ...(current[row.employee.id] ?? addDraft), location: e.target.value },
+                            }))
+                          }
+                        />
+                        <Input
+                          placeholder="Notes (optional)"
+                          value={addDraft.notes}
+                          onChange={(e) =>
+                            setAddTaskDrafts((current) => ({
+                              ...current,
+                              [row.employee.id]: { ...(current[row.employee.id] ?? addDraft), notes: e.target.value },
                             }))
                           }
                         />
