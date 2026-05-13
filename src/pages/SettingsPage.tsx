@@ -23,8 +23,8 @@ interface ShiftTemplate {
   id: string;
   org_id: string;
   name: string;
-  start_time: string;
-  end_time: string;
+  start: string;
+  end: string;
   days: string[];
   active: boolean;
 }
@@ -151,7 +151,7 @@ function SchedulerTab({ orgId }: { orgId: string }) {
       .from('shift_templates')
       .select('*')
       .eq('org_id', orgId)
-      .order('created_at', { ascending: true });
+      .order('name', { ascending: true });
     if (fetchError) {
       setTemplatesError(fetchError.message);
       setTemplatesLoading(false);
@@ -210,8 +210,8 @@ function SchedulerTab({ orgId }: { orgId: string }) {
       .insert({
         org_id: orgId,
         name: newName.trim(),
-        start_time: newStart,
-        end_time: newEnd,
+        start: newStart,
+        end: newEnd,
         days: newDays,
         active: true,
       })
@@ -378,7 +378,7 @@ function SchedulerTab({ orgId }: { orgId: string }) {
                   </button>
                 </div>
                 <span style={{ color: '#6b7280', fontSize: '13px' }}>
-                  {template.start_time?.slice(0, 5)}–{template.end_time?.slice(0, 5)}
+                  {template.start?.slice(0, 5)}–{template.end?.slice(0, 5)}
                 </span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {(template.days ?? []).map((day) => (

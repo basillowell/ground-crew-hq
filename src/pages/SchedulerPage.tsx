@@ -129,6 +129,22 @@ export default function SchedulerPage() {
     notes: '',
   });
 
+  async function fetchModalSchedulerDefaults() {
+    if (!supabase || !currentUser?.orgId) {
+      return { shiftStart: schedulerDefaultStart, shiftEnd: schedulerDefaultEnd };
+    }
+    const { data } = await supabase
+      .from('scheduler_settings')
+      .select('default_shift_start, default_shift_end')
+      .eq('org_id', currentUser.orgId)
+      .single();
+
+    return {
+      shiftStart: data?.default_shift_start?.slice(0, 5) ?? '05:00',
+      shiftEnd: data?.default_shift_end?.slice(0, 5) ?? '13:30',
+    };
+  }
+
   useEffect(() => {
     const firstId = employeeList.find((e) => e.status === 'active')?.id ?? '';
     setDraft((cur) => ({
@@ -162,13 +178,14 @@ export default function SchedulerPage() {
     };
   }, [activeEmployees, scheduleList, weekDays]);
 
-  function openAddShift(employeeId?: string, date?: string) {
+  async function openAddShift(employeeId?: string, date?: string) {
+    const defaults = await fetchModalSchedulerDefaults();
     const targetEmp = employeeId ?? activeEmployees[0]?.id ?? '';
     setDraft({
       employeeId: targetEmp,
       date: date ?? weekDays[0]?.date ?? weekStart,
-      shiftStart: schedulerDefaultStart,
-      shiftEnd: schedulerDefaultEnd,
+      shiftStart: defaults.shiftStart,
+      shiftEnd: defaults.shiftEnd,
       status: 'scheduled',
       notes: '',
     });
@@ -387,7 +404,7 @@ export default function SchedulerPage() {
           />
         </div>
 
-        <Button size="sm" className="h-8 gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
+        <Button size="sm" className="h-8 gap-1.5" onClick={() => void openAddShift()} data-testid="button-add-shift">
           <Plus className="h-3.5 w-3.5" /> Add Shift
         </Button>
         <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={copyWeek} data-testid="button-copy-week">
@@ -528,7 +545,7 @@ export default function SchedulerPage() {
                                 <button
                                   type="button"
                                   className="h-11 w-full rounded-lg border border-dashed border-border text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-colors"
-                                  onClick={() => openAddShift(emp.id, day.date)}
+                                  onClick={() => void openAddShift(emp.id, day.date)}
                                   data-testid={`button-add-shift-${emp.id}-${day.date}`}
                                 >
                                   + Add
