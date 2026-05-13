@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { ArrowRight, Calendar, CheckCircle2, Circle, CloudRain, MapPin, Plus, Users, Wrench } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
 import { getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather } from '@/lib/weather';
@@ -679,7 +680,7 @@ export default function CommandCenterOperationalPage() {
                   <tr key={row.id} className="border-b last:border-0">
                     <td className="py-3 font-medium">{row.name}</td>
                     <td className="py-3 text-muted-foreground">{row.department}</td>
-                    <td className="py-3">{row.shiftStart} - {row.shiftEnd}</td>
+                    <td className="py-3">{formatTime(row.shiftStart)} - {formatTime(row.shiftEnd)}</td>
                     <td className="py-3">
                       <Badge variant={row.assigned ? 'default' : 'outline'}>
                         {row.assigned ? 'Assigned' : 'Unassigned'}

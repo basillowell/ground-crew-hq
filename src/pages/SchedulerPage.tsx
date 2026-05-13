@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEmployees } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
+import { formatTime } from '@/utils/formatTime';
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -46,16 +47,6 @@ function shiftHours(start: string, end: string): number {
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   return Math.max(0, (eh * 60 + em - (sh * 60 + sm)) / 60);
-}
-
-function formatShiftTime(value: string): string {
-  if (!value) return '';
-  const [hourRaw, minuteRaw] = value.split(':');
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw ?? '0');
-  const period = hour >= 12 ? 'pm' : 'am';
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${hour12}:${String(minute).padStart(2, '0')}${period}`;
 }
 
 const STATUS_STYLES: Record<string, { cell: string; label: string }> = {
@@ -636,7 +627,7 @@ export default function SchedulerPage() {
                                 {entry.status === 'scheduled' ? (
                                   <>
                                     <div className="font-semibold text-[11px] text-emerald-700 dark:text-emerald-300">
-                                      {formatShiftTime(entry.shiftStart)} - {formatShiftTime(entry.shiftEnd)}
+                                      {formatTime(entry.shiftStart)} - {formatTime(entry.shiftEnd)}
                                     </div>
                                     <Badge
                                       variant="outline"
@@ -806,7 +797,7 @@ export default function SchedulerPage() {
                     <option value="">Select a template (optional)</option>
                     {shiftTemplates.map((template) => (
                       <option key={template.id} value={template.id}>
-                        {template.name} ({template.start.slice(0, 5)}–{template.end.slice(0, 5)})
+                        {template.name} ({formatTime(template.start)}–{formatTime(template.end)})
                       </option>
                     ))}
                   </select>
@@ -842,6 +833,8 @@ export default function SchedulerPage() {
                 {draft.shiftStart && draft.shiftEnd && (
                   <div className="col-span-2">
                     <div className="rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                      Scheduled: <span className="font-semibold text-foreground">{formatTime(draft.shiftStart)} - {formatTime(draft.shiftEnd)}</span>
+                      <br />
                       Shift length: <span className="font-semibold text-foreground">{shiftHours(draft.shiftStart, draft.shiftEnd).toFixed(1)} hours</span>
                     </div>
                   </div>

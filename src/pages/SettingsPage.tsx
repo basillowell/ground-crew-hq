@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { formatTime } from '@/utils/formatTime';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -578,6 +579,9 @@ function SchedulerTab({ orgId }: { orgId: string }) {
                 />
               </label>
             </div>
+            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+              Display window: {formatTime(settings.operational_day_start)}–{formatTime(settings.operational_day_end)}
+            </div>
 
             <div style={{ display: 'grid', gap: '4px' }}>
               <span style={{ fontSize: '12px', color: '#6b7280' }}>Active Days</span>
@@ -647,7 +651,7 @@ function SchedulerTab({ orgId }: { orgId: string }) {
                   <strong>{template.name}</strong>
                   <button onClick={() => void deleteTemplate(template.id)} style={{ color: '#dc2626', border: 'none', background: 'transparent', cursor: 'pointer' }}>×</button>
                 </div>
-                <span style={{ color: '#6b7280', fontSize: '13px' }}>{template.start?.slice(0, 5)}–{template.end?.slice(0, 5)}</span>
+                <span style={{ color: '#6b7280', fontSize: '13px' }}>{formatTime(template.start)}–{formatTime(template.end)}</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {(template.days ?? []).map((day) => (
                     <span key={`${template.id}-${day}`} style={{ border: '1px solid #e5e7eb', borderRadius: '999px', padding: '2px 8px', fontSize: '12px' }}>{day}</span>

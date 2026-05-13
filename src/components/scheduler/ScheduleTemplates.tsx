@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Calendar, Copy, Play, Pause, Clock, Users, ListChecks, ChevronRight } from 'lucide-react';
 import { scheduleTemplates, type ScheduleTemplate } from '@/data/multiPropertyData';
 import { toast } from '@/components/ui/sonner';
+import { formatTime } from '@/utils/formatTime';
 
 const seasonColors: Record<string, string> = {
   spring: 'bg-green-100 text-green-800 border-green-200',
@@ -137,7 +138,7 @@ export function ScheduleTemplates({ onApply }: { onApply?: (template: ScheduleTe
                     {selectedTemplate.shifts.map((shift, i) => (
                       <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
                         <span className="font-medium">{shift.role}</span>
-                        <span className="text-muted-foreground">{shift.shiftStart}–{shift.shiftEnd}</span>
+                        <span className="text-muted-foreground">{formatTime(shift.shiftStart)}–{formatTime(shift.shiftEnd)}</span>
                         <Badge variant="secondary" className="text-[10px]">{shift.count}x</Badge>
                       </div>
                     ))}
@@ -150,7 +151,7 @@ export function ScheduleTemplates({ onApply }: { onApply?: (template: ScheduleTe
                     {selectedTemplate.tasks.map((task, i) => (
                       <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
                         <span className="font-medium">{task.taskName}</span>
-                        <span className="text-muted-foreground">{dayLabels[task.dayOfWeek]} {task.startTime}</span>
+                        <span className="text-muted-foreground">{dayLabels[task.dayOfWeek]} {formatTime(task.startTime)}</span>
                         <span className="text-xs text-muted-foreground">{task.duration}min</span>
                       </div>
                     ))}

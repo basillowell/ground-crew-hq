@@ -9,6 +9,7 @@ import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Bell, ChevronLeft, ChevronRight, Copy, RefreshCw, Save, StickyNote, Trash2 } from 'lucide-react';
+import { formatTime } from '@/utils/formatTime';
 
 type AssignmentStatus = 'planned' | 'pending' | 'in_progress' | 'done';
 
@@ -16,6 +17,7 @@ type LaborEmployee = {
   id: string;
   first_name: string;
   last_name: string;
+  role?: string | null;
   department?: string | null;
   property_id?: string | null;
 };
@@ -89,16 +91,6 @@ function prettyDate(dateKey: string) {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-function formatShortTime(value: string) {
-  const [hourRaw, minuteRaw] = value.split(':');
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw ?? '0');
-  if (Number.isNaN(hour) || Number.isNaN(minute)) return value;
-  const period = hour >= 12 ? 'pm' : 'am';
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${hour12}:${String(minute).padStart(2, '0')}${period}`;
 }
 
 function shiftHours(start: string, end: string) {
@@ -176,7 +168,7 @@ export default function WorkflowPage() {
 
     const { data: employeesData, error: employeesError } = await supabase
       .from('employees')
-      .select('id, first_name, last_name, department, property_id')
+      .select('id, first_name, last_name, role, department, property_id')
       .in('id', employeeIds)
       .eq('org_id', orgId);
     if (employeesError) {
@@ -418,6 +410,7 @@ export default function WorkflowPage() {
       .select('id, employee_id, property_id, date, title, location, notes, status, estimated_hours, actual_hours, completed_at, order_index')
       .single();
     if (insertError) {
+      console.error('[Workflow] Assignment insert failed', { message: insertError.message, code: insertError.code, payload });
       toast.error('Add task failed', { description: insertError.message });
       return;
     }
@@ -555,10 +548,10 @@ export default function WorkflowPage() {
                       <div>
                         <div className="text-sm font-semibold">{employeeName}</div>
                         <div className="text-xs text-muted-foreground">
-                          {row.employee.department ?? 'Crew'} · {row.shiftStart}–{row.shiftEnd}
+                          {row.employee.role ?? row.employee.department ?? 'Crew'} · {formatTime(row.shiftStart)}–{formatTime(row.shiftEnd)}
                         </div>
                       </div>
-                      <Badge variant="outline">{formatShortTime(row.shiftStart)}–{formatShortTime(row.shiftEnd)}</Badge>
+                      <Badge variant="outline">{formatTime(row.shiftStart)}–{formatTime(row.shiftEnd)}</Badge>
                     </div>
 
                     <div className="space-y-2">
@@ -635,7 +628,6 @@ export default function WorkflowPage() {
                                 void updateAssignment(task.id, { actual_hours: clampedValue });
                               }}
                             />
-                              <span className="text-xs text-muted-foreground">—</span>
                             <button
                               type="button"
                               className="h-8 w-8 rounded border text-muted-foreground hover:text-foreground"

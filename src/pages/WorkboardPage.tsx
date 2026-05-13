@@ -44,6 +44,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { formatTime } from '@/utils/formatTime';
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
@@ -526,7 +527,7 @@ export default function WorkboardPage() {
       .slice(0, 6)
       .map((entry) => ({
         id: `sched-${entry.id}`,
-        title: `Crew shift coverage ${entry.shiftStart} - ${entry.shiftEnd}`,
+        title: `Crew shift coverage ${formatTime(entry.shiftStart)} - ${formatTime(entry.shiftEnd)}`,
         status: 'planned',
         priority: 'medium',
         source: 'schedule_fallback',
@@ -734,6 +735,7 @@ export default function WorkboardPage() {
     }
 
     if (error) {
+      console.error('[Workboard] Assignment upsert failed', { message: error.message, code: error.code, employeeId: assignmentDraft.employeeId, taskId: assignmentDraft.taskId });
       toast('Unable to save assignment', { description: error.message });
       return;
     }
@@ -1205,7 +1207,7 @@ export default function WorkboardPage() {
                   orderIndex={index}
                   isDragging={draggingEmployeeId === lane.employee.id}
                   isDropTarget={dropTargetEmployeeId === lane.employee.id}
-                  shiftLabel={lane.shift ? `${lane.shift.shiftStart}–${lane.shift.shiftEnd}` : undefined}
+                  shiftLabel={lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : undefined}
                   laneSummary={
                     lane.shift
                       ? `${lane.assignedMinutes} min assigned · ${lane.openMinutes} min open`
@@ -1368,7 +1370,7 @@ export default function WorkboardPage() {
                         {lane.employee.firstName} {lane.employee.lastName}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
-                        {lane.shift ? `${lane.shift.shiftStart}–${lane.shift.shiftEnd}` : 'No shift'} · {tasksCount} task{tasksCount !== 1 ? 's' : ''}
+                        {lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : 'No shift'} · {tasksCount} task{tasksCount !== 1 ? 's' : ''}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
@@ -1442,7 +1444,7 @@ export default function WorkboardPage() {
                 {fallbackEligibleEmployees.length === 0 && <option value="">No employees available</option>}
                 {fallbackEligibleEmployees.map((e) => {
                   const shift = getShiftForEmployee(scheduleList, e.id, boardDate);
-                  const shiftStr = shift ? ` (${shift.shiftStart}–${shift.shiftEnd})` : '';
+                  const shiftStr = shift ? ` (${formatTime(shift.shiftStart)}–${formatTime(shift.shiftEnd)})` : '';
                   return (
                     <option key={e.id} value={e.id}>
                       {e.firstName} {e.lastName}{shiftStr} · {e.group}
@@ -1550,6 +1552,7 @@ export default function WorkboardPage() {
                 className="mt-1"
                 data-testid="input-assignment-start"
               />
+              <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(assignmentDraft.startTime)}</div>
             </div>
 
 

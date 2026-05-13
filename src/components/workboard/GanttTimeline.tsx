@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Assignment, Employee, Task, EquipmentUnit, ScheduleEntry } from '@/data/seedData';
+import { formatTime } from '@/utils/formatTime';
 
 interface GanttTimelineProps {
   employees: Employee[];
@@ -62,7 +63,7 @@ function TaskBar({ assignment, task, equipment, onClick }: {
       <TooltipContent side="top" className="text-xs max-w-[220px]">
         <div className="font-semibold">{task?.name}</div>
         <div className="text-muted-foreground">
-          {assignment.startTime} · {assignment.duration}min · {assignment.area}
+          {formatTime(assignment.startTime)} · {assignment.duration}min · {assignment.area}
         </div>
         {equipment && <div className="text-muted-foreground">🚜 {equipment.unitNumber}</div>}
       </TooltipContent>
@@ -153,7 +154,7 @@ export function GanttTimeline({
                 <div className="min-w-0">
                   <div className="text-xs font-medium truncate">{emp.firstName} {emp.lastName}</div>
                   <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                    {shift ? `${shift.shiftStart}–${shift.shiftEnd}` : 'No shift'}
+                    {shift ? `${formatTime(shift.shiftStart)}–${formatTime(shift.shiftEnd)}` : 'No shift'}
                     {totalMin > 0 && <span>· {Math.floor(totalMin / 60)}h{totalMin % 60 > 0 ? `${totalMin % 60}m` : ''}</span>}
                   </div>
                 </div>
