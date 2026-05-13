@@ -56,10 +56,10 @@ function timeToMinutes(value?: string) {
   return hours * 60 + minutes;
 }
 
-function makeId(prefix: string) {
+function makeId() {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? `${prefix}-${crypto.randomUUID()}`
-    : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    ? crypto.randomUUID()
+    : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2, 14)}`;
 }
 
 function normalizeApplicationArea(row: Record<string, unknown>): ApplicationArea {
@@ -501,14 +501,14 @@ export default function WorkboardPage() {
     const scheduledIds = new Set(
       scheduleList.filter((e) => e.date === boardDate && e.status === 'scheduled').map((e) => e.employeeId),
     );
-    return activeDepartmentEmployees
+    return employeeList
       .filter((e) => scheduledIds.has(e.id))
       .sort((a, b) => {
         const aShift = getShiftForEmployee(scheduleList, a.id, boardDate)?.shiftStart ?? '99:99';
         const bShift = getShiftForEmployee(scheduleList, b.id, boardDate)?.shiftStart ?? '99:99';
-        return aShift !== bShift ? aShift.localeCompare(bShift) : `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+        return aShift.localeCompare(bShift);
       });
-  }, [activeDepartmentEmployees, boardDate, scheduleList]);
+  }, [employeeList, boardDate, scheduleList]);
 
   const unscheduledEmployees = useMemo(() => {
     const scheduledIds = new Set(
@@ -518,8 +518,8 @@ export default function WorkboardPage() {
   }, [activeDepartmentEmployees, boardDate, scheduleList]);
 
   const fallbackEligibleEmployees = useMemo(
-    () => (scheduledEmployees.length > 0 ? scheduledEmployees : activeDepartmentEmployees),
-    [scheduledEmployees, activeDepartmentEmployees],
+    () => (scheduledEmployees.length > 0 ? scheduledEmployees : employeeList.filter((e) => e.status === 'active')),
+    [scheduledEmployees, employeeList],
   );
 
   const dayAssignments = useMemo(
@@ -725,7 +725,7 @@ export default function WorkboardPage() {
     }
 
 
-    const assignmentId = editingAssignmentId ?? makeId('assign');
+    const assignmentId = editingAssignmentId ?? makeId();
     const basePayload: Record<string, unknown> = {
       id: assignmentId,
       org_id: currentUser?.orgId ?? null,
@@ -818,7 +818,7 @@ export default function WorkboardPage() {
       (assignment) => assignment.employeeId === quickTaskDraft.employeeId && assignment.date === quickTaskDraft.date,
     ).length;
     const { error } = await supabase.from('assignments').insert({
-      id: makeId('assign'),
+      id: makeId(),
       org_id: currentUser.orgId,
       employee_id: quickTaskDraft.employeeId,
       property_id: resolvedPropertyId,
@@ -854,7 +854,7 @@ export default function WorkboardPage() {
     const orderIndex = dayAssignments.filter((a) => a.employeeId === request.employee_id).length + 1;
     const notes = [request.title, request.description].filter(Boolean).join(' — ');
     const { error: assignmentError } = await supabase.from('assignments').insert({
-      id: makeId('assign'),
+      id: makeId(),
       org_id: currentUser.orgId,
       employee_id: request.employee_id,
       property_id: resolvedPropertyId,
@@ -892,7 +892,7 @@ export default function WorkboardPage() {
   async function saveNote() {
     if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !noteDraft.title.trim() || !noteDraft.content.trim()) return;
     const { error } = await supabase.from('notes').insert({
-      id: makeId('note'),
+      id: makeId(),
       property_id: effectivePropertyId,
       type: noteDraft.type,
       title: noteDraft.title.trim(),

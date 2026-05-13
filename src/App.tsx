@@ -33,7 +33,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      gcTime: 1000 * 60 * 60 * 24,
+      gcTime: 1000 * 60 * 60 * 4,
       refetchOnWindowFocus: false,
     },
   },
@@ -295,6 +295,10 @@ export default function App() {
       client={queryClient}
       persistOptions={{
         persister: queryPersister,
+        buster: "v2.5.46",
+        onError: () => {
+          queryPersister?.removeClient?.();
+        },
         dehydrateOptions: {
           shouldDehydrateQuery: (query) =>
             Array.isArray(query.queryKey) &&
