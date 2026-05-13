@@ -24,7 +24,7 @@ const MessagingPage = lazy(() => import("./pages/MessagingPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const TasksPage = lazy(() => import("./pages/TasksCatalogPage"));
 const SafetyPage = lazy(() => import("./pages/SafetyPage"));
-const ProgramSetupHubPage = lazy(() => import("./pages/ProgramSetupHubPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const ApplicationsPage = lazy(() => import("./pages/ApplicationsPage"));
 const MobileFieldPage = lazy(() => import("./pages/MobileFieldWorkspacePage"));
@@ -204,7 +204,7 @@ function AppRoutes() {
           <Route path="reports" element={<Suspense fallback={<PageRouteFallback />}><ReportsPage /></Suspense>} />
           <Route path="tasks" element={<Suspense fallback={<PageRouteFallback />}><TasksPage /></Suspense>} />
           <Route path="safety" element={<Suspense fallback={<PageRouteFallback />}><SafetyPage /></Suspense>} />
-          <Route path="settings" element={<Suspense fallback={<PageRouteFallback />}><ProgramSetupHubPage /></Suspense>} />
+          <Route path="settings" element={<Suspense fallback={<PageRouteFallback />}><SettingsPage /></Suspense>} />
           <Route path="field" element={<Suspense fallback={<PageRouteFallback />}><MobileFieldPage /></Suspense>} />
         </Routes>
       </AppLayout>
