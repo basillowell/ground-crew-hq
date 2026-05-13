@@ -107,8 +107,8 @@ export default function SchedulerPage() {
   const [draft, setDraft] = useState({
     employeeId: '',
     date: weekStart,
-    shiftStart: schedulerDefaultStart,
-    shiftEnd: schedulerDefaultEnd,
+    shiftStart: schedulerDefaults.start,
+    shiftEnd: schedulerDefaults.end,
     status: 'scheduled' as ScheduleEntry['status'],
     notes: '',
   });
