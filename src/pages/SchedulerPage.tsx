@@ -78,7 +78,7 @@ export default function SchedulerPage() {
 
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
-  const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '', end: '' });
+  const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '07:30', end: '16:00' });
   const [schedulerDefaultsLoading, setSchedulerDefaultsLoading] = useState(true);
   const [shiftTemplates, setShiftTemplates] = useState<Array<{ id: string; name: string; start: string; end: string; days: string[]; active: boolean }>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');

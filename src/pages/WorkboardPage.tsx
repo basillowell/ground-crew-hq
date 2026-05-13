@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -164,6 +164,13 @@ type WorkOrderBoardItem = {
   employeeName?: string;
 };
 
+type TaskLibraryItem = {
+  id: string;
+  name: string;
+  category: string | null;
+  estimated_hours: number | null;
+};
+
 export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -184,6 +191,9 @@ export default function WorkboardPage() {
   const [lastRealtimeRefreshAt, setLastRealtimeRefreshAt] = useState<number | null>(null);
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const [needsFilter, setNeedsFilter] = useState<'all' | 'new' | 'assigned'>('all');
+  const [taskLibrary, setTaskLibrary] = useState<TaskLibraryItem[]>([]);
+  const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
+  const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
 
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
@@ -226,7 +236,7 @@ export default function WorkboardPage() {
   const tasksQuery = useTasks(effectivePropertyId, currentUser?.orgId);
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, currentUser?.orgId);
   const notesQuery = useNotes(effectivePropertyId);
-  const tasksLoading = tasksQuery.isLoading;
+  const tasksLoading = tasksQuery.isLoading || taskLibraryLoading;
 
   const taskRequestsQuery = useQuery({
     queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
@@ -329,6 +339,18 @@ export default function WorkboardPage() {
         .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999) || a.name.localeCompare(b.name)),
     [tasksQuery.data],
   );
+  const groupedTaskLibrary = useMemo(() => {
+    return taskLibrary.reduce<Record<string, TaskLibraryItem[]>>((acc, task) => {
+      const key = task.category?.trim() || 'General';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(task);
+      return acc;
+    }, {});
+  }, [taskLibrary]);
+  const orderedTaskCategories = useMemo(
+    () => Object.keys(groupedTaskLibrary).sort((a, b) => a.localeCompare(b)),
+    [groupedTaskLibrary],
+  );
   const equipmentList = equipmentQuery.data ?? [];
   const noteList = notesQuery.data ?? [];
   const taskRequests = taskRequestsQuery.data ?? [];
@@ -355,6 +377,30 @@ export default function WorkboardPage() {
       taskId: cur.taskId || taskList[0]?.id || '',
     }));
   }, [boardDate, employeeList, scheduleList, taskList]);
+
+  const fetchTaskLibrary = useCallback(async () => {
+    if (!supabase || !currentUser?.orgId) return;
+    setTaskLibraryLoading(true);
+    setTaskLibraryError(null);
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('id, name, category, estimated_hours')
+      .eq('org_id', currentUser.orgId)
+      .eq('status', 'active')
+      .order('category', { ascending: true })
+      .order('name', { ascending: true });
+    if (error) {
+      setTaskLibraryError(error.message);
+      setTaskLibrary([]);
+    } else {
+      setTaskLibrary((data ?? []) as TaskLibraryItem[]);
+    }
+    setTaskLibraryLoading(false);
+  }, [currentUser?.orgId]);
+
+  useEffect(() => {
+    void fetchTaskLibrary();
+  }, [fetchTaskLibrary]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -609,7 +655,16 @@ export default function WorkboardPage() {
   }
 
   async function saveAssignment() {
-    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !assignmentDraft.employeeId || !assignmentDraft.taskId) return;
+    if (!supabase || !assignmentDraft.employeeId || !assignmentDraft.taskId) return;
+    const resolvedPropertyId =
+      (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ??
+      activeProperty?.id ??
+      properties[0]?.id ??
+      null;
+    if (!resolvedPropertyId) {
+      toast.error('No property available for assignment.');
+      return;
+    }
     const duration = Number(assignmentDraft.duration || 0);
     if (duration <= 0) {
       toast.error('Task duration must be greater than 0 minutes.');
@@ -638,18 +693,24 @@ export default function WorkboardPage() {
       });
     }
 
+    const selectedTask = taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null;
+    const selectedTaskName = selectedTask?.name ?? 'Task';
+    const estimatedHours = duration / 60;
+
     const assignmentId = editingAssignmentId ?? makeId('assign');
     const basePayload = {
       id: assignmentId,
       org_id: currentUser?.orgId ?? null,
       employee_id: assignmentDraft.employeeId,
-      property_id: effectivePropertyId,
+      property_id: resolvedPropertyId,
       task_id: assignmentDraft.taskId,
+      title: selectedTaskName,
       date: boardDate,
       location: assignmentDraft.area,
-      status: assignmentDraft.status,
+      status: 'planned',
       start_time: assignmentDraft.startTime,
       duration,
+      estimated_hours: estimatedHours,
       equipment_id: assignmentDraft.equipmentId || null,
       notes: assignmentDraft.notes.trim() || null,
       order_index: existingEmployeeAssignments.length,
@@ -660,13 +721,15 @@ export default function WorkboardPage() {
         id: assignmentId,
         org_id: currentUser?.orgId ?? null,
         employee_id: assignmentDraft.employeeId,
-        property_id: effectivePropertyId,
+        property_id: resolvedPropertyId,
         task_id: assignmentDraft.taskId,
+        title: selectedTaskName,
         date: boardDate,
         location: assignmentDraft.area,
-        status: assignmentDraft.status,
+        status: 'planned',
         start_time: assignmentDraft.startTime,
         duration,
+        estimated_hours: estimatedHours,
         equipment_id: assignmentDraft.equipmentId || null,
       };
       const fallback = await supabase.from('assignments').upsert(fallbackPayload);
@@ -1402,24 +1465,44 @@ export default function WorkboardPage() {
                   if (e.target.value === '__add_new_task__') {
                     setAssignmentDialogOpen(false);
                     setLinkedRequestId(null);
-                    navigate('/app/tasks?new=true');
+                    navigate('/app/tasks');
                     return;
                   }
-                  const task = taskList.find((t) => t.id === e.target.value);
-                  setAssignmentDraft({ ...assignmentDraft, taskId: e.target.value, duration: String(task?.duration ?? assignmentDraft.duration) });
+                  const task = taskLibrary.find((t) => t.id === e.target.value);
+                  const nextHours = Number(task?.estimated_hours ?? 0);
+                  setAssignmentDraft({
+                    ...assignmentDraft,
+                    taskId: e.target.value,
+                    duration: nextHours > 0 ? String(nextHours * 60) : assignmentDraft.duration,
+                  });
                 }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-assignment-task"
               >
-                {tasksLoading || taskList.length === 0 ? (
+                {tasksLoading || taskLibrary.length === 0 ? (
                   <option value="" disabled>No tasks - add tasks in Task Management</option>
                 ) : null}
-                {taskList.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                {orderedTaskCategories.map((category) => (
+                  <optgroup key={category} label={category}>
+                    {groupedTaskLibrary[category].map((task) => (
+                      <option key={task.id} value={task.id}>
+                        {task.name} ({Number(task.estimated_hours ?? 0)}h)
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
                 <option value="__add_new_task__">+ Add new task...</option>
               </select>
-              {(tasksLoading || taskList.length === 0) ? (
+              {taskLibraryError ? (
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-medium text-primary hover:underline"
+                  onClick={() => void fetchTaskLibrary()}
+                >
+                  Retry loading tasks →
+                </button>
+              ) : null}
+              {(tasksLoading || taskLibrary.length === 0) ? (
                 <button
                   type="button"
                   className="mt-2 text-xs font-medium text-primary hover:underline"
