@@ -195,7 +195,7 @@ function AppRoutes() {
           <Route path="dashboard" element={<Suspense fallback={<PageRouteFallback />}><CommandCenterPage /></Suspense>} />
           <Route path="workboard" element={<Suspense fallback={<PageRouteFallback />}><WorkboardPage /></Suspense>} />
           <Route path="employees" element={<Suspense fallback={<PageRouteFallback />}><EmployeesPage /></Suspense>} />
-          <Route path="scheduler" element={<Suspense fallback={<PageRouteFallback />}><SchedulerPage /></Suspense>} />
+          <Route path="scheduler" element={<Suspense fallback={<PageRouteFallback />}><SchedulerPage key="scheduler-route" /></Suspense>} />
           <Route path="equipment" element={<Suspense fallback={<PageRouteFallback />}><EquipmentPage /></Suspense>} />
           <Route path="breakroom" element={<Suspense fallback={<PageRouteFallback />}><BreakroomPage /></Suspense>} />
           <Route path="weather" element={<Suspense fallback={<PageRouteFallback />}><WeatherPage /></Suspense>} />

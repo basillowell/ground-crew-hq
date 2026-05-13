@@ -144,6 +144,13 @@ function TasksTab({ orgId, propertyId }: { orgId: string; propertyId: string | n
   const [newCategory, setNewCategory] = useState('General');
   const [newPriority, setNewPriority] = useState<'1' | '2' | '3'>('2');
   const [newEstimatedHours, setNewEstimatedHours] = useState('1');
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({
+    name: '',
+    category: '',
+    priority: 2,
+    estimated_hours: 0,
+  });
 
   const fetchTasks = useCallback(async () => {
     if (!supabase) {
@@ -221,6 +228,53 @@ function TasksTab({ orgId, propertyId }: { orgId: string; propertyId: string | n
     setTasks((current) => current.filter((task) => task.id !== taskId));
   };
 
+  const startEditTask = (task: TaskLibraryItem) => {
+    setEditingTaskId(task.id);
+    setEditDraft({
+      name: task.name,
+      category: task.category ?? 'General',
+      priority: task.priority ?? 2,
+      estimated_hours: Number(task.estimated_hours ?? 0),
+    });
+  };
+
+  const cancelEditTask = () => {
+    setEditingTaskId(null);
+    setEditDraft({ name: '', category: '', priority: 2, estimated_hours: 0 });
+  };
+
+  const saveEditTask = async (taskId: string) => {
+    if (!supabase || !orgId) return;
+    const { error: updateError } = await supabase
+      .from('tasks')
+      .update({
+        name: editDraft.name.trim(),
+        category: editDraft.category.trim() || 'General',
+        priority: editDraft.priority,
+        estimated_hours: editDraft.estimated_hours,
+      })
+      .eq('id', taskId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setTasks((current) =>
+      current.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              name: editDraft.name.trim(),
+              category: editDraft.category.trim() || 'General',
+              priority: editDraft.priority,
+              estimated_hours: editDraft.estimated_hours,
+            }
+          : task,
+      ),
+    );
+    cancelEditTask();
+  };
+
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
@@ -251,14 +305,64 @@ function TasksTab({ orgId, propertyId }: { orgId: string; propertyId: string | n
               <tbody>
                 {tasks.map((task) => (
                   <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '8px' }}>{task.name}</td>
-                    <td style={{ padding: '8px' }}>{task.category ?? 'General'}</td>
                     <td style={{ padding: '8px' }}>
-                      {task.priority === 1 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
+                      {editingTaskId === task.id ? (
+                        <input
+                          value={editDraft.name}
+                          onChange={(event) => setEditDraft((cur) => ({ ...cur, name: event.target.value }))}
+                        />
+                      ) : (
+                        task.name
+                      )}
                     </td>
-                    <td style={{ padding: '8px' }}>{Number(task.estimated_hours ?? 0).toFixed(1)}</td>
                     <td style={{ padding: '8px' }}>
-                      <button onClick={() => void removeTask(task.id)} style={{ color: '#dc2626' }}>Delete</button>
+                      {editingTaskId === task.id ? (
+                        <input
+                          value={editDraft.category}
+                          onChange={(event) => setEditDraft((cur) => ({ ...cur, category: event.target.value }))}
+                        />
+                      ) : (
+                        task.category ?? 'General'
+                      )}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {editingTaskId === task.id ? (
+                        <select
+                          value={String(editDraft.priority)}
+                          onChange={(event) => setEditDraft((cur) => ({ ...cur, priority: Number(event.target.value) }))}
+                        >
+                          <option value="1">High</option>
+                          <option value="2">Med</option>
+                          <option value="3">Low</option>
+                        </select>
+                      ) : task.priority === 1 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {editingTaskId === task.id ? (
+                        <input
+                          type="number"
+                          step="0.25"
+                          value={String(editDraft.estimated_hours)}
+                          onChange={(event) =>
+                            setEditDraft((cur) => ({ ...cur, estimated_hours: Number(event.target.value || '0') }))
+                          }
+                        />
+                      ) : (
+                        Number(task.estimated_hours ?? 0).toFixed(1)
+                      )}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {editingTaskId === task.id ? (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => void saveEditTask(task.id)} style={{ color: '#166534' }}>Save</button>
+                          <button onClick={cancelEditTask}>Cancel</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => startEditTask(task)}>Edit</button>
+                          <button onClick={() => void removeTask(task.id)} style={{ color: '#dc2626' }}>Delete</button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

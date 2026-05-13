@@ -82,6 +82,7 @@ export default function SchedulerPage() {
   const [schedulerDefaultsLoading, setSchedulerDefaultsLoading] = useState(true);
   const [shiftTemplates, setShiftTemplates] = useState<Array<{ id: string; name: string; start: string; end: string; days: string[]; active: boolean }>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [loadTimeoutReached, setLoadTimeoutReached] = useState(false);
 
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
@@ -114,6 +115,17 @@ export default function SchedulerPage() {
     (employeesQuery.error as { message?: string } | null)?.message ||
     (weekScheduleQueries.find((query) => query.error)?.error as { message?: string } | null)?.message ||
     '';
+
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadTimeoutReached(false);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setLoadTimeoutReached(true);
+    }, 8000);
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoading]);
 
   const [draft, setDraft] = useState({
     employeeId: '',
@@ -494,7 +506,7 @@ export default function SchedulerPage() {
 
       {/* ── Weekly schedule grid ── */}
       <div className="flex-1 overflow-auto">
-        {isLoading ? (
+        {isLoading && !loadTimeoutReached ? (
           <div className="p-4 grid gap-2">
             <div className="rounded-xl border border-dashed bg-muted/25 px-4 py-3 text-xs text-muted-foreground">
               Loading weekly schedule and crew coverage...
@@ -503,16 +515,19 @@ export default function SchedulerPage() {
               <div key={i} className="h-12 animate-pulse rounded-xl border bg-muted/50" />
             ))}
           </div>
-        ) : queryErrorMessage ? (
+        ) : queryErrorMessage || loadTimeoutReached ? (
           <div className="p-4">
             <div className="mx-auto max-w-xl rounded-xl border border-dashed p-5 text-center">
               <p className="text-sm font-medium text-foreground">Scheduler data is temporarily unavailable.</p>
-              <p className="mt-1 text-xs text-muted-foreground">{queryErrorMessage}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {loadTimeoutReached ? 'Loading took longer than expected. Try refreshing the schedule.' : queryErrorMessage}
+              </p>
               <Button
                 size="sm"
                 variant="outline"
                 className="mt-3"
                 onClick={() => {
+                  setLoadTimeoutReached(false);
                   void employeesQuery.refetch();
                   weekScheduleQueries.forEach((query) => {
                     void query.refetch();
