@@ -48,6 +48,16 @@ function shiftHours(start: string, end: string): number {
   return Math.max(0, (eh * 60 + em - (sh * 60 + sm)) / 60);
 }
 
+function formatShiftTime(value: string): string {
+  if (!value) return '';
+  const [hourRaw, minuteRaw] = value.split(':');
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw ?? '0');
+  const period = hour >= 12 ? 'pm' : 'am';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${String(minute).padStart(2, '0')}${period}`;
+}
+
 const STATUS_STYLES: Record<string, { cell: string; label: string }> = {
   scheduled: { cell: 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/35 dark:border-emerald-800 dark:text-emerald-200 dark:hover:bg-emerald-950/50', label: 'Scheduled' },
   'day-off': { cell: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/35 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950/50', label: 'Day Off' },
@@ -321,32 +331,41 @@ export default function SchedulerPage() {
 
   async function copyWeek() {
     if (!supabase) { toast.error('Database not available.'); return; }
-    const sourceDate = weekDays[0]?.date;
-    if (!sourceDate) return;
-    const inserts: Record<string, unknown>[] = [];
-    for (const emp of activeEmployees) {
-      const base = scheduleList.find((e) => e.employeeId === emp.id && e.date === sourceDate);
-      if (!base) continue;
-      for (const day of weekDays.slice(1)) {
-        const exists = scheduleList.find((e) => e.employeeId === emp.id && e.date === day.date);
-        if (!exists) {
-          const row: Record<string, unknown> = {
-            employee_id: emp.id,
-            date: day.date,
-            shift_start: base.shiftStart,
-            shift_end: base.shiftEnd,
-            status: base.status,
-          };
-          if (emp.propertyId) row.property_id = emp.propertyId;
-          if (currentUser?.orgId) row.org_id = currentUser.orgId;
-          inserts.push(row);
-        }
-      }
-    }
-    if (inserts.length === 0) {
-      toast.message('Nothing to copy', { description: 'All days already have entries.' });
+    const weekStartDate = weekDays[0]?.date;
+    const weekEndDate = weekDays[6]?.date;
+    if (!weekStartDate || !weekEndDate) return;
+    const source = new Date(`${weekStartDate}T00:00:00`);
+    const target = new Date(source);
+    target.setDate(target.getDate() + 7);
+    const confirmed = window.confirm(
+      `Copy week of ${source.toLocaleDateString()} to ${target.toLocaleDateString()}?`,
+    );
+    if (!confirmed) return;
+
+    const weekEntries = scheduleList.filter((entry) => entry.date >= weekStartDate && entry.date <= weekEndDate);
+    if (weekEntries.length === 0) {
+      toast.message('Nothing to copy', { description: 'No entries found in the current week.' });
       return;
     }
+
+    const inserts: Record<string, unknown>[] = [];
+    for (const entry of weekEntries) {
+      const copiedDate = new Date(`${entry.date}T00:00:00`);
+      copiedDate.setDate(copiedDate.getDate() + 7);
+      const employee = employeeList.find((person) => person.id === entry.employeeId);
+      const row: Record<string, unknown> = {
+        employee_id: entry.employeeId,
+        date: toDateKey(copiedDate),
+        shift_start: entry.shiftStart,
+        shift_end: entry.shiftEnd,
+        status: entry.status,
+        notes: (entry as ScheduleEntry & { notes?: string | null }).notes ?? null,
+      };
+      if (employee?.propertyId) row.property_id = employee.propertyId;
+      if (currentUser?.orgId) row.org_id = currentUser.orgId;
+      inserts.push(row);
+    }
+
     const { error } = await supabase.from('schedule_entries').insert(inserts);
     if (error) { toast.error('Copy failed', { description: error.message }); return; }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
@@ -373,12 +392,18 @@ export default function SchedulerPage() {
   const isEditing = !!scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
   const dailyTotals = useMemo(() => {
     return weekDays.map((day) => {
+      const dayEntries = scheduleList.filter((entry) => entry.date === day.date);
       const totalHours = scheduleList
         .filter((entry) => entry.date === day.date && entry.status === 'scheduled')
         .reduce((sum, entry) => sum + shiftHours(entry.shiftStart, entry.shiftEnd), 0);
-      return { date: day.date, totalHours };
+      const shiftCount = dayEntries.filter((entry) => entry.status === 'scheduled').length;
+      return { date: day.date, totalHours, shiftCount };
     });
   }, [scheduleList, weekDays]);
+  const weeklyShiftTotal = useMemo(
+    () => dailyTotals.reduce((sum, day) => sum + day.shiftCount, 0),
+    [dailyTotals],
+  );
   const weeklyTotalHours = useMemo(
     () => dailyTotals.reduce((sum, day) => sum + day.totalHours, 0),
     [dailyTotals],
@@ -537,6 +562,7 @@ export default function SchedulerPage() {
                 ) : (
                   activeEmployees.map((emp) => {
                     let weekHours = 0;
+                    let weekDaysScheduled = 0;
                     return (
                       <tr key={emp.id} className="border-b hover:bg-muted/20 transition-colors group">
                         {/* Employee cell */}
@@ -559,6 +585,7 @@ export default function SchedulerPage() {
 
                           if (entry?.status === 'scheduled') {
                             weekHours += shiftHours(entry.shiftStart, entry.shiftEnd);
+                            weekDaysScheduled += 1;
                           }
 
                           if (!entry) {
@@ -588,12 +615,34 @@ export default function SchedulerPage() {
                               >
                                 {entry.status === 'scheduled' ? (
                                   <>
-                                    <div className="font-semibold text-[11px]">{entry.shiftStart}–{entry.shiftEnd}</div>
-                                    <div className="text-[10px] opacity-70">{shiftHours(entry.shiftStart, entry.shiftEnd).toFixed(1)}h</div>
+                                    <div className="font-semibold text-[11px] text-emerald-700 dark:text-emerald-300">
+                                      {formatShiftTime(entry.shiftStart)} - {formatShiftTime(entry.shiftEnd)}
+                                    </div>
+                                    <Badge
+                                      variant="outline"
+                                      className="mt-1 h-5 border-emerald-300 bg-emerald-100 px-1.5 text-[9px] uppercase tracking-wide text-emerald-700"
+                                    >
+                                      Scheduled
+                                    </Badge>
                                     {entryNotes ? <div className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{entryNotes}</div> : null}
                                   </>
+                                ) : entry.status === 'day-off' ? (
+                                  <>
+                                    <div className="font-semibold text-[11px] text-amber-700 dark:text-amber-300">DAY OFF</div>
+                                    <Badge
+                                      variant="outline"
+                                      className="mt-1 h-5 border-amber-300 bg-amber-100 px-1.5 text-[9px] uppercase tracking-wide text-amber-700"
+                                    >
+                                      Day Off
+                                    </Badge>
+                                  </>
                                 ) : (
-                                  <div className="font-medium capitalize">{style.label}</div>
+                                  <>
+                                    <div className="font-medium capitalize">{style.label}</div>
+                                    <Badge variant="outline" className="mt-1 h-5 px-1.5 text-[9px] uppercase tracking-wide">
+                                      {style.label}
+                                    </Badge>
+                                  </>
                                 )}
                               </button>
                             </td>
@@ -602,9 +651,12 @@ export default function SchedulerPage() {
 
                         {/* Weekly total */}
                         <td className="px-3 py-2 text-center">
-                          <span className={`font-mono text-xs font-semibold ${weekHours >= 40 ? 'text-emerald-700 dark:text-emerald-300' : weekHours > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
-                            {weekHours > 0 ? `${weekHours.toFixed(1)}h` : '—'}
-                          </span>
+                          <div className="space-y-0.5">
+                            <div className="text-[11px] font-semibold text-foreground">{weekDaysScheduled} days</div>
+                            <span className={`font-mono text-xs font-semibold ${weekHours >= 40 ? 'text-emerald-700 dark:text-emerald-300' : weekHours > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                              {weekHours > 0 ? `${weekHours.toFixed(1)}h` : '—'}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -614,19 +666,25 @@ export default function SchedulerPage() {
               <tfoot>
                 <tr className="border-t bg-muted/20">
                   <td className="px-4 py-2.5 text-xs font-semibold text-muted-foreground sticky left-0 bg-muted/20 z-10">
-                    Daily Total Hours
+                    Day Summary
                   </td>
                   {dailyTotals.map((day) => (
                     <td key={day.date} className="px-2 py-2 text-center">
-                      <span className={`font-mono text-xs font-semibold ${day.totalHours >= 24 ? 'text-amber-700 dark:text-amber-300' : 'text-foreground'}`}>
-                        {day.totalHours > 0 ? `${day.totalHours.toFixed(1)}h` : '—'}
-                      </span>
+                      <div className="space-y-0.5">
+                        <div className="text-[11px] font-semibold text-foreground">{day.shiftCount} shifts</div>
+                        <span className={`font-mono text-xs font-semibold ${day.totalHours >= 24 ? 'text-amber-700 dark:text-amber-300' : 'text-foreground'}`}>
+                          {day.totalHours > 0 ? `${day.totalHours.toFixed(1)}h` : '0.0h'}
+                        </span>
+                      </div>
                     </td>
                   ))}
                   <td className="px-3 py-2 text-center">
-                    <span className="font-mono text-xs font-semibold text-primary">
-                      {weeklyTotalHours.toFixed(1)}h
-                    </span>
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-semibold text-foreground">{weeklyShiftTotal} shifts total</div>
+                      <span className="font-mono text-xs font-semibold text-primary">
+                        {weeklyTotalHours.toFixed(1)}h total
+                      </span>
+                    </div>
                   </td>
                 </tr>
               </tfoot>
