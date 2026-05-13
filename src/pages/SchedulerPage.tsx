@@ -68,25 +68,9 @@ export default function SchedulerPage() {
 
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
-  const schedulerDefaultsQuery = useQuery({
-    queryKey: ['scheduler-settings', currentUser?.orgId ?? 'no-org'],
-    enabled: Boolean(currentUser?.orgId),
-    staleTime: 1000 * 60 * 10,
-    queryFn: async () => {
-      if (!supabase || !currentUser?.orgId) return null as { default_shift_start?: string; default_shift_end?: string } | null;
-      const { data, error } = await supabase
-        .from('scheduler_settings')
-        .select('default_shift_start, default_shift_end')
-        .eq('org_id', currentUser.orgId)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return (data as { default_shift_start?: string; default_shift_end?: string } | null) ?? null;
-    },
-  });
-  const schedulerDefaultStart = schedulerDefaultsQuery.data?.default_shift_start?.slice(0, 5) || '05:00';
-  const schedulerDefaultEnd = schedulerDefaultsQuery.data?.default_shift_end?.slice(0, 5) || '13:30';
+  const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '05:00', end: '13:30' });
+  const [shiftTemplates, setShiftTemplates] = useState<Array<{ id: string; name: string; start: string; end: string; days: string[]; active: boolean }>>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
@@ -129,21 +113,47 @@ export default function SchedulerPage() {
     notes: '',
   });
 
-  async function fetchModalSchedulerDefaults() {
-    if (!supabase || !currentUser?.orgId) {
-      return { shiftStart: schedulerDefaultStart, shiftEnd: schedulerDefaultEnd };
-    }
-    const { data } = await supabase
-      .from('scheduler_settings')
-      .select('default_shift_start, default_shift_end')
-      .eq('org_id', currentUser.orgId)
-      .single();
+  useEffect(() => {
+    const fetchSchedulerData = async () => {
+      if (!supabase || !currentUser?.orgId) return;
 
-    return {
-      shiftStart: data?.default_shift_start?.slice(0, 5) ?? '05:00',
-      shiftEnd: data?.default_shift_end?.slice(0, 5) ?? '13:30',
+      const [settingsResult, templatesResult] = await Promise.all([
+        supabase
+          .from('scheduler_settings')
+          .select('default_shift_start, default_shift_end')
+          .eq('org_id', currentUser.orgId)
+          .single(),
+        supabase
+          .from('shift_templates')
+          .select('id, name, start, end, days, active')
+          .eq('org_id', currentUser.orgId)
+          .eq('active', true)
+          .order('name', { ascending: true }),
+      ]);
+
+      if (settingsResult.data) {
+        setSchedulerDefaults({
+          start: settingsResult.data.default_shift_start?.slice(0, 5) ?? '05:00',
+          end: settingsResult.data.default_shift_end?.slice(0, 5) ?? '13:30',
+        });
+      }
+
+      if (templatesResult.data) {
+        setShiftTemplates(
+          templatesResult.data.map((template) => ({
+            id: String(template.id),
+            name: String(template.name ?? ''),
+            start: String(template.start ?? ''),
+            end: String(template.end ?? ''),
+            days: Array.isArray(template.days) ? (template.days as string[]) : [],
+            active: Boolean(template.active),
+          })),
+        );
+      }
     };
-  }
+
+    void fetchSchedulerData();
+  }, [currentUser?.orgId]);
 
   useEffect(() => {
     const firstId = employeeList.find((e) => e.status === 'active')?.id ?? '';
@@ -178,17 +188,17 @@ export default function SchedulerPage() {
     };
   }, [activeEmployees, scheduleList, weekDays]);
 
-  async function openAddShift(employeeId?: string, date?: string) {
-    const defaults = await fetchModalSchedulerDefaults();
+  function openAddShift(employeeId?: string, date?: string) {
     const targetEmp = employeeId ?? activeEmployees[0]?.id ?? '';
     setDraft({
       employeeId: targetEmp,
       date: date ?? weekDays[0]?.date ?? weekStart,
-      shiftStart: defaults.shiftStart,
-      shiftEnd: defaults.shiftEnd,
+      shiftStart: schedulerDefaults.start,
+      shiftEnd: schedulerDefaults.end,
       status: 'scheduled',
       notes: '',
     });
+    setSelectedTemplateId('');
     setDialogOpen(true);
   }
 
@@ -202,7 +212,19 @@ export default function SchedulerPage() {
       status: entry.status,
       notes: ext.notes ?? '',
     });
+    setSelectedTemplateId('');
     setDialogOpen(true);
+  }
+
+  function handleCloseModal() {
+    setDialogOpen(false);
+    setSelectedTemplateId('');
+    setDraft((cur) => ({
+      ...cur,
+      shiftStart: schedulerDefaults.start,
+      shiftEnd: schedulerDefaults.end,
+      notes: '',
+    }));
   }
 
   async function handleSaveShift() {
@@ -278,14 +300,14 @@ export default function SchedulerPage() {
     }
 
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-    setDialogOpen(false);
+    handleCloseModal();
     toast.success(existing ? 'Shift updated' : 'Shift added');
   }
 
   async function handleDeleteShift() {
     if (!supabase) return;
     const existing = scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
-    if (!existing) { setDialogOpen(false); return; }
+    if (!existing) { handleCloseModal(); return; }
     const { error } = await supabase
       .from('schedule_entries')
       .delete()
@@ -293,7 +315,7 @@ export default function SchedulerPage() {
       .eq('org_id', currentUser?.orgId ?? '');
     if (error) { toast.error('Delete failed', { description: error.message }); return; }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-    setDialogOpen(false);
+    handleCloseModal();
     toast.success('Shift removed');
   }
 
@@ -404,7 +426,7 @@ export default function SchedulerPage() {
           />
         </div>
 
-        <Button size="sm" className="h-8 gap-1.5" onClick={() => void openAddShift()} data-testid="button-add-shift">
+        <Button size="sm" className="h-8 gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
           <Plus className="h-3.5 w-3.5" /> Add Shift
         </Button>
         <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={copyWeek} data-testid="button-copy-week">
@@ -545,7 +567,7 @@ export default function SchedulerPage() {
                                 <button
                                   type="button"
                                   className="h-11 w-full rounded-lg border border-dashed border-border text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-colors"
-                                  onClick={() => void openAddShift(emp.id, day.date)}
+                                  onClick={() => openAddShift(emp.id, day.date)}
                                   data-testid={`button-add-shift-${emp.id}-${day.date}`}
                                 >
                                   + Add
@@ -614,7 +636,16 @@ export default function SchedulerPage() {
       </div>
 
       {/* ── Add / Edit Shift dialog ── */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setDialogOpen(true);
+            return;
+          }
+          handleCloseModal();
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -676,6 +707,32 @@ export default function SchedulerPage() {
             {/* Times — only show when scheduled */}
             {draft.status === 'scheduled' && (
               <>
+                <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground">Use template (optional)</label>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      setSelectedTemplateId(nextId);
+                      const template = shiftTemplates.find((item) => item.id === nextId);
+                      if (template) {
+                        setDraft((current) => ({
+                          ...current,
+                          shiftStart: template.start.slice(0, 5),
+                          shiftEnd: template.end.slice(0, 5),
+                        }));
+                      }
+                    }}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Select a template (optional)</option>
+                    {shiftTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name} ({template.start.slice(0, 5)}–{template.end.slice(0, 5)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="text-xs text-muted-foreground">Shift start</label>
                   <Input
@@ -726,7 +783,7 @@ export default function SchedulerPage() {
               <span />
             )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={handleCloseModal}>Cancel</Button>
               <Button onClick={() => void handleSaveShift()} disabled={isSaving} data-testid="button-save-shift">
                 {isSaving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Shift'}
               </Button>

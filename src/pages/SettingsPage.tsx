@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
@@ -68,12 +68,14 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'Workspace' && <WorkspaceTab orgId={orgId} />}
-      {tab === 'Workforce' && <WorkforceTab orgId={orgId} />}
-      {tab === 'Scheduler' && <SchedulerTab orgId={orgId ?? ''} />}
-      {tab === 'Weather' && <WeatherTab orgId={orgId} />}
-      {tab === 'Access' && <AccessTab userEmail={user?.email ?? ''} userRole={userRole} orgId={orgId} />}
-      {tab === 'Help' && <HelpTab />}
+      {tab === 'Workspace' && <WorkspaceTab key="workspace" orgId={orgId} />}
+      {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
+      {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId ?? ''} />}
+      {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
+      {tab === 'Access' && (
+        <AccessTab key="access" userEmail={user?.email ?? ''} userRole={userRole} orgId={orgId} />
+      )}
+      {tab === 'Help' && <HelpTab key="help" />}
     </div>
   );
 }
@@ -121,7 +123,7 @@ function SchedulerTab({ orgId }: { orgId: string }) {
     { key: 'sun', label: 'S' },
   ] as const;
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     if (!supabase || !orgId) {
       setError('Organization context missing.');
       setLoading(false);
@@ -137,9 +139,9 @@ function SchedulerTab({ orgId }: { orgId: string }) {
     }
     setSettings(data as SchedulerSettings);
     setLoading(false);
-  };
+  }, [orgId]);
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     if (!supabase || !orgId) {
       setTemplatesError('Organization context missing.');
       setTemplatesLoading(false);
@@ -159,12 +161,15 @@ function SchedulerTab({ orgId }: { orgId: string }) {
     }
     setTemplates((data as ShiftTemplate[]) ?? []);
     setTemplatesLoading(false);
-  };
+  }, [orgId]);
 
   useEffect(() => {
     void fetchSettings();
+  }, [fetchSettings]);
+
+  useEffect(() => {
     void fetchTemplates();
-  }, [orgId]);
+  }, [fetchTemplates]);
 
   const toggleDayValue = (currentDays: string[], dayValue: string) =>
     currentDays.includes(dayValue) ? currentDays.filter((day) => day !== dayValue) : [...currentDays, dayValue];
