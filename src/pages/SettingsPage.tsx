@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
-const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Weather', 'Access', 'Help'] as const;
+const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
 
 type Tab = (typeof TABS)[number];
 
@@ -27,6 +27,20 @@ interface ShiftTemplate {
   end: string;
   days: string[];
   active: boolean;
+}
+
+interface TaskLibraryItem {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  status: string | null;
+  priority: number | null;
+  color: string | null;
+  estimated_hours: number | null;
+  location: string | null;
+  property_id: string | null;
 }
 
 export default function SettingsPage() {
@@ -71,11 +85,304 @@ export default function SettingsPage() {
       {tab === 'Workspace' && <WorkspaceTab key="workspace" orgId={orgId} />}
       {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
       {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId ?? ''} />}
+      {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId ?? ''} />}
       {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
       {tab === 'Access' && (
         <AccessTab key="access" userEmail={user?.email ?? ''} userRole={userRole} orgId={orgId} />
       )}
       {tab === 'Help' && <HelpTab key="help" />}
+    </div>
+  );
+}
+
+function TasksTab({ orgId }: { orgId: string }) {
+  const [tasks, setTasks] = useState<TaskLibraryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newCategory, setNewCategory] = useState('General');
+  const [newEstimatedHours, setNewEstimatedHours] = useState('2');
+  const [newLocation, setNewLocation] = useState('');
+  const [newColor, setNewColor] = useState('#166534');
+  const [customCategory, setCustomCategory] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState<Partial<TaskLibraryItem>>({});
+  const categoryOptions = ['Mowing', 'Irrigation', 'Maintenance', 'Equipment', 'Safety', 'General', 'Custom'];
+
+  const fetchTasks = useCallback(async () => {
+    if (!supabase || !orgId) {
+      setError('Organization context missing.');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const { data, error: fetchError } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('org_id', orgId)
+      .order('category', { ascending: true })
+      .order('name', { ascending: true });
+    if (fetchError) {
+      setError(fetchError.message);
+      setLoading(false);
+      return;
+    }
+    setTasks((data as TaskLibraryItem[]) ?? []);
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => {
+    void fetchTasks();
+  }, [fetchTasks]);
+
+  const groupedTasks = useMemo(() => {
+    const grouped = new Map<string, TaskLibraryItem[]>();
+    for (const task of tasks) {
+      const key = task.category?.trim() || 'General';
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)?.push(task);
+    }
+    return Array.from(grouped.entries());
+  }, [tasks]);
+
+  const addTask = async () => {
+    if (!supabase || !orgId || !newName.trim()) return;
+    const category = newCategory === 'Custom' ? customCategory.trim() || 'General' : newCategory;
+    const { data, error: insertError } = await supabase
+      .from('tasks')
+      .insert({
+        org_id: orgId,
+        name: newName.trim(),
+        category,
+        estimated_hours: Number(newEstimatedHours || '0'),
+        location: newLocation.trim() || null,
+        color: newColor,
+        status: 'active',
+      })
+      .select('*')
+      .single();
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    setTasks((current) =>
+      [...current, data as TaskLibraryItem].sort(
+        (a, b) => `${a.category ?? ''}${a.name}`.localeCompare(`${b.category ?? ''}${b.name}`),
+      ),
+    );
+    setNewName('');
+    setNewCategory('General');
+    setNewEstimatedHours('2');
+    setNewLocation('');
+    setNewColor('#166534');
+    setCustomCategory('');
+  };
+
+  const removeTask = async (taskId: string) => {
+    if (!supabase || !orgId) return;
+    const { error: deleteError } = await supabase.from('tasks').delete().eq('id', taskId).eq('org_id', orgId);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    setTasks((current) => current.filter((task) => task.id !== taskId));
+  };
+
+  const openEdit = (task: TaskLibraryItem) => {
+    setEditingId(task.id);
+    setEditingDraft(task);
+  };
+
+  const saveEdit = async () => {
+    if (!supabase || !orgId || !editingId) return;
+    const patch = {
+      name: editingDraft.name ?? '',
+      category: editingDraft.category ?? 'General',
+      estimated_hours: Number(editingDraft.estimated_hours ?? 0),
+      location: editingDraft.location ?? null,
+      color: editingDraft.color ?? '#166534',
+    };
+    const { error: updateError } = await supabase.from('tasks').update(patch).eq('id', editingId).eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setTasks((current) =>
+      current.map((task) => (task.id === editingId ? { ...task, ...patch } : task)),
+    );
+    setEditingId(null);
+    setEditingDraft({});
+  };
+
+  const seedCommonTasks = async () => {
+    if (!supabase || !orgId) return;
+    const seeds = [
+      { name: 'Roll Greens', category: 'Mowing', estimated_hours: 2 },
+      { name: 'Mow Greens', category: 'Mowing', estimated_hours: 3 },
+      { name: 'Mow Fairways', category: 'Mowing', estimated_hours: 4 },
+      { name: 'Mow Tees', category: 'Mowing', estimated_hours: 2 },
+      { name: 'Change Cups', category: 'Maintenance', estimated_hours: 2.5 },
+      { name: 'Check Sand Depth', category: 'Maintenance', estimated_hours: 4 },
+      { name: 'Irrigation Check', category: 'Irrigation', estimated_hours: 3 },
+      { name: 'Collect Balls', category: 'General', estimated_hours: 3 },
+      { name: 'Birdhouses', category: 'Maintenance', estimated_hours: 2 },
+    ];
+    const existingNames = new Set(tasks.map((task) => task.name.toLowerCase()));
+    const payload = seeds
+      .filter((seed) => !existingNames.has(seed.name.toLowerCase()))
+      .map((seed) => ({
+        org_id: orgId,
+        name: seed.name,
+        category: seed.category,
+        estimated_hours: seed.estimated_hours,
+        status: 'active',
+        color: '#166534',
+      }));
+    if (payload.length === 0) {
+      return;
+    }
+    const { error: insertError } = await supabase.from('tasks').insert(payload);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    await fetchTasks();
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 600 }}>Task Library</h3>
+        <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>
+          Reusable tasks for daily workflow planning
+        </p>
+
+        <button
+          onClick={() => void seedCommonTasks()}
+          style={{
+            width: 'fit-content',
+            border: '1px solid #166534',
+            borderRadius: '8px',
+            color: '#166534',
+            background: '#f0fdf4',
+            padding: '8px 14px',
+            cursor: 'pointer',
+            marginBottom: '12px',
+          }}
+        >
+          Add common turf tasks
+        </button>
+
+        {loading ? (
+          <div style={{ height: '140px', borderRadius: '10px', background: '#e5e7eb', animation: 'pulse 1.5s infinite' }} />
+        ) : error ? (
+          <div>
+            <p style={{ color: '#dc2626', marginBottom: '10px' }}>Failed to load: {error}</p>
+            <button onClick={() => void fetchTasks()}>Retry</button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {groupedTasks.length === 0 ? (
+              <p style={{ color: '#6b7280', fontSize: '13px' }}>No tasks yet. Add your first reusable task below.</p>
+            ) : (
+              groupedTasks.map(([category, items]) => (
+                <div key={category} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px' }}>
+                  <h4 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600 }}>{category}</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {items.map((task) => (
+                      <div key={task.id} style={{ border: '1px solid #f1f5f9', borderRadius: '8px', padding: '8px' }}>
+                        {editingId === task.id ? (
+                          <div style={{ display: 'grid', gap: '8px' }}>
+                            <input
+                              value={editingDraft.name ?? ''}
+                              onChange={(event) => setEditingDraft((current) => ({ ...current, name: event.target.value }))}
+                            />
+                            <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: '1fr 1fr 1fr' }}>
+                              <input
+                                value={editingDraft.category ?? ''}
+                                onChange={(event) => setEditingDraft((current) => ({ ...current, category: event.target.value }))}
+                              />
+                              <input
+                                type="number"
+                                step="0.25"
+                                value={String(editingDraft.estimated_hours ?? 0)}
+                                onChange={(event) => setEditingDraft((current) => ({ ...current, estimated_hours: Number(event.target.value) }))}
+                              />
+                              <input
+                                type="color"
+                                value={editingDraft.color ?? '#166534'}
+                                onChange={(event) => setEditingDraft((current) => ({ ...current, color: event.target.value }))}
+                              />
+                            </div>
+                            <input
+                              placeholder="Location"
+                              value={editingDraft.location ?? ''}
+                              onChange={(event) => setEditingDraft((current) => ({ ...current, location: event.target.value }))}
+                            />
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button onClick={() => void saveEdit()}>Save</button>
+                              <button onClick={() => { setEditingId(null); setEditingDraft({}); }}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '10px', height: '10px', borderRadius: '999px', background: task.color ?? '#166534', display: 'inline-block' }} />
+                                <strong>{task.name}</strong>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button onClick={() => openEdit(task)}>Edit</button>
+                                <button onClick={() => void removeTask(task.id)} style={{ color: '#dc2626' }}>Delete</button>
+                              </div>
+                            </div>
+                            <span style={{ color: '#6b7280', fontSize: '12px' }}>
+                              {Number(task.estimated_hours ?? 0).toFixed(1)}h · {task.category ?? 'General'} · {task.location ?? 'No location'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <strong>Add reusable task</strong>
+        <input placeholder="Task name" value={newName} onChange={(event) => setNewName(event.target.value)} />
+        <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr 1fr' }}>
+          <select value={newCategory} onChange={(event) => setNewCategory(event.target.value)}>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
+          <input type="number" step="0.25" placeholder="Est. hours" value={newEstimatedHours} onChange={(event) => setNewEstimatedHours(event.target.value)} />
+          <input type="color" value={newColor} onChange={(event) => setNewColor(event.target.value)} />
+        </div>
+        {newCategory === 'Custom' ? (
+          <input placeholder="Custom category name" value={customCategory} onChange={(event) => setCustomCategory(event.target.value)} />
+        ) : null}
+        <input placeholder="Default location" value={newLocation} onChange={(event) => setNewLocation(event.target.value)} />
+        <button
+          onClick={() => void addTask()}
+          style={{
+            width: 'fit-content',
+            border: 'none',
+            borderRadius: '8px',
+            color: '#ffffff',
+            background: '#166534',
+            padding: '8px 14px',
+            cursor: 'pointer',
+          }}
+        >
+          Save task
+        </button>
+      </div>
     </div>
   );
 }
