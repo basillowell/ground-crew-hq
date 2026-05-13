@@ -129,7 +129,7 @@ export default function WorkflowPage() {
   const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
   const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
 
-  const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : currentUser?.propertyId ?? null;
+  const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null;
 
   const fetchBoard = useCallback(async () => {
     if (!supabase || !orgId) {
@@ -169,7 +169,6 @@ export default function WorkflowPage() {
     const { data: employeesData, error: employeesError } = await supabase
       .from('employees')
       .select('id, first_name, last_name, role, department, property_id')
-      .in('id', employeeIds)
       .eq('org_id', orgId);
     if (employeesError) {
       setError(employeesError.message);
@@ -388,13 +387,20 @@ export default function WorkflowPage() {
       toast.error('Selected task not found.');
       return;
     }
+    const taskId = String(selectedTask.id ?? '').trim();
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidPattern.test(taskId)) {
+      console.error('[Workflow] Invalid task UUID selected', { taskId, draftTaskId: draft.taskId, selectedTask });
+      toast.error('Selected task is invalid. Please choose a task again.');
+      return;
+    }
     const orderIndex =
       (crewRows.find((row) => row.employee.id === employeeId)?.assignments.length ?? 0) + 1;
     const payload = {
       org_id: orgId,
       employee_id: employeeId,
       property_id: propertyId,
-      task_id: selectedTask.id,
+      task_id: taskId,
       date: selectedDate,
       title: selectedTask.name,
       estimated_hours: Number(draft.estimatedHours || '0'),
