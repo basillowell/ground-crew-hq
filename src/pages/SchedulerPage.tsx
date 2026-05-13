@@ -78,7 +78,8 @@ export default function SchedulerPage() {
 
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
-  const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '05:00', end: '13:30' });
+  const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '', end: '' });
+  const [schedulerDefaultsLoading, setSchedulerDefaultsLoading] = useState(true);
   const [shiftTemplates, setShiftTemplates] = useState<Array<{ id: string; name: string; start: string; end: string; days: string[]; active: boolean }>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
@@ -125,12 +126,15 @@ export default function SchedulerPage() {
 
   useEffect(() => {
     const fetchSchedulerData = async () => {
-      if (!supabase || !currentUser?.orgId) return;
+      if (!supabase || !currentUser?.orgId) {
+        setSchedulerDefaultsLoading(false);
+        return;
+      }
 
       const [settingsResult, templatesResult] = await Promise.all([
         supabase
           .from('scheduler_settings')
-          .select('default_shift_start, default_shift_end')
+          .select('operational_day_start, operational_day_end')
           .eq('org_id', currentUser.orgId)
           .single(),
         supabase
@@ -143,8 +147,8 @@ export default function SchedulerPage() {
 
       if (settingsResult.data) {
         setSchedulerDefaults({
-          start: settingsResult.data.default_shift_start?.slice(0, 5) ?? '05:00',
-          end: settingsResult.data.default_shift_end?.slice(0, 5) ?? '13:30',
+          start: settingsResult.data.operational_day_start?.slice(0, 5) ?? '07:30',
+          end: settingsResult.data.operational_day_end?.slice(0, 5) ?? '16:00',
         });
       }
 
@@ -160,6 +164,7 @@ export default function SchedulerPage() {
           })),
         );
       }
+      setSchedulerDefaultsLoading(false);
     };
 
     void fetchSchedulerData();
@@ -203,8 +208,8 @@ export default function SchedulerPage() {
     setDraft({
       employeeId: targetEmp,
       date: date ?? weekDays[0]?.date ?? weekStart,
-      shiftStart: schedulerDefaults.start,
-      shiftEnd: schedulerDefaults.end,
+      shiftStart: schedulerDefaults.start || '07:30',
+      shiftEnd: schedulerDefaults.end || '16:00',
       status: 'scheduled',
       notes: '',
     });
@@ -231,8 +236,8 @@ export default function SchedulerPage() {
     setSelectedTemplateId('');
     setDraft((cur) => ({
       ...cur,
-      shiftStart: schedulerDefaults.start,
-      shiftEnd: schedulerDefaults.end,
+      shiftStart: schedulerDefaults.start || '07:30',
+      shiftEnd: schedulerDefaults.end || '16:00',
       notes: '',
     }));
   }
@@ -798,6 +803,7 @@ export default function SchedulerPage() {
                     value={draft.shiftStart}
                     onChange={(e) => setDraft({ ...draft, shiftStart: e.target.value })}
                     className="mt-1"
+                    disabled={schedulerDefaultsLoading && !schedulerDefaults.start}
                     data-testid="input-shift-start"
                   />
                 </div>
@@ -808,9 +814,16 @@ export default function SchedulerPage() {
                     value={draft.shiftEnd}
                     onChange={(e) => setDraft({ ...draft, shiftEnd: e.target.value })}
                     className="mt-1"
+                    disabled={schedulerDefaultsLoading && !schedulerDefaults.start}
                     data-testid="input-shift-end"
                   />
                 </div>
+                {schedulerDefaultsLoading && !schedulerDefaults.start && (
+                  <div className="col-span-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+                    Loading operational hours…
+                  </div>
+                )}
                 {draft.shiftStart && draft.shiftEnd && (
                   <div className="col-span-2">
                     <div className="rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
