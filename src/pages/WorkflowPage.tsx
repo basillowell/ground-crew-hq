@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Bell, Check, ChevronLeft, ChevronRight, Circle, Copy, MinusCircle, RefreshCw, Save, StickyNote, Trash2 } from 'lucide-react';
+import { Bell, ChevronLeft, ChevronRight, Copy, RefreshCw, Save, StickyNote, Trash2 } from 'lucide-react';
 
 type AssignmentStatus = 'planned' | 'pending' | 'in_progress' | 'done';
 
@@ -115,8 +115,8 @@ function nextStatus(status: AssignmentStatus): AssignmentStatus {
 
 function statusPill(status: AssignmentStatus) {
   if (status === 'done') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-  if (status === 'in_progress') return 'bg-amber-100 text-amber-700 border-amber-200';
-  if (status === 'planned') return 'bg-blue-100 text-blue-700 border-blue-200';
+  if (status === 'in_progress') return 'bg-blue-100 text-blue-700 border-blue-200';
+  if (status === 'planned') return 'bg-muted text-muted-foreground border-border';
   return 'bg-muted text-muted-foreground border-border';
 }
 
@@ -545,6 +545,10 @@ export default function WorkflowPage() {
               {crewRows.map((row) => {
                 const employeeName = `${row.employee.first_name} ${row.employee.last_name}`;
                 const addDraft = addTaskDrafts[row.employee.id];
+                const rowEstimatedHours = row.assignments.reduce((sum, task) => sum + Number(task.estimated_hours ?? 0), 0);
+                const rowActualHours = row.assignments.reduce((sum, task) => sum + Number(task.actual_hours ?? 0), 0);
+                const rowDoneCount = row.assignments.filter((task) => task.status === 'done').length;
+                const rowTotalCount = row.assignments.length;
                 return (
                   <Card key={row.employee.id} className="p-4 space-y-3">
                     <div className="flex items-center justify-between gap-2">
@@ -571,10 +575,10 @@ export default function WorkflowPage() {
                           <div key={task.id} className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-2 rounded border p-2">
                             <button
                               type="button"
-                              className={`h-7 w-7 rounded-full border flex items-center justify-center ${statusPill(task.status)}`}
+                              className={`h-7 min-w-[92px] rounded-md border px-2 text-xs font-medium ${statusPill(task.status)}`}
                               onClick={() => void toggleAssignmentStatus(task)}
                             >
-                              {task.status === 'done' ? <Check className="h-4 w-4" /> : task.status === 'in_progress' ? <MinusCircle className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                              {task.status === 'done' ? 'Done' : task.status === 'in_progress' ? 'In Progress' : 'Planned'}
                             </button>
                             <Input
                               value={task.title}
@@ -607,26 +611,31 @@ export default function WorkflowPage() {
                               }}
                               onBlur={(e) => void updateAssignment(task.id, { estimated_hours: Number(e.target.value || '0') })}
                             />
-                            {(task.status === 'done' || task.status === 'in_progress') ? (
-                              <Input
-                                className="w-24"
-                                value={String(task.actual_hours ?? 0)}
-                                onChange={(e) => {
-                                  const value = Number(e.target.value || '0');
-                                  setCrewRows((current) =>
-                                    current.map((entry) => ({
-                                      ...entry,
-                                      assignments: entry.assignments.map((item) =>
-                                        item.id === task.id ? { ...item, actual_hours: value } : item,
-                                      ),
-                                    })),
-                                  );
-                                }}
-                                onBlur={(e) => void updateAssignment(task.id, { actual_hours: Number(e.target.value || '0') })}
-                              />
-                            ) : (
+                            <Input
+                              className="w-24"
+                              type="number"
+                              min={0}
+                              max={24}
+                              step={0.5}
+                              value={String(task.actual_hours ?? 0)}
+                              onChange={(e) => {
+                                const value = Number(e.target.value || '0');
+                                setCrewRows((current) =>
+                                  current.map((entry) => ({
+                                    ...entry,
+                                    assignments: entry.assignments.map((item) =>
+                                      item.id === task.id ? { ...item, actual_hours: value } : item,
+                                    ),
+                                  })),
+                                );
+                              }}
+                              onBlur={(e) => {
+                                const rawValue = Number(e.target.value || '0');
+                                const clampedValue = Math.min(24, Math.max(0, rawValue));
+                                void updateAssignment(task.id, { actual_hours: clampedValue });
+                              }}
+                            />
                               <span className="text-xs text-muted-foreground">—</span>
-                            )}
                             <button
                               type="button"
                               className="h-8 w-8 rounded border text-muted-foreground hover:text-foreground"
@@ -644,6 +653,13 @@ export default function WorkflowPage() {
                           </div>
                         ))
                       )}
+                    </div>
+                    <div className="sticky bottom-0 z-10 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                      Scheduled: <span className="font-semibold">{rowEstimatedHours.toFixed(1)}h</span>
+                      {' | '}
+                      Actual: <span className="font-semibold">{rowActualHours.toFixed(1)}h</span>
+                      {' | '}
+                      <span className="font-semibold">{rowDoneCount}/{rowTotalCount}</span> tasks done
                     </div>
 
                     {addDraft?.open ? (
