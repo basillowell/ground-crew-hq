@@ -37,6 +37,7 @@ type AssignmentRow = {
   notes: string | null;
   status: AssignmentStatus;
   estimated_hours: number | null;
+  actual_hours: number | null;
   completed_at: string | null;
   order_index: number | null;
 };
@@ -173,7 +174,7 @@ export default function WorkflowPage() {
 
     const { data: assignmentsData, error: assignmentsError } = await supabase
       .from('assignments')
-      .select('id, employee_id, property_id, date, title, location, notes, status, estimated_hours, completed_at, order_index')
+      .select('id, employee_id, property_id, date, title, location, notes, status, estimated_hours, actual_hours, completed_at, order_index')
       .eq('org_id', orgId)
       .eq('date', selectedDate)
       .in('employee_id', employeeIds)
@@ -232,12 +233,16 @@ export default function WorkflowPage() {
     const rows = crewRows.map((row) => {
       const scheduledHours = shiftHours(row.shiftStart, row.shiftEnd);
       const estimatedTaskHours = row.assignments.reduce((sum, task) => sum + Number(task.estimated_hours ?? 0), 0);
+      const actualTaskHours = row.assignments.reduce((sum, task) => sum + Number(task.actual_hours ?? 0), 0);
+      const varianceHours = actualTaskHours - estimatedTaskHours;
       const tasksDone = row.assignments.filter((task) => task.status === 'done').length;
       const tasksTotal = row.assignments.length;
       return {
         employeeName: `${row.employee.first_name} ${row.employee.last_name}`,
         scheduledHours,
         estimatedTaskHours,
+        actualTaskHours,
+        varianceHours,
         tasksDone,
         tasksTotal,
       };
@@ -246,10 +251,12 @@ export default function WorkflowPage() {
       (acc, row) => ({
         scheduledHours: acc.scheduledHours + row.scheduledHours,
         estimatedTaskHours: acc.estimatedTaskHours + row.estimatedTaskHours,
+        actualTaskHours: acc.actualTaskHours + row.actualTaskHours,
+        varianceHours: acc.varianceHours + row.varianceHours,
         tasksDone: acc.tasksDone + row.tasksDone,
         tasksTotal: acc.tasksTotal + row.tasksTotal,
       }),
-      { scheduledHours: 0, estimatedTaskHours: 0, tasksDone: 0, tasksTotal: 0 },
+      { scheduledHours: 0, estimatedTaskHours: 0, actualTaskHours: 0, varianceHours: 0, tasksDone: 0, tasksTotal: 0 },
     );
     return { rows, totals };
   }, [crewRows]);
@@ -348,7 +355,7 @@ export default function WorkflowPage() {
     const { data, error: insertError } = await supabase
       .from('assignments')
       .insert(payload)
-      .select('id, employee_id, property_id, date, title, location, notes, status, estimated_hours, completed_at, order_index')
+      .select('id, employee_id, property_id, date, title, location, notes, status, estimated_hours, actual_hours, completed_at, order_index')
       .single();
     if (insertError) {
       toast.error('Add task failed', { description: insertError.message });
@@ -384,6 +391,7 @@ export default function WorkflowPage() {
       location: task.location,
       notes: task.notes,
       estimated_hours: task.estimated_hours,
+      actual_hours: null,
       order_index: task.order_index,
       status: 'pending',
       completed_at: null,
@@ -500,7 +508,7 @@ export default function WorkflowPage() {
                         </button>
                       ) : (
                         row.assignments.map((task) => (
-                          <div key={task.id} className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-2 rounded border p-2">
+                          <div key={task.id} className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-2 rounded border p-2">
                             <button
                               type="button"
                               className={`h-7 w-7 rounded-full border flex items-center justify-center ${statusPill(task.status)}`}
@@ -539,6 +547,26 @@ export default function WorkflowPage() {
                               }}
                               onBlur={(e) => void updateAssignment(task.id, { estimated_hours: Number(e.target.value || '0') })}
                             />
+                            {(task.status === 'done' || task.status === 'in_progress') ? (
+                              <Input
+                                className="w-24"
+                                value={String(task.actual_hours ?? 0)}
+                                onChange={(e) => {
+                                  const value = Number(e.target.value || '0');
+                                  setCrewRows((current) =>
+                                    current.map((entry) => ({
+                                      ...entry,
+                                      assignments: entry.assignments.map((item) =>
+                                        item.id === task.id ? { ...item, actual_hours: value } : item,
+                                      ),
+                                    })),
+                                  );
+                                }}
+                                onBlur={(e) => void updateAssignment(task.id, { actual_hours: Number(e.target.value || '0') })}
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                             <button
                               type="button"
                               className="h-8 w-8 rounded border text-muted-foreground hover:text-foreground"
@@ -611,6 +639,8 @@ export default function WorkflowPage() {
                         <th className="py-1">Employee</th>
                         <th className="py-1">Scheduled Hrs</th>
                         <th className="py-1">Est. Task Hrs</th>
+                        <th className="py-1">Actual Hrs</th>
+                        <th className="py-1">Variance</th>
                         <th className="py-1">Tasks Done</th>
                         <th className="py-1">Tasks Total</th>
                       </tr>
@@ -621,6 +651,10 @@ export default function WorkflowPage() {
                           <td className="py-1">{row.employeeName}</td>
                           <td className="py-1">{row.scheduledHours.toFixed(1)}</td>
                           <td className="py-1">{row.estimatedTaskHours.toFixed(1)}</td>
+                          <td className="py-1">{row.actualTaskHours.toFixed(1)}</td>
+                          <td className={`py-1 ${row.varianceHours <= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                            {row.varianceHours.toFixed(1)}
+                          </td>
                           <td className="py-1">{row.tasksDone}</td>
                           <td className="py-1">{row.tasksTotal}</td>
                         </tr>
@@ -629,6 +663,10 @@ export default function WorkflowPage() {
                         <td className="py-1">Totals</td>
                         <td className="py-1">{daySummary.totals.scheduledHours.toFixed(1)}</td>
                         <td className="py-1">{daySummary.totals.estimatedTaskHours.toFixed(1)}</td>
+                        <td className="py-1">{daySummary.totals.actualTaskHours.toFixed(1)}</td>
+                        <td className={`py-1 ${daySummary.totals.varianceHours <= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                          {daySummary.totals.varianceHours.toFixed(1)}
+                        </td>
                         <td className="py-1">{daySummary.totals.tasksDone}</td>
                         <td className="py-1">{daySummary.totals.tasksTotal}</td>
                       </tr>
@@ -672,4 +710,3 @@ export default function WorkflowPage() {
     </div>
   );
 }
-

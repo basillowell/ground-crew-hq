@@ -103,6 +103,8 @@ export default function ReportsPage() {
   const [appliedStartDate, setAppliedStartDate] = useState(startDate);
   const [appliedEndDate, setAppliedEndDate] = useState(endDate);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [laborFromDate, setLaborFromDate] = useState(currentDateIso());
+  const [laborToDate, setLaborToDate] = useState(currentDateIso());
   const propertyId = currentPropertyId || 'all';
   const employeesQuery = useEmployees(propertyId);
   const scheduleEntriesQuery = useScheduleEntriesRange(appliedStartDate, appliedEndDate, propertyId);
@@ -706,6 +708,65 @@ export default function ReportsPage() {
         </div>
 
         <div className="mb-5 rounded-3xl border bg-card/90 backdrop-blur p-5 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Labor Summary</h3>
+              <p className="text-xs text-muted-foreground">Employee hours by scheduled shifts and workflow task time.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input type="date" value={laborFromDate} onChange={(event) => setLaborFromDate(event.target.value)} className="h-8 w-[150px]" />
+              <Input type="date" value={laborToDate} onChange={(event) => setLaborToDate(event.target.value)} className="h-8 w-[150px]" />
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setLaborPreset('today')}>Today</Button>
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setLaborPreset('week')}>This Week</Button>
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setLaborPreset('month')}>This Month</Button>
+              <Button variant="outline" size="sm" className="h-8" onClick={exportLaborSummaryCsv}>Export CSV</Button>
+            </div>
+          </div>
+          {laborSummaryQuery.isLoading ? (
+            <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">Loading labor summary...</div>
+          ) : laborSummaryQuery.error ? (
+            <div className="rounded-xl border border-dashed p-4 text-sm text-destructive">
+              Labor summary failed: {(laborSummaryQuery.error as { message?: string }).message ?? 'Unknown error'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto mb-5">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    <th className="px-3 py-3 font-medium">Employee</th>
+                    <th className="px-3 py-3 font-medium">Scheduled Hrs</th>
+                    <th className="px-3 py-3 font-medium">Task Est. Hrs</th>
+                    <th className="px-3 py-3 font-medium">Task Actual Hrs</th>
+                    <th className="px-3 py-3 font-medium">Tasks Done</th>
+                    <th className="px-3 py-3 font-medium">Variance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(laborSummaryQuery.data ?? []).length ? (
+                    (laborSummaryQuery.data ?? []).map((row) => (
+                      <tr key={row.employeeId} className="border-b last:border-b-0">
+                        <td className="px-3 py-3">{row.employeeName}</td>
+                        <td className="px-3 py-3">{row.scheduledHours.toFixed(2)}</td>
+                        <td className="px-3 py-3">{row.taskEstimatedHours.toFixed(2)}</td>
+                        <td className="px-3 py-3">{row.taskActualHours.toFixed(2)}</td>
+                        <td className="px-3 py-3">{row.tasksDone}</td>
+                        <td className={`px-3 py-3 ${row.variance <= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                          {row.variance.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                        No labor rows for this range yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Core Labor Reports</h3>
             <Badge variant="secondary">{appliedStartDate} to {appliedEndDate}</Badge>
@@ -1047,3 +1108,125 @@ export default function ReportsPage() {
     </div>
   );
 }
+  const laborSummaryQuery = useQuery({
+    queryKey: ['labor-summary', laborFromDate, laborToDate, orgId ?? 'all-orgs'],
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as Array<{
+        employeeId: string;
+        employeeName: string;
+        scheduledHours: number;
+        taskEstimatedHours: number;
+        taskActualHours: number;
+        tasksDone: number;
+        variance: number;
+      }>;
+
+      const [scheduleResult, assignmentResult] = await Promise.all([
+        supabase
+          .from('schedule_entries')
+          .select('employee_id, shift_start, shift_end, date, status')
+          .eq('org_id', orgId)
+          .gte('date', laborFromDate)
+          .lte('date', laborToDate),
+        supabase
+          .from('assignments')
+          .select('employee_id, estimated_hours, actual_hours, status, date')
+          .eq('org_id', orgId)
+          .gte('date', laborFromDate)
+          .lte('date', laborToDate),
+      ]);
+
+      if (scheduleResult.error) throw scheduleResult.error;
+      if (assignmentResult.error) throw assignmentResult.error;
+
+      const scheduleTotals = new Map<string, number>();
+      for (const row of scheduleResult.data ?? []) {
+        const status = String((row as { status?: string }).status ?? '').toLowerCase();
+        if (status !== 'scheduled') continue;
+        const start = String((row as { shift_start?: string }).shift_start ?? '00:00').slice(0, 5);
+        const end = String((row as { shift_end?: string }).shift_end ?? '00:00').slice(0, 5);
+        const [sh, sm] = start.split(':').map(Number);
+        const [eh, em] = end.split(':').map(Number);
+        const hours = Math.max(0, (eh * 60 + em - (sh * 60 + sm)) / 60);
+        const employeeId = String((row as { employee_id?: string }).employee_id ?? '');
+        scheduleTotals.set(employeeId, (scheduleTotals.get(employeeId) ?? 0) + hours);
+      }
+
+      const assignmentTotals = new Map<string, { est: number; actual: number; done: number; total: number }>();
+      for (const row of assignmentResult.data ?? []) {
+        const employeeId = String((row as { employee_id?: string }).employee_id ?? '');
+        const current = assignmentTotals.get(employeeId) ?? { est: 0, actual: 0, done: 0, total: 0 };
+        current.est += Number((row as { estimated_hours?: number | null }).estimated_hours ?? 0);
+        current.actual += Number((row as { actual_hours?: number | null }).actual_hours ?? 0);
+        current.total += 1;
+        if (String((row as { status?: string }).status ?? '') === 'done') current.done += 1;
+        assignmentTotals.set(employeeId, current);
+      }
+
+      const allEmployeeIds = new Set<string>([
+        ...Array.from(scheduleTotals.keys()),
+        ...Array.from(assignmentTotals.keys()),
+      ]);
+
+      const rows = Array.from(allEmployeeIds).map((employeeId) => {
+        const employee = employees.find((item) => item.id === employeeId);
+        const assignment = assignmentTotals.get(employeeId) ?? { est: 0, actual: 0, done: 0, total: 0 };
+        const scheduled = scheduleTotals.get(employeeId) ?? 0;
+        const variance = assignment.actual - assignment.est;
+        return {
+          employeeId,
+          employeeName: employee ? `${employee.firstName} ${employee.lastName}` : employeeId,
+          scheduledHours: Number(scheduled.toFixed(2)),
+          taskEstimatedHours: Number(assignment.est.toFixed(2)),
+          taskActualHours: Number(assignment.actual.toFixed(2)),
+          tasksDone: assignment.done,
+          tasksTotal: assignment.total,
+          variance: Number(variance.toFixed(2)),
+        };
+      });
+
+      return rows.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+    },
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const setLaborPreset = (preset: 'today' | 'week' | 'month') => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    if (preset === 'today') {
+      setLaborFromDate(today);
+      setLaborToDate(today);
+      return;
+    }
+    if (preset === 'week') {
+      const start = new Date(now);
+      const day = start.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      start.setDate(start.getDate() + diff);
+      setLaborFromDate(start.toISOString().slice(0, 10));
+      setLaborToDate(today);
+      return;
+    }
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    setLaborFromDate(start.toISOString().slice(0, 10));
+    setLaborToDate(today);
+  };
+
+  const exportLaborSummaryCsv = () => {
+    const rows = laborSummaryQuery.data ?? [];
+    const csvRows = [
+      'Employee,Scheduled Hrs,Task Est. Hrs,Task Actual Hrs,Tasks Done,Variance',
+      ...rows.map((row) =>
+        [
+          `"${row.employeeName}"`,
+          row.scheduledHours.toFixed(2),
+          row.taskEstimatedHours.toFixed(2),
+          row.taskActualHours.toFixed(2),
+          row.tasksDone,
+          row.variance.toFixed(2),
+        ].join(','),
+      ),
+    ];
+    downloadCsv(`labor-summary-${laborFromDate}-to-${laborToDate}.csv`, csvRows);
+  };
