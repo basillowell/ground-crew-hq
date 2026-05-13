@@ -11,7 +11,6 @@ import { PageHeader } from '@/components/shared';
 import { EmployeeRow } from '@/components/workboard/EmployeeRow';
 import { GanttTimeline } from '@/components/workboard/GanttTimeline';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
-import { EscalationCenter } from '@/components/notifications/EscalationCenter';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
 import {
@@ -72,7 +71,22 @@ function normalizeApplicationArea(row: Record<string, unknown>): ApplicationArea
   };
 }
 
-function normalizeTaskRequest(row: Record<string, unknown>): TaskRequest {
+type NeedsQueueRequest = {
+  id: string;
+  propertyId: string;
+  date: string;
+  title: string;
+  taskId?: string;
+  requestedBy: string;
+  requestedByType: 'client' | 'manager' | 'crew';
+  priority: 'high' | 'medium' | 'low';
+  status: 'new' | 'assigned' | 'dismissed' | string;
+  preferredLocation?: string;
+  notes: string;
+  createdAt?: string;
+};
+
+function normalizeTaskRequest(row: Record<string, unknown>): NeedsQueueRequest {
   return {
     id: String(row.id ?? ''),
     propertyId: String(row.propertyId ?? row.property_id ?? ''),
@@ -82,9 +96,10 @@ function normalizeTaskRequest(row: Record<string, unknown>): TaskRequest {
     requestedBy: String(row.requestedBy ?? row.requested_by ?? 'Client Request'),
     requestedByType: (row.requestedByType ?? row.requested_by_type ?? 'client') as TaskRequest['requestedByType'],
     priority: (row.priority ?? 'medium') as TaskRequest['priority'],
-    status: (row.status ?? 'new') as TaskRequest['status'],
+    status: (row.status ?? 'new') as NeedsQueueRequest['status'],
     preferredLocation: row.preferredLocation ? String(row.preferredLocation) : row.preferred_location ? String(row.preferred_location) : undefined,
     notes: String(row.notes ?? ''),
+    createdAt: row.createdAt ? String(row.createdAt) : row.created_at ? String(row.created_at) : undefined,
   };
 }
 
@@ -191,7 +206,7 @@ export default function WorkboardPage() {
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
   const [lastRealtimeRefreshAt, setLastRealtimeRefreshAt] = useState<number | null>(null);
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
-  const [needsFilter, setNeedsFilter] = useState<'all' | 'new' | 'assigned'>('all');
+  const [needsFilter, setNeedsFilter] = useState<'all' | 'open' | 'done'>('all');
   const [taskLibrary, setTaskLibrary] = useState<TaskLibraryItem[]>([]);
   const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
   const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
@@ -242,7 +257,7 @@ export default function WorkboardPage() {
   const taskRequestsQuery = useQuery({
     queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
     queryFn: async () => {
-      if (!supabase) return [] as TaskRequest[];
+      if (!supabase) return [] as NeedsQueueRequest[];
       let query = supabase.from('task_requests').select('*').eq('date', boardDate);
       if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
       const { data, error } = await query;
@@ -478,7 +493,8 @@ export default function WorkboardPage() {
 
   const filteredRequests = useMemo(() => {
     if (needsFilter === 'all') return propertyRequests;
-    return propertyRequests.filter((r) => r.status === needsFilter);
+    if (needsFilter === 'open') return propertyRequests.filter((r) => r.status !== 'dismissed' && r.status !== 'assigned');
+    return propertyRequests.filter((r) => r.status === 'dismissed' || r.status === 'assigned');
   }, [propertyRequests, needsFilter]);
 
   const scheduledEmployees = useMemo(() => {
@@ -588,7 +604,7 @@ export default function WorkboardPage() {
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
   const [todayDateKey] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const newRequestsCount = propertyRequests.filter((r) => r.status === 'new').length;
+  const newRequestsCount = propertyRequests.filter((r) => r.status !== 'dismissed' && r.status !== 'assigned').length;
 
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
@@ -638,7 +654,7 @@ export default function WorkboardPage() {
     setAssignmentDialogOpen(true);
   }
 
-  function applyRequestToAssignment(request: TaskRequest) {
+  function applyRequestToAssignment(request: NeedsQueueRequest) {
     setLinkedRequestId(request.id);
     const targetTaskId = request.taskId || taskList[0]?.id || '';
     const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
@@ -775,7 +791,7 @@ export default function WorkboardPage() {
 
   async function dismissRequest(requestId: string) {
     if (!supabase) return;
-    await supabase.from('task_requests').update({ status: 'assigned' }).eq('id', requestId);
+    await supabase.from('task_requests').update({ status: 'dismissed' }).eq('id', requestId);
     await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
   }
 
@@ -1267,7 +1283,7 @@ export default function WorkboardPage() {
 
           {/* Filter tabs */}
           <div className="flex gap-1 mb-3">
-            {(['all', 'new', 'assigned'] as const).map((f) => (
+            {(['all', 'open', 'done'] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setNeedsFilter(f)}
@@ -1278,7 +1294,11 @@ export default function WorkboardPage() {
                 }`}
                 data-testid={`filter-needs-${f}`}
               >
-                {f === 'all' ? `All (${propertyRequests.length})` : f === 'new' ? `Open (${propertyRequests.filter((r) => r.status === 'new').length})` : `Done (${propertyRequests.filter((r) => r.status === 'assigned').length})`}
+                {f === 'all'
+                  ? `All (${propertyRequests.length})`
+                  : f === 'open'
+                    ? `Open (${propertyRequests.filter((r) => r.status !== 'dismissed' && r.status !== 'assigned').length})`
+                    : `Done (${propertyRequests.filter((r) => r.status === 'dismissed' || r.status === 'assigned').length})`}
               </button>
             ))}
           </div>
@@ -1286,7 +1306,7 @@ export default function WorkboardPage() {
           {filteredRequests.length === 0 ? (
             <div className="rounded-2xl border border-dashed bg-muted/20 p-4 text-center">
               <p className="text-xs text-muted-foreground">
-                {needsFilter === 'new' ? 'All needs have been handled.' : needsFilter === 'assigned' ? 'No needs dispatched yet.' : 'No needs logged for this date.'}
+                {needsFilter === 'open' ? 'All needs have been handled.' : needsFilter === 'done' ? 'No completed needs yet.' : 'No needs logged for this date.'}
               </p>
             </div>
           ) : (
@@ -1316,17 +1336,20 @@ export default function WorkboardPage() {
                   {request.notes && (
                     <div className="text-[11px] text-muted-foreground italic mb-2 line-clamp-2">{request.notes}</div>
                   )}
-                  {request.status !== 'assigned' && (
-                    <div className="flex gap-1.5">
-                      <Button
-                        size="sm"
-                        className="h-7 text-[11px] flex-1"
-                        onClick={() => applyRequestToAssignment(request)}
-                        disabled={fallbackEligibleEmployees.length === 0}
-                        data-testid={`button-assign-request-${request.id}`}
-                      >
-                        Dispatch
-                      </Button>
+                  <div className="text-[10px] text-muted-foreground mb-2">
+                    Created {request.createdAt ? new Date(request.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Button
+                      size="sm"
+                      className="h-7 text-[11px] flex-1"
+                      onClick={() => applyRequestToAssignment(request)}
+                      disabled={fallbackEligibleEmployees.length === 0}
+                      data-testid={`button-view-request-${request.id}`}
+                    >
+                      View
+                    </Button>
+                    {request.status !== 'dismissed' ? (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -1334,10 +1357,10 @@ export default function WorkboardPage() {
                         onClick={() => dismissRequest(request.id)}
                         data-testid={`button-dismiss-request-${request.id}`}
                       >
-                        Done
+                        Dismiss
                       </Button>
-                    </div>
-                  )}
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1401,7 +1424,12 @@ export default function WorkboardPage() {
 
         {/* Escalations */}
         <div className="border-b p-4 flex-shrink-0">
-          <EscalationCenter />
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold">Escalation Center</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Escalation feed is unavailable in this build.
+          </p>
         </div>
 
         {/* Notes */}
