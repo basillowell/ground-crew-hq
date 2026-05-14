@@ -210,6 +210,7 @@ export default function WorkboardPage() {
   const [groupFilter, setGroupFilter] = useState('all');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [quickTaskDialogOpen, setQuickTaskDialogOpen] = useState(false);
+  const [taskTemplateDialogOpen, setTaskTemplateDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [linkedRequestId, setLinkedRequestId] = useState<string | null>(null);
@@ -226,6 +227,10 @@ export default function WorkboardPage() {
   const [weatherSnapshot, setWeatherSnapshot] = useState<WorkboardWeatherSnapshot | null>(null);
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
   const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
+  const [selectedTemplateTaskIds, setSelectedTemplateTaskIds] = useState<string[]>([]);
+  const [selectedTemplateEmployeeIds, setSelectedTemplateEmployeeIds] = useState<string[]>([]);
+  const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
+  const [applyingTaskTemplate, setApplyingTaskTemplate] = useState(false);
 
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
@@ -756,6 +761,125 @@ export default function WorkboardPage() {
       return 0;
     });
   }, [dispatchBoard, laneOrder]);
+
+  const toggleTemplateTask = useCallback((taskId: string) => {
+    setSelectedTemplateTaskIds((current) =>
+      current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId],
+    );
+  }, []);
+
+  const toggleTemplateEmployee = useCallback((employeeId: string) => {
+    setSelectedTemplateEmployeeIds((current) =>
+      current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
+    );
+  }, []);
+
+  const openTaskTemplateDialog = useCallback(() => {
+    setApplyTemplateToAllCrew(true);
+    setSelectedTemplateEmployeeIds(scheduledEmployees.map((employee) => employee.id));
+    setSelectedTemplateTaskIds([]);
+    setTaskTemplateDialogOpen(true);
+    if (!taskLibraryLoading && taskLibrary.length === 0 && !taskLibraryError) {
+      void fetchTaskLibrary();
+    }
+  }, [fetchTaskLibrary, scheduledEmployees, taskLibrary.length, taskLibraryError, taskLibraryLoading]);
+
+  const applyDailyTaskTemplate = useCallback(async () => {
+    if (!supabase || !currentUser?.orgId) return;
+
+    if (selectedTemplateTaskIds.length === 0) {
+      toast.error('Select at least one task to apply.');
+      return;
+    }
+
+    const targetEmployeeIds = applyTemplateToAllCrew
+      ? scheduledEmployees.map((employee) => employee.id)
+      : selectedTemplateEmployeeIds;
+
+    if (targetEmployeeIds.length === 0) {
+      toast.error('Select at least one crew member.');
+      return;
+    }
+
+    const selectedTasks = taskLibrary.filter((task) => selectedTemplateTaskIds.includes(task.id));
+    if (selectedTasks.length === 0) {
+      toast.error('Selected tasks are unavailable. Please reload and try again.');
+      return;
+    }
+
+    const scheduleByEmployee = new Map(
+      scheduleList
+        .filter((entry) => entry.date === boardDate)
+        .map((entry) => [entry.employeeId, entry]),
+    );
+
+    const assignmentCountByEmployee = dayAssignments.reduce<Record<string, number>>((acc, assignment) => {
+      acc[assignment.employeeId] = (acc[assignment.employeeId] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    const rowsToInsert = targetEmployeeIds.flatMap((employeeId) => {
+      const employeeShift = scheduleByEmployee.get(employeeId);
+      const propertyIdForEmployee =
+        (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : employeeShift?.propertyId) ??
+        activeProperty?.id ??
+        properties[0]?.id ??
+        '';
+      if (!propertyIdForEmployee) return [];
+
+      return selectedTasks.map((task, index) => {
+        const nextOrder = (assignmentCountByEmployee[employeeId] ?? 0) + index + 1;
+        return {
+          id: makeId(),
+          org_id: currentUser.orgId,
+          employee_id: employeeId,
+          property_id: propertyIdForEmployee,
+          task_id: task.id,
+          title: task.name,
+          date: boardDate,
+          status: 'planned',
+          estimated_hours: task.estimated_hours ?? 0,
+          order_index: nextOrder,
+          start_time: employeeShift?.shiftStart ?? null,
+        };
+      });
+    });
+
+    if (rowsToInsert.length === 0) {
+      toast.error('Unable to determine property for selected crew.');
+      return;
+    }
+
+    setApplyingTaskTemplate(true);
+    const { error } = await supabase.from('assignments').insert(rowsToInsert);
+    setApplyingTaskTemplate(false);
+
+    if (error) {
+      toast.error(`Could not apply task template: ${error.message}`);
+      return;
+    }
+
+    setTaskTemplateDialogOpen(false);
+    setSelectedTemplateTaskIds([]);
+    setSelectedTemplateEmployeeIds([]);
+    setApplyTemplateToAllCrew(true);
+    toast.success(`Applied ${selectedTasks.length} tasks to ${targetEmployeeIds.length} crew members.`);
+    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+  }, [
+    activeProperty?.id,
+    applyTemplateToAllCrew,
+    boardDate,
+    currentUser?.orgId,
+    dayAssignments,
+    effectivePropertyId,
+    properties,
+    queryClient,
+    scheduleList,
+    scheduledEmployees,
+    selectedTemplateEmployeeIds,
+    selectedTemplateTaskIds,
+    taskLibrary,
+  ]);
 
   const totalOpenMinutes = useMemo(
     () => orderedDispatchBoard.reduce((s, l) => s + l.openMinutes, 0),
@@ -1345,6 +1469,15 @@ export default function WorkboardPage() {
               data-testid="button-open-add-task"
             >
               Add Task
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 shrink-0"
+              onClick={openTaskTemplateDialog}
+              data-testid="button-open-task-template"
+            >
+              Apply Task Template
             </Button>
 
             <Tooltip>
@@ -2016,6 +2149,139 @@ export default function WorkboardPage() {
             </Button>
             <Button onClick={saveQuickTaskAssignment} data-testid="button-save-quick-task">
               Save Task
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={taskTemplateDialogOpen} onOpenChange={setTaskTemplateDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Apply Daily Task Template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-muted/20 p-3">
+              <p className="text-sm font-medium">Template Scope</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Select tasks from your task library, then apply to all scheduled crew or specific team members.
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Crew Selection</p>
+              <div className="flex items-center gap-2 mb-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={applyTemplateToAllCrew ? 'default' : 'outline'}
+                  onClick={() => {
+                    setApplyTemplateToAllCrew(true);
+                    setSelectedTemplateEmployeeIds(scheduledEmployees.map((employee) => employee.id));
+                  }}
+                >
+                  Apply to All Crew
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={!applyTemplateToAllCrew ? 'default' : 'outline'}
+                  onClick={() => {
+                    setApplyTemplateToAllCrew(false);
+                    setSelectedTemplateEmployeeIds((current) =>
+                      current.length > 0 ? current : scheduledEmployees.slice(0, 1).map((employee) => employee.id),
+                    );
+                  }}
+                >
+                  Select Crew
+                </Button>
+              </div>
+              {!applyTemplateToAllCrew ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {scheduledEmployees.map((employee) => {
+                    const checked = selectedTemplateEmployeeIds.includes(employee.id);
+                    return (
+                      <label key={`template-employee-${employee.id}`} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleTemplateEmployee(employee.id)}
+                        />
+                        <span>
+                          {employee.firstName} {employee.lastName}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {scheduledEmployees.length} scheduled crew member{scheduledEmployees.length === 1 ? '' : 's'} selected.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Tasks</p>
+              {taskLibraryLoading ? (
+                <div className="rounded-md border p-4 text-sm text-muted-foreground">Loading task library...</div>
+              ) : taskLibraryError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  <p>Could not load tasks: {taskLibraryError}</p>
+                  <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => void fetchTaskLibrary()}>
+                    Retry
+                  </Button>
+                </div>
+              ) : taskLibrary.length === 0 ? (
+                <div className="rounded-md border p-4 text-sm text-muted-foreground">
+                  No task library items found. Add tasks in Settings before applying a daily template.
+                </div>
+              ) : (
+                <div className="max-h-72 space-y-3 overflow-auto rounded-md border p-3">
+                  {orderedTaskCategories.map((category) => (
+                    <div key={`template-category-${category}`}>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{category}</p>
+                      <div className="space-y-1">
+                        {groupedTaskLibrary[category].map((task) => {
+                          const checked = selectedTemplateTaskIds.includes(task.id);
+                          return (
+                            <label key={`template-task-${task.id}`} className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted/40">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleTemplateTask(task.id)}
+                              />
+                              <span className="flex-1">{task.name}</span>
+                              <span className="text-xs text-muted-foreground">{Number(task.estimated_hours ?? 0)}h</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setTaskTemplateDialogOpen(false)}
+              disabled={applyingTaskTemplate}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void applyDailyTaskTemplate()}
+              disabled={
+                applyingTaskTemplate ||
+                taskLibraryLoading ||
+                selectedTemplateTaskIds.length === 0 ||
+                (!applyTemplateToAllCrew && selectedTemplateEmployeeIds.length === 0) ||
+                scheduledEmployees.length === 0
+              }
+            >
+              {applyingTaskTemplate ? 'Applying...' : 'Apply to Crew'}
             </Button>
           </div>
         </DialogContent>
