@@ -63,6 +63,15 @@ function makeId() {
     : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2, 14)}`;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function normalizeApplicationArea(row: Record<string, unknown>): ApplicationArea {
   return {
     id: String(row.id ?? ''),
@@ -977,6 +986,135 @@ export default function WorkboardPage() {
 
   const newRequestsCount = propertyRequests.filter((r) => r.status !== 'dismissed' && r.status !== 'assigned').length;
 
+  const handlePrintDailyPlan = useCallback(() => {
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!printWindow) {
+      toast.error('Unable to open print preview');
+      return;
+    }
+
+    const propertyLabel = activeProperty?.name || 'All Properties';
+    const preparedBy = currentUser?.fullName || currentUser?.email || 'Ground Crew HQ';
+    const weatherSummary = weatherSnapshot
+      ? `${Math.round(weatherSnapshot.temperature)}°F · Wind ${Math.round(weatherSnapshot.windSpeed)} mph`
+      : latestWeatherLog?.currentConditions || 'Weather unavailable';
+
+    const rowsMarkup = orderedDispatchBoard
+      .map((lane) => {
+        const employeeName = `${lane.employee.firstName} ${lane.employee.lastName}`.trim();
+        const shiftLabel = lane.shift
+          ? `${formatTime(lane.shift.shiftStart)} - ${formatTime(lane.shift.shiftEnd)}`
+          : 'No shift';
+
+        const taskRows = lane.employeeAssignments
+          .map((assignment, index) => {
+            const task = taskList.find((candidate) => candidate.id === assignment.taskId);
+            const equipment = equipmentList.find((unit) => unit.id === assignment.equipmentId);
+            const estimatedHours = Math.max(0, Number(assignment.duration ?? 0) / 60);
+            const estimatedLabel = Number.isInteger(estimatedHours)
+              ? `${estimatedHours}h`
+              : `${estimatedHours.toFixed(1)}h`;
+            const equipmentLabel = equipment?.unitNumber || 'None';
+
+            return `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${escapeHtml(task?.name || 'Task')}</td>
+                <td>${escapeHtml(task?.category || 'General')}</td>
+                <td>${escapeHtml(estimatedLabel)}</td>
+                <td>${escapeHtml(equipmentLabel)}</td>
+                <td>${escapeHtml(assignment.area || '—')}</td>
+                <td>${escapeHtml(String(assignment.status || 'planned'))}</td>
+              </tr>
+            `;
+          })
+          .join('');
+
+        return `
+          <section class="employee-section">
+            <h2>${escapeHtml(employeeName)} — Shift: ${escapeHtml(shiftLabel)}</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Task</th>
+                  <th>Category</th>
+                  <th>Est. Hours</th>
+                  <th>Equipment</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${taskRows || '<tr><td colspan="7">No tasks assigned</td></tr>'}
+              </tbody>
+            </table>
+          </section>
+        `;
+      })
+      .join('');
+
+    const totalScheduledHours = orderedDispatchBoard.reduce((sum, lane) => sum + lane.shiftMinutes / 60, 0);
+    const totalTasks = dayAssignments.length;
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Daily Work Plan - ${escapeHtml(propertyLabel)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+            h1 { margin: 0; font-size: 20px; }
+            .subhead { margin-top: 6px; color: #4b5563; font-size: 13px; }
+            .employee-section { margin-top: 22px; }
+            .employee-section h2 { margin: 0 0 10px; font-size: 15px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+            thead { background: #f9fafb; }
+            .footer { margin-top: 24px; font-size: 12px; color: #374151; }
+            @media print {
+              body { margin: 12mm; }
+            }
+          </style>
+        </head>
+        <body>
+          <header>
+            <h1>Ground Crew HQ · ${escapeHtml(propertyLabel)} · Daily Work Plan</h1>
+            <div class="subhead">Date: ${escapeHtml(boardDate)} · Prepared by: ${escapeHtml(preparedBy)}</div>
+          </header>
+          ${rowsMarkup || '<p>No scheduled crew for this date.</p>'}
+          <footer class="footer">
+            <div>Total Scheduled Hours: ${totalScheduledHours.toFixed(1)}h · Total Tasks: ${totalTasks}</div>
+            <div>Weather: ${escapeHtml(weatherSummary)}</div>
+          </footer>
+          <script>
+            window.onload = () => {
+              setTimeout(() => {
+                window.print();
+              }, 120);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }, [
+    activeProperty?.name,
+    boardDate,
+    currentUser?.email,
+    currentUser?.fullName,
+    dayAssignments.length,
+    equipmentList,
+    latestWeatherLog?.currentConditions,
+    orderedDispatchBoard,
+    taskList,
+    weatherSnapshot,
+  ]);
+
   function openAssignmentDialog(employeeId: string) {
     const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
@@ -1537,6 +1675,15 @@ export default function WorkboardPage() {
               data-testid="button-open-add-task"
             >
               Add Task
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 shrink-0"
+              onClick={handlePrintDailyPlan}
+              data-testid="button-export-workboard-plan"
+            >
+              Export / Print
             </Button>
             <Button
               size="sm"
