@@ -14,6 +14,7 @@ import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo'
 import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { OnboardingWizard } from '@/components/OnboardingWizard';
 
 function SummaryCard({
   title,
@@ -160,6 +161,7 @@ export default function CommandCenterOperationalPage() {
   const { currentPropertyId, setCurrentPropertyId, currentUser, isAdmin, isManager, isReady, orgId } = useAuth();
   const [currentDate] = useState(() => new Date());
   const [queryTimeoutReached, setQueryTimeoutReached] = useState(false);
+  const [onboardingDismissedLocally, setOnboardingDismissedLocally] = useState(false);
 
   const todayKey = currentDate.toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
@@ -594,6 +596,37 @@ export default function CommandCenterOperationalPage() {
   const isLoading = dashboardDataQuery.isLoading;
   const canLoadDashboard = isReady && Boolean(orgId);
 
+  const onboardingCheckQuery = useQuery({
+    queryKey: ['dashboard-onboarding-check', orgId ?? 'no-org', currentUser?.employeeId ?? 'no-employee'],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60,
+    queryFn: async () => {
+      if (!supabase || !orgId) {
+        return { propertyCount: 0, employeeCount: 0, taskCount: 0 };
+      }
+      const [propertiesResult, employeesResult, tasksResult] = await Promise.all([
+        supabase.from('properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      ]);
+
+      if (propertiesResult.error) throw propertiesResult.error;
+      if (employeesResult.error) throw employeesResult.error;
+      if (tasksResult.error) throw tasksResult.error;
+
+      const totalEmployees = employeesResult.count ?? 0;
+      const employeeCountExcludingSelf = Math.max(
+        0,
+        totalEmployees - (currentUser?.employeeId ? 1 : 0),
+      );
+      return {
+        propertyCount: propertiesResult.count ?? 0,
+        employeeCount: employeeCountExcludingSelf,
+        taskCount: tasksResult.count ?? 0,
+      };
+    },
+  });
+
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -668,6 +701,32 @@ export default function CommandCenterOperationalPage() {
           </div>
         </Card>
       </div>
+    );
+  }
+
+  const localOnboardingKey = `gcrew-onboarding-complete-${orgId}`;
+  const localOnboardingDone = localStorage.getItem(localOnboardingKey) === 'true' || onboardingDismissedLocally;
+  const shouldShowOnboarding =
+    !isLoading &&
+    !onboardingCheckQuery.isLoading &&
+    !localOnboardingDone &&
+    (
+      (onboardingCheckQuery.data?.propertyCount ?? 0) === 0 ||
+      (onboardingCheckQuery.data?.employeeCount ?? 0) === 0 ||
+      (onboardingCheckQuery.data?.taskCount ?? 0) === 0
+    );
+
+  if (shouldShowOnboarding) {
+    return (
+      <OnboardingWizard
+        orgId={orgId}
+        userId={currentUser?.appUserId}
+        onComplete={() => {
+          setOnboardingDismissedLocally(true);
+          void onboardingCheckQuery.refetch();
+          void dashboardDataQuery.refetch();
+        }}
+      />
     );
   }
 
