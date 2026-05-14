@@ -391,6 +391,49 @@ export default function WorkboardPage() {
   const weatherLocations = weatherLocationsQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
   const workOrders = workOrdersQuery.data ?? [];
+  const weatherStripProperty = useMemo(
+    () => properties.find((property) => property.id === effectivePropertyId) ?? properties[0] ?? null,
+    [effectivePropertyId, properties],
+  );
+  const hourlyWeatherStripQuery = useQuery({
+    queryKey: ['workboard-hourly-strip', boardDate, weatherStripProperty?.id ?? 'no-property'],
+    enabled: Boolean(weatherStripProperty?.latitude && weatherStripProperty?.longitude),
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      if (!weatherStripProperty?.latitude || !weatherStripProperty?.longitude) return [] as Array<{
+        hour: number;
+        temp: number;
+        wind: number;
+        precip: number;
+        weatherCode: number;
+      }>;
+      const payload = await fetchOpenMeteoWeather({
+        latitude: weatherStripProperty.latitude,
+        longitude: weatherStripProperty.longitude,
+        timezone: 'America/New_York',
+      });
+      const points = payload.hourly.filter((point) => point.time.slice(0, 10) === boardDate);
+      if (points.length === 0) return [] as Array<{
+        hour: number;
+        temp: number;
+        wind: number;
+        precip: number;
+        weatherCode: number;
+      }>;
+      const byHour = new Map(points.map((point) => [new Date(point.time).getHours(), point]));
+      return Array.from({ length: 13 }, (_, index) => {
+        const hour = index + 6;
+        const point = byHour.get(hour);
+        return {
+          hour,
+          temp: Number(point?.temperature ?? 0),
+          wind: Number(point?.windSpeed ?? 0),
+          precip: Number(point?.precipitationProbability ?? 0),
+          weatherCode: Number(point?.weatherCode ?? -1),
+        };
+      }).filter((entry) => entry.weatherCode >= 0);
+    },
+  });
 
   useEffect(() => {
     if (assignmentsQuery.dataUpdatedAt || taskRequestsQuery.dataUpdatedAt) {
@@ -732,6 +775,19 @@ export default function WorkboardPage() {
   const planningWeatherLocation = latestWeatherLog
     ? weatherLocations.find((l) => l.id === latestWeatherLog.locationId) ?? weatherLocations[0]
     : weatherLocations[0];
+  const weatherCellIcon = useCallback((code: number) => {
+    if (code === 0) return '☀️';
+    if (code <= 2) return '🌤';
+    if (code === 3) return '☁️';
+    if (code <= 48) return '🌫️';
+    if (code <= 82) return '🌧️';
+    return '⛈️';
+  }, []);
+  const weatherCellTone = useCallback((precip: number, code: number) => {
+    if (code >= 95 || precip >= 60 || (code >= 61 && code <= 82)) return 'bg-red-100 text-red-800 border-red-200';
+    if (precip >= 25 || code === 3 || (code >= 45 && code <= 57)) return 'bg-amber-100 text-amber-800 border-amber-200';
+    return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+  }, []);
 
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
   const [todayDateKey] = useState(() => new Date().toISOString().slice(0, 10));
@@ -1653,10 +1709,38 @@ export default function WorkboardPage() {
             <CloudSun className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Weather</h3>
           </div>
-          {planningWeatherLocation && latestWeatherLog ? (
-            <WeatherSnapshotCard location={planningWeatherLocation} log={latestWeatherLog} compact title="Daily Weather" />
+          {hourlyWeatherStripQuery.isLoading ? (
+            <div className="space-y-2">
+              <div className="h-16 rounded-lg bg-muted/30 animate-pulse" />
+            </div>
+          ) : hourlyWeatherStripQuery.data && hourlyWeatherStripQuery.data.length > 0 ? (
+            <div className="space-y-2">
+              {planningWeatherLocation && latestWeatherLog ? (
+                <WeatherSnapshotCard location={planningWeatherLocation} log={latestWeatherLog} compact title="Daily Weather" />
+              ) : null}
+              <div className="overflow-x-auto">
+                <div className="flex min-w-max gap-1 pr-1">
+                  {hourlyWeatherStripQuery.data.map((entry) => {
+                    const hourLabel = formatTime(`${entry.hour.toString().padStart(2, '0')}:00`);
+                    const isCurrentHour = boardDate === new Date().toISOString().slice(0, 10) && entry.hour === new Date().getHours();
+                    return (
+                      <div
+                        key={`weather-hour-${entry.hour}`}
+                        className={`w-16 rounded-md border px-1 py-1 text-center text-[12px] ${weatherCellTone(entry.precip, entry.weatherCode)} ${isCurrentHour ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+                        title={`${hourLabel} · ${Math.round(entry.temp)}°F · Wind ${Math.round(entry.wind)} mph`}
+                      >
+                        <div className="text-[11px] leading-tight">{hourLabel.replace(':00', '')}</div>
+                        <div className="text-base leading-tight">{weatherCellIcon(entry.weatherCode)}</div>
+                        <div className="font-semibold leading-tight">{Math.round(entry.temp)}°</div>
+                        <div className="leading-tight">{Math.round(entry.wind)}mph</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           ) : (
-            <p className="text-xs text-muted-foreground">No weather data for this date.</p>
+            <p className="text-xs text-muted-foreground">Forecast unavailable for this date.</p>
           )}
         </div>
 
