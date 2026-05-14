@@ -244,12 +244,31 @@ export default function WorkboardPage() {
   const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
   const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
   const [weatherSnapshot, setWeatherSnapshot] = useState<WorkboardWeatherSnapshot | null>(null);
+  const [assignmentFlashMap, setAssignmentFlashMap] = useState<Record<string, 'complete' | 'started'>>({});
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
+  const assignmentFlashTimeoutsRef = useRef<Record<string, number>>({});
   const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
   const [selectedTemplateTaskIds, setSelectedTemplateTaskIds] = useState<string[]>([]);
   const [selectedTemplateEmployeeIds, setSelectedTemplateEmployeeIds] = useState<string[]>([]);
   const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
   const [applyingTaskTemplate, setApplyingTaskTemplate] = useState(false);
+
+  const triggerAssignmentFlash = useCallback((assignmentId: string, tone: 'complete' | 'started') => {
+    if (!assignmentId) return;
+    setAssignmentFlashMap((current) => ({ ...current, [assignmentId]: tone }));
+    const activeTimeout = assignmentFlashTimeoutsRef.current[assignmentId];
+    if (activeTimeout) {
+      window.clearTimeout(activeTimeout);
+    }
+    assignmentFlashTimeoutsRef.current[assignmentId] = window.setTimeout(() => {
+      setAssignmentFlashMap((current) => {
+        const next = { ...current };
+        delete next[assignmentId];
+        return next;
+      });
+      delete assignmentFlashTimeoutsRef.current[assignmentId];
+    }, 2200);
+  }, []);
 
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
@@ -547,27 +566,68 @@ export default function WorkboardPage() {
 
   useEffect(() => {
     if (!supabase) return;
-    const channel = supabase
-      .channel('workflow-live-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, () => {
-        setLastRealtimeRefreshAt(Date.now());
-        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      })
+    const assignmentsChannel = supabase
+      .channel('workboard-assignments')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'assignments',
+          filter: currentUser?.orgId ? `org_id=eq.${currentUser.orgId}` : undefined,
+        },
+        (payload) => {
+          setLastRealtimeRefreshAt(Date.now());
+          const next = payload.new as { id?: string; status?: string; title?: string; employee_id?: string } | null;
+          const previous = payload.old as { status?: string } | null;
+          const nextStatus = (next?.status ?? '').toLowerCase();
+          const previousStatus = (previous?.status ?? '').toLowerCase();
+          const statusChanged = payload.eventType === 'UPDATE' && nextStatus && nextStatus !== previousStatus;
+          if (statusChanged && next?.id) {
+            const completed = nextStatus === 'done' || nextStatus === 'complete';
+            const started = nextStatus === 'in_progress' || nextStatus === 'in-progress';
+            if (completed || started) {
+              triggerAssignmentFlash(next.id, completed ? 'complete' : 'started');
+              const assignee = employeeList.find((employee) => employee.id === (next.employee_id ?? ''));
+              const fullName = assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Crew member';
+              const actionLabel = completed ? 'completed' : 'started';
+              const taskLabel = next.title || 'a task';
+              toast.success(`${fullName} ${actionLabel} ${taskLabel}`);
+            }
+          }
+          void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+        },
+      )
+      .subscribe();
+
+    const taskRequestsChannel = supabase
+      .channel('workflow-live-task-requests')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests' }, () => {
         setLastRealtimeRefreshAt(Date.now());
         void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
       })
+      .subscribe();
+
+    const scheduleChannel = supabase
+      .channel('workflow-live-schedule')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
       })
       .subscribe();
-    return () => { void channel.unsubscribe(); };
-  }, [queryClient]);
+
+    return () => {
+      void assignmentsChannel.unsubscribe();
+      void taskRequestsChannel.unsubscribe();
+      void scheduleChannel.unsubscribe();
+    };
+  }, [currentUser?.orgId, employeeList, queryClient, triggerAssignmentFlash]);
 
   useEffect(
     () => () => {
       Object.values(pendingDeleteTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
       pendingDeleteTimeoutsRef.current = {};
+      Object.values(assignmentFlashTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+      assignmentFlashTimeoutsRef.current = {};
     },
     [],
   );
@@ -1848,9 +1908,24 @@ export default function WorkboardPage() {
                   <span className="text-right">Status</span>
                 </div>
               </div>
-              {orderedDispatchBoard.map((lane, index) => (
+              {orderedDispatchBoard.map((lane, index) => {
+                const laneFlashTone = lane.employeeAssignments.reduce<'complete' | 'started' | null>((tone, assignment) => {
+                  const assignmentId = assignment.id ?? '';
+                  const nextTone = assignmentFlashMap[assignmentId];
+                  return nextTone ?? tone;
+                }, null);
+                return (
+                  <div
+                    key={lane.employee.id}
+                    className={`rounded-3xl transition-all duration-500 ${
+                      laneFlashTone === 'complete'
+                        ? 'ring-2 ring-green-400/70 bg-green-50/40'
+                        : laneFlashTone === 'started'
+                          ? 'ring-2 ring-blue-400/70 bg-blue-50/40'
+                          : ''
+                    }`}
+                  >
                 <EmployeeRow
-                  key={lane.employee.id}
                   employee={lane.employee}
                   assignments={lane.employeeAssignments}
                   tasks={taskList}
@@ -1884,7 +1959,9 @@ export default function WorkboardPage() {
                   onRemoveAssignment={removeAssignment}
                   weatherWarningsByAssignment={assignmentWeatherWarnings}
                 />
-              ))}
+                  </div>
+                );
+              })}
 
               {/* Unscheduled crew notice */}
               {unscheduledEmployees.length > 0 && (
