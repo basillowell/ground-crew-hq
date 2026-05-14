@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/components/ui/sonner';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -134,7 +135,14 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'Workspace' && <WorkspaceTab key="workspace" orgId={orgId} />}
+      {tab === 'Workspace' && (
+        <WorkspaceTab
+          key="workspace"
+          orgId={orgId}
+          userRole={userRole}
+          currentPropertyId={currentPropertyId}
+        />
+      )}
       {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
       {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId ?? ''} />}
       {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
@@ -153,7 +161,15 @@ export default function SettingsPage() {
   );
 }
 
-function WorkspaceTab({ orgId }: { orgId: string | null }) {
+function WorkspaceTab({
+  orgId,
+  userRole,
+  currentPropertyId,
+}: {
+  orgId: string | null;
+  userRole: string | null;
+  currentPropertyId: string;
+}) {
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [orgNameDraft, setOrgNameDraft] = useState('');
   const [properties, setProperties] = useState<PropertyItem[]>([]);
@@ -163,6 +179,7 @@ function WorkspaceTab({ orgId }: { orgId: string | null }) {
   const [newPropertyName, setNewPropertyName] = useState('');
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [editingPropertyName, setEditingPropertyName] = useState('');
+  const [loadingDemoData, setLoadingDemoData] = useState(false);
 
   const fetchWorkspaceData = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -268,6 +285,248 @@ function WorkspaceTab({ orgId }: { orgId: string | null }) {
     setProperties((current) => current.filter((property) => property.id !== propertyId));
   };
 
+  const loadDemoData = async () => {
+    if (!supabase || !orgId) return;
+    const confirmed = window.confirm(
+      'This will add sample employees, tasks, schedule entries, and assignments for demo purposes. Continue?',
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setLoadingDemoData(true);
+    const today = new Date();
+    const todayKey = today.toISOString().slice(0, 10);
+    const monday = new Date(today);
+    const dayOfWeek = monday.getDay();
+    const offsetToMonday = (dayOfWeek + 6) % 7;
+    monday.setDate(monday.getDate() - offsetToMonday);
+    const weekdayKeys = Array.from({ length: 5 }, (_, index) => {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + index);
+      return date.toISOString().slice(0, 10);
+    });
+
+    const activePropertyId =
+      (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null) ??
+      properties[0]?.id ??
+      null;
+
+    if (!activePropertyId) {
+      setLoadingDemoData(false);
+      setError('Add a property first to load demo data.');
+      return;
+    }
+
+    const [{ count: employeeCount }, { count: taskCount }, { count: equipmentCount }] = await Promise.all([
+      supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('equipment_units').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+    ]);
+
+    const demoEmployeesSeed = [
+      { first_name: 'Alex', last_name: 'Rivera', role: 'Field Staff', department: 'Maintenance' },
+      { first_name: 'Jordan', last_name: 'Martinez', role: 'Field Staff', department: 'Irrigation' },
+      { first_name: 'Sam', last_name: 'Thompson', role: 'Field Manager', department: 'Maintenance' },
+      { first_name: 'Casey', last_name: 'Williams', role: 'Field Staff', department: 'General' },
+    ];
+
+    let demoEmployees: Array<{ id: string; first_name: string; last_name: string }> = [];
+
+    if ((employeeCount ?? 0) < 3) {
+      const employeeRows = demoEmployeesSeed.map((employee) => ({
+        id: crypto.randomUUID(),
+        org_id: orgId,
+        property_id: activePropertyId,
+        first_name: employee.first_name,
+        last_name: employee.last_name,
+        role: employee.role,
+        department: employee.department,
+        status: 'active',
+        active: true,
+      }));
+      const { data: insertedEmployees, error: employeeError } = await supabase
+        .from('employees')
+        .insert(employeeRows)
+        .select('id, first_name, last_name');
+      if (employeeError) {
+        setLoadingDemoData(false);
+        setError(employeeError.message);
+        return;
+      }
+      demoEmployees = (insertedEmployees ?? []) as Array<{ id: string; first_name: string; last_name: string }>;
+    } else {
+      const { data: existingEmployees, error: existingError } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name')
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .order('last_name', { ascending: true })
+        .limit(4);
+      if (existingError) {
+        setLoadingDemoData(false);
+        setError(existingError.message);
+        return;
+      }
+      demoEmployees = (existingEmployees ?? []) as Array<{ id: string; first_name: string; last_name: string }>;
+    }
+
+    const taskSeed = [
+      { name: 'Mow Greens', category: 'Mowing', estimated_hours: 3, priority: 1 },
+      { name: 'Mow Fairways', category: 'Mowing', estimated_hours: 4, priority: 1 },
+      { name: 'Roll Greens', category: 'Mowing', estimated_hours: 2, priority: 2 },
+      { name: 'Bunker Maintenance', category: 'Maintenance', estimated_hours: 3, priority: 2 },
+      { name: 'Irrigation Check', category: 'Irrigation', estimated_hours: 3, priority: 2 },
+      { name: 'Trim & Edge', category: 'Maintenance', estimated_hours: 2, priority: 2 },
+      { name: 'Collect Balls', category: 'General', estimated_hours: 3, priority: 2 },
+      { name: 'Change Cups', category: 'Maintenance', estimated_hours: 2.5, priority: 2 },
+      { name: 'Mow Tees', category: 'Mowing', estimated_hours: 2, priority: 2 },
+      { name: 'Bunker Rake', category: 'Maintenance', estimated_hours: 2, priority: 3 },
+      { name: 'Cart Path Blow Off', category: 'General', estimated_hours: 1.5, priority: 3 },
+      { name: 'Debris Patrol', category: 'General', estimated_hours: 1, priority: 3 },
+    ];
+
+    let taskRowsForAssignments: Array<{ id: string; name: string; estimated_hours: number | null }> = [];
+
+    if ((taskCount ?? 0) < 5) {
+      const rows = taskSeed.map((task) => ({
+        id: crypto.randomUUID(),
+        org_id: orgId,
+        property_id: activePropertyId,
+        name: task.name,
+        category: task.category,
+        status: 'active',
+        priority: task.priority,
+        estimated_hours: task.estimated_hours,
+      }));
+      const { data: insertedTasks, error: taskInsertError } = await supabase
+        .from('tasks')
+        .insert(rows)
+        .select('id, name, estimated_hours');
+      if (taskInsertError) {
+        setLoadingDemoData(false);
+        setError(taskInsertError.message);
+        return;
+      }
+      taskRowsForAssignments = (insertedTasks ?? []) as Array<{ id: string; name: string; estimated_hours: number | null }>;
+    } else {
+      const { data: existingTasks, error: existingTaskError } = await supabase
+        .from('tasks')
+        .select('id, name, estimated_hours')
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .order('priority', { ascending: true })
+        .order('name', { ascending: true })
+        .limit(12);
+      if (existingTaskError) {
+        setLoadingDemoData(false);
+        setError(existingTaskError.message);
+        return;
+      }
+      taskRowsForAssignments = (existingTasks ?? []) as Array<{ id: string; name: string; estimated_hours: number | null }>;
+    }
+
+    if (demoEmployees.length > 0) {
+      const { data: existingWeekSchedule, error: weekScheduleError } = await supabase
+        .from('schedule_entries')
+        .select('employee_id, date')
+        .eq('org_id', orgId)
+        .in('employee_id', demoEmployees.map((employee) => employee.id))
+        .in('date', weekdayKeys);
+      if (weekScheduleError) {
+        setLoadingDemoData(false);
+        setError(weekScheduleError.message);
+        return;
+      }
+      const existingWeekKeySet = new Set((existingWeekSchedule ?? []).map((row) => `${row.employee_id}-${row.date}`));
+      const scheduleRows = demoEmployees.flatMap((employee) =>
+        weekdayKeys
+          .filter((dateKey) => !existingWeekKeySet.has(`${employee.id}-${dateKey}`))
+          .map((dateKey) => ({
+            id: crypto.randomUUID(),
+            org_id: orgId,
+            employee_id: employee.id,
+            property_id: activePropertyId,
+            date: dateKey,
+            shift_start: '07:00',
+            shift_end: '15:30',
+            status: 'scheduled',
+          })),
+      );
+      if (scheduleRows.length > 0) {
+        const { error: scheduleError } = await supabase.from('schedule_entries').insert(scheduleRows);
+        if (scheduleError) {
+          setLoadingDemoData(false);
+          setError(scheduleError.message);
+          return;
+        }
+      }
+
+      if (taskRowsForAssignments.length > 0) {
+        const { data: existingAssignments, error: assignmentFetchError } = await supabase
+          .from('assignments')
+          .select('employee_id')
+          .eq('org_id', orgId)
+          .eq('date', todayKey)
+          .in('employee_id', demoEmployees.map((employee) => employee.id));
+        if (assignmentFetchError) {
+          setLoadingDemoData(false);
+          setError(assignmentFetchError.message);
+          return;
+        }
+        const assignedTodaySet = new Set((existingAssignments ?? []).map((row) => row.employee_id as string));
+        const targetTasks = taskRowsForAssignments.slice(0, Math.max(3, Math.min(6, taskRowsForAssignments.length)));
+        const assignmentRows = demoEmployees
+          .filter((employee) => !assignedTodaySet.has(employee.id))
+          .flatMap((employee) =>
+            targetTasks.slice(0, 3).map((task, index) => ({
+              id: crypto.randomUUID(),
+              org_id: orgId,
+              property_id: activePropertyId,
+              employee_id: employee.id,
+              task_id: task.id,
+              title: task.name,
+              date: todayKey,
+              status: 'planned',
+              estimated_hours: Number(task.estimated_hours ?? 0),
+              order_index: index,
+            })),
+          );
+        if (assignmentRows.length > 0) {
+          const { error: assignmentInsertError } = await supabase.from('assignments').insert(assignmentRows);
+          if (assignmentInsertError) {
+            setLoadingDemoData(false);
+            setError(assignmentInsertError.message);
+            return;
+          }
+        }
+      }
+    }
+
+    if ((equipmentCount ?? 0) === 0) {
+      const equipmentRows = [
+        { name: 'Toro Greensmaster 3150', type: 'Mowing', status: 'available', unit_name: 'Toro Greensmaster 3150', active: true },
+        { name: 'John Deere 2500E', type: 'Mowing', status: 'available', unit_name: 'John Deere 2500E', active: true },
+        { name: 'Toro Workman HDX', type: 'Utility', status: 'available', unit_name: 'Toro Workman HDX', active: true },
+        { name: 'Stihl FS 131', type: 'Trimming', status: 'in_use', unit_name: 'Stihl FS 131', active: true },
+      ].map((equipment) => ({
+        id: crypto.randomUUID(),
+        org_id: orgId,
+        property_id: activePropertyId,
+        ...equipment,
+      }));
+      const { error: equipmentError } = await supabase.from('equipment_units').insert(equipmentRows);
+      if (equipmentError) {
+        setLoadingDemoData(false);
+        setError(equipmentError.message);
+        return;
+      }
+    }
+
+    setLoadingDemoData(false);
+    await fetchWorkspaceData();
+    toast.success('Demo data loaded! Navigate to the Workboard to see it.');
+  };
+
   if (!orgId || loading) {
     return (
       <div style={{ display: 'grid', gap: '12px' }}>
@@ -313,6 +572,23 @@ function WorkspaceTab({ orgId }: { orgId: string | null }) {
         >
           {savingOrg ? 'Saving...' : 'Save'}
         </button>
+        {userRole === 'admin' ? (
+          <button
+            onClick={() => void loadDemoData()}
+            disabled={loadingDemoData}
+            style={{
+              width: 'fit-content',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              color: '#111827',
+              background: '#ffffff',
+              padding: '8px 14px',
+              cursor: 'pointer',
+            }}
+          >
+            {loadingDemoData ? 'Loading Demo Data...' : 'Load Demo Data'}
+          </button>
+        ) : null}
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
