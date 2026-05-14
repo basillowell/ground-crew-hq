@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { ArrowRight, Calendar, CheckCircle2, Circle, CloudRain, MapPin, Plus, Us
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
-import { getWeatherConditionMeta } from '@/lib/openMeteo';
+import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
 
@@ -269,6 +269,41 @@ export default function CommandCenterOperationalPage() {
     return properties[0] ?? null;
   }, [currentPropertyId, properties]);
   const selectedWeatherQuery = useWeather(selectedProperty?.id);
+  const sprayWindowQuery = useQuery({
+    queryKey: ['dashboard-spray-window', selectedProperty?.id ?? 'none'],
+    enabled:
+      Boolean(selectedProperty) &&
+      typeof selectedProperty?.latitude === 'number' &&
+      typeof selectedProperty?.longitude === 'number',
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      if (!selectedProperty || typeof selectedProperty.latitude !== 'number' || typeof selectedProperty.longitude !== 'number') {
+        return [] as Array<{ hour: number; safe: boolean }>;
+      }
+      const payload = await fetchOpenMeteoWeather({
+        latitude: selectedProperty.latitude,
+        longitude: selectedProperty.longitude,
+        timezone: 'America/New_York',
+      });
+      const hourlyByHour = new Map<number, (typeof payload.hourly)[number]>();
+      for (const point of payload.hourly) {
+        const date = new Date(point.time);
+        if (date.toISOString().slice(0, 10) !== todayKey) continue;
+        hourlyByHour.set(date.getHours(), point);
+      }
+      return Array.from({ length: 12 }, (_, index) => {
+        const hour = index + 6;
+        const point = hourlyByHour.get(hour);
+        const safe =
+          Boolean(point) &&
+          point!.windSpeed < 10 &&
+          point!.precipitationProbability < 20 &&
+          point!.temperature >= 45 &&
+          point!.temperature <= 95;
+        return { hour, safe };
+      });
+    },
+  });
 
   const onboardingDismissKey = useMemo(
     () => (currentUser?.orgId ? `gcrew-onboarding-dismissed-${currentUser.orgId}` : ''),
@@ -316,6 +351,37 @@ export default function CommandCenterOperationalPage() {
     () => scheduledRows.filter((row) => !row.assigned).length,
     [scheduledRows],
   );
+  const sprayWindowSummary = useMemo(() => {
+    const hours = sprayWindowQuery.data ?? [];
+    if (hours.length === 0) return 'No safe spray windows today';
+
+    const ranges: Array<{ start: number; end: number }> = [];
+    let start: number | null = null;
+    for (let index = 0; index < hours.length; index += 1) {
+      const block = hours[index];
+      if (block.safe && start === null) start = block.hour;
+      if ((!block.safe || index === hours.length - 1) && start !== null) {
+        const endHour = block.safe && index === hours.length - 1 ? block.hour + 1 : block.hour;
+        ranges.push({ start, end: endHour });
+        start = null;
+      }
+    }
+
+    if (ranges.length === 0) return 'No safe spray windows today';
+
+    const formatHourRange = (value: number) => {
+      const padded = value.toString().padStart(2, '0');
+      return formatTime(`${padded}:00`);
+    };
+
+    return `Safe to spray: ${ranges.map((range) => `${formatHourRange(range.start)} - ${formatHourRange(range.end)}`).join(', ')}`;
+  }, [sprayWindowQuery.data]);
+  const sprayCurrentMarkerPercent = useMemo(() => {
+    const now = new Date();
+    const nowValue = now.getHours() + now.getMinutes() / 60;
+    if (nowValue < 6 || nowValue > 18) return null;
+    return ((nowValue - 6) / 12) * 100;
+  }, [currentDate]);
 
   const weatherRiskSummary = useMemo(() => {
     if (!selectedProperty) {
@@ -597,6 +663,41 @@ export default function CommandCenterOperationalPage() {
           tone={blockersSummary.tone}
         />
       </div> : null}
+
+      <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+        <h3 className="text-sm font-semibold">Spray Window — Today</h3>
+        <div className="mt-3">
+          {sprayWindowQuery.isLoading ? (
+            <Skeleton className="h-6 w-full rounded-full" />
+          ) : sprayWindowQuery.data && sprayWindowQuery.data.length > 0 ? (
+            <div className="relative">
+              <div className="grid grid-cols-12 gap-1">
+                {sprayWindowQuery.data.map((block) => (
+                  <div
+                    key={`spray-hour-${block.hour}`}
+                    className={`h-6 rounded ${block.safe ? 'bg-emerald-500' : 'bg-red-500'}`}
+                    title={`${formatTime(`${block.hour.toString().padStart(2, '0')}:00`)} - ${formatTime(`${(block.hour + 1).toString().padStart(2, '0')}:00`)}`}
+                  />
+                ))}
+              </div>
+              {sprayCurrentMarkerPercent !== null ? (
+                <div
+                  className="pointer-events-none absolute -top-1 bottom-0 w-0.5 bg-foreground/80"
+                  style={{ left: `${sprayCurrentMarkerPercent}%` }}
+                />
+              ) : null}
+              <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>6:00 AM</span>
+                <span>12:00 PM</span>
+                <span>6:00 PM</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">No weather data available for spray window analysis.</div>
+          )}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">{sprayWindowSummary}</p>
+      </Card>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
         <SummaryCard title="Crew Scheduled Today" value={crewScheduledCount} onClick={() => navigate('/app/scheduler')} />
