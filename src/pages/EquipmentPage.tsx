@@ -1,618 +1,549 @@
-import { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Clock3, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Wrench, CheckCircle2, AlertTriangle, Clock, ChevronRight } from 'lucide-react';
-import { useEquipmentUnits } from '@/lib/supabase-queries';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+
+type EquipmentUnitRow = {
+  id: string;
+  property_id: string | null;
+  name: string | null;
+  type: string | null;
+  status: string | null;
+  location: string | null;
+  last_serviced: string | null;
+  org_id: string | null;
+  equipment_type_id: string | null;
+  unit_name: string | null;
+  notes: string | null;
+  active: boolean | null;
+};
 
 type EquipmentTypeRow = {
   id: string;
-  name: string;
+  org_id: string | null;
+  property_id: string | null;
+  name: string | null;
   short_name: string | null;
   category: string | null;
   active: boolean | null;
-  org_id: string | null;
-  property_id: string | null;
 };
 
-type WorkOrderRow = {
-  id: string;
-  equipment_unit_id: string;
-  title: string;
-  description: string | null;
-  status: 'open' | 'in-progress' | 'completed';
-  priority: 'low' | 'medium' | 'high';
-  cost: number | null;
-  created_at: string;
-  completed_at: string | null;
-  org_id: string | null;
-  property_id: string | null;
+type EquipmentStatus = 'available' | 'in_use' | 'maintenance' | 'retired';
+
+type AddDraft = {
+  name: string;
+  equipmentTypeId: string;
+  status: EquipmentStatus;
+  location: string;
+  notes: string;
+  lastServiced: string;
 };
 
-type CanonicalStatus = 'ready' | 'issue' | 'maintenance' | 'disabled';
-
-const statusBadgeClassMap: Record<CanonicalStatus, string> = {
-  ready: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
-  issue: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
-  maintenance: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300',
-  disabled: 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300',
+type EditDraft = {
+  name: string;
+  equipmentTypeId: string;
+  status: EquipmentStatus;
+  location: string;
+  lastServiced: string;
+  notes: string;
 };
 
-function normalizeStatus(raw?: string): CanonicalStatus {
-  const v = String(raw ?? '').toLowerCase();
-  if (v === 'ready' || v === 'available' || v === 'in-use') return 'ready';
-  if (v === 'issue') return 'issue';
-  if (v === 'maintenance') return 'maintenance';
-  return 'disabled';
+const STATUS_OPTIONS: EquipmentStatus[] = ['available', 'in_use', 'maintenance', 'retired'];
+
+function normalizeStatus(raw: string | null | undefined): EquipmentStatus {
+  const value = String(raw ?? '').toLowerCase();
+  if (value === 'available') return 'available';
+  if (value === 'in_use' || value === 'in-use') return 'in_use';
+  if (value === 'maintenance') return 'maintenance';
+  return 'retired';
+}
+
+function statusBadgeClass(status: EquipmentStatus) {
+  if (status === 'available') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (status === 'in_use') return 'bg-blue-50 text-blue-700 border-blue-200';
+  if (status === 'maintenance') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-slate-100 text-slate-700 border-slate-300';
+}
+
+function statusLabel(status: EquipmentStatus) {
+  if (status === 'in_use') return 'In Use';
+  if (status === 'available') return 'Available';
+  if (status === 'maintenance') return 'Maintenance';
+  return 'Retired';
+}
+
+function toDateInput(value: string | null | undefined) {
+  if (!value) return '';
+  return value.slice(0, 10);
+}
+
+function isServiceOverdue(lastServiced: string | null | undefined) {
+  if (!lastServiced) return false;
+  const servicedAt = new Date(lastServiced);
+  if (Number.isNaN(servicedAt.getTime())) return false;
+  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+  return Date.now() - servicedAt.getTime() > ninetyDaysMs;
+}
+
+function emptyAddDraft(): AddDraft {
+  return {
+    name: '',
+    equipmentTypeId: '',
+    status: 'available',
+    location: '',
+    notes: '',
+    lastServiced: '',
+  };
 }
 
 export default function EquipmentPage() {
   const { currentUser, currentPropertyId } = useAuth();
-  const queryClient = useQueryClient();
-  const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
-  const orgId = currentUser?.orgId;
+  const orgId = currentUser?.orgId ?? '';
+  const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null;
 
-  const unitsQuery = useEquipmentUnits(propertyScope, orgId);
-  const units = unitsQuery.data ?? [];
+  const [units, setUnits] = useState<EquipmentUnitRow[]>([]);
+  const [types, setTypes] = useState<EquipmentTypeRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const equipmentTypesQuery = useQuery({
-    queryKey: ['equipment-types', propertyScope ?? 'all', orgId ?? 'all-orgs'],
-    queryFn: async () => {
-      if (!supabase) return [] as EquipmentTypeRow[];
-      let query = supabase.from('equipment_types').select('*').order('name');
-      if (orgId) query = query.eq('org_id', orgId);
-      if (propertyScope) query = query.eq('property_id', propertyScope);
-      const { data, error } = await query;
-      if (error) return [] as EquipmentTypeRow[];
-      return (data ?? []) as EquipmentTypeRow[];
-    },
-    staleTime: 1000 * 60 * 5,
-  });
+  const [addOpen, setAddOpen] = useState(false);
+  const [addSaving, setAddSaving] = useState(false);
+  const [addDraft, setAddDraft] = useState<AddDraft>(emptyAddDraft);
 
-  const workOrdersQuery = useQuery({
-    queryKey: ['work-orders', propertyScope ?? 'all', orgId ?? 'all-orgs'],
-    queryFn: async () => {
-      if (!supabase) return [] as WorkOrderRow[];
-      let query = supabase.from('work_orders').select('*').order('created_at', { ascending: false });
-      if (orgId) query = query.eq('org_id', orgId);
-      if (propertyScope) query = query.eq('property_id', propertyScope);
-      const { data, error } = await query;
-      if (error) return [] as WorkOrderRow[];
-      return (data ?? []) as WorkOrderRow[];
-    },
-    staleTime: 1000 * 60 * 2,
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [rowSavingId, setRowSavingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const derivedTypes = useMemo(
-    () =>
-      [...new Set(units.map((u) => (u.typeId || '').trim()).filter(Boolean))].map((name) => ({
-        id: name,
-        name,
-        short_name: name.slice(0, 12).toUpperCase(),
-        category: 'General',
-        active: true,
-        org_id: orgId ?? null,
-        property_id: propertyScope ?? null,
-      })),
-    [units, orgId, propertyScope],
-  );
-
-  const equipmentTypes = equipmentTypesQuery.data && equipmentTypesQuery.data.length > 0
-    ? equipmentTypesQuery.data
-    : derivedTypes;
-
-  const [selectedTypeId, setSelectedTypeId] = useState<string>('');
-  const activeTypeId = selectedTypeId || equipmentTypes[0]?.id || '';
-
-  const filteredUnits = useMemo(() => {
-    if (!activeTypeId) return units;
-    const activeType = equipmentTypes.find((t) => t.id === activeTypeId);
-    if (!activeType) return units;
-    return units.filter((u) => {
-      const unitType = (u.typeId || '').trim();
-      return unitType === activeType.id || unitType === activeType.name;
-    });
-  }, [activeTypeId, equipmentTypes, units]);
-
-  const statusCounts = useMemo(() => {
-    const counts: Record<CanonicalStatus, number> = { ready: 0, issue: 0, maintenance: 0, disabled: 0 };
-    filteredUnits.forEach((unit) => {
-      counts[normalizeStatus(unit.status)] += 1;
-    });
-    return counts;
-  }, [filteredUnits]);
-  const typeWorkOrderCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    const workOrders = workOrdersQuery.data ?? [];
-    for (const type of equipmentTypes) {
-      const unitIds = units
-        .filter((u) => u.typeId === type.name || u.typeId === type.id)
-        .map((u) => u.id);
-      counts[type.id] = workOrders.filter((wo) => unitIds.includes(wo.equipment_unit_id)).length;
+  const fetchEquipment = useCallback(async () => {
+    if (!supabase || !orgId) {
+      setLoading(true);
+      return;
     }
-    return counts;
-  }, [equipmentTypes, units, workOrdersQuery.data]);
-  const unitWorkOrderCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const wo of workOrdersQuery.data ?? []) {
-      counts[wo.equipment_unit_id] = (counts[wo.equipment_unit_id] ?? 0) + 1;
+
+    setLoading(true);
+    setError(null);
+
+    const unitsQuery = supabase
+      .from('equipment_units')
+      .select('id, property_id, name, type, status, location, last_serviced, org_id, equipment_type_id, unit_name, notes, active')
+      .eq('org_id', orgId)
+      .order('unit_name', { ascending: true });
+
+    const typesQuery = supabase
+      .from('equipment_types')
+      .select('id, org_id, property_id, name, short_name, category, active')
+      .eq('org_id', orgId)
+      .order('name', { ascending: true });
+
+    const [{ data: unitsData, error: unitsError }, { data: typesData, error: typesError }] = await Promise.all([
+      unitsQuery,
+      typesQuery,
+    ]);
+
+    if (unitsError || typesError) {
+      setError(unitsError?.message ?? typesError?.message ?? 'Could not load equipment data.');
+      setUnits([]);
+      setTypes([]);
+      setLoading(false);
+      return;
     }
-    return counts;
-  }, [workOrdersQuery.data]);
 
-  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
-  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
-  const [unitDraft, setUnitDraft] = useState({
-    equipment_type_id: '',
-    unit_name: '',
-    status: 'ready' as CanonicalStatus,
-    notes: '',
-    active: true,
-  });
+    setUnits((unitsData ?? []) as EquipmentUnitRow[]);
+    setTypes((typesData ?? []) as EquipmentTypeRow[]);
+    setLoading(false);
+  }, [orgId]);
 
-  const [typeDialogOpen, setTypeDialogOpen] = useState(false);
-  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
-  const [typeDraft, setTypeDraft] = useState({
-    name: '',
-    short_name: '',
-    category: 'General',
-    active: true,
-  });
+  useEffect(() => {
+    void fetchEquipment();
+  }, [fetchEquipment]);
 
-  const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
-  const [workOrderDraft, setWorkOrderDraft] = useState({
-    equipment_unit_id: '',
-    title: '',
-    description: '',
-    priority: 'medium' as WorkOrderRow['priority'],
-  });
-
-  function openAddType() {
-    setEditingTypeId(null);
-    setTypeDraft({ name: '', short_name: '', category: 'General', active: true });
-    setTypeDialogOpen(true);
-  }
-
-  function openEditType(type: EquipmentTypeRow) {
-    setEditingTypeId(type.id);
-    setTypeDraft({
-      name: type.name,
-      short_name: type.short_name ?? '',
-      category: type.category ?? 'General',
-      active: type.active ?? true,
-    });
-    setTypeDialogOpen(true);
-  }
-
-  function openAddUnit() {
-    setEditingUnitId(null);
-    setUnitDraft({
-      equipment_type_id: activeTypeId || equipmentTypes[0]?.id || '',
-      unit_name: '',
-      status: 'ready',
-      notes: '',
-      active: true,
-    });
-    setUnitDialogOpen(true);
-  }
-
-  function openEditUnit(unitId: string) {
-    const unit = units.find((u) => u.id === unitId);
-    if (!unit) return;
-    const type = equipmentTypes.find((t) => t.name === unit.typeId || t.id === unit.typeId);
-    const ext = unit as unknown as { notes?: string; active?: boolean };
-    setEditingUnitId(unit.id);
-    setUnitDraft({
-      equipment_type_id: type?.id ?? unit.typeId,
-      unit_name: unit.unitNumber,
-      status: normalizeStatus(unit.status),
-      notes: ext.notes ?? '',
-      active: ext.active ?? normalizeStatus(unit.status) !== 'disabled',
-    });
-    setUnitDialogOpen(true);
-  }
-
-  async function saveType() {
-    if (!supabase || !typeDraft.name.trim()) return;
-    const payload = {
-      id: editingTypeId ?? crypto.randomUUID(),
-      name: typeDraft.name.trim(),
-      short_name: typeDraft.short_name.trim() || null,
-      category: typeDraft.category.trim() || 'General',
-      active: typeDraft.active,
-      org_id: orgId ?? null,
-      property_id: propertyScope ?? null,
-    };
-    const { error } = await supabase.from('equipment_types').upsert(payload);
-    if (error) return;
-    await queryClient.invalidateQueries({ queryKey: ['equipment-types'] });
-    setTypeDialogOpen(false);
-  }
-
-  async function saveUnit() {
-    if (!supabase || !unitDraft.unit_name.trim() || !currentPropertyId || currentPropertyId === 'all') return;
-    const resolvedType = equipmentTypes.find((t) => t.id === unitDraft.equipment_type_id);
-    const canonical = unitDraft.active ? unitDraft.status : 'disabled';
-    const payload = {
-      id: editingUnitId ?? crypto.randomUUID(),
-      property_id: currentPropertyId,
-      org_id: orgId ?? null,
-      equipment_type_id: unitDraft.equipment_type_id || null,
-      unit_name: unitDraft.unit_name.trim(),
-      name: unitDraft.unit_name.trim(),
-      type: resolvedType?.name ?? unitDraft.equipment_type_id ?? 'General',
-      status: canonical,
-      notes: unitDraft.notes.trim() || null,
-      active: unitDraft.active,
-    };
-    let { error } = await supabase.from('equipment_units').upsert(payload);
-    if (error) {
-      const fallback = await supabase.from('equipment_units').upsert({
-        id: payload.id,
-        property_id: payload.property_id,
-        org_id: payload.org_id,
-        name: payload.name,
-        type: payload.type,
-        status: payload.status,
-      });
-      error = fallback.error;
+  const typeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const type of types) {
+      if (type.id && type.name) map.set(type.id, type.name);
     }
-    if (error) return;
-    await queryClient.invalidateQueries({ queryKey: ['equipment-units'] });
-    setUnitDialogOpen(false);
-  }
+    return map;
+  }, [types]);
 
-  async function saveWorkOrder() {
-    if (!supabase || !workOrderDraft.equipment_unit_id || !workOrderDraft.title.trim() || !currentPropertyId || currentPropertyId === 'all') return;
+  const rows = useMemo(() => {
+    return units.map((unit) => {
+      const resolvedName = unit.unit_name || unit.name || 'Unnamed equipment';
+      const resolvedType = unit.equipment_type_id
+        ? typeNameById.get(unit.equipment_type_id) || unit.type || 'Unassigned'
+        : unit.type || 'Unassigned';
+      return {
+        ...unit,
+        displayName: resolvedName,
+        displayType: resolvedType,
+        normalizedStatus: normalizeStatus(unit.status),
+      };
+    });
+  }, [typeNameById, units]);
+
+  const scopedRows = useMemo(() => {
+    if (!propertyId) return rows;
+    return rows.filter((row) => row.property_id === propertyId);
+  }, [propertyId, rows]);
+
+  const startAdd = useCallback(() => {
+    setAddDraft(emptyAddDraft());
+    setAddOpen(true);
+  }, []);
+
+  const cancelAdd = useCallback(() => {
+    setAddOpen(false);
+    setAddDraft(emptyAddDraft());
+  }, []);
+
+  const saveAdd = useCallback(async () => {
+    if (!supabase || !orgId || !addDraft.name.trim()) return;
+
+    setAddSaving(true);
+    const selectedTypeName = typeNameById.get(addDraft.equipmentTypeId) ?? null;
     const payload = {
       id: crypto.randomUUID(),
-      equipment_unit_id: workOrderDraft.equipment_unit_id,
-      title: workOrderDraft.title.trim(),
-      description: workOrderDraft.description.trim() || null,
-      status: 'open' as WorkOrderRow['status'],
-      priority: workOrderDraft.priority,
-      cost: 0,
-      org_id: orgId ?? null,
-      property_id: currentPropertyId,
+      org_id: orgId,
+      property_id: propertyId,
+      unit_name: addDraft.name.trim(),
+      name: addDraft.name.trim(),
+      equipment_type_id: addDraft.equipmentTypeId || null,
+      type: selectedTypeName,
+      status: addDraft.status,
+      location: addDraft.location.trim() || null,
+      notes: addDraft.notes.trim() || null,
+      active: addDraft.status !== 'retired',
+      last_serviced: addDraft.lastServiced || null,
     };
-    const { error } = await supabase.from('work_orders').insert(payload);
-    if (error) return;
-    await queryClient.invalidateQueries({ queryKey: ['work-orders'] });
-    setWorkOrderDialogOpen(false);
-    setWorkOrderDraft({ equipment_unit_id: '', title: '', description: '', priority: 'medium' });
-  }
 
-  const typeCounts = useMemo(() => {
-    return equipmentTypes.map((type) => {
-      const forType = units.filter((u) => u.typeId === type.name || u.typeId === type.id);
-      const status = { ready: 0, issue: 0, maintenance: 0, disabled: 0 } as Record<CanonicalStatus, number>;
-      forType.forEach((u) => { status[normalizeStatus(u.status)] += 1; });
-      return { type, total: forType.length, status };
+    const { error: insertError } = await supabase.from('equipment_units').insert(payload);
+    setAddSaving(false);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+
+    cancelAdd();
+    await fetchEquipment();
+  }, [addDraft, cancelAdd, fetchEquipment, orgId, propertyId, typeNameById]);
+
+  const startEdit = useCallback((row: EquipmentUnitRow & { displayName: string; displayType: string; normalizedStatus: EquipmentStatus }) => {
+    setEditingId(row.id);
+    setEditDraft({
+      name: row.displayName,
+      equipmentTypeId: row.equipment_type_id ?? '',
+      status: row.normalizedStatus,
+      location: row.location ?? '',
+      lastServiced: toDateInput(row.last_serviced),
+      notes: row.notes ?? '',
     });
-  }, [equipmentTypes, units]);
+  }, []);
 
-  const hasWorkOrderTable = (workOrdersQuery.data ?? []).length > 0 || !workOrdersQuery.error;
-  const loading = unitsQuery.isLoading || equipmentTypesQuery.isLoading;
-  const hasError = Boolean(unitsQuery.error || equipmentTypesQuery.error || workOrdersQuery.error);
-  const errorMessage =
-    (unitsQuery.error as { message?: string } | null)?.message ||
-    (equipmentTypesQuery.error as { message?: string } | null)?.message ||
-    (workOrdersQuery.error as { message?: string } | null)?.message ||
-    'Unable to load equipment readiness data.';
+  const cancelEdit = useCallback(() => {
+    setEditingId(null);
+    setEditDraft(null);
+  }, []);
 
-  if (loading) {
+  const saveEdit = useCallback(async (id: string) => {
+    if (!supabase || !editDraft || !orgId || !editDraft.name.trim()) return;
+    setRowSavingId(id);
+
+    const selectedTypeName = typeNameById.get(editDraft.equipmentTypeId) ?? null;
+    const payload = {
+      unit_name: editDraft.name.trim(),
+      name: editDraft.name.trim(),
+      equipment_type_id: editDraft.equipmentTypeId || null,
+      type: selectedTypeName,
+      status: editDraft.status,
+      location: editDraft.location.trim() || null,
+      notes: editDraft.notes.trim() || null,
+      active: editDraft.status !== 'retired',
+      last_serviced: editDraft.lastServiced || null,
+      org_id: orgId,
+    };
+
+    const { error: updateError } = await supabase.from('equipment_units').update(payload).eq('id', id).eq('org_id', orgId);
+    setRowSavingId(null);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    cancelEdit();
+    await fetchEquipment();
+  }, [cancelEdit, editDraft, fetchEquipment, orgId, typeNameById]);
+
+  const removeRow = useCallback(async (id: string) => {
+    if (!supabase || !orgId) return;
+    setDeleteId(id);
+    const { error: deleteError } = await supabase.from('equipment_units').delete().eq('id', id).eq('org_id', orgId);
+    setDeleteId(null);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    await fetchEquipment();
+  }, [fetchEquipment, orgId]);
+
+  if (!orgId || loading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <div className="rounded-2xl border border-dashed bg-muted/20 px-5 py-4 text-center">
-          <Clock className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
-          <p className="mt-2 text-sm text-muted-foreground">Loading fleet readiness board...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (hasError) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <div className="max-w-lg rounded-2xl border border-dashed bg-muted/20 px-6 py-5 text-center">
-          <AlertTriangle className="mx-auto h-6 w-6 text-amber-500" />
-          <p className="mt-2 text-sm font-medium text-foreground">Equipment data is temporarily unavailable.</p>
-          <p className="mt-1 text-xs text-muted-foreground">{errorMessage}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-3"
-            onClick={() => {
-              void unitsQuery.refetch();
-              void equipmentTypesQuery.refetch();
-              void workOrdersQuery.refetch();
-            }}
-          >
-            Retry
-          </Button>
+      <div className="p-6">
+        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          <Clock3 className="mx-auto mb-2 h-5 w-5 animate-spin" />
+          Loading equipment...
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
-      <div className="w-80 border-r bg-card overflow-auto p-3 space-y-2">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold">Equipment Types</h3>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={openAddType}>
-            <Plus className="h-3.5 w-3.5" />
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Equipment</h1>
+          <p className="text-sm text-muted-foreground">Manage units, status, and service readiness.</p>
+        </div>
+        <Button onClick={startAdd}>
+          <Plus className="mr-1.5 h-4 w-4" />
+          Add Equipment
+        </Button>
+      </div>
+
+      {error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>{error}</p>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => void fetchEquipment()}>
+            Retry
           </Button>
         </div>
-        {typeCounts.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
-            No equipment added yet. Add your first unit.
-          </div>
-        ) : (
-          typeCounts.map(({ type, total, status }) => (
-            <button
-              key={type.id}
-              type="button"
-              onClick={() => setSelectedTypeId(type.id)}
-              className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                activeTypeId === type.id ? 'bg-accent border-primary/30' : 'hover:bg-muted/40'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{type.name}</span>
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                <Badge variant="outline" className={`text-[10px] ${statusBadgeClassMap.ready}`}>Ready {status.ready}</Badge>
-                <Badge variant="outline" className={`text-[10px] ${statusBadgeClassMap.issue}`}>Issue {status.issue}</Badge>
-                <Badge variant="outline" className={`text-[10px] ${statusBadgeClassMap.maintenance}`}>Maint {status.maintenance}</Badge>
-                <Badge variant="outline" className={`text-[10px] ${statusBadgeClassMap.disabled}`}>Disabled {status.disabled}</Badge>
-                <Badge variant="secondary" className="text-[10px] ml-auto">{total} total</Badge>
-              </div>
-              <div className="mt-2 text-[10px] text-muted-foreground">
-                Work orders: <span className="font-medium text-foreground">{typeWorkOrderCounts[type.id] ?? 0}</span>
-              </div>
-              <div className="mt-2">
-                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={(event) => {
-                  event.stopPropagation();
-                  openEditType(type);
-                }}>
-                  Edit Type
-                </Button>
-              </div>
-            </button>
-          ))
-        )}
+      ) : null}
+
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="min-w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">Name</th>
+              <th className="px-3 py-2 text-left font-medium">Type</th>
+              <th className="px-3 py-2 text-left font-medium">Status</th>
+              <th className="px-3 py-2 text-left font-medium">Location</th>
+              <th className="px-3 py-2 text-left font-medium">Last Serviced</th>
+              <th className="px-3 py-2 text-right font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scopedRows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                  No equipment found. Add your first unit.
+                </td>
+              </tr>
+            ) : (
+              scopedRows.map((row) => {
+                const isEditing = editingId === row.id && editDraft;
+                const overdue = isServiceOverdue(row.last_serviced);
+                return (
+                  <tr key={row.id} className="border-t align-top">
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <Input
+                          value={editDraft.name}
+                          onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })}
+                        />
+                      ) : (
+                        <span className="font-medium">{row.displayName}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <select
+                          value={editDraft.equipmentTypeId}
+                          onChange={(event) => setEditDraft({ ...editDraft, equipmentTypeId: event.target.value })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="">Select type</option>
+                          {types
+                            .filter((type) => type.active !== false)
+                            .map((type) => (
+                              <option key={type.id} value={type.id}>
+                                {type.name ?? 'Unnamed Type'}
+                              </option>
+                            ))}
+                        </select>
+                      ) : (
+                        row.displayType
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <select
+                          value={editDraft.status}
+                          onChange={(event) => setEditDraft({ ...editDraft, status: event.target.value as EquipmentStatus })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {STATUS_OPTIONS.map((status) => (
+                            <option key={status} value={status}>
+                              {statusLabel(status)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Badge variant="outline" className={statusBadgeClass(row.normalizedStatus)}>
+                          {statusLabel(row.normalizedStatus)}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <Input
+                          value={editDraft.location}
+                          onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value })}
+                        />
+                      ) : (
+                        row.location || '—'
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <Input
+                            type="date"
+                            value={editDraft.lastServiced}
+                            onChange={(event) => setEditDraft({ ...editDraft, lastServiced: event.target.value })}
+                          />
+                          <Textarea
+                            value={editDraft.notes}
+                            onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })}
+                            placeholder="Notes"
+                            className="min-h-16"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span>{row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}</span>
+                          {overdue ? <AlertTriangle className="h-4 w-4 text-amber-500" aria-label="Service overdue" /> : null}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={cancelEdit}>
+                            Cancel
+                          </Button>
+                          <Button size="sm" onClick={() => void saveEdit(row.id)} disabled={rowSavingId === row.id}>
+                            {rowSavingId === row.id ? 'Saving...' : 'Save'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex justify-end gap-1">
+                          <Button variant="outline" size="icon" onClick={() => startEdit(row)} aria-label="Edit equipment">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => {
+                              const ok = window.confirm('Delete this equipment unit?');
+                              if (ok) void removeRow(row.id);
+                            }}
+                            disabled={deleteId === row.id}
+                            aria-label="Delete equipment"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">{equipmentTypes.find((type) => type.id === activeTypeId)?.name ?? 'Equipment Units'}</h2>
-            <p className="text-sm text-muted-foreground">
-              Ready {statusCounts.ready} · Issue {statusCounts.issue} · Maintenance {statusCounts.maintenance} · Disabled {statusCounts.disabled}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Work orders: {(workOrdersQuery.data ?? []).length}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => setWorkOrderDialogOpen(true)}>
-              <Wrench className="mr-1.5 h-3.5 w-3.5" /> Add Work Order
-            </Button>
-            <Button size="sm" onClick={openAddUnit}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Unit
-            </Button>
-          </div>
-        </div>
-
-        {filteredUnits.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-            No units for this type yet.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filteredUnits.map((unit) => {
-              const canonical = normalizeStatus(unit.status);
-              const ext = unit as unknown as { notes?: string; active?: boolean };
-              return (
-                <Card key={unit.id} className="p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-semibold">{unit.unitNumber}</span>
-                    <Badge variant="outline" className={`capitalize ${statusBadgeClassMap[canonical]}`}>{canonical}</Badge>
-                  </div>
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    <div className="flex justify-between">
-                      <span>Type</span>
-                      <span className="text-foreground">{unit.typeId}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Active</span>
-                      <span className="text-foreground">{ext.active === false || canonical === 'disabled' ? 'No' : 'Yes'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Work Orders</span>
-                      <span className="text-foreground">{unitWorkOrderCounts[unit.id] ?? 0}</span>
-                    </div>
-                    {ext.notes ? (
-                      <p className="pt-1 text-[11px]">{ext.notes}</p>
-                    ) : null}
-                  </div>
-                  <div className="mt-3 flex justify-end">
-                    <Button size="sm" variant="outline" onClick={() => openEditUnit(unit.id)}>
-                      Edit
-                    </Button>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="mt-6 rounded-xl border p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Work Orders</h3>
-          </div>
-          {!hasWorkOrderTable ? (
-            <p className="text-xs text-muted-foreground">
-              Work order table not available yet. Run migration `006_equipment_management.sql`.
-            </p>
-          ) : (workOrdersQuery.data ?? []).length === 0 ? (
-            <p className="text-xs text-muted-foreground">No work orders yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {(workOrdersQuery.data ?? []).slice(0, 12).map((wo) => (
-                <div key={wo.id} className="rounded-lg border p-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{wo.title}</span>
-                    <Badge variant={wo.status === 'completed' ? 'secondary' : wo.status === 'in-progress' ? 'outline' : 'destructive'}>
-                      {wo.status}
-                    </Badge>
-                  </div>
-                  {wo.description ? <p className="mt-1 text-xs text-muted-foreground">{wo.description}</p> : null}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <Dialog open={typeDialogOpen} onOpenChange={setTypeDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editingTypeId ? 'Edit Equipment Type' : 'Add Equipment Type'}</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Equipment</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3">
+            <div>
               <label className="text-xs text-muted-foreground">Name</label>
-              <Input value={typeDraft.name} onChange={(event) => setTypeDraft({ ...typeDraft, name: event.target.value })} className="mt-1" />
+              <Input
+                value={addDraft.name}
+                onChange={(event) => setAddDraft({ ...addDraft, name: event.target.value })}
+                className="mt-1"
+              />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Short Name</label>
-              <Input value={typeDraft.short_name} onChange={(event) => setTypeDraft({ ...typeDraft, short_name: event.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Category</label>
-              <Input value={typeDraft.category} onChange={(event) => setTypeDraft({ ...typeDraft, category: event.target.value })} className="mt-1" />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Active</label>
+              <label className="text-xs text-muted-foreground">Type</label>
               <select
-                value={typeDraft.active ? 'true' : 'false'}
-                onChange={(event) => setTypeDraft({ ...typeDraft, active: event.target.value === 'true' })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setTypeDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveType}>Save Type</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{editingUnitId ? 'Edit Equipment Unit' : 'Add Equipment Unit'}</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Equipment Type</label>
-              <select
-                value={unitDraft.equipment_type_id}
-                onChange={(event) => setUnitDraft({ ...unitDraft, equipment_type_id: event.target.value })}
+                value={addDraft.equipmentTypeId}
+                onChange={(event) => setAddDraft({ ...addDraft, equipmentTypeId: event.target.value })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="">Select type</option>
-                {equipmentTypes.map((type) => (
-                  <option key={type.id} value={type.id}>{type.name}</option>
-                ))}
+                {types
+                  .filter((type) => type.active !== false)
+                  .map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name ?? 'Unnamed Type'}
+                    </option>
+                  ))}
               </select>
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Unit Name</label>
-              <Input value={unitDraft.unit_name} onChange={(event) => setUnitDraft({ ...unitDraft, unit_name: event.target.value })} className="mt-1" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Status</label>
               <select
-                value={unitDraft.status}
-                onChange={(event) => setUnitDraft({ ...unitDraft, status: event.target.value as CanonicalStatus })}
+                value={addDraft.status}
+                onChange={(event) => setAddDraft({ ...addDraft, status: event.target.value as EquipmentStatus })}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="ready">Ready</option>
-                <option value="issue">Issue</option>
-                <option value="maintenance">Maintenance</option>
-                <option value="disabled">Disabled</option>
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {statusLabel(status)}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Active</label>
-              <select
-                value={unitDraft.active ? 'true' : 'false'}
-                onChange={(event) => setUnitDraft({ ...unitDraft, active: event.target.value === 'true' })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </select>
+              <label className="text-xs text-muted-foreground">Location</label>
+              <Input
+                value={addDraft.location}
+                onChange={(event) => setAddDraft({ ...addDraft, location: event.target.value })}
+                className="mt-1"
+              />
             </div>
-            <div className="col-span-2">
+            <div>
+              <label className="text-xs text-muted-foreground">Last Serviced</label>
+              <Input
+                type="date"
+                value={addDraft.lastServiced}
+                onChange={(event) => setAddDraft({ ...addDraft, lastServiced: event.target.value })}
+                className="mt-1"
+              />
+            </div>
+            <div>
               <label className="text-xs text-muted-foreground">Notes</label>
-              <Textarea value={unitDraft.notes} onChange={(event) => setUnitDraft({ ...unitDraft, notes: event.target.value })} className="mt-1 min-h-20" />
+              <Textarea
+                value={addDraft.notes}
+                onChange={(event) => setAddDraft({ ...addDraft, notes: event.target.value })}
+                className="mt-1 min-h-20"
+              />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setUnitDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveUnit}>Save Unit</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={workOrderDialogOpen} onOpenChange={setWorkOrderDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Create Work Order</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <select
-              value={workOrderDraft.equipment_unit_id}
-              onChange={(event) => setWorkOrderDraft({ ...workOrderDraft, equipment_unit_id: event.target.value })}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Select equipment unit</option>
-              {filteredUnits.map((unit) => (
-                <option key={unit.id} value={unit.id}>{unit.unitNumber}</option>
-              ))}
-            </select>
-            <Input
-              placeholder="Work order title"
-              value={workOrderDraft.title}
-              onChange={(event) => setWorkOrderDraft({ ...workOrderDraft, title: event.target.value })}
-            />
-            <Textarea
-              placeholder="Description"
-              value={workOrderDraft.description}
-              onChange={(event) => setWorkOrderDraft({ ...workOrderDraft, description: event.target.value })}
-            />
-            <select
-              value={workOrderDraft.priority}
-              onChange={(event) => setWorkOrderDraft({ ...workOrderDraft, priority: event.target.value as WorkOrderRow['priority'] })}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="low">Low Priority</option>
-              <option value="medium">Medium Priority</option>
-              <option value="high">High Priority</option>
-            </select>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setWorkOrderDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveWorkOrder}>Create Work Order</Button>
+            <Button variant="outline" onClick={cancelAdd}>
+              Cancel
+            </Button>
+            <Button onClick={() => void saveAdd()} disabled={addSaving || !addDraft.name.trim()}>
+              {addSaving ? 'Saving...' : 'Save Equipment'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
