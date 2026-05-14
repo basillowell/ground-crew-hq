@@ -16,6 +16,7 @@ import {
   useWeatherDailyLogs,
   useWeatherLocations,
 } from '@/lib/supabase-queries';
+import { formatTime } from '@/utils/formatTime';
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -191,7 +192,7 @@ export default function BreakroomPage() {
                   <div className="mt-2">
                     <div className="text-2xl font-semibold leading-tight">{topAssignment.task.name}</div>
                     <div className="mt-2 text-base text-muted-foreground">
-                      {topAssignment.assignment.startTime} · {topAssignment.assignment.area} · {topAssignment.assignment.duration} minutes
+                      {formatTime(topAssignment.assignment.startTime)} · {topAssignment.assignment.area} · {topAssignment.assignment.duration} minutes
                     </div>
                   </div>
                 ) : (
@@ -204,7 +205,7 @@ export default function BreakroomPage() {
                   <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Additional tasks</div>
                   {extraAssignments.map(({ assignment, task }) => (
                     <div key={assignment.id} className="rounded-xl border px-3 py-2 text-sm">
-                      {task?.name ?? 'Unknown task'} · {assignment.startTime} · {assignment.area}
+                      {task?.name ?? 'Unknown task'} · {formatTime(assignment.startTime)} · {assignment.area}
                     </div>
                   ))}
                 </div>

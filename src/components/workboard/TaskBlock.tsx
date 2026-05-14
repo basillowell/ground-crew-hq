@@ -5,6 +5,7 @@ import type { Task, Assignment } from '@/data/seedData';
 import { Pencil, X } from 'lucide-react';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatTime } from '@/utils/formatTime';
 
 interface TaskBlockProps {
   task: Task;
@@ -57,7 +58,7 @@ export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove, d
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80">Start</div>
-            <div className="font-medium text-foreground/90">{assignment.startTime}</div>
+            <div className="font-medium text-foreground/90">{formatTime(assignment.startTime)}</div>
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground/80">Duration</div>
@@ -70,7 +71,7 @@ export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove, d
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <StatusChip variant="neutral">{assignment.status}</StatusChip>
-          <Badge variant="secondary" className="text-[10px]">{assignment.startTime}</Badge>
+          <Badge variant="secondary" className="text-[10px]">{formatTime(assignment.startTime)}</Badge>
           {equipment && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{equipment.unitNumber}</Badge>}
         </div>
       </div>

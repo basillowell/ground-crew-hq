@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { getBrowserLocation } from '@/lib/integrations';
 import { supabase } from '@/lib/supabase';
+import { formatTime } from '@/utils/formatTime';
 import { useAssignments, useClockEvents, useEmployees, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { computeTimecardSummary, getOrderedAssignmentsForEmployee, getShiftMinutes } from '@/lib/laborMetrics';
@@ -342,7 +343,7 @@ export default function MobileFieldWorkspacePage() {
                   {currentAssignment?.area ?? 'Work location pending'}
                 </span>
                 <span>•</span>
-                <span>{employeeSchedule ? `${employeeSchedule.shiftStart} - ${employeeSchedule.shiftEnd}` : 'Shift pending'}</span>
+                <span>{employeeSchedule ? `${formatTime(employeeSchedule.shiftStart)} - ${formatTime(employeeSchedule.shiftEnd)}` : 'Shift pending'}</span>
               </div>
             </div>
             <Badge variant="secondary" className="min-h-11 rounded-full px-3 text-sm">

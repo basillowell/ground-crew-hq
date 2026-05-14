@@ -111,17 +111,17 @@ export default function SettingsPage() {
 
 function WorkspaceTab({ orgId }: { orgId: string | null }) {
   if (!orgId) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading workspace settings…</div>;
-  return <PlaceholderCard text="Workspace settings coming soon." />;
+  return <PlaceholderCard text="Workspace settings — manage your organization name, properties, and operational program settings. Coming in the next update." />;
 }
 
 function WorkforceTab({ orgId }: { orgId: string | null }) {
   if (!orgId) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading workforce settings…</div>;
-  return <PlaceholderCard text="Workforce settings coming soon." />;
+  return <PlaceholderCard text="Workforce settings — define crew roles, departments, and labor rate categories. Coming in the next update." />;
 }
 
 function WeatherTab({ orgId }: { orgId: string | null }) {
   if (!orgId) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading weather settings…</div>;
-  return <PlaceholderCard text="Weather settings coming soon." />;
+  return <PlaceholderCard text="Weather settings — configure your active weather station location and dashboard display preferences. Coming in the next update." />;
 }
 
 function AccessTab({
@@ -136,7 +136,7 @@ function AccessTab({
   if (!orgId) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading access settings…</div>;
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
-      <PlaceholderCard text="Access settings coming soon." />
+      <PlaceholderCard text="Access settings — view your account details and manage team access. Coming in the next update." />
       <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>{userEmail || 'No user email'}</p>
       <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Role: {userRole ?? 'Not available'}</p>
     </div>
@@ -144,7 +144,7 @@ function AccessTab({
 }
 
 function HelpTab() {
-  return <PlaceholderCard text="Help settings coming soon." />;
+  return <PlaceholderCard text="Need help? Contact support at support@groundcrewhq.com or visit our documentation at docs.groundcrewhq.com." />;
 }
 
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {

@@ -38,6 +38,7 @@ import {
   useWeatherDailyLogs,
   useWeatherLocations,
 } from '@/lib/supabase-queries';
+import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -513,7 +514,7 @@ export default function ApplicationsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-base font-semibold">{area?.name ?? log.areaId}</h3>
                     <Badge variant="outline">{log.applicationDate}</Badge>
-                    <Badge variant="secondary">{log.startTime} - {log.endTime}</Badge>
+                    <Badge variant="secondary">{formatTime(log.startTime)} - {formatTime(log.endTime)}</Badge>
                     {hasRestrictedUse && <Badge variant="destructive">Restricted Use</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground">{log.targetPest} - {log.agronomicPurpose}</p>
@@ -794,7 +795,6 @@ export default function ApplicationsPage() {
     </div>
   );
 }
-
 
 
 
