@@ -347,6 +347,57 @@ export default function CommandCenterOperationalPage() {
       });
     },
   });
+  const morningNeedsQuery = useQuery({
+    queryKey: ['dashboard-morning-open-needs', orgId ?? 'no-org', todayKey],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60,
+    queryFn: async () => {
+      if (!supabase || !orgId) return 0;
+      const { count, error } = await supabase
+        .from('task_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('date', todayKey)
+        .eq('status', 'open');
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const morningBriefWeatherQuery = useQuery({
+    queryKey: ['dashboard-morning-brief-weather', selectedProperty?.id ?? 'none', todayKey],
+    enabled:
+      Boolean(selectedProperty) &&
+      typeof selectedProperty?.latitude === 'number' &&
+      typeof selectedProperty?.longitude === 'number',
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      if (!selectedProperty || typeof selectedProperty.latitude !== 'number' || typeof selectedProperty.longitude !== 'number') {
+        return null;
+      }
+      const payload = await fetchOpenMeteoWeather({
+        latitude: selectedProperty.latitude,
+        longitude: selectedProperty.longitude,
+        timezone: 'America/New_York',
+      });
+      const weatherLabel = getWeatherConditionMeta(payload.current.weatherCode).label;
+      const now = new Date();
+      const nowHour = now.getHours();
+      const todayHours = payload.hourly
+        .map((point) => ({ ...point, date: new Date(point.time) }))
+        .filter((point) => point.date.toISOString().slice(0, 10) === todayKey && point.date.getHours() >= nowHour);
+      const firstShift = todayHours.find(
+        (point) => point.weatherCode > 2 || point.precipitationProbability >= 25,
+      );
+      const clearUntilHour = firstShift ? firstShift.date.getHours() : 18;
+      return {
+        temperature: Math.round(payload.current.temperature),
+        windSpeed: Math.round(payload.current.windSpeed),
+        weatherLabel,
+        clearUntilHour,
+      };
+    },
+  });
   const equipmentAlertsQuery = useQuery({
     queryKey: ['dashboard-equipment-alerts', orgId ?? 'no-org'],
     enabled: Boolean(orgId),
@@ -543,6 +594,36 @@ export default function CommandCenterOperationalPage() {
   const isLoading = dashboardDataQuery.isLoading;
   const canLoadDashboard = isReady && Boolean(orgId);
 
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
+  const firstName = useMemo(() => {
+    const raw = currentUser?.fullName?.trim() || currentUser?.email?.split('@')[0] || 'there';
+    return raw.split(' ')[0];
+  }, [currentUser?.email, currentUser?.fullName]);
+  const morningDateLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+    [],
+  );
+  const morningPropertyLabel = selectedProperty?.name ?? 'No property selected';
+  const openNeedsCount = morningNeedsQuery.data ?? 0;
+  const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;
+  const morningWeatherLine = useMemo(() => {
+    if (morningBriefWeatherQuery.isLoading) return 'Loading weather...';
+    if (morningBriefWeatherQuery.error || !morningBriefWeatherQuery.data) return 'Weather unavailable';
+    const details = morningBriefWeatherQuery.data;
+    const clearUntil = formatTime(`${String(details.clearUntilHour).padStart(2, '0')}:00`);
+    return `${details.temperature}°F, ${details.weatherLabel} until ${clearUntil} | Wind: ${details.windSpeed} mph`;
+  }, [morningBriefWeatherQuery.data, morningBriefWeatherQuery.error, morningBriefWeatherQuery.isLoading]);
+
   useEffect(() => {
     if (!canLoadDashboard || !isLoading) {
       setQueryTimeoutReached(false);
@@ -635,6 +716,24 @@ export default function CommandCenterOperationalPage() {
 
   return (
     <div className="h-full overflow-auto bg-background p-6">
+      <Card className="mb-6 rounded-2xl border p-6 shadow-sm bg-gradient-to-r from-emerald-50 to-white">
+        <h2 className="text-2xl font-semibold tracking-tight">
+          {greeting}, {firstName}.
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Today: {morningDateLabel} · {morningPropertyLabel}
+        </p>
+        <div className="mt-4 space-y-2 text-sm">
+          <p>
+            👥 Crew: {crewScheduledCount} scheduled | ✅ Tasks: {tasksAssignedCount} assigned
+          </p>
+          <p>🌤️ Weather: {morningWeatherLine}</p>
+          <p>
+            ⚠️ Alerts: {overdueEquipmentCount} equipment overdue | {openNeedsCount} open needs
+          </p>
+        </div>
+      </Card>
+
       {showGettingStarted ? (
         <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
