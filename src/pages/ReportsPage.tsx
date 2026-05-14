@@ -64,6 +64,14 @@ function formatHours(value: number) {
   return value.toFixed(1);
 }
 
+function quoteCsv(value: string | number) {
+  const text = String(value ?? '');
+  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
 export default function ReportsPage() {
   const { orgId, currentPropertyId } = useAuth();
   const [startDate, setStartDate] = useState<string>(() => toIsoDate(startOfWeek(new Date())));
@@ -201,6 +209,38 @@ export default function ReportsPage() {
     );
   }, [laborRows]);
 
+  const exportCsv = useCallback(() => {
+    const headers = ['Employee', 'Days Worked', 'Scheduled Hours', 'Actual Hours', 'Tasks Completed', 'Variance'];
+    const dataRows = laborRows.map((row) => [
+      row.employeeName,
+      row.daysWorked,
+      formatHours(row.scheduledHours),
+      formatHours(row.actualHours),
+      row.tasksCompleted,
+      formatHours(row.variance),
+    ]);
+    const totalsRow = [
+      'Totals',
+      totals.daysWorked,
+      formatHours(totals.scheduledHours),
+      formatHours(totals.actualHours),
+      totals.tasksCompleted,
+      formatHours(totals.variance),
+    ];
+    const csvString = [headers, ...dataRows, totalsRow]
+      .map((cells) => cells.map((cell) => quoteCsv(cell)).join(','))
+      .join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `labor-report-${toIsoDate(new Date())}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, [laborRows, totals]);
+
   if (!orgId) {
     return <div style={{ padding: '1.5rem', color: '#6b7280', fontSize: '14px' }}>Loading reports…</div>;
   }
@@ -243,7 +283,12 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Labor Summary</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Labor Summary</h3>
+          <button onClick={exportCsv} disabled={loading || Boolean(error) || laborRows.length === 0}>
+            Export CSV
+          </button>
+        </div>
 
         {loading ? (
           <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Loading report data…</p>
