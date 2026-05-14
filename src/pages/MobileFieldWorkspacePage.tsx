@@ -46,6 +46,12 @@ type PropertyRecord = {
   name: string;
 };
 
+type ClockEventRecord = {
+  id: string;
+  eventType: string;
+  timestamp: string;
+};
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -82,10 +88,18 @@ export default function MobileFieldWorkspacePage() {
   const [propertyName, setPropertyName] = useState<string>('Assigned Property');
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [actualHoursDraft, setActualHoursDraft] = useState<Record<string, string>>({});
+  const [clockEvents, setClockEvents] = useState<ClockEventRecord[]>([]);
+  const [clockActionSaving, setClockActionSaving] = useState(false);
+  const [liveNow, setLiveNow] = useState<Date>(new Date());
 
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
   const boardDate = todayKey();
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => setLiveNow(new Date()), 60_000);
+    return () => window.clearInterval(timerId);
+  }, []);
 
   const fetchFieldData = useCallback(async () => {
     if (!supabase || !employeeId || !orgId) {
@@ -97,7 +111,10 @@ export default function MobileFieldWorkspacePage() {
     setLoading(true);
     setError(null);
 
-    const [{ data: employeeRow, error: employeeError }, { data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: propertyRows, error: propertyError }] = await Promise.all([
+    const startOfDayIso = new Date(`${boardDate}T00:00:00`).toISOString();
+    const endOfDayIso = new Date(`${boardDate}T23:59:59`).toISOString();
+
+    const [{ data: employeeRow, error: employeeError }, { data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: propertyRows, error: propertyError }, { data: clockRows, error: clockError }] = await Promise.all([
       supabase.from('employees').select('id, first_name, last_name').eq('org_id', orgId).eq('id', employeeId).maybeSingle(),
       supabase
         .from('schedule_entries')
@@ -121,15 +138,24 @@ export default function MobileFieldWorkspacePage() {
         .from('properties')
         .select('id, name')
         .eq('org_id', orgId),
+      supabase
+        .from('clock_events')
+        .select('id, event_type, timestamp')
+        .eq('org_id', orgId)
+        .eq('employee_id', employeeId)
+        .gte('timestamp', startOfDayIso)
+        .lte('timestamp', endOfDayIso)
+        .order('timestamp', { ascending: true }),
     ]);
 
-    if (employeeError || shiftError || assignmentsError || tasksError || propertyError) {
+    if (employeeError || shiftError || assignmentsError || tasksError || propertyError || clockError) {
       setError(
         employeeError?.message ||
           shiftError?.message ||
           assignmentsError?.message ||
           tasksError?.message ||
           propertyError?.message ||
+          clockError?.message ||
           'Unable to load field data.',
       );
       setLoading(false);
@@ -171,6 +197,13 @@ export default function MobileFieldWorkspacePage() {
       completedAt: row.completed_at ? String(row.completed_at) : null,
     }));
     setAssignments(normalizedAssignments);
+
+    const normalizedClockEvents: ClockEventRecord[] = (clockRows ?? []).map((row) => ({
+      id: String(row.id),
+      eventType: String(row.event_type ?? ''),
+      timestamp: String(row.timestamp),
+    }));
+    setClockEvents(normalizedClockEvents);
 
     const nextActualDraft: Record<string, string> = {};
     normalizedAssignments.forEach((assignment) => {
@@ -302,6 +335,105 @@ export default function MobileFieldWorkspacePage() {
     year: 'numeric',
   });
 
+  const latestClockIn = useMemo(
+    () => [...clockEvents].reverse().find((event) => event.eventType === 'clock_in') ?? null,
+    [clockEvents],
+  );
+  const latestClockOut = useMemo(
+    () => [...clockEvents].reverse().find((event) => event.eventType === 'clock_out') ?? null,
+    [clockEvents],
+  );
+
+  const isShiftComplete = Boolean(
+    latestClockIn &&
+      latestClockOut &&
+      new Date(latestClockOut.timestamp).getTime() >= new Date(latestClockIn.timestamp).getTime(),
+  );
+
+  const isClockedIn = Boolean(latestClockIn && !isShiftComplete);
+
+  const elapsedMinutes = useMemo(() => {
+    if (!latestClockIn || !isClockedIn) return 0;
+    const start = new Date(latestClockIn.timestamp).getTime();
+    const now = liveNow.getTime();
+    return Math.max(Math.round((now - start) / 60000), 0);
+  }, [isClockedIn, latestClockIn, liveNow]);
+
+  const elapsedLabel = useMemo(() => {
+    const hours = Math.floor(elapsedMinutes / 60);
+    const minutes = elapsedMinutes % 60;
+    return `${hours}h ${minutes}m`;
+  }, [elapsedMinutes]);
+
+  const shiftCompleteLabel = useMemo(() => {
+    if (!latestClockIn || !latestClockOut) return '';
+    const start = new Date(latestClockIn.timestamp).getTime();
+    const end = new Date(latestClockOut.timestamp).getTime();
+    const totalMinutes = Math.max(Math.round((end - start) / 60000), 0);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const startTime = formatTime(new Date(latestClockIn.timestamp).toISOString().slice(11, 16));
+    const endTime = formatTime(new Date(latestClockOut.timestamp).toISOString().slice(11, 16));
+    return `Shift complete: ${startTime} – ${endTime} (${hours}h ${minutes}m)`;
+  }, [latestClockIn, latestClockOut]);
+
+  const handleClockEvent = useCallback(
+    async (eventType: 'clock_in' | 'clock_out') => {
+      if (!supabase || !employeeId || !orgId) return;
+      const propertyId = shift?.propertyId ?? currentUser?.propertyId ?? null;
+      if (!propertyId) {
+        toast.error('Property is not available for clock event.');
+        return;
+      }
+
+      setClockActionSaving(true);
+      const optimisticEvent: ClockEventRecord = {
+        id: `optimistic-${Date.now()}`,
+        eventType,
+        timestamp: new Date().toISOString(),
+      };
+      setClockEvents((current) => [...current, optimisticEvent]);
+
+      const { data, error: insertError } = await supabase
+        .from('clock_events')
+        .insert({
+          employee_id: employeeId,
+          property_id: propertyId,
+          org_id: orgId,
+          event_type: eventType,
+          timestamp: optimisticEvent.timestamp,
+          location_lat: null,
+          location_lng: null,
+        })
+        .select('id, event_type, timestamp')
+        .single();
+
+      setClockActionSaving(false);
+      if (insertError) {
+        setClockEvents((current) => current.filter((event) => event.id !== optimisticEvent.id));
+        toast.error(`Unable to ${eventType === 'clock_in' ? 'clock in' : 'clock out'}`, {
+          description: insertError.message,
+        });
+        return;
+      }
+
+      setClockEvents((current) =>
+        current.map((event) =>
+          event.id === optimisticEvent.id
+            ? {
+                id: String(data.id),
+                eventType: String(data.event_type),
+                timestamp: String(data.timestamp),
+              }
+            : event,
+        ),
+      );
+
+      toast.success(eventType === 'clock_in' ? 'Clocked in' : 'Clocked out');
+    },
+    [currentUser?.propertyId, employeeId, orgId, shift?.propertyId],
+  );
+
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[520px] px-4 py-4 font-sans">
@@ -339,6 +471,31 @@ export default function MobileFieldWorkspacePage() {
         </Card>
       ) : (
         <>
+          <Card className="mb-4 rounded-2xl p-5">
+            {!latestClockIn ? (
+              <Button
+                className="h-12 min-h-12 w-full bg-green-600 text-base hover:bg-green-700"
+                disabled={clockActionSaving}
+                onClick={() => void handleClockEvent('clock_in')}
+              >
+                Clock In
+              </Button>
+            ) : isClockedIn ? (
+              <div className="space-y-3">
+                <p className="text-base font-medium">Elapsed time: {elapsedLabel}</p>
+                <Button
+                  className="h-12 min-h-12 w-full bg-red-600 text-base hover:bg-red-700"
+                  disabled={clockActionSaving}
+                  onClick={() => void handleClockEvent('clock_out')}
+                >
+                  Clock Out
+                </Button>
+              </div>
+            ) : (
+              <p className="text-base font-medium">{shiftCompleteLabel}</p>
+            )}
+          </Card>
+
           <Card className="mb-4 rounded-2xl p-5">
             <p className="text-base font-medium">Your shift: {formatTime(shift.shiftStart)} – {formatTime(shift.shiftEnd)}</p>
           </Card>
