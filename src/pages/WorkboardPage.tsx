@@ -219,6 +219,13 @@ type WorkboardWeatherSnapshot = {
   weatherCode: number;
 };
 
+type EscalationAlert = {
+  id: string;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  timestamp: string;
+};
+
 export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -244,6 +251,7 @@ export default function WorkboardPage() {
   const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
   const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
   const [weatherSnapshot, setWeatherSnapshot] = useState<WorkboardWeatherSnapshot | null>(null);
+  const [dismissedEscalationIds, setDismissedEscalationIds] = useState<string[]>([]);
   const [assignmentFlashMap, setAssignmentFlashMap] = useState<Record<string, 'complete' | 'started'>>({});
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
   const assignmentFlashTimeoutsRef = useRef<Record<string, number>>({});
@@ -888,6 +896,93 @@ export default function WorkboardPage() {
       return 0;
     });
   }, [dispatchBoard, laneOrder]);
+
+  const escalationAlerts = useMemo<EscalationAlert[]>(() => {
+    const alerts: EscalationAlert[] = [];
+    const nowIso = new Date().toISOString();
+
+    const scheduledForDay = scheduleList.filter((entry) => entry.date === boardDate && entry.status === 'scheduled');
+    const assignedEmployeeIds = new Set(dayAssignments.map((assignment) => assignment.employeeId));
+    const unassignedCount = scheduledForDay.filter((entry) => !assignedEmployeeIds.has(entry.employeeId)).length;
+    if (unassignedCount > 0) {
+      alerts.push({
+        id: `unassigned-${boardDate}`,
+        severity: unassignedCount >= 3 ? 'critical' : 'warning',
+        message: `${unassignedCount} crew member${unassignedCount === 1 ? '' : 's'} scheduled but unassigned`,
+        timestamp: nowIso,
+      });
+    }
+
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    let overdueCount = 0;
+    let maxOverdueDays = 0;
+    for (const unit of equipmentList as Array<Record<string, unknown>>) {
+      const lastServicedRaw = String(unit.lastService ?? unit.last_serviced ?? '');
+      if (!lastServicedRaw) continue;
+      const lastServicedDate = new Date(lastServicedRaw);
+      if (Number.isNaN(lastServicedDate.getTime()) || lastServicedDate >= ninetyDaysAgo) continue;
+      const overdueDays = Math.max(0, Math.floor((Date.now() - lastServicedDate.getTime()) / (1000 * 60 * 60 * 24)) - 90);
+      overdueCount += 1;
+      if (overdueDays > maxOverdueDays) maxOverdueDays = overdueDays;
+    }
+    if (overdueCount > 0) {
+      alerts.push({
+        id: `equipment-overdue-${boardDate}`,
+        severity: maxOverdueDays >= 180 ? 'critical' : 'warning',
+        message: `${overdueCount} equipment unit${overdueCount === 1 ? '' : 's'} overdue for service`,
+        timestamp: nowIso,
+      });
+    }
+
+    const lowCoverageCount = orderedDispatchBoard.filter((lane) => lane.shiftMinutes > 0 && lane.coveragePercent < 50).length;
+    if (lowCoverageCount > 0) {
+      alerts.push({
+        id: `coverage-low-${boardDate}`,
+        severity: 'warning',
+        message: `Shift coverage below 50% for ${lowCoverageCount} crew member${lowCoverageCount === 1 ? '' : 's'}`,
+        timestamp: nowIso,
+      });
+    }
+
+    if (weatherSnapshot && (weatherSnapshot.windSpeed > 15 || weatherSnapshot.precipitationProbability > 60)) {
+      alerts.push({
+        id: `weather-unsafe-${boardDate}`,
+        severity: 'critical',
+        message: `Weather alert: unsafe spray conditions (wind ${Math.round(weatherSnapshot.windSpeed)} mph, rain ${Math.round(weatherSnapshot.precipitationProbability)}%)`,
+        timestamp: nowIso,
+      });
+    }
+
+    const openTaskRequestCount = propertyRequests.filter((request) => request.status === 'open').length;
+    if (openTaskRequestCount > 0) {
+      alerts.push({
+        id: `open-requests-${boardDate}`,
+        severity: 'info',
+        message: `${openTaskRequestCount} unread task request${openTaskRequestCount === 1 ? '' : 's'}`,
+        timestamp: nowIso,
+      });
+    }
+
+    return alerts.filter((alert) => !dismissedEscalationIds.includes(alert.id));
+  }, [boardDate, dayAssignments, dismissedEscalationIds, equipmentList, orderedDispatchBoard, propertyRequests, scheduleList, weatherSnapshot]);
+
+  const dismissEscalation = useCallback((alertId: string) => {
+    setDismissedEscalationIds((current) => (current.includes(alertId) ? current : [...current, alertId]));
+  }, []);
+
+  const formatRelativeTime = useCallback((isoValue: string) => {
+    const date = new Date(isoValue);
+    const diffMs = Date.now() - date.getTime();
+    if (Number.isNaN(diffMs) || diffMs < 0) return 'just now';
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'} ago`;
+  }, []);
 
   const toggleTemplateTask = useCallback((taskId: string) => {
     setSelectedTemplateTaskIds((current) =>
@@ -2173,10 +2268,42 @@ export default function WorkboardPage() {
         <div className="border-b p-4 flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold">Escalation Center</h3>
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+              {escalationAlerts.length}
+            </Badge>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Escalation feed is unavailable in this build.
-          </p>
+          {escalationAlerts.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No active escalations right now.</p>
+          ) : (
+            <div className="space-y-2">
+              {escalationAlerts.map((alert) => (
+                <div key={alert.id} className="rounded-lg border bg-muted/20 p-2.5">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <Badge
+                      className={
+                        alert.severity === 'critical'
+                          ? 'bg-red-100 text-red-700'
+                          : alert.severity === 'warning'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-700'
+                      }
+                    >
+                      {alert.severity}
+                    </Badge>
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                      onClick={() => dismissEscalation(alert.id)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  <p className="text-xs text-foreground">{alert.message}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">{formatRelativeTime(alert.timestamp)}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Notes */}
