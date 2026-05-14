@@ -29,6 +29,8 @@ import {
 } from '@/data/seedData';
 import {
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   Clock,
   CloudSun,
@@ -55,6 +57,14 @@ function timeToMinutes(value?: string) {
   const [hours, minutes] = value.split(':').map(Number);
   if (Number.isNaN(hours) || Number.isNaN(minutes)) return 0;
   return hours * 60 + minutes;
+}
+
+function formatMinutesAsHoursAndMinutes(totalMinutes: number) {
+  const safe = Math.max(0, totalMinutes);
+  const hours = Math.floor(safe / 60);
+  const minutes = safe % 60;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
 }
 
 function makeId() {
@@ -260,6 +270,13 @@ export default function WorkboardPage() {
   const [selectedTemplateEmployeeIds, setSelectedTemplateEmployeeIds] = useState<string[]>([]);
   const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
   const [applyingTaskTemplate, setApplyingTaskTemplate] = useState(false);
+  const [expandedMobileCrewIds, setExpandedMobileCrewIds] = useState<string[]>([]);
+  const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
+    scheduledCrew: false,
+    weather: true,
+    notes: false,
+    escalations: false,
+  });
 
   const triggerAssignmentFlash = useCallback((assignmentId: string, tone: 'complete' | 'started') => {
     if (!assignmentId) return;
@@ -897,6 +914,20 @@ export default function WorkboardPage() {
     });
   }, [dispatchBoard, laneOrder]);
 
+  useEffect(() => {
+    if (orderedDispatchBoard.length === 0) {
+      setExpandedMobileCrewIds([]);
+      return;
+    }
+
+    setExpandedMobileCrewIds((current) => {
+      const validIds = new Set(orderedDispatchBoard.map((lane) => lane.employee.id));
+      const filtered = current.filter((id) => validIds.has(id));
+      if (filtered.length > 0) return filtered;
+      return [orderedDispatchBoard[0].employee.id];
+    });
+  }, [orderedDispatchBoard]);
+
   const escalationAlerts = useMemo<EscalationAlert[]>(() => {
     const alerts: EscalationAlert[] = [];
     const nowIso = new Date().toISOString();
@@ -969,6 +1000,19 @@ export default function WorkboardPage() {
 
   const dismissEscalation = useCallback((alertId: string) => {
     setDismissedEscalationIds((current) => (current.includes(alertId) ? current : [...current, alertId]));
+  }, []);
+
+  const toggleMobileCrew = useCallback((employeeId: string) => {
+    setExpandedMobileCrewIds((current) =>
+      current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
+    );
+  }, []);
+
+  const toggleMobileSection = useCallback((section: keyof typeof mobileSectionsOpen) => {
+    setMobileSectionsOpen((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
   }, []);
 
   const formatRelativeTime = useCallback((isoValue: string) => {
@@ -1758,7 +1802,9 @@ export default function WorkboardPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header bar */}
-        <div className="border-b bg-card px-5 py-3 flex items-center gap-3 flex-wrap shrink-0">
+        <div className="border-b bg-card px-3 py-3 md:px-5">
+          <div className="flex items-center gap-3 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
+            <div className="flex min-w-max items-center gap-3">
           <div className="flex items-center gap-2 rounded-xl border bg-muted/20 px-3 py-1.5">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Board Date</span>
             <input
@@ -1850,9 +1896,9 @@ export default function WorkboardPage() {
               Apply Task Template
             </Button>
 
-            <Tooltip>
+          <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" aria-label="Breakroom display info">
+              <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 md:h-9 md:w-9" aria-label="Breakroom display info">
                 <MonitorSmartphone className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -1860,10 +1906,12 @@ export default function WorkboardPage() {
               Build the day here, then open Breakroom on a cast TV to display the live crew order and task sequence.
             </TooltipContent>
           </Tooltip>
+            </div>
+          </div>
         </div>
 
         {/* Stats strip */}
-        <div className="border-b bg-muted/30 px-5 py-2 flex items-center gap-4 flex-wrap text-xs shrink-0">
+        <div className="hidden border-b bg-muted/30 px-5 py-2 text-xs md:flex md:items-center md:gap-4 md:flex-wrap shrink-0">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Users className="h-3.5 w-3.5" />
             <span><span className="font-semibold text-foreground">{scheduledEmployees.length}</span> scheduled</span>
@@ -1950,9 +1998,9 @@ export default function WorkboardPage() {
             {workOrderBoardItems.length === 0 ? (
               <p className="text-xs text-muted-foreground">No work orders or schedule entries found for this date.</p>
             ) : (
-              <div className="grid gap-2 md:grid-cols-2">
+              <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:gap-2 md:overflow-visible md:pb-0 md:grid-cols-2">
                 {workOrderBoardItems.map((item) => (
-                  <div key={item.id} className={`rounded-2xl border p-3 ${PRIORITY_COLOR[item.priority] ?? 'bg-muted/20 border-border'}`}>
+                  <div key={item.id} className={`min-w-[260px] rounded-2xl border p-3 md:min-w-0 ${PRIORITY_COLOR[item.priority] ?? 'bg-muted/20 border-border'}`}>
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <span className="text-sm font-medium">{item.title}</span>
                       <Badge variant="outline" className="h-5 px-1.5 text-[10px] capitalize">
@@ -1994,7 +2042,8 @@ export default function WorkboardPage() {
               onDropTask={(employeeId) => openAssignmentDialog(employeeId)}
             />
           ) : (
-            <div className="space-y-2">
+            <>
+            <div className="hidden space-y-2 md:block">
               <div className="rounded-2xl border bg-card/70 px-4 py-2 text-[11px] text-muted-foreground">
                 <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3">
                   <span className="font-medium text-foreground/90">Employee / Assignments</span>
@@ -2075,11 +2124,177 @@ export default function WorkboardPage() {
                 </div>
               )}
             </div>
+            <div className="space-y-3 md:hidden">
+              {orderedDispatchBoard.map((lane) => {
+                const isExpanded = expandedMobileCrewIds.includes(lane.employee.id);
+                return (
+                  <div key={`mobile-lane-${lane.employee.id}`} className="rounded-2xl border bg-card">
+                    <button
+                      type="button"
+                      onClick={() => toggleMobileCrew(lane.employee.id)}
+                      className="flex min-h-11 w-full items-center justify-between gap-2 px-3 py-3 text-left"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {lane.employee.firstName} {lane.employee.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : 'No shift'} · Coverage {Math.round(lane.coveragePercent)}%
+                        </p>
+                      </div>
+                      {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    </button>
+                    {isExpanded ? (
+                      <div className="border-t px-3 py-3">
+                        {lane.employeeAssignments.length === 0 ? (
+                          <p className="mb-3 text-sm text-muted-foreground">No tasks assigned yet.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {lane.employeeAssignments.map((assignment) => {
+                              const task = taskList.find((candidate) => candidate.id === assignment.taskId);
+                              return (
+                                <div key={`mobile-assignment-${assignment.id}`} className="rounded-xl border bg-muted/20 p-2.5">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <p className="text-sm font-medium">{assignment.title || task?.name || 'Untitled task'}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {formatMinutesAsHoursAndMinutes(assignment.duration)} · {assignment.status}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditAssignmentDialog(assignment)}
+                                      className="min-h-11 min-w-11 rounded-md border px-2 text-xs font-medium"
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <Button
+                          size="sm"
+                          className="mt-3 min-h-11 w-full"
+                          onClick={() => openAssignmentDialog(lane.employee.id)}
+                        >
+                          + Add Task
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            </>
           )}
         </div>
       </div>
 
       {/* ─── RIGHT RAIL ─── */}
+      <div className="border-t bg-card md:hidden">
+        <div className="space-y-2 p-3">
+          <div className="rounded-2xl border">
+            <button
+              type="button"
+              className="flex min-h-11 w-full items-center justify-between px-3 py-2"
+              onClick={() => toggleMobileSection('scheduledCrew')}
+            >
+              <span className="text-sm font-semibold">Scheduled Crew ({scheduledEmployees.length})</span>
+              {mobileSectionsOpen.scheduledCrew ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {mobileSectionsOpen.scheduledCrew ? (
+              <div className="space-y-2 border-t px-3 py-2">
+                {orderedDispatchBoard.map((lane) => (
+                  <div key={`mobile-summary-${lane.employee.id}`} className="rounded-xl bg-muted/30 px-3 py-2 text-xs">
+                    <p className="font-medium">{lane.employee.firstName} {lane.employee.lastName}</p>
+                    <p className="text-muted-foreground">{lane.employeeAssignments.length} tasks · {Math.round(lane.coveragePercent)}% coverage</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl border">
+            <button
+              type="button"
+              className="flex min-h-11 w-full items-center justify-between px-3 py-2"
+              onClick={() => toggleMobileSection('weather')}
+            >
+              <span className="text-sm font-semibold">Weather</span>
+              {mobileSectionsOpen.weather ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {mobileSectionsOpen.weather ? (
+              <div className="border-t px-3 py-2">
+                {hourlyWeatherStripQuery.isLoading ? (
+                  <div className="h-16 animate-pulse rounded-lg bg-muted/30" />
+                ) : hourlyWeatherStripQuery.data && hourlyWeatherStripQuery.data.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <div className="flex min-w-max gap-1">
+                      {hourlyWeatherStripQuery.data.map((entry) => (
+                        <div key={`mobile-weather-${entry.hour}`} className={`w-14 rounded-md border px-1 py-1 text-center text-[12px] ${weatherCellTone(entry.precip, entry.weatherCode)}`}>
+                          <div>{formatTime(`${entry.hour.toString().padStart(2, '0')}:00`).replace(':00', '')}</div>
+                          <div>{Math.round(entry.temp)}°</div>
+                          <div>{Math.round(entry.wind)}mph</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Forecast unavailable for this date.</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl border">
+            <button
+              type="button"
+              className="flex min-h-11 w-full items-center justify-between px-3 py-2"
+              onClick={() => toggleMobileSection('notes')}
+            >
+              <span className="text-sm font-semibold">Notes</span>
+              {mobileSectionsOpen.notes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {mobileSectionsOpen.notes ? (
+              <div className="border-t px-3 py-2">
+                <NotesPanel
+                  notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
+                  onAddNote={() => setNoteDialogOpen(true)}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl border">
+            <button
+              type="button"
+              className="flex min-h-11 w-full items-center justify-between px-3 py-2"
+              onClick={() => toggleMobileSection('escalations')}
+            >
+              <span className="text-sm font-semibold">Escalation Center ({escalationAlerts.length})</span>
+              {mobileSectionsOpen.escalations ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {mobileSectionsOpen.escalations ? (
+              <div className="space-y-2 border-t px-3 py-2">
+                {escalationAlerts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No active escalations right now.</p>
+                ) : escalationAlerts.map((alert) => (
+                  <div key={`mobile-escalation-${alert.id}`} className="rounded-lg border bg-muted/20 p-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <Badge variant="outline" className="text-[10px]">{alert.severity}</Badge>
+                      <button type="button" className="text-xs" onClick={() => dismissEscalation(alert.id)}>Dismiss</button>
+                    </div>
+                    <p className="text-xs">{alert.message}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
       <div className="w-80 border-l bg-card overflow-auto flex flex-col hidden lg:flex">
 
         {/* Needs Queue */}
@@ -2263,6 +2478,17 @@ export default function WorkboardPage() {
             <p className="text-xs text-muted-foreground">Forecast unavailable for this date.</p>
           )}
         </div>
+        <div className="border-b bg-muted/30 px-3 py-2 text-sm md:hidden">
+          <div className="overflow-x-auto">
+            <div className="min-w-max whitespace-nowrap font-medium text-muted-foreground">
+              <span className="text-foreground">{scheduledEmployees.length} crew</span>
+              <span> · </span>
+              <span className="text-foreground">{dayAssignments.length} tasks</span>
+              <span> · </span>
+              <span className="text-foreground">{totalOpenMinutes} min covered</span>
+            </div>
+          </div>
+        </div>
 
         {/* Escalations */}
         <div className="border-b p-4 flex-shrink-0">
@@ -2321,12 +2547,15 @@ export default function WorkboardPage() {
 
       {/* ─── ASSIGNMENT DIALOG ─── */}
       <Dialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 md:inset-auto md:h-auto md:w-full md:max-w-lg md:translate-x-[-50%] md:translate-y-[-50%] md:rounded-lg md:border md:p-6">
+          <div className="flex h-full flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>
               {editingAssignmentId ? 'Edit Assignment' : linkedRequestId ? 'Dispatch Need to Crew' : 'Assign Task to Crew'}
             </DialogTitle>
           </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-4 pb-3 md:px-0 md:pb-0">
 
           {linkedRequestId && (
             <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 mb-1">
@@ -2506,13 +2735,16 @@ export default function WorkboardPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); }}>
+          </div>
+
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-card px-4 py-3 md:static md:border-t-0 md:bg-transparent md:px-0 md:py-2">
+            <Button className="min-h-11" variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); }}>
               Cancel
             </Button>
-            <Button onClick={saveAssignment} data-testid="button-save-assignment">
+            <Button className="min-h-11" onClick={saveAssignment} data-testid="button-save-assignment">
               {editingAssignmentId ? 'Save Changes' : 'Dispatch'}
             </Button>
+          </div>
           </div>
         </DialogContent>
       </Dialog>
