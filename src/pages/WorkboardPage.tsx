@@ -240,7 +240,8 @@ export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentPropertyId, setCurrentPropertyId, currentUser } = useAuth();
+  const { currentPropertyId, setCurrentPropertyId, currentUser, userRole } = useAuth();
+  const isReadOnly = String(userRole ?? '') === 'viewer';
   const [boardDate, setBoardDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [department, setDepartment] = useState('Maintenance');
   const [groupFilter, setGroupFilter] = useState('all');
@@ -1051,6 +1052,10 @@ export default function WorkboardPage() {
   }, [fetchTaskLibrary, scheduledEmployees, taskLibrary.length, taskLibraryError, taskLibraryLoading]);
 
   const applyDailyTaskTemplate = useCallback(async () => {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
     if (!supabase || !currentUser?.orgId) return;
 
     if (selectedTemplateTaskIds.length === 0) {
@@ -1138,6 +1143,7 @@ export default function WorkboardPage() {
     currentUser?.orgId,
     dayAssignments,
     effectivePropertyId,
+    isReadOnly,
     properties,
     queryClient,
     scheduleList,
@@ -1363,6 +1369,10 @@ export default function WorkboardPage() {
   }
 
   function applyRequestToAssignment(request: NeedsQueueRequest) {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
     setLinkedRequestId(request.id);
     const targetTaskId = request.taskId || taskList[0]?.id || '';
     const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
@@ -1382,6 +1392,10 @@ export default function WorkboardPage() {
   }
 
   async function saveAssignment() {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
     if (!supabase || !assignmentDraft.employeeId || !assignmentDraft.taskId) return;
     const resolvedPropertyId =
       (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ??
@@ -1522,6 +1536,10 @@ export default function WorkboardPage() {
   }
 
   async function removeAssignment(assignmentId: string) {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
     if (!supabase) return;
     const assignmentToRemove = dayAssignments.find((assignment) => assignment.id === assignmentId);
     if (!assignmentToRemove) return;
@@ -1558,6 +1576,10 @@ export default function WorkboardPage() {
   }
 
   async function dismissRequest(requestId: string) {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
     if (!supabase) return;
     await supabase.from('task_requests').update({ status: 'dismissed' }).eq('id', requestId);
     await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
@@ -1611,6 +1633,10 @@ export default function WorkboardPage() {
   }
 
   async function saveQuickTaskAssignment() {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
     if (!supabase || !currentUser?.orgId || !quickTaskDraft.employeeId || !quickTaskDraft.notes.trim()) {
       return;
     }
@@ -1646,6 +1672,10 @@ export default function WorkboardPage() {
   }
 
   async function approveRequestToAssignment(request: PendingTaskRequest) {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
     if (!supabase || !currentUser?.orgId || !request.employee_id) return;
     const resolvedPropertyId =
       (request.property_id && request.property_id !== 'all' ? request.property_id : null) ??
@@ -1694,6 +1724,10 @@ export default function WorkboardPage() {
   }
 
   async function saveNote() {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
     if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !noteDraft.title.trim() || !noteDraft.content.trim()) return;
     const { error } = await supabase.from('notes').insert({
       id: makeId(),
@@ -1869,14 +1903,16 @@ export default function WorkboardPage() {
               </TabsTrigger>
             </TabsList>
             </Tabs>
-            <Button
-              size="sm"
-              className="h-9 shrink-0"
-              onClick={openQuickTaskDialog}
-              data-testid="button-open-add-task"
-            >
-              Add Task
-            </Button>
+            {!isReadOnly ? (
+              <Button
+                size="sm"
+                className="h-9 shrink-0"
+                onClick={openQuickTaskDialog}
+                data-testid="button-open-add-task"
+              >
+                Add Task
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -1886,15 +1922,17 @@ export default function WorkboardPage() {
             >
               Export / Print
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 shrink-0"
-              onClick={openTaskTemplateDialog}
-              data-testid="button-open-task-template"
-            >
-              Apply Task Template
-            </Button>
+            {!isReadOnly ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0"
+                onClick={openTaskTemplateDialog}
+                data-testid="button-open-task-template"
+              >
+                Apply Task Template
+              </Button>
+            ) : null}
 
           <Tooltip>
             <TooltipTrigger asChild>
@@ -2174,13 +2212,15 @@ export default function WorkboardPage() {
                             })}
                           </div>
                         )}
-                        <Button
-                          size="sm"
-                          className="mt-3 min-h-11 w-full"
-                          onClick={() => openAssignmentDialog(lane.employee.id)}
-                        >
-                          + Add Task
-                        </Button>
+                        {!isReadOnly ? (
+                          <Button
+                            size="sm"
+                            className="mt-3 min-h-11 w-full"
+                            onClick={() => openAssignmentDialog(lane.employee.id)}
+                          >
+                            + Add Task
+                          </Button>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

@@ -119,6 +119,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
   const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, orgId } = useAuth();
+  const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
+  const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
   const deptQuery = useDepartmentOptions();
@@ -267,6 +269,29 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
+        {isReadOnlyDemo && showDemoBanner ? (
+          <div className="fixed inset-x-0 top-0 z-50 h-9 bg-blue-600 text-white">
+            <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-3 text-xs md:px-4">
+              <div>
+                Demo Mode — Viewing sample data (read-only).{' '}
+                <button type="button" className="underline underline-offset-2" onClick={() => navigate('/')}>
+                  Sign Up
+                </button>
+              </div>
+              <button
+                type="button"
+                className="ml-3 rounded px-2 py-0.5 hover:bg-white/20"
+                onClick={() => {
+                  sessionStorage.setItem('gchq-demo-banner-dismissed', 'true');
+                  setShowDemoBanner(false);
+                }}
+                aria-label="Dismiss demo banner"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        ) : null}
         {mobileSidebarOpen ? (
           <button
             type="button"
@@ -282,7 +307,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         >
           <AppSidebarRefined onNavigate={closeMobileSidebar} />
         </div>
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className={`flex-1 flex flex-col min-w-0 ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
           <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}

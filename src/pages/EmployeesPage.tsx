@@ -73,7 +73,8 @@ function formatHourlyRate(value: number | null) {
 }
 
 export default function EmployeesPage() {
-  const { orgId } = useAuth();
+  const { orgId, userRole } = useAuth();
+  const isReadOnly = String(userRole ?? '') === 'viewer';
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +151,7 @@ export default function EmployeesPage() {
   }, []);
 
   const saveNewEmployee = useCallback(async () => {
+    if (isReadOnly) return;
     if (!supabase || !orgId) return;
     if (!addDraft.first_name.trim() || !addDraft.last_name.trim()) return;
 
@@ -175,7 +177,7 @@ export default function EmployeesPage() {
 
     closeAddModal();
     await fetchPageData();
-  }, [addDraft, closeAddModal, fetchPageData, orgId]);
+  }, [addDraft, closeAddModal, fetchPageData, isReadOnly, orgId]);
 
   const startEdit = useCallback((employee: EmployeeRow) => {
     setEditingId(employee.id);
@@ -196,6 +198,7 @@ export default function EmployeesPage() {
   }, []);
 
   const saveEdit = useCallback(async (employeeId: string) => {
+    if (isReadOnly) return;
     if (!supabase || !orgId || !editDraft) return;
     if (!editDraft.first_name.trim() || !editDraft.last_name.trim()) return;
 
@@ -223,9 +226,10 @@ export default function EmployeesPage() {
 
     cancelEdit();
     await fetchPageData();
-  }, [cancelEdit, editDraft, fetchPageData, orgId]);
+  }, [cancelEdit, editDraft, fetchPageData, isReadOnly, orgId]);
 
   const deactivateEmployee = useCallback(async (employee: EmployeeRow) => {
+    if (isReadOnly) return;
     if (!supabase || !orgId) return;
     const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'this employee';
     const confirmed = window.confirm(`Deactivate ${name}? They won't appear in scheduling.`);
@@ -245,7 +249,7 @@ export default function EmployeesPage() {
     }
 
     await fetchPageData();
-  }, [fetchPageData, orgId]);
+  }, [fetchPageData, isReadOnly, orgId]);
 
   if (!orgId || loading) {
     return (
@@ -264,10 +268,12 @@ export default function EmployeesPage() {
           <h1 className="text-2xl font-semibold">Crew Roster</h1>
           <p className="text-sm text-muted-foreground">Manage employees for scheduling and daily task assignments.</p>
         </div>
+        {!isReadOnly ? (
         <Button onClick={openAddModal}>
           <Plus className="mr-1.5 h-4 w-4" />
           Add Employee
         </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -385,7 +391,7 @@ export default function EmployeesPage() {
                             {rowSavingId === employee.id ? 'Saving...' : 'Save'}
                           </Button>
                         </div>
-                      ) : (
+                      ) : !isReadOnly ? (
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm" onClick={() => startEdit(employee)}>
                             <UserCog className="mr-1 h-4 w-4" />
@@ -400,7 +406,7 @@ export default function EmployeesPage() {
                             Deactivate
                           </Button>
                         </div>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -447,7 +453,7 @@ export default function EmployeesPage() {
                         {rowSavingId === employee.id ? 'Saving...' : 'Save'}
                       </Button>
                     </>
-                  ) : (
+                  ) : !isReadOnly ? (
                     <>
                       <Button variant="outline" className="min-h-11 flex-1" onClick={() => startEdit(employee)}>Edit</Button>
                       <Button
@@ -459,7 +465,7 @@ export default function EmployeesPage() {
                         Deactivate
                       </Button>
                     </>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
@@ -467,7 +473,7 @@ export default function EmployeesPage() {
         )}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen && !isReadOnly} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Employee</DialogTitle>

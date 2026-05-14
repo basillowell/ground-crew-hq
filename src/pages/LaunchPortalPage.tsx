@@ -21,6 +21,8 @@ export default function LaunchPortalPage() {
   const clientName = programSettingsQuery.data?.clientLabel || 'Ground Crew HQ';
   const appName = programSettingsQuery.data?.appName || 'Ground Crew HQ';
   const shellImageUrl = programSettingsQuery.data?.logoUrl || '';
+  const DEMO_EMAIL = 'demo@groundcrewhq.com';
+  const DEMO_PASSWORD = 'GroundCrewHQDemo!2026';
 
   useEffect(() => {
     if (currentUser) {
@@ -114,6 +116,33 @@ export default function LaunchPortalPage() {
         if (import.meta.env.DEV) {
           console.info('[Login] Supabase sign-in succeeded, waiting for profile hydration');
         }
+        setIsAwaitingProfile(true);
+      }
+    } catch {
+      setErrorMessage('An unexpected error occurred. Please try again.');
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    if (!supabase) {
+      setErrorMessage(supabaseConfigError || 'Supabase is not configured for this environment.');
+      return;
+    }
+    setIsSubmitting(true);
+    setIsAwaitingProfile(false);
+    setErrorMessage('');
+    try {
+      const result = await Promise.race([
+        supabase.auth.signInWithPassword({ email: DEMO_EMAIL, password: DEMO_PASSWORD }),
+        new Promise<{ error: { message: string } }>((resolve) =>
+          setTimeout(() => resolve({ error: { message: 'Sign-in timed out. Please try again.' } }), 15000),
+        ),
+      ]);
+      if (result.error) {
+        setErrorMessage(mapAuthError(result.error.message));
+        setIsSubmitting(false);
+      } else {
         setIsAwaitingProfile(true);
       }
     } catch {
@@ -234,6 +263,15 @@ export default function LaunchPortalPage() {
               <Button className="w-full gap-2" disabled={isSubmitting || !email || !password || !hasSupabaseConfig} type="submit">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
                 {isSubmitting ? (isAwaitingProfile ? 'Loading workspace profile...' : 'Signing in securely...') : 'Get Started'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                disabled={isSubmitting || !hasSupabaseConfig}
+                onClick={() => void handleDemoLogin()}
+              >
+                Try Demo
               </Button>
               <p className="text-center text-[11px] text-muted-foreground">
                 Secure access powered by Supabase authentication.

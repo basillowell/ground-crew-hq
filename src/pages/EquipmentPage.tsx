@@ -102,7 +102,8 @@ function emptyAddDraft(): AddDraft {
 }
 
 export default function EquipmentPage() {
-  const { currentUser, currentPropertyId } = useAuth();
+  const { currentUser, currentPropertyId, userRole } = useAuth();
+  const isReadOnly = String(userRole ?? '') === 'viewer';
   const orgId = currentUser?.orgId ?? '';
   const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null;
 
@@ -202,6 +203,7 @@ export default function EquipmentPage() {
   }, []);
 
   const saveAdd = useCallback(async () => {
+    if (isReadOnly) return;
     if (!supabase || !orgId || !addDraft.name.trim()) return;
 
     setAddSaving(true);
@@ -230,7 +232,7 @@ export default function EquipmentPage() {
 
     cancelAdd();
     await fetchEquipment();
-  }, [addDraft, cancelAdd, fetchEquipment, orgId, propertyId, typeNameById]);
+  }, [addDraft, cancelAdd, fetchEquipment, isReadOnly, orgId, propertyId, typeNameById]);
 
   const startEdit = useCallback((row: EquipmentUnitRow & { displayName: string; displayType: string; normalizedStatus: EquipmentStatus }) => {
     setEditingId(row.id);
@@ -250,6 +252,7 @@ export default function EquipmentPage() {
   }, []);
 
   const saveEdit = useCallback(async (id: string) => {
+    if (isReadOnly) return;
     if (!supabase || !editDraft || !orgId || !editDraft.name.trim()) return;
     setRowSavingId(id);
 
@@ -275,9 +278,10 @@ export default function EquipmentPage() {
     }
     cancelEdit();
     await fetchEquipment();
-  }, [cancelEdit, editDraft, fetchEquipment, orgId, typeNameById]);
+  }, [cancelEdit, editDraft, fetchEquipment, isReadOnly, orgId, typeNameById]);
 
   const removeRow = useCallback(async (id: string) => {
+    if (isReadOnly) return;
     if (!supabase || !orgId) return;
     setDeleteId(id);
     const { error: deleteError } = await supabase.from('equipment_units').delete().eq('id', id).eq('org_id', orgId);
@@ -287,7 +291,7 @@ export default function EquipmentPage() {
       return;
     }
     await fetchEquipment();
-  }, [fetchEquipment, orgId]);
+  }, [fetchEquipment, isReadOnly, orgId]);
 
   if (!orgId || loading) {
     return (
@@ -307,10 +311,12 @@ export default function EquipmentPage() {
           <h1 className="text-2xl font-semibold">Equipment</h1>
           <p className="text-sm text-muted-foreground">Manage units, status, and service readiness.</p>
         </div>
+        {!isReadOnly ? (
         <Button onClick={startAdd}>
           <Plus className="mr-1.5 h-4 w-4" />
           Add Equipment
         </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -438,7 +444,7 @@ export default function EquipmentPage() {
                             {rowSavingId === row.id ? 'Saving...' : 'Save'}
                           </Button>
                         </div>
-                      ) : (
+                      ) : !isReadOnly ? (
                         <div className="flex justify-end gap-1">
                           <Button variant="outline" size="icon" onClick={() => startEdit(row)} aria-label="Edit equipment">
                             <Pencil className="h-4 w-4" />
@@ -456,7 +462,7 @@ export default function EquipmentPage() {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -503,7 +509,7 @@ export default function EquipmentPage() {
                         {rowSavingId === row.id ? 'Saving...' : 'Save'}
                       </Button>
                     </>
-                  ) : (
+                  ) : !isReadOnly ? (
                     <>
                       <Button variant="outline" className="min-h-11 flex-1" onClick={() => startEdit(row)}>Edit</Button>
                       <Button
@@ -515,7 +521,7 @@ export default function EquipmentPage() {
                         Delete
                       </Button>
                     </>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
@@ -523,7 +529,7 @@ export default function EquipmentPage() {
         )}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen && !isReadOnly} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Equipment</DialogTitle>

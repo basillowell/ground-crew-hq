@@ -85,6 +85,7 @@ function PlaceholderCard({ text }: { text: string }) {
 
 export default function SettingsPage() {
   const { orgId, user, userRole, currentUser, currentPropertyId } = useAuth();
+  const isReadOnly = String(userRole ?? '') === 'viewer';
   const location = useLocation();
   const [tab, setTab] = useState<Tab>('Scheduler');
   const taskPropertyId =
@@ -150,18 +151,26 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'Workspace' && (
-        <WorkspaceTab
-          key="workspace"
-          orgId={orgId}
-          userRole={userRole}
-          currentPropertyId={currentPropertyId}
-        />
-      )}
-      {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
-      {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId ?? ''} />}
-      {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
-      {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
+      {isReadOnly ? (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          Demo Mode — Viewing sample data (read-only)
+        </div>
+      ) : null}
+
+      <fieldset disabled={isReadOnly} style={{ border: 'none', margin: 0, padding: 0 }}>
+        {tab === 'Workspace' && (
+          <WorkspaceTab
+            key="workspace"
+            orgId={orgId}
+            userRole={userRole}
+            currentPropertyId={currentPropertyId}
+          />
+        )}
+        {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
+        {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId ?? ''} />}
+        {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
+        {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
+      </fieldset>
       {tab === 'Access' && (
         <AccessTab
           key="access"

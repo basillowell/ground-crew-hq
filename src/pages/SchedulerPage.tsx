@@ -71,7 +71,8 @@ const STATUS_STYLES: Record<string, { cell: string; label: string }> = {
 
 export default function SchedulerPage() {
   const queryClient = useQueryClient();
-  const { currentPropertyId, currentUser } = useAuth();
+  const { currentPropertyId, currentUser, userRole } = useAuth();
+  const isReadOnly = String(userRole ?? '') === 'viewer';
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copyWeekDialogOpen, setCopyWeekDialogOpen] = useState(false);
@@ -266,6 +267,7 @@ export default function SchedulerPage() {
   }, [activeEmployees, scheduleList, weekDays]);
 
   function openAddShift(employeeId?: string, date?: string) {
+    if (isReadOnly) return;
     const targetEmp = employeeId ?? activeEmployees[0]?.id ?? '';
     setDraft({
       employeeId: targetEmp,
@@ -280,6 +282,7 @@ export default function SchedulerPage() {
   }
 
   function openEditShift(employeeId: string, day: { date: string }, entry: ScheduleEntry) {
+    if (isReadOnly) return;
     const ext = entry as ScheduleEntry & { notes?: string | null };
     setDraft({
       employeeId,
@@ -305,6 +308,7 @@ export default function SchedulerPage() {
   }
 
   async function handleSaveShift() {
+    if (isReadOnly) return;
     if (!draft.employeeId || !draft.date) {
       toast.error('Select an employee and date before saving.');
       return;
@@ -382,6 +386,7 @@ export default function SchedulerPage() {
   }
 
   async function handleDeleteShift() {
+    if (isReadOnly) return;
     if (!supabase) return;
     const existing = scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
     if (!existing) { handleCloseModal(); return; }
@@ -425,6 +430,7 @@ export default function SchedulerPage() {
   }
 
   async function saveWeekAsTemplate() {
+    if (isReadOnly) return;
     if (!supabase || !currentUser?.orgId) return;
     const name = templateName.trim();
     if (!name) {
@@ -485,6 +491,7 @@ export default function SchedulerPage() {
   }
 
   async function applyWeekTemplate() {
+    if (isReadOnly) return;
     if (!supabase || !currentUser?.orgId || !selectedWeekTemplateId) return;
     const selectedTemplate = weekTemplates.find((template) => template.id === selectedWeekTemplateId);
     if (!selectedTemplate) return;
@@ -547,6 +554,7 @@ export default function SchedulerPage() {
   }
 
   async function copyWeek() {
+    if (isReadOnly) return;
     if (!supabase) {
       toast.error('Database not available.');
       return;
@@ -784,18 +792,22 @@ export default function SchedulerPage() {
           />
         </div>
 
-        <Button size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
-          <Plus className="h-3.5 w-3.5" /> Add Shift
-        </Button>
-        <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openSaveTemplateDialog}>
-          Save as Template
-        </Button>
-        <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openApplyTemplateDialog}>
-          Apply Template
-        </Button>
-        <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openCopyWeekDialog} data-testid="button-copy-week">
-          <Copy className="h-3.5 w-3.5" /> Copy Week
-        </Button>
+        {!isReadOnly ? (
+          <>
+            <Button size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
+              <Plus className="h-3.5 w-3.5" /> Add Shift
+            </Button>
+            <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openSaveTemplateDialog}>
+              Save as Template
+            </Button>
+            <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openApplyTemplateDialog}>
+              Apply Template
+            </Button>
+            <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openCopyWeekDialog} data-testid="button-copy-week">
+              <Copy className="h-3.5 w-3.5" /> Copy Week
+            </Button>
+          </>
+        ) : null}
         <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={exportWeekToCalendar}>
           <Download className="h-3.5 w-3.5" /> Export
         </Button>
@@ -875,9 +887,11 @@ export default function SchedulerPage() {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-            <Button className="h-11 w-full" onClick={() => openAddShift(undefined, selectedMobileDay?.date)} data-testid="button-add-shift-mobile">
+            {!isReadOnly ? (
+              <Button className="h-11 w-full" onClick={() => openAddShift(undefined, selectedMobileDay?.date)} data-testid="button-add-shift-mobile">
               <Plus className="mr-1.5 h-4 w-4" /> Add Shift
-            </Button>
+              </Button>
+            ) : null}
             <div className="space-y-2">
               {activeEmployees.map((emp) => {
                 const entry = selectedMobileDay ? scheduleList.find((s) => s.employeeId === emp.id && s.date === selectedMobileDay.date) : undefined;
@@ -992,6 +1006,7 @@ export default function SchedulerPage() {
                               <td key={day.date} className={`px-2 py-2 text-center ${isToday ? 'bg-primary/5' : ''}`}>
                                 <button
                                   type="button"
+                                  disabled={isReadOnly}
                                   className="h-11 w-full rounded-lg border border-dashed border-border text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-colors"
                                   onClick={() => openAddShift(emp.id, day.date)}
                                   data-testid={`button-add-shift-${emp.id}-${day.date}`}
@@ -1008,6 +1023,7 @@ export default function SchedulerPage() {
                             <td key={day.date} className={`px-2 py-2 ${isToday ? 'bg-primary/5' : ''}`}>
                               <button
                                 type="button"
+                                disabled={isReadOnly}
                                 className={`w-full rounded-lg border px-2 py-1.5 text-center text-xs transition-colors ${style.cell}`}
                                 onClick={() => openEditShift(emp.id, day, entry)}
                                 data-testid={`button-edit-shift-${emp.id}-${day.date}`}
