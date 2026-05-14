@@ -211,6 +211,7 @@ export default function WorkboardPage() {
   const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
   const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
+  const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
 
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
@@ -595,7 +596,8 @@ export default function WorkboardPage() {
           .sort((a, b) => a.startTime.localeCompare(b.startTime));
         const assignedMinutes = employeeAssignments.reduce((s, a) => s + a.duration, 0);
         const shiftMinutes = shift ? Math.max(timeToMinutes(shift.shiftEnd) - timeToMinutes(shift.shiftStart), 0) : 0;
-        return { employee, shift, employeeAssignments, assignedMinutes, shiftMinutes, openMinutes: Math.max(shiftMinutes - assignedMinutes, 0) };
+        const coveragePercent = shiftMinutes > 0 ? (assignedMinutes / shiftMinutes) * 100 : 0;
+        return { employee, shift, employeeAssignments, assignedMinutes, shiftMinutes, openMinutes: Math.max(shiftMinutes - assignedMinutes, 0), coveragePercent };
       }),
     [boardDate, dayAssignments, scheduleList, scheduledEmployees],
   );
@@ -874,6 +876,53 @@ export default function WorkboardPage() {
     if (!supabase) return;
     await supabase.from('task_requests').update({ status: 'dismissed' }).eq('id', requestId);
     await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
+  }
+
+  async function reorderEmployeeAssignments(
+    employeeId: string,
+    draggedAssignmentId: string,
+    targetAssignmentId: string,
+  ) {
+    if (!supabase || draggedAssignmentId === targetAssignmentId) return;
+
+    const employeeAssignments = dayAssignments.filter((assignment) => assignment.employeeId === employeeId);
+    const fromIndex = employeeAssignments.findIndex((assignment) => assignment.id === draggedAssignmentId);
+    const toIndex = employeeAssignments.findIndex((assignment) => assignment.id === targetAssignmentId);
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    const reordered = [...employeeAssignments];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) => {
+      const existing = current ?? [];
+      const byId = new Map(reordered.map((assignment) => [assignment.id, assignment]));
+      let reorderedCursor = 0;
+      return existing.map((assignment) => {
+        if (assignment.employeeId !== employeeId) return assignment;
+        const next = reordered[reorderedCursor];
+        reorderedCursor += 1;
+        if (!next) return assignment;
+        return byId.get(next.id!) ?? assignment;
+      });
+    });
+
+    const orderUpdates = reordered.map((assignment, index) => ({
+      id: assignment.id,
+      order_index: index,
+    }));
+
+    const { error } = await supabase
+      .from('assignments')
+      .upsert(orderUpdates, { onConflict: 'id' });
+
+    if (error) {
+      toast.error('Unable to save task order', { description: error.message });
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      return;
+    }
+
+    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
   }
 
   async function saveQuickTaskAssignment() {
@@ -1315,10 +1364,17 @@ export default function WorkboardPage() {
                       ? `Assigned hours exceed scheduled shift by ${Math.ceil((lane.assignedMinutes - lane.shiftMinutes) / 60)}h ${(lane.assignedMinutes - lane.shiftMinutes) % 60}m`
                       : undefined
                   }
+                  coveragePercent={lane.coveragePercent}
                   onDragStart={setDraggingEmployeeId}
                   onDragEnter={setDropTargetEmployeeId}
                   onDragEnd={() => { setDraggingEmployeeId(null); setDropTargetEmployeeId(null); }}
                   onDropRow={moveEmployeeLane}
+                  onTaskDragStart={(employeeId, assignmentId) => setDraggingTask({ employeeId, assignmentId })}
+                  onTaskDropOnTask={(employeeId, targetAssignmentId) => {
+                    if (!draggingTask || draggingTask.employeeId !== employeeId) return;
+                    void reorderEmployeeAssignments(employeeId, draggingTask.assignmentId, targetAssignmentId);
+                    setDraggingTask(null);
+                  }}
                   onAddTask={openAssignmentDialog}
                   onEditAssignment={openEditAssignmentDialog}
                   onRemoveAssignment={removeAssignment}

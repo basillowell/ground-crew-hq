@@ -24,6 +24,9 @@ interface EmployeeRowProps {
   onAddTask?: (employeeId: string) => void;
   onEditAssignment?: (assignment: Assignment) => void;
   onRemoveAssignment?: (assignmentId: string) => void;
+  onTaskDragStart?: (employeeId: string, assignmentId: string) => void;
+  onTaskDropOnTask?: (employeeId: string, targetAssignmentId: string) => void;
+  coveragePercent?: number;
 }
 
 export function EmployeeRow({
@@ -43,11 +46,11 @@ export function EmployeeRow({
   onAddTask,
   onEditAssignment,
   onRemoveAssignment,
+  onTaskDragStart,
+  onTaskDropOnTask,
+  coveragePercent,
 }: EmployeeRowProps) {
-  const sortedAssignments = [...empAssignments].sort((left, right) => {
-    if (left.startTime !== right.startTime) return left.startTime.localeCompare(right.startTime);
-    return left.duration - right.duration;
-  });
+  const sortedAssignments = [...empAssignments];
   const totalMinutes = sortedAssignments.reduce((s, a) => s + a.duration, 0);
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
@@ -82,6 +85,19 @@ export function EmployeeRow({
             <StatusChip variant="success">{employee.group}</StatusChip>
             <StatusChip variant="neutral">{employee.department}</StatusChip>
             <Badge variant="outline">{sortedAssignments.length} tasks</Badge>
+            {typeof coveragePercent === 'number' ? (
+              <Badge
+                className={
+                  coveragePercent >= 80
+                    ? 'bg-green-100 text-green-800'
+                    : coveragePercent >= 50
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-red-100 text-red-800'
+                }
+              >
+                Coverage: {Math.round(coveragePercent)}%
+              </Badge>
+            ) : null}
             <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
               <Clock className="h-3 w-3" />
               {hours}h {mins}m
@@ -124,6 +140,9 @@ export function EmployeeRow({
                   task={task}
                   assignment={a}
                   priorityIndex={sortedAssignments.findIndex((assignment) => assignment.id === a.id)}
+                  draggable
+                  onDragStart={onTaskDragStart ? () => onTaskDragStart(employee.id, a.id ?? '') : undefined}
+                  onDrop={onTaskDropOnTask ? () => onTaskDropOnTask(employee.id, a.id ?? '') : undefined}
                   onEdit={onEditAssignment ? () => onEditAssignment(a) : undefined}
                   onRemove={onRemoveAssignment ? () => onRemoveAssignment(a.id) : undefined}
                 />

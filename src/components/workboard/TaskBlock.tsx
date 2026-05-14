@@ -12,9 +12,13 @@ interface TaskBlockProps {
   priorityIndex?: number;
   onEdit?: () => void;
   onRemove?: () => void;
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragEnter?: () => void;
+  onDrop?: () => void;
 }
 
-export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove }: TaskBlockProps) {
+export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove, draggable, onDragStart, onDragEnter, onDrop }: TaskBlockProps) {
   const { currentPropertyId, currentUser } = useAuth();
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const equipmentUnits = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
@@ -25,6 +29,11 @@ export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove }:
   return (
     <div
       className="grid grid-cols-[1fr_auto] gap-3 rounded-xl border px-3 py-2.5 text-xs transition-all hover:shadow-sm"
+      draggable={Boolean(draggable)}
+      onDragStart={draggable ? onDragStart : undefined}
+      onDragEnter={draggable ? onDragEnter : undefined}
+      onDragOver={draggable ? (event) => event.preventDefault() : undefined}
+      onDrop={draggable ? onDrop : undefined}
       style={{
         backgroundColor: task.color + '18',
         borderColor: task.color + '40',
