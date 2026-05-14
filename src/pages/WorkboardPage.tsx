@@ -1515,10 +1515,10 @@ export default function WorkboardPage() {
               <select
                 value={assignmentDraft.taskId}
                 onChange={(e) => {
-                  if (e.target.value === '__add_new_task__') {
+                  if (e.target.value === '__manage_task_library__') {
                     setAssignmentDialogOpen(false);
                     setLinkedRequestId(null);
-                    navigate('/app/tasks');
+                    navigate('/app/settings?tab=Tasks');
                     return;
                   }
                   setAssignmentDraft({
@@ -1530,7 +1530,7 @@ export default function WorkboardPage() {
                 data-testid="select-assignment-task"
               >
                 {tasksLoading || taskLibrary.length === 0 ? (
-                  <option value="" disabled>No tasks - add tasks in Task Management</option>
+                  <option value="" disabled>No tasks yet - manage task library in Settings</option>
                 ) : null}
                 {orderedTaskCategories.map((category) => (
                   <optgroup key={category} label={category}>
@@ -1541,7 +1541,7 @@ export default function WorkboardPage() {
                     ))}
                   </optgroup>
                 ))}
-                <option value="__add_new_task__">+ Add new task...</option>
+                <option value="__manage_task_library__">+ Manage task library</option>
               </select>
               {taskLibraryError ? (
                 <button
@@ -1552,19 +1552,17 @@ export default function WorkboardPage() {
                   Retry loading tasks →
                 </button>
               ) : null}
-              {(tasksLoading || taskLibrary.length === 0) ? (
-                <button
-                  type="button"
-                  className="mt-2 text-xs font-medium text-primary hover:underline"
-                  onClick={() => {
-                    setAssignmentDialogOpen(false);
-                    setLinkedRequestId(null);
-                    navigate('/app/tasks');
-                  }}
-                >
-                  Go to Tasks →
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className="mt-2 block text-xs font-medium text-primary hover:underline"
+                onClick={() => {
+                  setAssignmentDialogOpen(false);
+                  setLinkedRequestId(null);
+                  navigate('/app/settings?tab=Tasks');
+                }}
+              >
+                + Manage task library
+              </button>
             </div>
 
             <div className="col-span-2">

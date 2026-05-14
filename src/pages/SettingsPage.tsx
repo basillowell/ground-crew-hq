@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
+import { useLocation } from 'react-router-dom';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -47,11 +48,20 @@ function PlaceholderCard({ text }: { text: string }) {
 
 export default function SettingsPage() {
   const { orgId, user, userRole, currentUser, currentPropertyId } = useAuth();
+  const location = useLocation();
   const [tab, setTab] = useState<Tab>('Scheduler');
   const taskPropertyId =
     (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null) ??
     currentUser?.propertyId ??
     null;
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const requestedTab = params.get('tab');
+    if (requestedTab && TABS.includes(requestedTab as Tab)) {
+      setTab(requestedTab as Tab);
+    }
+  }, [location.search]);
 
   return (
     <div style={{ padding: '1.5rem', maxWidth: '900px' }}>
@@ -91,7 +101,7 @@ export default function SettingsPage() {
       {tab === 'Workspace' && <WorkspaceTab key="workspace" orgId={orgId} />}
       {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
       {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId ?? ''} />}
-      {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId ?? ''} propertyId={taskPropertyId} />}
+      {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
       {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
       {tab === 'Access' && <AccessTab key="access" userEmail={user?.email ?? ''} userRole={userRole} orgId={orgId} />}
       {tab === 'Help' && <HelpTab key="help" />}
@@ -137,7 +147,7 @@ function HelpTab() {
   return <PlaceholderCard text="Help settings coming soon." />;
 }
 
-function TasksTab({ orgId, propertyId }: { orgId: string; propertyId: string | null }) {
+function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
   const [tasks, setTasks] = useState<TaskLibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -158,11 +168,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string; propertyId: string | n
       setLoading(false);
       return;
     }
-    if (!orgId) {
-      setLoading(true);
-      setError(null);
-      return;
-    }
+    if (!orgId) return;
 
     setLoading(true);
     setError(null);
@@ -282,15 +288,18 @@ function TasksTab({ orgId, propertyId }: { orgId: string; propertyId: string | n
         <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 600 }}>Task Library</h3>
         <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>Reusable tasks for daily workflow planning.</p>
 
-        {loading ? (
-          <div style={{ height: '140px', borderRadius: '10px', background: '#e5e7eb', animation: 'pulse 1.5s infinite' }} />
+        {!orgId || loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '13px' }}>
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[#166534] border-t-transparent" />
+            Loading tasks...
+          </div>
         ) : error ? (
           <div>
             <p style={{ color: '#dc2626', marginBottom: '10px' }}>Failed to load: {error}</p>
             <button onClick={() => void fetchTasks()}>Retry</button>
           </div>
         ) : tasks.length === 0 ? (
-          <p style={{ color: '#6b7280', fontSize: '13px' }}>No tasks yet. Add your first reusable task below.</p>
+          <p style={{ color: '#6b7280', fontSize: '13px' }}>No tasks yet. Add your first task below.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>

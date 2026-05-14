@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   Clock,
   Users,
-  ListChecks,
   Wrench,
   Shield,
   BarChart3,
@@ -91,7 +90,6 @@ const employeeNavSections: NavSection[] = [
     items: [
       { title: 'Dashboard', url: '/app/dashboard', icon: Building2, moduleId: 'command-center' },
       { title: 'My Schedule', url: '/app/scheduler', icon: Clock, moduleId: 'workflow' },
-      { title: 'Tasks', url: '/app/tasks', icon: ListChecks, moduleId: 'workflow' },
       { title: 'Field', url: '/app/field', icon: Smartphone, moduleId: 'field' },
     ],
   },
