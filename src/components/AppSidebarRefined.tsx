@@ -32,6 +32,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProgramSettings, useProperties, usePropertyClassOptions } from '@/lib/supabase-queries';
 import { APP_VERSION } from '@/constants/version';
 
+interface AppSidebarRefinedProps {
+  onNavigate?: () => void;
+}
+
 type NavRole = 'employee' | 'admin';
 
 type NavSection = {
@@ -102,7 +106,7 @@ const employeeNavSections: NavSection[] = [
   },
 ] as const;
 
-export const AppSidebarRefined = memo(function AppSidebarRefined() {
+export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate }: AppSidebarRefinedProps) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
@@ -166,6 +170,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
                       <NavLink
                         to={item.url}
                         end
+                        onClick={onNavigate}
                         className="rounded-lg border border-transparent px-2.5 py-2 text-sidebar-foreground transition-colors duration-150 hover:border-sidebar-border/60 hover:bg-sidebar-accent"
                         activeClassName="border-sidebar-primary/40 bg-sidebar-accent text-sidebar-primary font-semibold shadow-[inset_0_0_0_1px_rgba(47,168,102,0.16)]"
                       >
@@ -182,11 +187,9 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/80 bg-[linear-gradient(180deg,rgba(10,32,22,0),rgba(10,32,22,0.55))] p-4">
-        {!collapsed ? (
-          <div className="text-[11px] text-sidebar-foreground/85">
-            Ground Crew HQ · v{APP_VERSION}
-          </div>
-        ) : null}
+        <div className="text-[11px] text-sidebar-foreground/85">
+          {collapsed ? `v${APP_VERSION}` : `Ground Crew HQ · v${APP_VERSION}`}
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

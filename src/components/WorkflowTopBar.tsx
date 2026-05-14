@@ -1,8 +1,7 @@
 import { memo } from 'react';
-import { Bell, CalendarDays, ClipboardList, LogOut, Wrench, CalendarClock } from 'lucide-react';
+import { Bell, CalendarDays, ClipboardList, LogOut, Wrench, CalendarClock, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -32,6 +31,7 @@ interface WorkflowTopBarProps {
   unreadNotificationCount: number;
   onMarkAllNotificationsRead: () => void;
   onOpenNotification: (route: string, id: string) => void;
+  onOpenMobileSidebar: () => void;
   onSignOut: () => void;
   programSetting?: ProgramSettings;
 }
@@ -58,6 +58,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   unreadNotificationCount,
   onMarkAllNotificationsRead,
   onOpenNotification,
+  onOpenMobileSidebar,
   onSignOut,
   programSetting,
 }: WorkflowTopBarProps) {
@@ -76,41 +77,48 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
     if (icon === 'equipment') return <Wrench className="h-3.5 w-3.5 text-amber-600" />;
     return <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />;
   };
+
   return (
     <header className="sticky top-0 z-20 shrink-0 border-b border-border/80 bg-card/92 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/85">
-      <div className="flex flex-wrap items-center gap-3">
-        <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
+      <div className="flex items-center gap-2 md:gap-3">
+        <Button variant="ghost" size="icon" className="h-9 w-9 md:hidden" onClick={onOpenMobileSidebar} aria-label="Open menu">
+          <Menu className="h-5 w-5" />
+        </Button>
 
-        <Select value={department} onValueChange={setDepartment}>
-          <SelectTrigger className="h-9 w-[170px] rounded-lg border-border/80 bg-background/90 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {departments.map((entry) => (
-              <SelectItem key={entry} value={entry}>
-                {entry}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="hidden md:block">
+          <Select value={department} onValueChange={setDepartment}>
+            <SelectTrigger className="h-9 w-[170px] rounded-lg border-border/80 bg-background/90 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {departments.map((entry) => (
+                <SelectItem key={entry} value={entry}>
+                  {entry}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Select value={currentPropertyId} onValueChange={onSelectProperty}>
-          <SelectTrigger className="h-9 w-[190px] rounded-lg border-border/80 bg-background/90 text-sm">
-            <SelectValue placeholder="Select property" />
-          </SelectTrigger>
-          <SelectContent>
-            {allowAllProperties ? (
-              <SelectItem value="all">All Properties</SelectItem>
-            ) : null}
-            {properties.map((entry) => (
-              <SelectItem key={entry.id} value={entry.id}>
-                {entry.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="min-w-0 flex-1 md:flex-none">
+          <Select value={currentPropertyId} onValueChange={onSelectProperty}>
+            <SelectTrigger className="h-9 w-full md:w-[190px] rounded-lg border-border/80 bg-background/90 text-sm">
+              <SelectValue placeholder="Select property" />
+            </SelectTrigger>
+            <SelectContent>
+              {allowAllProperties ? (
+                <SelectItem value="all">All Properties</SelectItem>
+              ) : null}
+              {properties.map((entry) => (
+                <SelectItem key={entry.id} value={entry.id}>
+                  {entry.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <div className="min-w-[250px]">
+        <div className="hidden md:block min-w-[250px]">
           <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Workflow Date</div>
           <Popover>
             <PopoverTrigger asChild>
@@ -130,7 +138,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </Popover>
         </div>
 
-        <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/80 bg-background/90 text-xs" onClick={today}>
+        <Button variant="outline" size="sm" className="hidden md:inline-flex h-9 rounded-xl border-border/80 bg-background/90 text-xs" onClick={today}>
           {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
         </Button>
 
@@ -140,63 +148,73 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </Badge>
         ) : null}
 
-        <DropdownMenu onOpenChange={(open) => open && onMarkAllNotificationsRead()}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent hover:border-border/70 hover:bg-muted/50">
-              <Bell className="h-4 w-4" />
-              <Badge className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
-                {unreadNotificationCount}
-              </Badge>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-96">
-            <DropdownMenuLabel className="flex items-center justify-between">
-              <span>Admin Notifications</span>
-              <span className="text-[11px] font-normal text-muted-foreground">{programSetting?.clientLabel || 'Active club'}</span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {notifications.map((notification) => (
-              <DropdownMenuItem
-                key={notification.id}
-                className={`items-start gap-3 py-3 ${notification.read ? 'opacity-75' : 'bg-muted/20'}`}
-                onClick={() => onOpenNotification(notification.route, notification.id)}
-              >
-                <div className="mt-0.5">{getNotificationIcon(notification.icon)}</div>
-                <div
-                  className={`mt-1 h-2.5 w-2.5 rounded-full ${
-                    notification.severity === 'critical'
-                      ? 'bg-red-500'
-                      : notification.severity === 'warning'
-                        ? 'bg-amber-500'
-                        : 'bg-emerald-500'
-                  }`}
-                />
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">{notification.title}</div>
-                  <div className="text-xs text-muted-foreground">{notification.description}</div>
-                  <div className="text-[11px] text-muted-foreground">{formatTimestamp(notification.timestamp)}</div>
-                </div>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2 ml-auto">
+          <DropdownMenu onOpenChange={(open) => open && onMarkAllNotificationsRead()}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent hover:border-border/70 hover:bg-muted/50">
+                <Bell className="h-4 w-4" />
+                <Badge className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
+                  {unreadNotificationCount}
+                </Badge>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-96">
+              <DropdownMenuLabel className="flex items-center justify-between">
+                <span>Admin Notifications</span>
+                <span className="text-[11px] font-normal text-muted-foreground">{programSetting?.clientLabel || 'Active club'}</span>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {notifications.map((notification) => (
+                <DropdownMenuItem
+                  key={notification.id}
+                  className={`items-start gap-3 py-3 ${notification.read ? 'opacity-75' : 'bg-muted/20'}`}
+                  onClick={() => onOpenNotification(notification.route, notification.id)}
+                >
+                  <div className="mt-0.5">{getNotificationIcon(notification.icon)}</div>
+                  <div
+                    className={`mt-1 h-2.5 w-2.5 rounded-full ${
+                      notification.severity === 'critical'
+                        ? 'bg-red-500'
+                        : notification.severity === 'warning'
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                    }`}
+                  />
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">{notification.title}</div>
+                    <div className="text-xs text-muted-foreground">{notification.description}</div>
+                    <div className="text-[11px] text-muted-foreground">{formatTimestamp(notification.timestamp)}</div>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <div className="flex-1" />
+          <div className="hidden text-right md:block">
+            <div className="text-sm font-semibold text-foreground">{displayName}</div>
+            <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{displayRole}</div>
+          </div>
 
-        <div className="hidden text-right md:block">
-          <div className="text-sm font-semibold text-foreground">{displayName}</div>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{displayRole}</div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground md:hidden"
+            onClick={onSignOut}
+            aria-label="Account"
+          >
+            <span className="text-xs font-semibold">{displayName.slice(0, 1).toUpperCase()}</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden md:inline-flex h-9 w-9 rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            onClick={onSignOut}
+            aria-label="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-          onClick={onSignOut}
-          aria-label="Sign out"
-        >
-          <LogOut className="h-4 w-4" />
-        </Button>
       </div>
     </header>
   );

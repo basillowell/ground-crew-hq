@@ -116,6 +116,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const [department, setDepartment] = useState('Maintenance');
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
   const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, orgId } = useAuth();
   const programSettingQuery = useProgramSettings(orgId);
@@ -261,10 +262,26 @@ export function AppLayout({ children }: AppLayoutProps) {
     navigate(route);
   };
 
+  const closeMobileSidebar = () => setMobileSidebarOpen(false);
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
-        <AppSidebarRefined />
+        {mobileSidebarOpen ? (
+          <button
+            type="button"
+            aria-label="Close menu backdrop"
+            className="fixed inset-0 z-30 bg-black/40 md:hidden"
+            onClick={closeMobileSidebar}
+          />
+        ) : null}
+        <div
+          className={`fixed inset-y-0 left-0 z-40 w-72 transform transition-transform duration-200 ease-in-out md:static md:translate-x-0 ${
+            mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
+        >
+          <AppSidebarRefined onNavigate={closeMobileSidebar} />
+        </div>
         <div className="flex-1 flex flex-col min-w-0">
           <WorkflowTopBar
             department={department}
@@ -280,6 +297,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             unreadNotificationCount={unreadNotificationCount}
             onMarkAllNotificationsRead={markAllNotificationsRead}
             onOpenNotification={handleNotificationOpen}
+            onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
             onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
           />
@@ -292,6 +310,12 @@ export function AppLayout({ children }: AppLayoutProps) {
             }}
           >
             <main className="flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,248,246,1))]">
+              <div className="md:hidden border-b bg-background/85 px-4 py-2">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Workflow Date</div>
+                <div className="text-sm font-medium text-foreground">
+                  {currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                </div>
+              </div>
               {children}
             </main>
           </OperationsProvider>
