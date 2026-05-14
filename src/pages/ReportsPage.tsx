@@ -17,11 +17,17 @@ type EmployeeRow = {
 type AssignmentRow = {
   id: string;
   employee_id: string;
+  task_id: string | null;
   property_id: string | null;
   date: string;
   status: string | null;
   estimated_hours: number | null;
   actual_hours: number | null;
+};
+
+type TaskRow = {
+  id: string;
+  category: string | null;
 };
 
 type LaborSummaryRow = {
@@ -35,6 +41,14 @@ type LaborSummaryRow = {
   scheduledCost: number;
   actualCost: number;
   varianceCost: number;
+};
+
+type CostByTaskRow = {
+  category: string;
+  tasksCompleted: number;
+  totalHours: number;
+  totalCost: number;
+  avgCostPerTask: number;
 };
 
 function toIsoDate(value: Date) {
@@ -89,6 +103,7 @@ export default function ReportsPage() {
   );
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +139,7 @@ export default function ReportsPage() {
 
     let assignmentsQuery = supabase
       .from('assignments')
-      .select('id, employee_id, property_id, date, status, estimated_hours, actual_hours')
+      .select('id, employee_id, task_id, property_id, date, status, estimated_hours, actual_hours')
       .eq('org_id', orgId)
       .gte('date', startDate)
       .lte('date', endDate);
@@ -133,17 +148,19 @@ export default function ReportsPage() {
       assignmentsQuery = assignmentsQuery.eq('property_id', selectedPropertyId);
     }
 
-    const [assignmentsResult, employeesResult, propertiesResult] = await Promise.all([
+    const [assignmentsResult, employeesResult, propertiesResult, tasksResult] = await Promise.all([
       assignmentsQuery,
       supabase.from('employees').select('id, first_name, last_name, hourly_rate').eq('org_id', orgId),
       supabase.from('properties').select('id, name').eq('org_id', orgId).order('name', { ascending: true }),
+      supabase.from('tasks').select('id, category').eq('org_id', orgId),
     ]);
 
-    if (assignmentsResult.error || employeesResult.error || propertiesResult.error) {
+    if (assignmentsResult.error || employeesResult.error || propertiesResult.error || tasksResult.error) {
       setError(
         assignmentsResult.error?.message ??
           employeesResult.error?.message ??
           propertiesResult.error?.message ??
+          tasksResult.error?.message ??
           'Unable to load report data',
       );
       setLoading(false);
@@ -153,6 +170,7 @@ export default function ReportsPage() {
     setAssignments((assignmentsResult.data ?? []) as AssignmentRow[]);
     setEmployees((employeesResult.data ?? []) as EmployeeRow[]);
     setProperties((propertiesResult.data ?? []) as PropertyRow[]);
+    setTasks((tasksResult.data ?? []) as TaskRow[]);
     setLoading(false);
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
@@ -230,6 +248,56 @@ export default function ReportsPage() {
     );
   }, [laborRows]);
 
+  const costByTaskRows = useMemo<CostByTaskRow[]>(() => {
+    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    const taskCategoryById = new Map(tasks.map((task) => [task.id, task.category?.trim() || 'General']));
+    const byCategory = new Map<string, CostByTaskRow>();
+
+    assignments.forEach((assignment) => {
+      const category = taskCategoryById.get(assignment.task_id ?? '') ?? 'General';
+      const employee = employeeById.get(assignment.employee_id);
+      const hourlyRate = Number(employee?.hourly_rate ?? 0);
+      const actualHours = Number(assignment.actual_hours ?? 0);
+      const cost = actualHours * hourlyRate;
+      const existing = byCategory.get(category) ?? {
+        category,
+        tasksCompleted: 0,
+        totalHours: 0,
+        totalCost: 0,
+        avgCostPerTask: 0,
+      };
+      existing.totalHours += actualHours;
+      existing.totalCost += cost;
+      if (assignment.status === 'done') {
+        existing.tasksCompleted += 1;
+      }
+      byCategory.set(category, existing);
+    });
+
+    const rows = Array.from(byCategory.values()).map((row) => ({
+      ...row,
+      avgCostPerTask: row.tasksCompleted > 0 ? row.totalCost / row.tasksCompleted : 0,
+    }));
+
+    return rows.sort((a, b) => a.category.localeCompare(b.category));
+  }, [assignments, employees, tasks]);
+
+  const costByTaskTotals = useMemo(() => {
+    return costByTaskRows.reduce(
+      (sum, row) => {
+        sum.tasksCompleted += row.tasksCompleted;
+        sum.totalHours += row.totalHours;
+        sum.totalCost += row.totalCost;
+        return sum;
+      },
+      {
+        tasksCompleted: 0,
+        totalHours: 0,
+        totalCost: 0,
+      },
+    );
+  }, [costByTaskRows]);
+
   const exportCsv = useCallback(() => {
     const headers = ['Employee', 'Days Worked', 'Scheduled Hours', 'Actual Hours', 'Tasks Completed', 'Variance', 'Scheduled Cost', 'Actual Cost', 'Variance ($)'];
     const dataRows = laborRows.map((row) => [
@@ -254,7 +322,22 @@ export default function ReportsPage() {
       formatCurrency(totals.actualCost),
       formatCurrency(totals.varianceCost),
     ];
-    const csvString = [headers, ...dataRows, totalsRow]
+    const costHeaders = ['Task Category', 'Tasks Completed', 'Total Hours', 'Total Cost', 'Avg Cost/Task'];
+    const costRows = costByTaskRows.map((row) => [
+      row.category,
+      row.tasksCompleted,
+      formatHours(row.totalHours),
+      formatCurrency(row.totalCost),
+      formatCurrency(row.avgCostPerTask),
+    ]);
+    const costTotalsRow = [
+      'Totals',
+      costByTaskTotals.tasksCompleted,
+      formatHours(costByTaskTotals.totalHours),
+      formatCurrency(costByTaskTotals.totalCost),
+      formatCurrency(costByTaskTotals.tasksCompleted > 0 ? costByTaskTotals.totalCost / costByTaskTotals.tasksCompleted : 0),
+    ];
+    const csvString = [headers, ...dataRows, totalsRow, [], costHeaders, ...costRows, costTotalsRow]
       .map((cells) => cells.map((cell) => quoteCsv(cell)).join(','))
       .join('\n');
     const blob = new Blob([csvString], { type: 'text/csv' });
@@ -266,7 +349,7 @@ export default function ReportsPage() {
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-  }, [laborRows, totals]);
+  }, [costByTaskRows, costByTaskTotals, laborRows, totals]);
 
   if (!orgId) {
     return <div style={{ padding: '1.5rem', color: '#6b7280', fontSize: '14px' }}>Loading reports...</div>;
@@ -377,6 +460,51 @@ export default function ReportsPage() {
                   <td style={{ padding: '8px', color: totals.varianceCost <= 0 ? '#166534' : '#dc2626' }}>
                     {totals.varianceCost >= 0 ? '+' : ''}
                     {formatCurrency(totals.varianceCost)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+        <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Cost by Task</h3>
+        {loading ? (
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Loading task cost data...</p>
+        ) : error ? (
+          <p style={{ margin: 0, color: '#dc2626', fontSize: '13px' }}>Could not load task cost breakdown.</p>
+        ) : costByTaskRows.length === 0 ? (
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No task cost data for this date range.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left', color: '#6b7280' }}>
+                  <th style={{ padding: '8px' }}>Task Category</th>
+                  <th style={{ padding: '8px' }}>Tasks Completed</th>
+                  <th style={{ padding: '8px' }}>Total Hours</th>
+                  <th style={{ padding: '8px' }}>Total Cost</th>
+                  <th style={{ padding: '8px' }}>Avg Cost/Task</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costByTaskRows.map((row) => (
+                  <tr key={row.category} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '8px' }}>{row.category}</td>
+                    <td style={{ padding: '8px' }}>{row.tasksCompleted}</td>
+                    <td style={{ padding: '8px' }}>{formatHours(row.totalHours)}</td>
+                    <td style={{ padding: '8px' }}>{formatCurrency(row.totalCost)}</td>
+                    <td style={{ padding: '8px' }}>{formatCurrency(row.avgCostPerTask)}</td>
+                  </tr>
+                ))}
+                <tr style={{ borderTop: '2px solid #e5e7eb', fontWeight: 700 }}>
+                  <td style={{ padding: '8px' }}>Totals</td>
+                  <td style={{ padding: '8px' }}>{costByTaskTotals.tasksCompleted}</td>
+                  <td style={{ padding: '8px' }}>{formatHours(costByTaskTotals.totalHours)}</td>
+                  <td style={{ padding: '8px' }}>{formatCurrency(costByTaskTotals.totalCost)}</td>
+                  <td style={{ padding: '8px' }}>
+                    {formatCurrency(costByTaskTotals.tasksCompleted > 0 ? costByTaskTotals.totalCost / costByTaskTotals.tasksCompleted : 0)}
                   </td>
                 </tr>
               </tbody>
