@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -91,6 +92,13 @@ export default function MobileFieldWorkspacePage() {
   const [clockEvents, setClockEvents] = useState<ClockEventRecord[]>([]);
   const [clockActionSaving, setClockActionSaving] = useState(false);
   const [liveNow, setLiveNow] = useState<Date>(new Date());
+  const [needsOpen, setNeedsOpen] = useState(false);
+  const [needsSaving, setNeedsSaving] = useState(false);
+  const [needsTitle, setNeedsTitle] = useState('');
+  const [needsPriority, setNeedsPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [needsLocation, setNeedsLocation] = useState('');
+  const [needsNotes, setNeedsNotes] = useState('');
+  const [needsPhotoBase64, setNeedsPhotoBase64] = useState<string | null>(null);
 
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
@@ -434,6 +442,68 @@ export default function MobileFieldWorkspacePage() {
     [currentUser?.propertyId, employeeId, orgId, shift?.propertyId],
   );
 
+  const resetNeedsForm = () => {
+    setNeedsTitle('');
+    setNeedsPriority('medium');
+    setNeedsLocation('');
+    setNeedsNotes('');
+    setNeedsPhotoBase64(null);
+  };
+
+  const handleNeedsPhotoChange = async (file: File | null) => {
+    if (!file) {
+      setNeedsPhotoBase64(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      setNeedsPhotoBase64(result || null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const submitNeed = async () => {
+    if (!supabase || !employeeId || !orgId) return;
+    if (!needsTitle.trim()) {
+      toast.error('Title is required');
+      return;
+    }
+    const propertyId = shift?.propertyId ?? currentUser?.propertyId ?? null;
+    if (!propertyId) {
+      toast.error('Property is not available for this request.');
+      return;
+    }
+
+    const composedNotes = [needsNotes.trim(), needsPhotoBase64 ? `Photo (base64): ${needsPhotoBase64}` : '']
+      .filter(Boolean)
+      .join('\n\n');
+
+    setNeedsSaving(true);
+    const { error: insertError } = await supabase.from('task_requests').insert({
+      org_id: orgId,
+      property_id: propertyId,
+      submitted_by: employeeId,
+      status: 'open',
+      date: boardDate,
+      title: needsTitle.trim(),
+      priority: needsPriority,
+      location: needsLocation.trim() || null,
+      notes: composedNotes || null,
+      created_at: new Date().toISOString(),
+    });
+    setNeedsSaving(false);
+
+    if (insertError) {
+      toast.error('Unable to submit request', { description: insertError.message });
+      return;
+    }
+
+    toast.success('Request submitted! Your supervisor will review it.');
+    resetNeedsForm();
+    setNeedsOpen(false);
+  };
+
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[520px] px-4 py-4 font-sans">
@@ -585,8 +655,93 @@ export default function MobileFieldWorkspacePage() {
           <p className="text-base font-semibold">
             {doneCount}/{assignments.length} tasks done · {actualHoursTotal.toFixed(1)}h actual / {scheduledHoursTotal.toFixed(1)}h scheduled
           </p>
+          <Button className="mt-2 h-12 min-h-12 w-full text-base" variant="outline" onClick={() => setNeedsOpen(true)}>
+            Report a Need
+          </Button>
         </div>
       </footer>
+
+      {needsOpen ? (
+        <div className="fixed inset-0 z-50 bg-background">
+          <div className="mx-auto flex h-full w-full max-w-[520px] flex-col px-4 pb-4 pt-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Report a Need</h2>
+              <button
+                type="button"
+                className="rounded-md border px-3 py-1.5 text-sm"
+                onClick={() => {
+                  setNeedsOpen(false);
+                  resetNeedsForm();
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Title</label>
+                <Input
+                  value={needsTitle}
+                  onChange={(event) => setNeedsTitle(event.target.value)}
+                  placeholder="Sprinkler head broken on hole 7"
+                  className="h-12 text-base"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">Priority</label>
+                <select
+                  value={needsPriority}
+                  onChange={(event) => setNeedsPriority(event.target.value as 'low' | 'medium' | 'high')}
+                  className="h-12 w-full rounded-md border border-input bg-background px-3 text-base"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">Location</label>
+                <Input
+                  value={needsLocation}
+                  onChange={(event) => setNeedsLocation(event.target.value)}
+                  placeholder="Hole 7 fairway"
+                  className="h-12 text-base"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">Notes</label>
+                <Textarea
+                  value={needsNotes}
+                  onChange={(event) => setNeedsNotes(event.target.value)}
+                  placeholder="Add extra details"
+                  className="min-h-24 text-base"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium">Photo (optional)</label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => void handleNeedsPhotoChange(event.target.files?.[0] ?? null)}
+                  className="h-12 text-base"
+                />
+                {needsPhotoBase64 ? <p className="mt-1 text-xs text-muted-foreground">Photo attached</p> : null}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <Button className="h-12 min-h-12 w-full text-base" onClick={() => void submitNeed()} disabled={needsSaving || !needsTitle.trim()}>
+                {needsSaving ? 'Submitting...' : 'Submit Request'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
