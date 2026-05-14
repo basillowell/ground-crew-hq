@@ -854,7 +854,7 @@ export default function CommandCenterOperationalPage() {
   );
 
   return (
-    <div className="h-full overflow-auto bg-background p-6">
+    <div className="h-full overflow-auto bg-background p-3 md:p-6">
       <Card className="mb-6 rounded-2xl border p-6 shadow-sm bg-gradient-to-r from-emerald-50 to-white">
         <h2 className="text-2xl font-semibold tracking-tight">
           {greeting}, {firstName}.
@@ -996,14 +996,14 @@ export default function CommandCenterOperationalPage() {
         />
       </div> : null}
 
-      <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+      <Card className="mb-6 rounded-2xl border p-4 md:p-5 shadow-sm">
         <h3 className="text-sm font-semibold">Spray Window — Today</h3>
         <div className="mt-3">
           {sprayWindowQuery.isLoading ? (
             <Skeleton className="h-6 w-full rounded-full" />
           ) : sprayWindowQuery.data && sprayWindowQuery.data.length > 0 ? (
-            <div className="relative">
-              <div className="grid grid-cols-12 gap-1">
+            <div className="relative overflow-x-auto">
+              <div className="grid min-w-[520px] grid-cols-12 gap-1">
                 {sprayWindowQuery.data.map((block) => (
                   <div
                     key={`spray-hour-${block.hour}`}
@@ -1143,7 +1143,7 @@ export default function CommandCenterOperationalPage() {
         </div>
       </Card>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="Crew Scheduled Today" value={crewScheduledCount} onClick={() => navigate('/app/scheduler')} />
         <SummaryCard title="Tasks Assigned" value={tasksAssignedCount} onClick={() => navigate('/app/workboard')} />
         <SummaryCard title="Equipment Active" value={equipmentActiveCount} onClick={() => navigate('/app/equipment')} />

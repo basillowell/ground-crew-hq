@@ -105,9 +105,24 @@ export default function SettingsPage() {
       <h1 style={{ fontSize: '22px', fontWeight: 600, margin: '0 0 4px' }}>Operations Control Center</h1>
       <p style={{ color: '#6b7280', fontSize: '13px', margin: '0 0 1.5rem' }}>{user?.email}</p>
 
+      <div className="mb-4 md:hidden">
+        <label className="mb-1 block text-xs text-muted-foreground">Section</label>
+        <select
+          value={tab}
+          onChange={(event) => setTab(event.target.value as Tab)}
+          className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+        >
+          {TABS.map((t) => (
+            <option key={`mobile-tab-${t}`} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div
+        className="hidden md:flex"
         style={{
-          display: 'flex',
           gap: '8px',
           marginBottom: '1.5rem',
           borderBottom: '1px solid #e5e7eb',

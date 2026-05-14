@@ -356,7 +356,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div style={{ padding: '1.5rem', display: 'grid', gap: '16px' }}>
+    <div style={{ padding: '1rem', display: 'grid', gap: '16px' }}>
       <div>
         <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: 600 }}>Reports</h1>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Labor summary by employee for the selected period.</p>
@@ -369,7 +369,7 @@ export default function ReportsPage() {
           <button onClick={() => applyPreset('this-month')}>This Month</button>
           <button onClick={() => applyPreset('last-month')}>Last Month</button>
         </div>
-        <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr 1fr' }}>
+        <div className="grid gap-[10px] md:grid-cols-3">
           <div style={{ display: 'grid', gap: '4px' }}>
             <label style={{ fontSize: '12px', color: '#6b7280' }}>Start Date</label>
             <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
@@ -411,7 +411,7 @@ export default function ReportsPage() {
           <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No labor data for this date range.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left', color: '#6b7280' }}>
                   <th style={{ padding: '8px' }}>Employee</th>
@@ -478,7 +478,7 @@ export default function ReportsPage() {
           <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No task cost data for this date range.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left', color: '#6b7280' }}>
                   <th style={{ padding: '8px' }}>Task Category</th>

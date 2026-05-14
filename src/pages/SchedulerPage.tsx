@@ -86,6 +86,8 @@ export default function SchedulerPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const weekDays = useMemo(() => buildWeekDays(weekStart), [weekStart]);
+  const [mobileDayIndex, setMobileDayIndex] = useState(0);
+  const selectedMobileDay = weekDays[mobileDayIndex] ?? weekDays[0];
   const today = useMemo(() => toDateKey(new Date()), []);
   const thisWeekStart = useMemo(() => getWeekStart(new Date()), []);
 
@@ -139,6 +141,10 @@ export default function SchedulerPage() {
     }, 8000);
     return () => window.clearTimeout(timeoutId);
   }, [isLoading]);
+
+  useEffect(() => {
+    setMobileDayIndex(0);
+  }, [weekStart]);
 
   const [draft, setDraft] = useState({
     employeeId: '',
@@ -707,6 +713,15 @@ export default function SchedulerPage() {
     });
   }
 
+  function shiftMobileDay(direction: -1 | 1) {
+    setMobileDayIndex((current) => {
+      const next = current + direction;
+      if (next < 0) return 0;
+      if (next > 6) return 6;
+      return next;
+    });
+  }
+
   const isEditing = !!scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
   const dailyTotals = useMemo(() => {
     return weekDays.map((day) => {
@@ -731,7 +746,7 @@ export default function SchedulerPage() {
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
 
       {/* ── Top bar ── */}
-      <div className="border-b bg-card px-5 py-3 flex items-center gap-3 flex-wrap shrink-0">
+      <div className="border-b bg-card px-3 py-3 md:px-5 flex items-center gap-2 md:gap-3 flex-wrap shrink-0">
         <h1 className="text-lg font-semibold tracking-tight flex-1 min-w-0">Scheduler</h1>
 
         {/* Week nav */}
@@ -758,30 +773,30 @@ export default function SchedulerPage() {
         </div>
 
         {/* Search */}
-        <div className="relative">
+        <div className="relative w-full md:w-auto">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Search crew..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8 pl-7 w-40 text-xs"
+            className="h-10 md:h-8 pl-7 w-full md:w-40 text-xs"
             data-testid="input-search-crew"
           />
         </div>
 
-        <Button size="sm" className="h-8 gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
+        <Button size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
           <Plus className="h-3.5 w-3.5" /> Add Shift
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openSaveTemplateDialog}>
+        <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openSaveTemplateDialog}>
           Save as Template
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openApplyTemplateDialog}>
+        <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openApplyTemplateDialog}>
           Apply Template
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openCopyWeekDialog} data-testid="button-copy-week">
+        <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openCopyWeekDialog} data-testid="button-copy-week">
           <Copy className="h-3.5 w-3.5" /> Copy Week
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportWeekToCalendar}>
+        <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={exportWeekToCalendar}>
           <Download className="h-3.5 w-3.5" /> Export
         </Button>
       </div>
@@ -846,7 +861,64 @@ export default function SchedulerPage() {
             </div>
           </div>
         ) : (
-          <Card className="rounded-none border-0 border-b">
+          <>
+          <div className="md:hidden p-3 space-y-3">
+            <div className="flex items-center justify-between rounded-xl border bg-card px-3 py-2">
+              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => shiftMobileDay(-1)} disabled={mobileDayIndex === 0}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="text-center">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Day View</div>
+                <div className="text-sm font-semibold">{selectedMobileDay?.label}</div>
+              </div>
+              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => shiftMobileDay(1)} disabled={mobileDayIndex === 6}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <Button className="h-11 w-full" onClick={() => openAddShift(undefined, selectedMobileDay?.date)} data-testid="button-add-shift-mobile">
+              <Plus className="mr-1.5 h-4 w-4" /> Add Shift
+            </Button>
+            <div className="space-y-2">
+              {activeEmployees.map((emp) => {
+                const entry = selectedMobileDay ? scheduleList.find((s) => s.employeeId === emp.id && s.date === selectedMobileDay.date) : undefined;
+                return (
+                  <div key={`mobile-day-${emp.id}`} className="rounded-xl border bg-card p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">{emp.firstName} {emp.lastName}</p>
+                        <p className="text-xs text-muted-foreground">{emp.group || emp.department}</p>
+                      </div>
+                      {entry ? (
+                        <Badge variant="outline" className="text-[11px]">{entry.status}</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[11px]">No Shift</Badge>
+                      )}
+                    </div>
+                    <div className="mt-2">
+                      {entry ? (
+                        <button
+                          type="button"
+                          className="min-h-11 w-full rounded-lg border bg-muted/20 px-3 py-2 text-left text-sm"
+                          onClick={() => selectedMobileDay && openEditShift(emp.id, selectedMobileDay, entry)}
+                        >
+                          {entry.status === 'scheduled' ? `${formatTime(entry.shiftStart)} - ${formatTime(entry.shiftEnd)}` : 'Day Off / Unavailable'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="min-h-11 w-full rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground"
+                          onClick={() => selectedMobileDay && openAddShift(emp.id, selectedMobileDay.date)}
+                        >
+                          + Add Shift
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <Card className="hidden md:block rounded-none border-0 border-b">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b bg-muted/40 sticky top-0 z-10">
@@ -1017,6 +1089,7 @@ export default function SchedulerPage() {
               </tfoot>
             </table>
           </Card>
+          </>
         )}
       </div>
 
@@ -1031,7 +1104,7 @@ export default function SchedulerPage() {
           handleCloseModal();
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-4 md:inset-auto md:h-auto md:w-full md:max-w-md md:translate-x-[-50%] md:translate-y-[-50%] md:rounded-lg md:border md:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />

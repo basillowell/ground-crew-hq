@@ -322,7 +322,7 @@ export default function EquipmentPage() {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="hidden overflow-x-auto rounded-lg border md:block">
         <table className="min-w-full text-sm">
           <thead className="bg-muted/40">
             <tr>
@@ -464,6 +464,63 @@ export default function EquipmentPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="space-y-3 md:hidden">
+        {scopedRows.length === 0 ? (
+          <div className="rounded-lg border p-4 text-sm text-muted-foreground">No equipment found. Add your first unit.</div>
+        ) : (
+          scopedRows.map((row) => {
+            const isEditing = editingId === row.id && editDraft;
+            const overdue = isServiceOverdue(row.last_serviced);
+            return (
+              <div key={`mobile-eq-${row.id}`} className="rounded-lg border p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="font-medium">{row.displayName}</p>
+                  {isEditing ? null : (
+                    <Badge variant="outline" className={statusBadgeClass(row.normalizedStatus)}>{statusLabel(row.normalizedStatus)}</Badge>
+                  )}
+                </div>
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <Input value={editDraft.name} onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })} />
+                    <Input value={editDraft.location} onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value })} placeholder="Location" />
+                    <Input type="date" value={editDraft.lastServiced} onChange={(event) => setEditDraft({ ...editDraft, lastServiced: event.target.value })} />
+                    <Textarea value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })} className="min-h-16" />
+                  </div>
+                ) : (
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <p>Type: {row.displayType}</p>
+                    <p>Location: {row.location || '—'}</p>
+                    <p className="flex items-center gap-1">Last Serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}{overdue ? <AlertTriangle className="h-4 w-4 text-amber-500" /> : null}</p>
+                  </div>
+                )}
+                <div className="mt-3 flex gap-2">
+                  {isEditing ? (
+                    <>
+                      <Button variant="outline" className="min-h-11 flex-1" onClick={cancelEdit}>Cancel</Button>
+                      <Button className="min-h-11 flex-1" onClick={() => void saveEdit(row.id)} disabled={rowSavingId === row.id}>
+                        {rowSavingId === row.id ? 'Saving...' : 'Save'}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="outline" className="min-h-11 flex-1" onClick={() => startEdit(row)}>Edit</Button>
+                      <Button
+                        variant="outline"
+                        className="min-h-11 flex-1"
+                        onClick={() => { const ok = window.confirm('Delete this equipment unit?'); if (ok) void removeRow(row.id); }}
+                        disabled={deleteId === row.id}
+                      >
+                        Delete
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

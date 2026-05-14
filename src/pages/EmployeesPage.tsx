@@ -279,7 +279,7 @@ export default function EmployeesPage() {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="hidden overflow-x-auto rounded-lg border md:block">
         <table className="min-w-full text-sm">
           <thead className="bg-muted/30">
             <tr>
@@ -408,6 +408,63 @@ export default function EmployeesPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="space-y-3 md:hidden">
+        {employees.length === 0 ? (
+          <div className="rounded-lg border p-4 text-sm text-muted-foreground">No employees yet. Add your first crew member.</div>
+        ) : (
+          employees.map((employee) => {
+            const fullName = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee';
+            const isEditing = editingId === employee.id && editDraft;
+            return (
+              <div key={`mobile-${employee.id}`} className="rounded-lg border p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="font-medium">{fullName}</div>
+                  {isEditing ? null : statusBadge(employee.status)}
+                </div>
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <Input value={editDraft.first_name} onChange={(event) => setEditDraft({ ...editDraft, first_name: event.target.value })} placeholder="First name" />
+                    <Input value={editDraft.last_name} onChange={(event) => setEditDraft({ ...editDraft, last_name: event.target.value })} placeholder="Last name" />
+                    <Input value={editDraft.role} onChange={(event) => setEditDraft({ ...editDraft, role: event.target.value })} placeholder="Role" />
+                    <Input value={editDraft.department} onChange={(event) => setEditDraft({ ...editDraft, department: event.target.value })} placeholder="Department" />
+                    <Input type="number" min="0" step="0.01" value={editDraft.hourly_rate} onChange={(event) => setEditDraft({ ...editDraft, hourly_rate: event.target.value })} placeholder="Hourly rate" />
+                  </div>
+                ) : (
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <p>Role: {employee.role || '-'}</p>
+                    <p>Department: {employee.department || '-'}</p>
+                    <p>Property: {(employee.property_id ? propertyNameById.get(employee.property_id) : null) ?? '-'}</p>
+                    <p>Hourly Rate: {formatHourlyRate(employee.hourly_rate)}</p>
+                  </div>
+                )}
+                <div className="mt-3 flex gap-2">
+                  {isEditing ? (
+                    <>
+                      <Button variant="outline" className="min-h-11 flex-1" onClick={cancelEdit}>Cancel</Button>
+                      <Button className="min-h-11 flex-1" onClick={() => void saveEdit(employee.id)} disabled={rowSavingId === employee.id}>
+                        {rowSavingId === employee.id ? 'Saving...' : 'Save'}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="outline" className="min-h-11 flex-1" onClick={() => startEdit(employee)}>Edit</Button>
+                      <Button
+                        variant="outline"
+                        className="min-h-11 flex-1"
+                        onClick={() => void deactivateEmployee(employee)}
+                        disabled={String(employee.status).toLowerCase() === 'inactive' || deactivatingId === employee.id}
+                      >
+                        Deactivate
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
