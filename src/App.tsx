@@ -12,6 +12,7 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { formatTime } from "@/utils/formatTime";
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
@@ -45,6 +46,22 @@ const queryPersister =
       })
     : undefined;
 const NOTIFICATION_PERMISSION_KEY = "ground-crew-notification-permission-requested";
+const IN_APP_NOTIFICATION_EVENT = "ground-crew-in-app-notification";
+
+type InAppNotificationDetail = {
+  id: string;
+  title: string;
+  description: string;
+  route: string;
+  severity: "critical" | "warning" | "info";
+  icon: "task" | "schedule" | "equipment";
+  timestamp: string;
+};
+
+function publishInAppNotification(detail: InAppNotificationDetail) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(IN_APP_NOTIFICATION_EVENT, { detail }));
+}
 
 function RouteFallback() {
   return (
@@ -243,6 +260,15 @@ function AppWithNotificationSetup() {
         { event: "*", schema: "public", table: "schedule_entries", filter: `employee_id=eq.${currentUser.employeeId}` },
         () => {
           sendNotification("Schedule updated", "Your shift schedule changed. Open Scheduler to review.", "/app/scheduler");
+          publishInAppNotification({
+            id: `schedule-${Date.now()}`,
+            title: "Schedule updated",
+            description: "Your shift schedule changed. Open Scheduler to review.",
+            route: "/app/scheduler",
+            severity: "warning",
+            icon: "schedule",
+            timestamp: new Date().toISOString(),
+          });
         },
       )
       .subscribe();
@@ -252,8 +278,40 @@ function AppWithNotificationSetup() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "assignments", filter: `employee_id=eq.${currentUser.employeeId}` },
-        () => {
-          sendNotification("New task assigned", "A new task was assigned to you. Open Workflow to review.", "/app/workboard");
+        async (payload) => {
+          const next = payload.new as {
+            title?: string | null;
+            start_time?: string | null;
+            property_id?: string | null;
+            assigned_by_name?: string | null;
+            created_by_name?: string | null;
+          };
+          const assignmentTitle = next.title?.trim() || "Task";
+          const dispatcherName = next.assigned_by_name?.trim() || next.created_by_name?.trim() || "Supervisor";
+          const startLabel = formatTime(next.start_time).trim() || "Not set";
+          let propertyName = "Property not set";
+          if (next.property_id) {
+            const { data: property } = await supabase
+              .from("properties")
+              .select("name")
+              .eq("id", next.property_id)
+              .maybeSingle();
+            if (property?.name) {
+              propertyName = property.name;
+            }
+          }
+
+          const notificationBody = `Assigned by ${dispatcherName} · Start: ${startLabel} · ${propertyName}`;
+          sendNotification(`New Task: ${assignmentTitle}`, notificationBody, "/app/workboard");
+          publishInAppNotification({
+            id: `assignment-${Date.now()}`,
+            title: `New Task: ${assignmentTitle}`,
+            description: notificationBody,
+            route: "/app/workboard",
+            severity: "info",
+            icon: "task",
+            timestamp: new Date().toISOString(),
+          });
         },
       )
       .subscribe();

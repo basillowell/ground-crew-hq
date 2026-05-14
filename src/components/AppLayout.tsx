@@ -26,6 +26,9 @@ export interface AppNotification {
   description: string;
   severity: 'critical' | 'warning' | 'info';
   route: string;
+  icon: 'task' | 'schedule' | 'equipment';
+  timestamp: string;
+  read: boolean;
 }
 
 function hexToHslValues(hex: string | undefined, fallback: string) {
@@ -105,10 +108,15 @@ function applyBranding(programSetting?: ProgramSettings) {
   }
 }
 
+const inAppNotificationEventName = 'ground-crew-in-app-notification';
+
+type IncomingNotification = Omit<AppNotification, 'read'>;
+
 export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const [department, setDepartment] = useState('Maintenance');
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
   const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, orgId } = useAuth();
   const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
@@ -125,17 +133,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     applyBranding(programSetting ?? undefined);
   }, [programSetting]);
 
-  const notifications = useMemo(() => {
-    const todayKey = currentDate.toISOString().slice(0, 10);
+  const computedNotifications = useMemo(() => {
+    const currentDayKey = currentDate.toISOString().slice(0, 10);
     const employees = employeesQuery.data ?? [];
     const scheduleEntries = scheduleQuery.data ?? [];
     const assignments = assignmentsQuery.data ?? [];
     const equipmentUnits = equipmentQuery.data ?? [];
     const activeEmployees = employees.filter((employee) => employee.status === 'active' && employee.department === department);
     const scheduledToday = scheduleEntries.filter(
-      (entry) => entry.date === todayKey && entry.status === 'scheduled' && activeEmployees.some((employee) => employee.id === entry.employeeId),
+      (entry) => entry.date === currentDayKey && entry.status === 'scheduled' && activeEmployees.some((employee) => employee.id === entry.employeeId),
     );
-    const assignmentsToday = assignments.filter((entry) => entry.date === todayKey);
+    const assignmentsToday = assignments.filter((entry) => entry.date === currentDayKey);
     const equipmentIssues = equipmentUnits.filter((unit) => unit.status === 'maintenance' || unit.status === 'out-of-service');
     const unassignedCrew = scheduledToday.filter(
       (entry) => !assignmentsToday.some((assignment) => assignment.employeeId === entry.employeeId),
@@ -145,6 +153,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     );
 
     const nextNotifications: AppNotification[] = [];
+    const now = new Date().toISOString();
 
     if (currentUser?.role === 'admin' || currentUser?.role === 'manager') {
       if (unscheduledCrew.length > 0) {
@@ -154,15 +163,21 @@ export function AppLayout({ children }: AppLayoutProps) {
           description: `${unscheduledCrew.slice(0, 3).map((entry) => `${entry.firstName} ${entry.lastName}`).join(', ')}${unscheduledCrew.length > 3 ? ' and more' : ''}`,
           severity: 'warning',
           route: '/app/scheduler',
+          icon: 'schedule',
+          timestamp: now,
+          read: false,
         });
       }
       if (unassignedCrew.length > 0) {
         nextNotifications.push({
           id: 'unassigned-crew',
           title: `${unassignedCrew.length} scheduled crew members lack assignments`,
-          description: 'Open the workflow board to finish dispatching today’s labor plan.',
+          description: 'Open the workflow board to finish dispatching today\'s labor plan.',
           severity: 'critical',
           route: '/app/workboard',
+          icon: 'task',
+          timestamp: now,
+          read: false,
         });
       }
       if (equipmentIssues.length > 0) {
@@ -172,22 +187,59 @@ export function AppLayout({ children }: AppLayoutProps) {
           description: 'Maintenance or out-of-service equipment can affect labor and spray plans.',
           severity: 'warning',
           route: '/app/equipment',
+          icon: 'equipment',
+          timestamp: now,
+          read: false,
         });
       }
     }
 
-    if (nextNotifications.length === 0) {
-      nextNotifications.push({
-        id: 'all-clear',
-        title: 'Operations look clean',
-        description: 'No urgent admin issues were detected for the current date and department.',
-        severity: 'info',
-        route: '/app/workboard',
-      });
-    }
-
     return nextNotifications;
   }, [employeesQuery.data, scheduleQuery.data, assignmentsQuery.data, equipmentQuery.data, currentDate, currentUser?.role, department]);
+
+  useEffect(() => {
+    const handleNotification = (event: Event) => {
+      const detail = (event as CustomEvent<IncomingNotification>).detail;
+      if (!detail) return;
+      setInAppNotifications((previous) => [{ ...detail, read: false }, ...previous].slice(0, 40));
+    };
+
+    window.addEventListener(inAppNotificationEventName, handleNotification as EventListener);
+    return () => window.removeEventListener(inAppNotificationEventName, handleNotification as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!computedNotifications.length) return;
+    setInAppNotifications((previous) => {
+      const byId = new Map(previous.map((item) => [item.id, item]));
+      const merged = [...previous];
+      computedNotifications.forEach((item) => {
+        if (!byId.has(item.id)) {
+          merged.unshift(item);
+        }
+      });
+      return merged.slice(0, 40);
+    });
+  }, [computedNotifications]);
+
+  const notificationsForDisplay = useMemo(() => {
+    if (inAppNotifications.length > 0) return inAppNotifications;
+    return [{
+      id: 'all-clear',
+      title: 'Operations look clean',
+      description: 'No urgent admin issues were detected for the current date and department.',
+      severity: 'info' as const,
+      route: '/app/workboard',
+      icon: 'schedule' as const,
+      timestamp: new Date().toISOString(),
+      read: true,
+    }];
+  }, [inAppNotifications]);
+
+  const unreadNotificationCount = useMemo(
+    () => inAppNotifications.filter((entry) => !entry.read).length,
+    [inAppNotifications],
+  );
 
   const handleSelectProperty = (propertyId: string) => {
     setCurrentPropertyId(propertyId);
@@ -196,6 +248,17 @@ export function AppLayout({ children }: AppLayoutProps) {
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
+  };
+
+  const markAllNotificationsRead = () => {
+    setInAppNotifications((previous) => previous.map((entry) => ({ ...entry, read: true })));
+  };
+
+  const handleNotificationOpen = (route: string, id: string) => {
+    setInAppNotifications((previous) =>
+      previous.map((entry) => (entry.id === id ? { ...entry, read: true } : entry)),
+    );
+    navigate(route);
   };
 
   return (
@@ -213,7 +276,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             currentPropertyId={currentPropertyId}
             onSelectProperty={handleSelectProperty}
             allowAllProperties={currentUser?.role === 'admin' || currentUser?.role === 'manager'}
-            notifications={notifications}
+            notifications={notificationsForDisplay}
+            unreadNotificationCount={unreadNotificationCount}
+            onMarkAllNotificationsRead={markAllNotificationsRead}
+            onOpenNotification={handleNotificationOpen}
             onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
           />

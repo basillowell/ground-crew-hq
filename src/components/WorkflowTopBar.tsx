@@ -1,6 +1,5 @@
 import { memo } from 'react';
-import { Bell, CalendarDays, LogOut } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Bell, CalendarDays, ClipboardList, LogOut, Wrench, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -30,6 +29,9 @@ interface WorkflowTopBarProps {
   onSelectProperty: (propertyId: string) => void;
   allowAllProperties?: boolean;
   notifications: AppNotification[];
+  unreadNotificationCount: number;
+  onMarkAllNotificationsRead: () => void;
+  onOpenNotification: (route: string, id: string) => void;
   onSignOut: () => void;
   programSetting?: ProgramSettings;
 }
@@ -53,17 +55,27 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   onSelectProperty,
   allowAllProperties = false,
   notifications,
+  unreadNotificationCount,
+  onMarkAllNotificationsRead,
+  onOpenNotification,
   onSignOut,
   programSetting,
 }: WorkflowTopBarProps) {
   const { currentUser } = useAuth();
-  const navigate = useNavigate();
   const firstName = (currentUser as { firstName?: string } | null)?.firstName ?? currentUser?.fullName?.split(' ')[0] ?? '';
   const lastName = (currentUser as { lastName?: string } | null)?.lastName ?? currentUser?.fullName?.split(' ').slice(1).join(' ') ?? '';
   const displayName = [firstName, lastName].filter(Boolean).join(' ') || currentUser?.fullName || 'WorkForce User';
   const displayRole = (currentUser?.role || 'admin').toUpperCase();
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
+  const formatTimestamp = (isoTimestamp: string) =>
+    new Date(isoTimestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
+
+  const getNotificationIcon = (icon: AppNotification['icon']) => {
+    if (icon === 'task') return <ClipboardList className="h-3.5 w-3.5 text-blue-600" />;
+    if (icon === 'equipment') return <Wrench className="h-3.5 w-3.5 text-amber-600" />;
+    return <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />;
+  };
   return (
     <header className="sticky top-0 z-20 shrink-0 border-b border-border/80 bg-card/92 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/85">
       <div className="flex flex-wrap items-center gap-3">
@@ -128,12 +140,12 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </Badge>
         ) : null}
 
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={(open) => open && onMarkAllNotificationsRead()}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent hover:border-border/70 hover:bg-muted/50">
               <Bell className="h-4 w-4" />
               <Badge className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
-                {notifications.length}
+                {unreadNotificationCount}
               </Badge>
             </Button>
           </DropdownMenuTrigger>
@@ -144,7 +156,12 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             {notifications.map((notification) => (
-              <DropdownMenuItem key={notification.id} className="items-start gap-3 py-3" onClick={() => navigate(notification.route)}>
+              <DropdownMenuItem
+                key={notification.id}
+                className={`items-start gap-3 py-3 ${notification.read ? 'opacity-75' : 'bg-muted/20'}`}
+                onClick={() => onOpenNotification(notification.route, notification.id)}
+              >
+                <div className="mt-0.5">{getNotificationIcon(notification.icon)}</div>
                 <div
                   className={`mt-1 h-2.5 w-2.5 rounded-full ${
                     notification.severity === 'critical'
@@ -157,9 +174,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                 <div className="space-y-1">
                   <div className="text-sm font-medium">{notification.title}</div>
                   <div className="text-xs text-muted-foreground">{notification.description}</div>
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                    {notification.route.replace('/app/', '')}
-                  </div>
+                  <div className="text-[11px] text-muted-foreground">{formatTimestamp(notification.timestamp)}</div>
                 </div>
               </DropdownMenuItem>
             ))}
