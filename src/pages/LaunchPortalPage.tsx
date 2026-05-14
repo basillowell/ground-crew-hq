@@ -1,38 +1,82 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
+import {
+  CalendarDays,
+  ClipboardList,
+  CloudSun,
+  Loader2,
+  ShieldCheck,
+  Smartphone,
+  Wrench,
+  BarChart3,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { hasSupabaseConfig, supabase, supabaseConfigError } from '@/lib/supabase';
 import { useProgramSettings } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
+
+type FeatureItem = {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+};
+
+const FEATURES: FeatureItem[] = [
+  {
+    icon: CalendarDays,
+    title: 'Crew Scheduling',
+    description: 'Week grid, shift templates, and one-click copy week to keep mornings efficient.',
+  },
+  {
+    icon: ClipboardList,
+    title: 'Task Dispatch',
+    description: 'Assign tasks, track status, and keep supervisors synced with real-time updates.',
+  },
+  {
+    icon: CloudSun,
+    title: 'Weather Intelligence',
+    description: 'Spray windows, heat alerts, and inline weather warnings where work decisions happen.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Labor Reports',
+    description: 'Actual vs planned hours, labor cost tracking, and export-ready CSV reporting.',
+  },
+  {
+    icon: Smartphone,
+    title: 'Mobile Crew App',
+    description: 'Clock in, complete tasks, and log hours directly from the field in real time.',
+  },
+  {
+    icon: Wrench,
+    title: 'Equipment Tracking',
+    description: 'Service alerts, assignment linking, and a full fleet readiness overview.',
+  },
+];
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
   const { currentUser, authDebugMessage, isLoading, authState, hasSession, retryAuthHydration } = useAuth();
   const programSettingsQuery = useProgramSettings();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAwaitingProfile, setIsAwaitingProfile] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const clientName = programSettingsQuery.data?.clientLabel || 'Ground Crew HQ';
+  const [loginOpen, setLoginOpen] = useState(false);
+
   const appName = programSettingsQuery.data?.appName || 'Ground Crew HQ';
-  const shellImageUrl = programSettingsQuery.data?.logoUrl || '';
+  const clientName = programSettingsQuery.data?.clientLabel || 'Ground Crew HQ';
   const DEMO_EMAIL = 'demo@groundcrewhq.com';
   const DEMO_PASSWORD = 'GroundCrewHQDemo!2026';
 
   useEffect(() => {
     if (currentUser) {
-      if (import.meta.env.DEV) {
-        console.info('[Login] Profile hydrated, navigating to dashboard', {
-          appUserId: currentUser.appUserId,
-          orgId: currentUser.orgId,
-          role: currentUser.role,
-        });
-      }
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
       setErrorMessage('');
@@ -41,21 +85,11 @@ export default function LaunchPortalPage() {
     }
 
     if (isAwaitingProfile && !isLoading) {
-      if (import.meta.env.DEV) {
-        console.warn('[Login] Sign-in succeeded but app profile hydration failed', {
-          authDebugMessage,
-          authState,
-        });
-      }
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
-      if (authDebugMessage) {
-        setErrorMessage(authDebugMessage);
-      } else {
-        setErrorMessage('Sign-in completed, but your app profile could not be loaded.');
-      }
+      setErrorMessage(authDebugMessage || 'Sign-in completed, but your app profile could not be loaded.');
     }
-  }, [authDebugMessage, authState, currentUser, isAwaitingProfile, isLoading, navigate]);
+  }, [authDebugMessage, currentUser, isAwaitingProfile, isLoading, navigate]);
 
   useEffect(() => {
     if (!hasSupabaseConfig) {
@@ -65,221 +99,223 @@ export default function LaunchPortalPage() {
 
   const mapAuthError = (message: string) => {
     const normalized = message.toLowerCase();
-    if (normalized.includes('invalid login credentials')) {
-      return 'Invalid credentials. Please check your email and password and try again.';
-    }
-    if (normalized.includes('email not confirmed')) {
-      return 'Email not confirmed. Please verify your email address before signing in.';
-    }
+    if (normalized.includes('invalid login credentials')) return 'Invalid credentials. Please check your email and password.';
+    if (normalized.includes('email not confirmed')) return 'Email not confirmed. Please verify your email before signing in.';
     return message;
   };
 
-  const errorTone = (() => {
-    const normalized = errorMessage.toLowerCase();
-    if (!normalized) return null;
-    if (normalized.includes('invalid credentials')) return { title: 'Sign-in failed', detail: 'The email or password was incorrect.' };
-    if (normalized.includes('timed out')) return { title: 'Connection timed out', detail: 'Your network or Supabase response is taking too long.' };
-    if (normalized.includes('not configured')) return { title: 'Configuration required', detail: 'Supabase environment variables are missing for this deployment.' };
-    if (normalized.includes('profile')) return { title: 'Profile setup needed', detail: 'Authentication succeeded, but workspace profile data is incomplete.' };
-    return { title: 'Unable to sign in', detail: 'Please review the message and try again.' };
-  })();
+  const signInWithCredentials = async (nextEmail: string, nextPassword: string) => {
+    if (!supabase) {
+      setErrorMessage(supabaseConfigError || 'Supabase is not configured for this environment.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setIsAwaitingProfile(false);
+    setErrorMessage('');
+    try {
+      const result = await Promise.race([
+        supabase.auth.signInWithPassword({ email: nextEmail, password: nextPassword }),
+        new Promise<{ error: { message: string } }>((resolve) =>
+          setTimeout(() => resolve({ error: { message: 'Sign-in timed out. Please try again.' } }), 15000),
+        ),
+      ]);
+
+      if (result.error) {
+        setErrorMessage(mapAuthError(result.error.message));
+        setIsSubmitting(false);
+        return;
+      }
+
+      setIsAwaitingProfile(true);
+    } catch {
+      setErrorMessage('An unexpected error occurred. Please try again.');
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) {
-      setErrorMessage(supabaseConfigError || 'Supabase is not configured for this environment.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setIsAwaitingProfile(false);
-    setErrorMessage('');
-    try {
-      if (import.meta.env.DEV) {
-        console.info('[Login] Starting signInWithPassword', { email });
-      }
-      const result = await Promise.race([
-        supabase.auth.signInWithPassword({ email, password }),
-        new Promise<{ error: { message: string } }>((resolve) =>
-          setTimeout(() => resolve({ error: { message: 'Sign-in timed out. Please try again.' } }), 15000),
-        ),
-      ]);
-
-      if (result.error) {
-        if (import.meta.env.DEV) {
-          console.warn('[Login] Supabase sign-in error', result.error.message);
-        }
-        setErrorMessage(mapAuthError(result.error.message));
-        setIsSubmitting(false);
-      } else {
-        // Wait for AuthContext profile hydration before redirecting.
-        if (import.meta.env.DEV) {
-          console.info('[Login] Supabase sign-in succeeded, waiting for profile hydration');
-        }
-        setIsAwaitingProfile(true);
-      }
-    } catch {
-      setErrorMessage('An unexpected error occurred. Please try again.');
-      setIsSubmitting(false);
-    }
+    await signInWithCredentials(email, password);
   };
 
   const handleDemoLogin = async () => {
-    if (!supabase) {
-      setErrorMessage(supabaseConfigError || 'Supabase is not configured for this environment.');
-      return;
-    }
-    setIsSubmitting(true);
-    setIsAwaitingProfile(false);
-    setErrorMessage('');
-    try {
-      const result = await Promise.race([
-        supabase.auth.signInWithPassword({ email: DEMO_EMAIL, password: DEMO_PASSWORD }),
-        new Promise<{ error: { message: string } }>((resolve) =>
-          setTimeout(() => resolve({ error: { message: 'Sign-in timed out. Please try again.' } }), 15000),
-        ),
-      ]);
-      if (result.error) {
-        setErrorMessage(mapAuthError(result.error.message));
-        setIsSubmitting(false);
-      } else {
-        setIsAwaitingProfile(true);
-      }
-    } catch {
-      setErrorMessage('An unexpected error occurred. Please try again.');
-      setIsSubmitting(false);
-    }
-  };
-
-  const scrollToAccess = () => {
-    document.getElementById('launch-access')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    await signInWithCredentials(DEMO_EMAIL, DEMO_PASSWORD);
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(247,250,248,1),rgba(236,244,239,1))]">
-      <header
-        className="border-b border-white/10 shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]"
-        style={{
-          backgroundImage: shellImageUrl
-            ? `linear-gradient(120deg, rgba(15,23,42,0.86), rgba(18,54,36,0.72)), url(${shellImageUrl})`
-            : 'linear-gradient(120deg, rgba(18,54,36,1), rgba(30,93,62,0.92))',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      >
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-4 text-white">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-sm font-extrabold tracking-wide backdrop-blur">
-            HQ
-          </div>
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f7fbf8_0%,#eef6f1_100%)] text-foreground">
+      <header className="sticky top-0 z-20 border-b border-emerald-100/80 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <div>
-            <div className="text-lg font-semibold tracking-tight">{appName}</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">{clientName}</div>
+            <div className="text-base font-semibold tracking-tight">{appName}</div>
+            <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{clientName}</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={() => setLoginOpen(true)}>
+              Sign In
+            </Button>
+            <Button onClick={() => setLoginOpen(true)}>Start Free Trial</Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-14 md:py-20">
-        <section className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,420px)] lg:items-center">
-          <div className="max-w-2xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
-              Ground operations workspace
-            </div>
-            <h1 className="max-w-xl text-4xl font-bold tracking-tight text-foreground md:text-5xl">
-              Workforce coordination for crews, properties, and daily field execution.
+      <main className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6 md:py-16">
+        <section className="grid items-center gap-8 lg:grid-cols-2">
+          <div>
+            <h1 className="text-4xl font-bold tracking-tight text-emerald-950 md:text-5xl">
+              Your Digital Whiteboard for Grounds Operations
             </h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg">
-              Ground Crew HQ gives supervisors, admins, and field teams one place to organize schedules,
-              tasks, weather, equipment, and communication across every property.
+              Schedule crews, dispatch tasks, track labor, and make weather-smart decisions — all in one platform built for superintendents.
             </p>
-            <div className="mt-6 grid gap-2 sm:grid-cols-3">
-              {['Live workforce scheduling', 'Daily execution control', 'Property-ready operations'].map((item) => (
-                <div key={item} className="rounded-xl border border-border/80 bg-white/75 px-3 py-2 text-xs text-foreground/85 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                    <span>{item}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-8">
-              <Button size="lg" className="gap-2 px-6" onClick={scrollToAccess}>
-                Get Started
-                <ArrowRight className="h-4 w-4" />
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button size="lg" onClick={() => setLoginOpen(true)}>
+                Start Free Trial
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => void handleDemoLogin()}>
+                Try Demo
               </Button>
             </div>
           </div>
+          <Card className="overflow-hidden rounded-2xl border-emerald-100 bg-white shadow-lg">
+            <img
+              src="/images/hero-workboard.png"
+              alt="Ground Crew HQ workboard preview"
+              className="h-full w-full object-cover"
+            />
+          </Card>
+        </section>
 
-          <Card id="launch-access" className="border-primary/20 bg-card/95 p-6 shadow-xl shadow-primary/10">
-            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              Login and access
-            </div>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Sign in with your club or company credentials to open your operations workspace.
-            </p>
+        <section className="mt-16">
+          <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">
+            Every morning, you erase yesterday&apos;s whiteboard and start over.
+          </h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {[
+              'Scheduling takes 30+ minutes every day',
+              'Weather wrecks your plan and nobody knows',
+              "Your GM asks for labor reports you can't produce",
+            ].map((item) => (
+              <Card key={item} className="rounded-xl border-emerald-100 bg-white p-5">
+                <p className="text-sm font-medium text-foreground">{item}</p>
+              </Card>
+            ))}
+          </div>
+        </section>
 
-            <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="name@club.com"
-                  autoComplete="email"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                />
-              </div>
-              {errorMessage ? (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-3 text-sm text-destructive">
-                  <div className="font-semibold">{errorTone?.title ?? 'Sign-in error'}</div>
-                  <div className="mt-0.5 text-xs">{errorTone?.detail ?? ''}</div>
-                  <div className="mt-2 text-xs">{errorMessage}</div>
-                </div>
-              ) : null}
-              {!errorMessage && authDebugMessage ? (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950">
-                  {authDebugMessage}
-                  {hasSession && (authState === 'network-timeout' || authState === 'profile-error' || authState === 'profile-missing') ? (
-                    <div className="mt-2">
-                      <Button type="button" size="sm" variant="outline" onClick={() => void retryAuthHydration()}>
-                        Retry profile load
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              <Button className="w-full gap-2" disabled={isSubmitting || !email || !password || !hasSupabaseConfig} type="submit">
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                {isSubmitting ? (isAwaitingProfile ? 'Loading workspace profile...' : 'Signing in securely...') : 'Get Started'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full gap-2"
-                disabled={isSubmitting || !hasSupabaseConfig}
-                onClick={() => void handleDemoLogin()}
-              >
-                Try Demo
-              </Button>
-              <p className="text-center text-[11px] text-muted-foreground">
-                Secure access powered by Supabase authentication.
-              </p>
-            </form>
+        <section className="mt-16">
+          <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">Feature Showcase</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {FEATURES.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <Card key={feature.title} className="rounded-xl border-emerald-100 bg-white p-5">
+                  <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-base font-semibold">{feature.title}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{feature.description}</p>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mt-16 rounded-2xl border border-emerald-100 bg-white p-6">
+          <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">Built for Turf, Not Tech</h2>
+          <p className="mt-3 text-sm leading-7 text-muted-foreground md:text-base">
+            Unlike generic field service tools, Ground Crew HQ speaks your language. Mow greens. Roll greens.
+            Bunker maintenance. Irrigation check. Your task library, your schedule, your weather.
+          </p>
+        </section>
+
+        <section className="mt-16">
+          <Card className="mx-auto max-w-xl rounded-2xl border-emerald-200 bg-emerald-50/60 p-6 text-center">
+            <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">Early Access — Free during beta</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Full platform access. No credit card required.</p>
+            <Button className="mt-5" size="lg" onClick={() => setLoginOpen(true)}>
+              Get Started
+            </Button>
           </Card>
         </section>
       </main>
+
+      <footer className="border-t border-emerald-100 bg-white/90">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-muted-foreground md:flex-row md:px-6">
+          <div>Ground Crew HQ · © 2026 · support@groundcrewhq.com</div>
+          <div className="flex items-center gap-4">
+            <a href="#" className="hover:text-foreground">Privacy Policy</a>
+            <a href="#" className="hover:text-foreground">Terms of Service</a>
+          </div>
+        </div>
+      </footer>
+
+      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              Sign in to your workspace
+            </DialogTitle>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@club.com"
+                autoComplete="email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+              />
+            </div>
+            {errorMessage ? (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-3 text-xs text-destructive">
+                {errorMessage}
+              </div>
+            ) : null}
+            {!errorMessage && authDebugMessage ? (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-xs text-amber-950">
+                {authDebugMessage}
+                {hasSession &&
+                (authState === 'network-timeout' || authState === 'profile-error' || authState === 'profile-missing') ? (
+                  <div className="mt-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => void retryAuthHydration()}>
+                      Retry profile load
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <Button className="w-full gap-2" disabled={isSubmitting || !email || !password || !hasSupabaseConfig} type="submit">
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isSubmitting ? (isAwaitingProfile ? 'Loading workspace profile...' : 'Signing in...') : 'Sign In'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={isSubmitting || !hasSupabaseConfig}
+              onClick={() => void handleDemoLogin()}
+            >
+              Try Demo
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
