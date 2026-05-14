@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -210,6 +210,7 @@ export default function WorkboardPage() {
   const [taskLibrary, setTaskLibrary] = useState<TaskLibraryItem[]>([]);
   const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
   const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
+  const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
 
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
@@ -437,6 +438,14 @@ export default function WorkboardPage() {
     return () => { void channel.unsubscribe(); };
   }, [queryClient]);
 
+  useEffect(
+    () => () => {
+      Object.values(pendingDeleteTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+      pendingDeleteTimeoutsRef.current = {};
+    },
+    [],
+  );
+
   useEffect(() => {
     if (focusedPropertyId && focusedPropertyId !== currentPropertyId) {
       setCurrentPropertyId(focusedPropertyId);
@@ -525,6 +534,27 @@ export default function WorkboardPage() {
   const dayAssignments = useMemo(
     () => assignmentList.filter((a) => a.date === boardDate),
     [assignmentList, boardDate],
+  );
+
+  const upsertAssignmentInCache = useCallback(
+    (nextAssignment: Assignment) => {
+      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) => {
+        const existing = current ?? [];
+        const withoutExisting = existing.filter((assignment) => assignment.id !== nextAssignment.id);
+        return [...withoutExisting, nextAssignment];
+      });
+    },
+    [assignmentsQuery.queryKey, queryClient],
+  );
+
+  const removeAssignmentFromCache = useCallback(
+    (assignmentId: string) => {
+      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) => {
+        const existing = current ?? [];
+        return existing.filter((assignment) => assignment.id !== assignmentId);
+      });
+    },
+    [assignmentsQuery.queryKey, queryClient],
   );
   const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
     if (workOrders.length > 0) {
@@ -767,6 +797,19 @@ export default function WorkboardPage() {
       return;
     }
 
+    const optimisticAssignment: Assignment = {
+      id: assignmentId,
+      employeeId: assignmentDraft.employeeId,
+      taskId: selectedTaskId,
+      equipmentId: assignmentDraft.equipmentId || undefined,
+      date: boardDate,
+      startTime: assignmentDraft.startTime || '06:00',
+      duration: estimatedMinutes,
+      area: assignmentDraft.area.trim() || 'Primary zone',
+      status: assignmentDraft.status ?? 'planned',
+    };
+    upsertAssignmentInCache(optimisticAssignment);
+
     if (linkedRequestId) {
       await supabase
         .from('task_requests')
@@ -779,10 +822,8 @@ export default function WorkboardPage() {
         .eq('id', linkedRequestId);
     }
 
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['assignments'] }),
-      queryClient.invalidateQueries({ queryKey: ['task-requests'] }),
-    ]);
+    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
     setLinkedRequestId(null);
     setEditingAssignmentId(null);
     setAssignmentDialogOpen(false);
@@ -795,9 +836,38 @@ export default function WorkboardPage() {
 
   async function removeAssignment(assignmentId: string) {
     if (!supabase) return;
-    const { error } = await supabase.from('assignments').delete().eq('id', assignmentId);
-    if (error) { toast('Unable to remove assignment', { description: error.message }); return; }
-    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    const assignmentToRemove = dayAssignments.find((assignment) => assignment.id === assignmentId);
+    if (!assignmentToRemove) return;
+
+    removeAssignmentFromCache(assignmentId);
+
+    const timeoutId = window.setTimeout(async () => {
+      delete pendingDeleteTimeoutsRef.current[assignmentId];
+      const { error } = await supabase.from('assignments').delete().eq('id', assignmentId);
+      if (error) {
+        upsertAssignmentInCache(assignmentToRemove);
+        toast('Unable to remove assignment', { description: error.message });
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    }, 3000);
+
+    pendingDeleteTimeoutsRef.current[assignmentId] = timeoutId;
+
+    toast('Assignment removed', {
+      description: 'Undo?',
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          const activeTimeout = pendingDeleteTimeoutsRef.current[assignmentId];
+          if (activeTimeout) {
+            window.clearTimeout(activeTimeout);
+            delete pendingDeleteTimeoutsRef.current[assignmentId];
+          }
+          upsertAssignmentInCache(assignmentToRemove);
+        },
+      },
+    });
   }
 
   async function dismissRequest(requestId: string) {

@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProgramSettings, useProperties, usePropertyClassOptions } from '@/lib/supabase-queries';
+import { APP_VERSION } from '@/constants/version';
 
 type NavRole = 'employee' | 'admin';
 
@@ -183,7 +184,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined() {
       <SidebarFooter className="border-t border-sidebar-border/80 bg-[linear-gradient(180deg,rgba(10,32,22,0),rgba(10,32,22,0.55))] p-4">
         {!collapsed ? (
           <div className="text-[11px] text-sidebar-foreground/85">
-            {programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'} · v2.4.1
+            Ground Crew HQ · v{APP_VERSION}
           </div>
         ) : null}
       </SidebarFooter>

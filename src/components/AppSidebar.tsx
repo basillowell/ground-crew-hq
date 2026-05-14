@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useProgramSettings } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
+import { APP_VERSION } from '@/constants/version';
 
 const navItems = [
   { title: 'Workboard', url: '/app/workboard', icon: LayoutDashboard },
@@ -94,7 +95,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         {!collapsed && (
           <div className="text-xs text-sidebar-foreground">
-            {programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'} • v2.4.1
+            Ground Crew HQ · v{APP_VERSION}
           </div>
         )}
       </SidebarFooter>
