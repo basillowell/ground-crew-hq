@@ -423,6 +423,74 @@ export default function CommandCenterOperationalPage() {
       return (data ?? []) as Array<{ id: string; name: string | null; unit_name: string | null; type: string | null; last_serviced: string | null }>;
     },
   });
+  const weeklyLaborCostQuery = useQuery({
+    queryKey: ['dashboard-weekly-labor-cost', orgId ?? 'no-org', todayKey],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      if (!supabase || !orgId) {
+        return { totalCost: 0, daily: [] as Array<{ date: string; label: string; cost: number }>, hasHourlyRates: false };
+      }
+      const now = new Date();
+      const weekStart = new Date(now);
+      const weekDay = weekStart.getDay();
+      const shift = weekDay === 0 ? -6 : 1 - weekDay;
+      weekStart.setDate(weekStart.getDate() + shift);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const startDate = weekStart.toISOString().slice(0, 10);
+      const endDate = weekEnd.toISOString().slice(0, 10);
+
+      const [assignmentsResult, employeesResult] = await Promise.all([
+        supabase
+          .from('assignments')
+          .select('date, employee_id, actual_hours')
+          .eq('org_id', orgId)
+          .gte('date', startDate)
+          .lte('date', endDate),
+        supabase
+          .from('employees')
+          .select('id, hourly_rate')
+          .eq('org_id', orgId),
+      ]);
+
+      if (assignmentsResult.error) throw assignmentsResult.error;
+      if (employeesResult.error) throw employeesResult.error;
+
+      const hourlyRateByEmployee = new Map<string, number>();
+      (employeesResult.data ?? []).forEach((employee) => {
+        hourlyRateByEmployee.set(String(employee.id), Number(employee.hourly_rate ?? 0));
+      });
+      const hasHourlyRates = Array.from(hourlyRateByEmployee.values()).some((rate) => rate > 0);
+
+      const dailyMap = new Map<string, number>();
+      for (let i = 0; i < 7; i += 1) {
+        const date = new Date(weekStart);
+        date.setDate(weekStart.getDate() + i);
+        dailyMap.set(date.toISOString().slice(0, 10), 0);
+      }
+
+      (assignmentsResult.data ?? []).forEach((assignment) => {
+        const employeeId = String(assignment.employee_id ?? '');
+        const rate = hourlyRateByEmployee.get(employeeId) ?? 0;
+        const actualHours = Number(assignment.actual_hours ?? 0);
+        const dayKey = String(assignment.date ?? '');
+        if (!dailyMap.has(dayKey)) return;
+        const nextCost = (dailyMap.get(dayKey) ?? 0) + actualHours * rate;
+        dailyMap.set(dayKey, nextCost);
+      });
+
+      const daily = Array.from(dailyMap.entries()).map(([date, cost]) => ({
+        date,
+        label: new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' }),
+        cost: Number(cost.toFixed(2)),
+      }));
+      const totalCost = Number(daily.reduce((sum, row) => sum + row.cost, 0).toFixed(2));
+
+      return { totalCost, daily, hasHourlyRates };
+    },
+  });
 
   const onboardingDismissKey = useMemo(
     () => (currentUser?.orgId ? `gcrew-onboarding-dismissed-${currentUser.orgId}` : ''),
@@ -495,6 +563,18 @@ export default function CommandCenterOperationalPage() {
 
     return `Safe to spray: ${ranges.map((range) => `${formatHourRange(range.start)} - ${formatHourRange(range.end)}`).join(', ')}`;
   }, [sprayWindowQuery.data]);
+  const weeklyLaborBudget = useMemo(() => {
+    const candidate = (dashboardDataQuery.data?.programSettings as Record<string, unknown> | null)?.weekly_labor_budget;
+    const numeric = Number(candidate ?? 0);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  }, [dashboardDataQuery.data?.programSettings]);
+  const weeklyLaborCostSummary = useMemo(() => {
+    const total = weeklyLaborCostQuery.data?.totalCost ?? 0;
+    if (weeklyLaborBudget && weeklyLaborBudget > 0) {
+      return `This Week: $${total.toLocaleString()} spent · Budget: $${weeklyLaborBudget.toLocaleString()}`;
+    }
+    return `This Week: $${total.toLocaleString()} in labor costs`;
+  }, [weeklyLaborBudget, weeklyLaborCostQuery.data?.totalCost]);
   const sprayCurrentMarkerPercent = useMemo(() => {
     const now = new Date();
     const nowValue = now.getHours() + now.getMinutes() / 60;
@@ -975,6 +1055,33 @@ export default function CommandCenterOperationalPage() {
                     />
                   ))}
                 </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+        <h3 className="text-sm font-semibold">Labor Cost This Week</h3>
+        <div className="mt-2 text-sm text-muted-foreground">{weeklyLaborCostSummary}</div>
+        {!weeklyLaborCostQuery.isLoading && !weeklyLaborCostQuery.error && !weeklyLaborCostQuery.data?.hasHourlyRates ? (
+          <p className="mt-2 text-xs text-amber-700">
+            Set employee hourly rates in the Employees page to enable cost tracking.
+          </p>
+        ) : null}
+        <div className="mt-4 h-44">
+          {weeklyLaborCostQuery.isLoading ? (
+            <Skeleton className="h-full w-full rounded-xl" />
+          ) : weeklyLaborCostQuery.error ? (
+            <div className="text-xs text-muted-foreground">Unable to load weekly labor costs.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyLaborCostQuery.data?.daily ?? []} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} />
+                <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
+                <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                <Bar dataKey="cost" name="Cost" fill="#166534" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
