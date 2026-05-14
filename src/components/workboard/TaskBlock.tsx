@@ -17,9 +17,10 @@ interface TaskBlockProps {
   onDragStart?: () => void;
   onDragEnter?: () => void;
   onDrop?: () => void;
+  weatherWarnings?: Array<{ level: 'warning' | 'danger'; message: string }>;
 }
 
-export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove, draggable, onDragStart, onDragEnter, onDrop }: TaskBlockProps) {
+export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove, draggable, onDragStart, onDragEnter, onDrop, weatherWarnings = [] }: TaskBlockProps) {
   const { currentPropertyId, currentUser } = useAuth();
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const equipmentUnits = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
@@ -74,6 +75,22 @@ export function TaskBlock({ task, assignment, priorityIndex, onEdit, onRemove, d
           <Badge variant="secondary" className="text-[10px]">{formatTime(assignment.startTime)}</Badge>
           {equipment && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{equipment.unitNumber}</Badge>}
         </div>
+        {weatherWarnings.length > 0 ? (
+          <div className="mt-2 space-y-1">
+            {weatherWarnings.map((warning, index) => (
+              <div
+                key={`${assignment.id ?? 'assignment'}-weather-warning-${index}`}
+                className={`rounded-md border px-2 py-1 text-[11px] font-medium ${
+                  warning.level === 'danger'
+                    ? 'border-red-300 bg-red-100 text-red-800'
+                    : 'border-amber-300 bg-amber-100 text-amber-800'
+                }`}
+              >
+                {warning.message}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
       <div className="flex items-start gap-1">
         {onEdit && (

@@ -27,6 +27,7 @@ interface EmployeeRowProps {
   onTaskDragStart?: (employeeId: string, assignmentId: string) => void;
   onTaskDropOnTask?: (employeeId: string, targetAssignmentId: string) => void;
   coveragePercent?: number;
+  weatherWarningsByAssignment?: Record<string, Array<{ level: 'warning' | 'danger'; message: string }>>;
 }
 
 export function EmployeeRow({
@@ -49,6 +50,7 @@ export function EmployeeRow({
   onTaskDragStart,
   onTaskDropOnTask,
   coveragePercent,
+  weatherWarningsByAssignment,
 }: EmployeeRowProps) {
   const sortedAssignments = [...empAssignments];
   const totalMinutes = sortedAssignments.reduce((s, a) => s + a.duration, 0);
@@ -140,6 +142,7 @@ export function EmployeeRow({
                   task={task}
                   assignment={a}
                   priorityIndex={sortedAssignments.findIndex((assignment) => assignment.id === a.id)}
+                  weatherWarnings={weatherWarningsByAssignment?.[a.id ?? ''] ?? []}
                   draggable
                   onDragStart={onTaskDragStart ? () => onTaskDragStart(employee.id, a.id ?? '') : undefined}
                   onDrop={onTaskDropOnTask ? () => onTaskDropOnTask(employee.id, a.id ?? '') : undefined}

@@ -43,6 +43,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
 import { formatTime } from '@/utils/formatTime';
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
@@ -187,6 +188,18 @@ type TaskLibraryItem = {
   estimated_hours: number | null;
 };
 
+type TaskWeatherWarning = {
+  level: 'warning' | 'danger';
+  message: string;
+};
+
+type WorkboardWeatherSnapshot = {
+  temperature: number;
+  windSpeed: number;
+  precipitationProbability: number;
+  weatherCode: number;
+};
+
 export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -210,6 +223,7 @@ export default function WorkboardPage() {
   const [taskLibrary, setTaskLibrary] = useState<TaskLibraryItem[]>([]);
   const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
   const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
+  const [weatherSnapshot, setWeatherSnapshot] = useState<WorkboardWeatherSnapshot | null>(null);
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
   const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
 
@@ -490,6 +504,34 @@ export default function WorkboardPage() {
     [effectivePropertyId, properties],
   );
 
+  const fetchWorkboardWeather = useCallback(async () => {
+    if (!activeProperty?.latitude || !activeProperty?.longitude) {
+      setWeatherSnapshot(null);
+      return;
+    }
+
+    try {
+      const payload = await fetchOpenMeteoWeather({
+        latitude: activeProperty.latitude,
+        longitude: activeProperty.longitude,
+        timezone: 'America/New_York',
+      });
+      const firstHourly = payload.hourly[0];
+      setWeatherSnapshot({
+        temperature: Number(payload.current.temperature ?? 0),
+        windSpeed: Number(payload.current.windSpeed ?? 0),
+        precipitationProbability: Number(firstHourly?.precipitationProbability ?? 0),
+        weatherCode: Number(payload.current.weatherCode ?? firstHourly?.weatherCode ?? -1),
+      });
+    } catch {
+      setWeatherSnapshot(null);
+    }
+  }, [activeProperty?.latitude, activeProperty?.longitude]);
+
+  useEffect(() => {
+    void fetchWorkboardWeather();
+  }, [fetchWorkboardWeather, boardDate]);
+
   const propertyRequests = useMemo(
     () =>
       taskRequests
@@ -601,6 +643,64 @@ export default function WorkboardPage() {
       }),
     [boardDate, dayAssignments, scheduleList, scheduledEmployees],
   );
+
+  const assignmentWeatherWarnings = useMemo<Record<string, TaskWeatherWarning[]>>(() => {
+    if (!weatherSnapshot) return {};
+
+    return dayAssignments.reduce<Record<string, TaskWeatherWarning[]>>((acc, assignment) => {
+      const task = taskList.find((candidate) => candidate.id === assignment.taskId);
+      if (!task?.id) return acc;
+
+      const warnings: TaskWeatherWarning[] = [];
+      const category = (task.category ?? '').toLowerCase();
+      const isSprayingTask =
+        category.includes('spray') || category.includes('irrigation') || category.includes('application');
+      const isMowingTask = category === 'mowing';
+
+      const windHighForSpray = weatherSnapshot.windSpeed > 10;
+      const rainHighForSpray = weatherSnapshot.precipitationProbability > 40;
+      if (isSprayingTask && windHighForSpray && rainHighForSpray) {
+        warnings.push({ level: 'danger', message: '🛑 Unsafe spray conditions' });
+      } else if (isSprayingTask) {
+        if (windHighForSpray) {
+          warnings.push({
+            level: 'warning',
+            message: `⚠️ Wind too high for spraying (${Math.round(weatherSnapshot.windSpeed)}mph)`,
+          });
+        }
+        if (rainHighForSpray) {
+          warnings.push({
+            level: 'warning',
+            message: '⚠️ Rain expected — spraying not recommended',
+          });
+        }
+      }
+
+      if (isMowingTask && weatherSnapshot.precipitationProbability > 60) {
+        warnings.push({
+          level: 'warning',
+          message: '⚠️ Wet conditions — mowing quality affected',
+        });
+      }
+
+      if (weatherSnapshot.temperature > 105) {
+        warnings.push({
+          level: 'danger',
+          message: '🛑 Extreme heat — consider rescheduling',
+        });
+      } else if (weatherSnapshot.temperature > 95) {
+        warnings.push({
+          level: 'warning',
+          message: '🔴 Heat advisory — schedule water breaks',
+        });
+      }
+
+      if (warnings.length > 0 && assignment.id) {
+        acc[assignment.id] = warnings;
+      }
+      return acc;
+    }, {});
+  }, [dayAssignments, taskList, weatherSnapshot]);
 
   const orderedDispatchBoard = useMemo(() => {
     const ranking = new Map(laneOrder.map((id, i) => [id, i]));
@@ -1378,6 +1478,7 @@ export default function WorkboardPage() {
                   onAddTask={openAssignmentDialog}
                   onEditAssignment={openEditAssignmentDialog}
                   onRemoveAssignment={removeAssignment}
+                  weatherWarningsByAssignment={assignmentWeatherWarnings}
                 />
               ))}
 
