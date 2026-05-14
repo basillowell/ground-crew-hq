@@ -11,6 +11,7 @@ type EmployeeRow = {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  hourly_rate: number | null;
 };
 
 type AssignmentRow = {
@@ -31,6 +32,9 @@ type LaborSummaryRow = {
   actualHours: number;
   tasksCompleted: number;
   variance: number;
+  scheduledCost: number;
+  actualCost: number;
+  varianceCost: number;
 };
 
 function toIsoDate(value: Date) {
@@ -62,6 +66,10 @@ function endOfMonth(date: Date) {
 
 function formatHours(value: number) {
   return value.toFixed(1);
+}
+
+function formatCurrency(value: number) {
+  return `$${value.toFixed(2)}`;
 }
 
 function quoteCsv(value: string | number) {
@@ -127,7 +135,7 @@ export default function ReportsPage() {
 
     const [assignmentsResult, employeesResult, propertiesResult] = await Promise.all([
       assignmentsQuery,
-      supabase.from('employees').select('id, first_name, last_name').eq('org_id', orgId),
+      supabase.from('employees').select('id, first_name, last_name, hourly_rate').eq('org_id', orgId),
       supabase.from('properties').select('id, name').eq('org_id', orgId).order('name', { ascending: true }),
     ]);
 
@@ -160,6 +168,7 @@ export default function ReportsPage() {
     assignments.forEach((assignment) => {
       const employeeId = assignment.employee_id;
       const employee = employeeById.get(employeeId);
+      const hourlyRate = Number(employee?.hourly_rate ?? 0);
       const existing = byEmployee.get(employeeId) ?? {
         employeeId,
         employeeName: employee ? `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee' : 'Unknown Employee',
@@ -168,22 +177,28 @@ export default function ReportsPage() {
         actualHours: 0,
         tasksCompleted: 0,
         variance: 0,
+        scheduledCost: 0,
+        actualCost: 0,
+        varianceCost: 0,
       };
 
-      existing.scheduledHours += Number(assignment.estimated_hours ?? 0);
-      existing.actualHours += Number(assignment.actual_hours ?? 0);
+      const scheduledHours = Number(assignment.estimated_hours ?? 0);
+      const actualHours = Number(assignment.actual_hours ?? 0);
+      existing.scheduledHours += scheduledHours;
+      existing.actualHours += actualHours;
+      existing.scheduledCost += scheduledHours * hourlyRate;
+      existing.actualCost += actualHours * hourlyRate;
       if (assignment.status === 'done') existing.tasksCompleted += 1;
       byEmployee.set(employeeId, existing);
     });
 
     byEmployee.forEach((row) => {
       const workedDays = new Set(
-        assignments
-          .filter((assignment) => assignment.employee_id === row.employeeId)
-          .map((assignment) => assignment.date),
+        assignments.filter((assignment) => assignment.employee_id === row.employeeId).map((assignment) => assignment.date),
       );
       row.daysWorked = workedDays.size;
       row.variance = row.actualHours - row.scheduledHours;
+      row.varianceCost = row.actualCost - row.scheduledCost;
     });
 
     return Array.from(byEmployee.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
@@ -197,6 +212,9 @@ export default function ReportsPage() {
         sum.actualHours += row.actualHours;
         sum.tasksCompleted += row.tasksCompleted;
         sum.variance += row.variance;
+        sum.scheduledCost += row.scheduledCost;
+        sum.actualCost += row.actualCost;
+        sum.varianceCost += row.varianceCost;
         return sum;
       },
       {
@@ -205,12 +223,15 @@ export default function ReportsPage() {
         actualHours: 0,
         tasksCompleted: 0,
         variance: 0,
+        scheduledCost: 0,
+        actualCost: 0,
+        varianceCost: 0,
       },
     );
   }, [laborRows]);
 
   const exportCsv = useCallback(() => {
-    const headers = ['Employee', 'Days Worked', 'Scheduled Hours', 'Actual Hours', 'Tasks Completed', 'Variance'];
+    const headers = ['Employee', 'Days Worked', 'Scheduled Hours', 'Actual Hours', 'Tasks Completed', 'Variance', 'Scheduled Cost', 'Actual Cost', 'Variance ($)'];
     const dataRows = laborRows.map((row) => [
       row.employeeName,
       row.daysWorked,
@@ -218,6 +239,9 @@ export default function ReportsPage() {
       formatHours(row.actualHours),
       row.tasksCompleted,
       formatHours(row.variance),
+      formatCurrency(row.scheduledCost),
+      formatCurrency(row.actualCost),
+      formatCurrency(row.varianceCost),
     ]);
     const totalsRow = [
       'Totals',
@@ -226,6 +250,9 @@ export default function ReportsPage() {
       formatHours(totals.actualHours),
       totals.tasksCompleted,
       formatHours(totals.variance),
+      formatCurrency(totals.scheduledCost),
+      formatCurrency(totals.actualCost),
+      formatCurrency(totals.varianceCost),
     ];
     const csvString = [headers, ...dataRows, totalsRow]
       .map((cells) => cells.map((cell) => quoteCsv(cell)).join(','))
@@ -242,7 +269,7 @@ export default function ReportsPage() {
   }, [laborRows, totals]);
 
   if (!orgId) {
-    return <div style={{ padding: '1.5rem', color: '#6b7280', fontSize: '14px' }}>Loading reports…</div>;
+    return <div style={{ padding: '1.5rem', color: '#6b7280', fontSize: '14px' }}>Loading reports...</div>;
   }
 
   return (
@@ -291,7 +318,7 @@ export default function ReportsPage() {
         </div>
 
         {loading ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Loading report data…</p>
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Loading report data...</p>
         ) : error ? (
           <div>
             <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
@@ -310,6 +337,9 @@ export default function ReportsPage() {
                   <th style={{ padding: '8px' }}>Actual Hours</th>
                   <th style={{ padding: '8px' }}>Tasks Completed</th>
                   <th style={{ padding: '8px' }}>Variance</th>
+                  <th style={{ padding: '8px' }}>Scheduled Cost</th>
+                  <th style={{ padding: '8px' }}>Actual Cost</th>
+                  <th style={{ padding: '8px' }}>Variance ($)</th>
                 </tr>
               </thead>
               <tbody>
@@ -324,6 +354,12 @@ export default function ReportsPage() {
                       {row.variance >= 0 ? '+' : ''}
                       {formatHours(row.variance)}
                     </td>
+                    <td style={{ padding: '8px' }}>{formatCurrency(row.scheduledCost)}</td>
+                    <td style={{ padding: '8px' }}>{formatCurrency(row.actualCost)}</td>
+                    <td style={{ padding: '8px', color: row.varianceCost <= 0 ? '#166534' : '#dc2626', fontWeight: 600 }}>
+                      {row.varianceCost >= 0 ? '+' : ''}
+                      {formatCurrency(row.varianceCost)}
+                    </td>
                   </tr>
                 ))}
                 <tr style={{ borderTop: '2px solid #e5e7eb', fontWeight: 700 }}>
@@ -335,6 +371,12 @@ export default function ReportsPage() {
                   <td style={{ padding: '8px', color: totals.variance <= 0 ? '#166534' : '#dc2626' }}>
                     {totals.variance >= 0 ? '+' : ''}
                     {formatHours(totals.variance)}
+                  </td>
+                  <td style={{ padding: '8px' }}>{formatCurrency(totals.scheduledCost)}</td>
+                  <td style={{ padding: '8px' }}>{formatCurrency(totals.actualCost)}</td>
+                  <td style={{ padding: '8px', color: totals.varianceCost <= 0 ? '#166534' : '#dc2626' }}>
+                    {totals.varianceCost >= 0 ? '+' : ''}
+                    {formatCurrency(totals.varianceCost)}
                   </td>
                 </tr>
               </tbody>

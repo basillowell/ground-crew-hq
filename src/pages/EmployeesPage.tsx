@@ -21,6 +21,7 @@ type EmployeeRow = {
   phone: string | null;
   employment_type: string | null;
   language: string | null;
+  hourly_rate: number | null;
 };
 
 type PropertyRow = {
@@ -35,6 +36,7 @@ type AddEmployeeDraft = {
   department: string;
   property_id: string;
   status: 'active' | 'inactive';
+  hourly_rate: string;
 };
 
 type EditEmployeeDraft = {
@@ -44,6 +46,7 @@ type EditEmployeeDraft = {
   department: string;
   property_id: string;
   status: 'active' | 'inactive';
+  hourly_rate: string;
 };
 
 function emptyAddDraft(): AddEmployeeDraft {
@@ -54,6 +57,7 @@ function emptyAddDraft(): AddEmployeeDraft {
     department: 'Maintenance',
     property_id: '',
     status: 'active',
+    hourly_rate: '0',
   };
 }
 
@@ -62,6 +66,10 @@ function statusBadge(status: string | null) {
     return <Badge className="bg-emerald-100 text-emerald-700">Active</Badge>;
   }
   return <Badge className="bg-slate-100 text-slate-700">Inactive</Badge>;
+}
+
+function formatHourlyRate(value: number | null) {
+  return `$${Number(value ?? 0).toFixed(2)}/hr`;
 }
 
 export default function EmployeesPage() {
@@ -91,7 +99,7 @@ export default function EmployeesPage() {
 
     const employeesQuery = supabase
       .from('employees')
-      .select('id, first_name, last_name, role, department, property_id, org_id, status, active, email, phone, employment_type, language')
+      .select('id, first_name, last_name, role, department, property_id, org_id, status, active, email, phone, employment_type, language, hourly_rate')
       .eq('org_id', orgId)
       .order('last_name', { ascending: true });
 
@@ -156,6 +164,7 @@ export default function EmployeesPage() {
       property_id: addDraft.property_id || null,
       status: addDraft.status,
       active: addDraft.status === 'active',
+      hourly_rate: Math.max(0, Number(addDraft.hourly_rate || 0)),
     });
     setAddSaving(false);
 
@@ -177,6 +186,7 @@ export default function EmployeesPage() {
       department: employee.department ?? '',
       property_id: employee.property_id ?? '',
       status: String(employee.status).toLowerCase() === 'inactive' ? 'inactive' : 'active',
+      hourly_rate: String(Number(employee.hourly_rate ?? 0)),
     });
   }, []);
 
@@ -200,6 +210,7 @@ export default function EmployeesPage() {
         property_id: editDraft.property_id || null,
         status: editDraft.status,
         active: editDraft.status === 'active',
+        hourly_rate: Math.max(0, Number(editDraft.hourly_rate || 0)),
       })
       .eq('id', employeeId)
       .eq('org_id', orgId);
@@ -277,13 +288,14 @@ export default function EmployeesPage() {
               <th className="px-3 py-2 text-left font-medium">Department</th>
               <th className="px-3 py-2 text-left font-medium">Status</th>
               <th className="px-3 py-2 text-left font-medium">Property</th>
+              <th className="px-3 py-2 text-left font-medium">Hourly Rate</th>
               <th className="px-3 py-2 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {employees.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                   No employees yet. Add your first crew member.
                 </td>
               </tr>
@@ -296,16 +308,8 @@ export default function EmployeesPage() {
                     <td className="px-3 py-2">
                       {isEditing ? (
                         <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            value={editDraft.first_name}
-                            onChange={(event) => setEditDraft({ ...editDraft, first_name: event.target.value })}
-                            placeholder="First name"
-                          />
-                          <Input
-                            value={editDraft.last_name}
-                            onChange={(event) => setEditDraft({ ...editDraft, last_name: event.target.value })}
-                            placeholder="Last name"
-                          />
+                          <Input value={editDraft.first_name} onChange={(event) => setEditDraft({ ...editDraft, first_name: event.target.value })} placeholder="First name" />
+                          <Input value={editDraft.last_name} onChange={(event) => setEditDraft({ ...editDraft, last_name: event.target.value })} placeholder="Last name" />
                         </div>
                       ) : (
                         <div className="font-medium">{fullName}</div>
@@ -313,24 +317,16 @@ export default function EmployeesPage() {
                     </td>
                     <td className="px-3 py-2">
                       {isEditing ? (
-                        <Input
-                          value={editDraft.role}
-                          onChange={(event) => setEditDraft({ ...editDraft, role: event.target.value })}
-                          placeholder="Role"
-                        />
+                        <Input value={editDraft.role} onChange={(event) => setEditDraft({ ...editDraft, role: event.target.value })} placeholder="Role" />
                       ) : (
-                        employee.role || '—'
+                        employee.role || '-'
                       )}
                     </td>
                     <td className="px-3 py-2">
                       {isEditing ? (
-                        <Input
-                          value={editDraft.department}
-                          onChange={(event) => setEditDraft({ ...editDraft, department: event.target.value })}
-                          placeholder="Department"
-                        />
+                        <Input value={editDraft.department} onChange={(event) => setEditDraft({ ...editDraft, department: event.target.value })} placeholder="Department" />
                       ) : (
-                        employee.department || '—'
+                        employee.department || '-'
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -362,7 +358,21 @@ export default function EmployeesPage() {
                           ))}
                         </select>
                       ) : (
-                        (employee.property_id ? propertyNameById.get(employee.property_id) : null) ?? '—'
+                        (employee.property_id ? propertyNameById.get(employee.property_id) : null) ?? '-'
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editDraft.hourly_rate}
+                          onChange={(event) => setEditDraft({ ...editDraft, hourly_rate: event.target.value })}
+                          placeholder="0.00"
+                        />
+                      ) : (
+                        formatHourlyRate(employee.hourly_rate)
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -409,48 +419,24 @@ export default function EmployeesPage() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs text-muted-foreground">First Name</label>
-                <Input
-                  className="mt-1"
-                  value={addDraft.first_name}
-                  onChange={(event) => setAddDraft({ ...addDraft, first_name: event.target.value })}
-                  required
-                />
+                <Input className="mt-1" value={addDraft.first_name} onChange={(event) => setAddDraft({ ...addDraft, first_name: event.target.value })} required />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground">Last Name</label>
-                <Input
-                  className="mt-1"
-                  value={addDraft.last_name}
-                  onChange={(event) => setAddDraft({ ...addDraft, last_name: event.target.value })}
-                  required
-                />
+                <Input className="mt-1" value={addDraft.last_name} onChange={(event) => setAddDraft({ ...addDraft, last_name: event.target.value })} required />
               </div>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Role</label>
-              <Input
-                className="mt-1"
-                value={addDraft.role}
-                onChange={(event) => setAddDraft({ ...addDraft, role: event.target.value })}
-                placeholder="Field Staff"
-              />
+              <Input className="mt-1" value={addDraft.role} onChange={(event) => setAddDraft({ ...addDraft, role: event.target.value })} placeholder="Field Staff" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Department</label>
-              <Input
-                className="mt-1"
-                value={addDraft.department}
-                onChange={(event) => setAddDraft({ ...addDraft, department: event.target.value })}
-                placeholder="Maintenance"
-              />
+              <Input className="mt-1" value={addDraft.department} onChange={(event) => setAddDraft({ ...addDraft, department: event.target.value })} placeholder="Maintenance" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Property</label>
-              <select
-                value={addDraft.property_id}
-                onChange={(event) => setAddDraft({ ...addDraft, property_id: event.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
+              <select value={addDraft.property_id} onChange={(event) => setAddDraft({ ...addDraft, property_id: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">No property</option>
                 {properties.map((property) => (
                   <option key={property.id} value={property.id}>
@@ -470,6 +456,18 @@ export default function EmployeesPage() {
                 <option value="inactive">Inactive</option>
               </select>
             </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Hourly Rate</label>
+              <Input
+                className="mt-1"
+                type="number"
+                min="0"
+                step="0.01"
+                value={addDraft.hourly_rate}
+                onChange={(event) => setAddDraft({ ...addDraft, hourly_rate: event.target.value })}
+                placeholder="0.00"
+              />
+            </div>
             <p className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
               To give this employee login access, contact your administrator.
             </p>
@@ -478,10 +476,7 @@ export default function EmployeesPage() {
             <Button variant="outline" onClick={closeAddModal}>
               Cancel
             </Button>
-            <Button
-              onClick={() => void saveNewEmployee()}
-              disabled={addSaving || !addDraft.first_name.trim() || !addDraft.last_name.trim()}
-            >
+            <Button onClick={() => void saveNewEmployee()} disabled={addSaving || !addDraft.first_name.trim() || !addDraft.last_name.trim()}>
               {addSaving ? 'Saving...' : 'Save Employee'}
             </Button>
           </div>
