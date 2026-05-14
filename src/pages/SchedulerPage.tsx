@@ -15,6 +15,19 @@ import { supabase } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
 
+type WeekTemplateItem = {
+  id: string;
+  name: string;
+  template_data: Array<{
+    day: string;
+    employee_id: string;
+    shift_start: string;
+    shift_end: string;
+    property_id?: string | null;
+    status?: string;
+  }>;
+};
+
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -64,6 +77,12 @@ export default function SchedulerPage() {
   const [copyWeekDialogOpen, setCopyWeekDialogOpen] = useState(false);
   const [copyAssignmentsChecked, setCopyAssignmentsChecked] = useState(false);
   const [copyWeekSaving, setCopyWeekSaving] = useState(false);
+  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false);
+  const [applyTemplateDialogOpen, setApplyTemplateDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [selectedWeekTemplateId, setSelectedWeekTemplateId] = useState('');
+  const [templateActionSaving, setTemplateActionSaving] = useState(false);
+  const [weekTemplates, setWeekTemplates] = useState<WeekTemplateItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const weekDays = useMemo(() => buildWeekDays(weekStart), [weekStart]);
@@ -152,7 +171,7 @@ export default function SchedulerPage() {
         return;
       }
 
-      const [settingsResult, templatesResult] = await Promise.all([
+      const [settingsResult, templatesResult, weekTemplatesResult] = await Promise.all([
         supabase
           .from('scheduler_settings')
           .select('operational_day_start, operational_day_end')
@@ -164,6 +183,11 @@ export default function SchedulerPage() {
           .eq('org_id', currentUser.orgId)
           .eq('active', true)
           .order('name', { ascending: true }),
+        supabase
+          .from('schedule_week_templates')
+          .select('id, name, template_data')
+          .eq('org_id', currentUser.orgId)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (settingsResult.data) {
@@ -182,6 +206,17 @@ export default function SchedulerPage() {
             end: String(template.end ?? ''),
             days: Array.isArray(template.days) ? (template.days as string[]) : [],
             active: Boolean(template.active),
+          })),
+        );
+      }
+      if (weekTemplatesResult.data) {
+        setWeekTemplates(
+          weekTemplatesResult.data.map((template) => ({
+            id: String(template.id),
+            name: String(template.name ?? 'Untitled template'),
+            template_data: Array.isArray(template.template_data)
+              ? (template.template_data as WeekTemplateItem['template_data'])
+              : [],
           })),
         );
       }
@@ -360,11 +395,149 @@ export default function SchedulerPage() {
     setCopyWeekDialogOpen(true);
   }
 
+  function openSaveTemplateDialog() {
+    setTemplateName('');
+    setSaveTemplateDialogOpen(true);
+  }
+
+  function openApplyTemplateDialog() {
+    setSelectedWeekTemplateId(weekTemplates[0]?.id ?? '');
+    setApplyTemplateDialogOpen(true);
+  }
+
   function generateUuid() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
     }
     return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2, 14)}`;
+  }
+
+  function toDayName(dateKey: string) {
+    const day = new Date(`${dateKey}T00:00:00`).getDay();
+    const map = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    return map[day] ?? 'mon';
+  }
+
+  async function saveWeekAsTemplate() {
+    if (!supabase || !currentUser?.orgId) return;
+    const name = templateName.trim();
+    if (!name) {
+      toast.error('Template name is required.');
+      return;
+    }
+    const weekStartDate = weekDays[0]?.date;
+    const weekEndDate = weekDays[6]?.date;
+    if (!weekStartDate || !weekEndDate) return;
+
+    const weekEntries = scheduleList.filter((entry) => entry.date >= weekStartDate && entry.date <= weekEndDate);
+    if (weekEntries.length === 0) {
+      toast.message('Nothing to save', { description: 'No entries found in the current week.' });
+      return;
+    }
+
+    const templateData = weekEntries.map((entry) => {
+      const employee = employeeList.find((item) => item.id === entry.employeeId);
+      return {
+        day: toDayName(entry.date),
+        employee_id: entry.employeeId,
+        shift_start: entry.shiftStart,
+        shift_end: entry.shiftEnd,
+        property_id: employee?.propertyId ?? null,
+        status: entry.status,
+      };
+    });
+
+    setTemplateActionSaving(true);
+    const { data, error } = await supabase
+      .from('schedule_week_templates')
+      .insert({
+        org_id: currentUser.orgId,
+        name,
+        template_data: templateData,
+      })
+      .select('id, name, template_data')
+      .single();
+    setTemplateActionSaving(false);
+
+    if (error) {
+      toast.error('Template save failed', { description: error.message });
+      return;
+    }
+
+    setWeekTemplates((current) => [
+      {
+        id: String(data.id),
+        name: String(data.name ?? name),
+        template_data: Array.isArray(data.template_data)
+          ? (data.template_data as WeekTemplateItem['template_data'])
+          : [],
+      },
+      ...current,
+    ]);
+    setSaveTemplateDialogOpen(false);
+    toast.success('Week template saved');
+  }
+
+  async function applyWeekTemplate() {
+    if (!supabase || !currentUser?.orgId || !selectedWeekTemplateId) return;
+    const selectedTemplate = weekTemplates.find((template) => template.id === selectedWeekTemplateId);
+    if (!selectedTemplate) return;
+
+    const weekStartDate = weekDays[0]?.date;
+    const weekEndDate = weekDays[6]?.date;
+    if (!weekStartDate || !weekEndDate) return;
+
+    const { data: existingWeekEntries, error: existingError } = await supabase
+      .from('schedule_entries')
+      .select('date')
+      .eq('org_id', currentUser.orgId)
+      .gte('date', weekStartDate)
+      .lte('date', weekEndDate);
+    if (existingError) {
+      toast.error('Template apply failed', { description: existingError.message });
+      return;
+    }
+
+    const daysWithEntries = new Set((existingWeekEntries ?? []).map((entry) => String(entry.date)));
+    const dayOffsets: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+    const start = new Date(`${weekStartDate}T00:00:00`);
+    const inserts: Record<string, unknown>[] = [];
+
+    selectedTemplate.template_data.forEach((item) => {
+      const offset = dayOffsets[item.day?.toLowerCase?.() ?? ''];
+      if (offset == null) return;
+      const date = new Date(start);
+      date.setDate(start.getDate() + offset);
+      const targetDate = toDateKey(date);
+      if (daysWithEntries.has(targetDate)) return;
+      inserts.push({
+        id: generateUuid(),
+        org_id: currentUser.orgId,
+        employee_id: item.employee_id,
+        property_id: item.property_id ?? null,
+        date: targetDate,
+        shift_start: item.shift_start,
+        shift_end: item.shift_end,
+        status: 'scheduled',
+      });
+    });
+
+    if (inserts.length === 0) {
+      toast.message('Nothing to apply', { description: 'All target days already have entries.' });
+      setApplyTemplateDialogOpen(false);
+      return;
+    }
+
+    setTemplateActionSaving(true);
+    const { error } = await supabase.from('schedule_entries').insert(inserts);
+    setTemplateActionSaving(false);
+    if (error) {
+      toast.error('Template apply failed', { description: error.message });
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
+    setApplyTemplateDialogOpen(false);
+    toast.success('Week template applied', { description: `${inserts.length} shifts added.` });
   }
 
   async function copyWeek() {
@@ -598,6 +771,12 @@ export default function SchedulerPage() {
 
         <Button size="sm" className="h-8 gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
           <Plus className="h-3.5 w-3.5" /> Add Shift
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openSaveTemplateDialog}>
+          Save as Template
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openApplyTemplateDialog}>
+          Apply Template
         </Button>
         <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openCopyWeekDialog} data-testid="button-copy-week">
           <Copy className="h-3.5 w-3.5" /> Copy Week
@@ -1036,6 +1215,64 @@ export default function SchedulerPage() {
               </Button>
               <Button onClick={() => void copyWeek()} disabled={copyWeekSaving}>
                 {copyWeekSaving ? 'Copying...' : 'Confirm Copy'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={saveTemplateDialogOpen} onOpenChange={setSaveTemplateDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save this week as template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="text-xs text-muted-foreground">Template name</label>
+            <Input
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              placeholder="e.g. Standard Week"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setSaveTemplateDialogOpen(false)} disabled={templateActionSaving}>
+                Cancel
+              </Button>
+              <Button onClick={() => void saveWeekAsTemplate()} disabled={templateActionSaving}>
+                {templateActionSaving ? 'Saving...' : 'Save Template'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={applyTemplateDialogOpen} onOpenChange={setApplyTemplateDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Apply saved template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="text-xs text-muted-foreground">Template</label>
+            <select
+              value={selectedWeekTemplateId}
+              onChange={(event) => setSelectedWeekTemplateId(event.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {weekTemplates.length === 0 ? <option value="">No templates saved</option> : null}
+              {weekTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setApplyTemplateDialogOpen(false)} disabled={templateActionSaving}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void applyWeekTemplate()}
+                disabled={templateActionSaving || !selectedWeekTemplateId}
+              >
+                {templateActionSaving ? 'Applying...' : 'Apply Template'}
               </Button>
             </div>
           </div>
