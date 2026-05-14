@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { formatTime } from "@/utils/formatTime";
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
+const PricingPage = lazy(() => import("./pages/PricingPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
 const WorkboardPage = lazy(() => import("./pages/WorkboardPage"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
@@ -330,6 +331,7 @@ function AppWithNotificationSetup() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingRoute />} />
+          <Route path="/pricing" element={<Suspense fallback={<RouteFallback />}><PricingPage /></Suspense>} />
           <Route
             path="/app/*"
             element={(

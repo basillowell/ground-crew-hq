@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarDays,
   ClipboardList,
@@ -152,6 +152,9 @@ export default function LaunchPortalPage() {
             <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{clientName}</div>
           </div>
           <div className="flex items-center gap-2">
+            <Link to="/pricing" className="px-3 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Pricing
+            </Link>
             <Button variant="ghost" onClick={() => setLoginOpen(true)}>
               Sign In
             </Button>
