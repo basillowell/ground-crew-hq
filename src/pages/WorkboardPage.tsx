@@ -188,6 +188,16 @@ type TaskLibraryItem = {
   estimated_hours: number | null;
 };
 
+type AvailableEquipmentItem = {
+  id: string;
+  name: string | null;
+  unit_name: string | null;
+  type: string | null;
+  status: string | null;
+  active: boolean | null;
+  org_id: string | null;
+};
+
 type TaskWeatherWarning = {
   level: 'warning' | 'danger';
   message: string;
@@ -274,6 +284,42 @@ export default function WorkboardPage() {
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, currentUser?.orgId);
   const notesQuery = useNotes(effectivePropertyId);
   const tasksLoading = tasksQuery.isLoading || taskLibraryLoading;
+
+  const availableEquipmentQuery = useQuery({
+    queryKey: ['workboard-available-equipment', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return [] as AvailableEquipmentItem[];
+      const { data, error } = await supabase
+        .from('equipment_units')
+        .select('id, name, unit_name, type, status, active, org_id')
+        .eq('org_id', currentUser.orgId)
+        .eq('active', true)
+        .eq('status', 'available')
+        .order('unit_name', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as AvailableEquipmentItem[];
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const assignmentEquipmentQuery = useQuery({
+    queryKey: ['workboard-assignment-equipment', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return [] as Array<{ id: string; equipment_unit_id: string | null }>;
+      let query = supabase
+        .from('assignments')
+        .select('id, equipment_unit_id')
+        .eq('org_id', currentUser.orgId)
+        .eq('date', boardDate);
+      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; equipment_unit_id: string | null }>;
+    },
+    staleTime: 1000 * 30,
+  });
 
   const taskRequestsQuery = useQuery({
     queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
@@ -389,6 +435,14 @@ export default function WorkboardPage() {
     [groupedTaskLibrary],
   );
   const equipmentList = equipmentQuery.data ?? [];
+  const availableEquipmentList = availableEquipmentQuery.data ?? [];
+  const assignmentEquipmentMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of assignmentEquipmentQuery.data ?? []) {
+      if (row.id && row.equipment_unit_id) map.set(row.id, row.equipment_unit_id);
+    }
+    return map;
+  }, [assignmentEquipmentQuery.data]);
   const noteList = notesQuery.data ?? [];
   const taskRequests = taskRequestsQuery.data ?? [];
   const pendingTaskRequests = pendingTaskRequestsQuery.data ?? [];
@@ -622,10 +676,14 @@ export default function WorkboardPage() {
     [scheduledEmployees, employeeList],
   );
 
-  const dayAssignments = useMemo(
-    () => assignmentList.filter((a) => a.date === boardDate),
-    [assignmentList, boardDate],
-  );
+  const dayAssignments = useMemo(() => {
+    return assignmentList
+      .filter((a) => a.date === boardDate)
+      .map((assignment) => ({
+        ...assignment,
+        equipmentId: assignment.equipmentId ?? assignmentEquipmentMap.get(assignment.id) ?? assignment.equipmentId,
+      }));
+  }, [assignmentEquipmentMap, assignmentList, boardDate]);
 
   const upsertAssignmentInCache = useCallback(
     (nextAssignment: Assignment) => {
@@ -887,8 +945,9 @@ export default function WorkboardPage() {
   );
 
   const availableEquipment = useMemo(
-    () => equipmentList.filter((u) => ['ready', 'available'].includes(String(u.status).toLowerCase())),
-    [equipmentList],
+    () =>
+      availableEquipmentList.filter((unit) => unit.active !== false && String(unit.status ?? '').toLowerCase() === 'available'),
+    [availableEquipmentList],
   );
 
   const latestWeatherLog = useMemo(
@@ -996,8 +1055,8 @@ export default function WorkboardPage() {
       return;
     }
     if (assignmentDraft.equipmentId) {
-      const selectedEquipment = equipmentList.find((unit) => unit.id === assignmentDraft.equipmentId);
-      const isReady = selectedEquipment && ['ready', 'available'].includes(String(selectedEquipment.status).toLowerCase());
+      const selectedEquipment = availableEquipment.find((unit) => unit.id === assignmentDraft.equipmentId);
+      const isReady = selectedEquipment && String(selectedEquipment.status ?? '').toLowerCase() === 'available' && selectedEquipment.active !== false;
       if (!isReady) {
         toast.error('Selected equipment is not ready for assignment.');
         return;
@@ -1053,6 +1112,10 @@ export default function WorkboardPage() {
     if (assignmentDraft.startTime) basePayload.start_time = assignmentDraft.startTime;
     if (assignmentDraft.area.trim()) basePayload.location = assignmentDraft.area.trim();
     if (assignmentDraft.notes.trim()) basePayload.notes = assignmentDraft.notes.trim();
+    if (assignmentDraft.equipmentId) {
+      basePayload.equipment_unit_id = assignmentDraft.equipmentId;
+      basePayload.equipment_id = assignmentDraft.equipmentId;
+    }
     let { error } = await supabase.from('assignments').upsert(basePayload);
     if (error) {
       const fallbackPayload: Record<string, unknown> = {
@@ -1069,6 +1132,10 @@ export default function WorkboardPage() {
       if (assignmentDraft.startTime) fallbackPayload.start_time = assignmentDraft.startTime;
       if (assignmentDraft.area.trim()) fallbackPayload.location = assignmentDraft.area.trim();
       if (assignmentDraft.notes.trim()) fallbackPayload.notes = assignmentDraft.notes.trim();
+      if (assignmentDraft.equipmentId) {
+        fallbackPayload.equipment_unit_id = assignmentDraft.equipmentId;
+        fallbackPayload.equipment_id = assignmentDraft.equipmentId;
+      }
       const fallback = await supabase.from('assignments').upsert(fallbackPayload);
       error = fallback.error;
     }
@@ -1105,6 +1172,7 @@ export default function WorkboardPage() {
     }
 
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    void queryClient.invalidateQueries({ queryKey: ['workboard-assignment-equipment'] });
     void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
     setLinkedRequestId(null);
     setEditingAssignmentId(null);
@@ -2019,7 +2087,9 @@ export default function WorkboardPage() {
               >
                 <option value="">No equipment</option>
                 {availableEquipment.map((u) => (
-                  <option key={u.id} value={u.id}>{u.unitNumber} · {u.location} · {u.status}</option>
+                  <option key={u.id} value={u.id}>
+                    {(u.unit_name || u.name || 'Equipment')} ({u.type || 'General'})
+                  </option>
                 ))}
               </select>
             </div>
