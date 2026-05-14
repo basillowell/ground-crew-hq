@@ -1,561 +1,435 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Clock3, MapPin, MessageSquare, Phone, PlayCircle, ShieldAlert } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
-import { getBrowserLocation } from '@/lib/integrations';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
-import { useAssignments, useClockEvents, useEmployees, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
-import { useAuth } from '@/contexts/AuthContext';
-import { computeTimecardSummary, getOrderedAssignmentsForEmployee, getShiftMinutes } from '@/lib/laborMetrics';
 
-const MobileFieldMap = lazy(() =>
-  import('@/components/field/MobileFieldMap').then((module) => ({ default: module.MobileFieldMap })),
-);
+type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 
-type ClockAction = 'in' | 'out' | 'break';
-type PendingClockEvent = {
-  employee_id: string;
-  property_id: string;
-  event_type: ClockAction;
-  timestamp: string;
-  location_lat: number | null;
-  location_lng: number | null;
-  localId: string;
+type FieldAssignment = {
+  id: string;
+  taskId: string | null;
+  title: string;
+  location: string | null;
+  notes: string | null;
+  status: AssignmentStatus;
+  orderIndex: number;
+  estimatedHours: number;
+  actualHours: number | null;
+  startTime: string | null;
+  completedAt: string | null;
 };
-const PENDING_CLOCK_EVENTS_KEY = 'pending-clock-events';
 
-function loadPendingClockEvents() {
-  if (typeof window === 'undefined') return [] as PendingClockEvent[];
-  try {
-    const raw = window.localStorage.getItem(PENDING_CLOCK_EVENTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as PendingClockEvent[]) : [];
-  } catch {
-    return [];
-  }
+type ShiftEntry = {
+  propertyId: string | null;
+  shiftStart: string;
+  shiftEnd: string;
+};
+
+type EmployeeRecord = {
+  id: string;
+  firstName: string;
+  lastName: string;
+};
+
+type TaskMeta = {
+  id: string;
+  category: string | null;
+};
+
+type PropertyRecord = {
+  id: string;
+  name: string;
+};
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function savePendingClockEvents(events: PendingClockEvent[]) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(PENDING_CLOCK_EVENTS_KEY, JSON.stringify(events));
+function displayStatus(status: AssignmentStatus) {
+  if (status === 'in_progress' || status === 'in-progress') return 'in_progress';
+  if (status === 'completed') return 'done';
+  if (status === 'done') return 'done';
+  return 'planned';
 }
 
-function MobileFieldSkeleton() {
-  return (
-    <div className="mx-auto flex min-h-[70vh] w-full max-w-[430px] flex-col gap-4 px-4 py-5">
-      <Skeleton className="h-28 rounded-3xl" />
-      <Skeleton className="h-48 rounded-3xl" />
-      <Skeleton className="h-32 rounded-3xl" />
-      <Skeleton className="h-40 rounded-3xl" />
-    </div>
-  );
+function statusBadgeLabel(status: AssignmentStatus) {
+  const normalized = displayStatus(status);
+  if (normalized === 'in_progress') return 'In Progress';
+  if (normalized === 'done') return 'Done';
+  return 'Planned';
+}
+
+function statusBadgeClass(status: AssignmentStatus) {
+  const normalized = displayStatus(status);
+  if (normalized === 'done') return 'bg-green-100 text-green-800';
+  if (normalized === 'in_progress') return 'bg-blue-100 text-blue-800';
+  return 'bg-slate-100 text-slate-800';
 }
 
 export default function MobileFieldWorkspacePage() {
-  const queryClient = useQueryClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const { currentUser, currentPropertyId } = useAuth();
-  const [shouldLoadMap, setShouldLoadMap] = useState(false);
-  const [pendingClockEvents, setPendingClockEvents] = useState<PendingClockEvent[]>(() => loadPendingClockEvents());
+  const { currentUser } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [employee, setEmployee] = useState<EmployeeRecord | null>(null);
+  const [shift, setShift] = useState<ShiftEntry | null>(null);
+  const [assignments, setAssignments] = useState<FieldAssignment[]>([]);
+  const [taskMetaById, setTaskMetaById] = useState<Record<string, TaskMeta>>({});
+  const [propertyName, setPropertyName] = useState<string>('Assigned Property');
+  const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
+  const [actualHoursDraft, setActualHoursDraft] = useState<Record<string, string>>({});
 
-  const effectivePropertyId =
-    currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : currentUser?.propertyId ?? '';
+  const employeeId = currentUser?.employeeId ?? null;
+  const orgId = currentUser?.orgId ?? null;
+  const boardDate = todayKey();
 
-  const propertiesQuery = useProperties();
-  const employeesQuery = useEmployees(effectivePropertyId || undefined);
-  const tasksQuery = useTasks(effectivePropertyId || undefined);
-  const assignmentsQuery = useAssignments(today, effectivePropertyId || undefined);
-  const scheduleQuery = useScheduleEntries(today, effectivePropertyId || undefined);
-  const clockEventsQuery = useClockEvents(today, effectivePropertyId || undefined);
-  const locationQuery = useQuery({
-    queryKey: ['mobile-field-location'],
-    queryFn: getBrowserLocation,
-    staleTime: 1000 * 60 * 10,
-  });
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setShouldLoadMap(true), 500);
-    return () => window.clearTimeout(timeout);
-  }, []);
-
-  useEffect(() => {
-    savePendingClockEvents(pendingClockEvents);
-  }, [pendingClockEvents]);
-
-  async function syncPendingClockEvents(showSuccessToast = false) {
-    if (!supabase || pendingClockEvents.length === 0) return;
-
-    let remaining = [...pendingClockEvents];
-
-    for (const event of pendingClockEvents) {
-      const { error } = await supabase.from('clock_events').insert({
-        employee_id: event.employee_id,
-        property_id: event.property_id,
-        event_type: event.event_type,
-        timestamp: event.timestamp,
-        location_lat: event.location_lat,
-        location_lng: event.location_lng,
-      });
-
-      if (!error) {
-        remaining = remaining.filter((item) => item.localId !== event.localId);
-      }
-    }
-
-    setPendingClockEvents(remaining);
-
-    if (remaining.length !== pendingClockEvents.length) {
-      await queryClient.invalidateQueries({ queryKey: ['clock-events'] });
-    }
-
-    if (showSuccessToast && remaining.length === 0 && pendingClockEvents.length > 0) {
-      toast.success('Pending clock events synced');
-    }
-  }
-
-  useEffect(() => {
-    void syncPendingClockEvents();
-    const handleOnline = () => {
-      void syncPendingClockEvents(true);
-    };
-    window.addEventListener('online', handleOnline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-    };
-  }, [pendingClockEvents.length, queryClient]);
-
-  useEffect(() => {
-    if (!supabase || !currentUser?.employeeId) return;
-
-    const channel = supabase
-      .channel(`mobile-field-live-${currentUser.employeeId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments', filter: `employee_id=eq.${currentUser.employeeId}` }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `employee_id=eq.${currentUser.employeeId}` }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clock_events', filter: `employee_id=eq.${currentUser.employeeId}` }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['clock-events'] });
-      })
-      .subscribe();
-
-    return () => {
-      void channel.unsubscribe();
-    };
-  }, [currentUser?.employeeId, queryClient]);
-
-  const properties = propertiesQuery.data ?? [];
-  const employees = employeesQuery.data ?? [];
-  const tasks = tasksQuery.data ?? [];
-  const assignments = assignmentsQuery.data ?? [];
-  const scheduleEntries = scheduleQuery.data ?? [];
-  const clockEvents = clockEventsQuery.data ?? [];
-
-  const currentEmployee = useMemo(
-    () => employees.find((employee) => employee.id === currentUser?.employeeId) ?? null,
-    [currentUser?.employeeId, employees],
-  );
-
-  const activeProperty = useMemo(
-    () => properties.find((property) => property.id === effectivePropertyId) ?? null,
-    [effectivePropertyId, properties],
-  );
-
-  const employeeSchedule = useMemo(
-    () => scheduleEntries.find((entry) => entry.employeeId === currentEmployee?.id) ?? null,
-    [currentEmployee?.id, scheduleEntries],
-  );
-
-  const employeeAssignments = useMemo(
-    () => getOrderedAssignmentsForEmployee(assignments.filter((assignment) => assignment.employeeId === currentEmployee?.id), tasks),
-    [assignments, currentEmployee?.id, tasks],
-  );
-
-  const currentAssignment =
-    employeeAssignments.find((assignment) => assignment.status === 'in-progress') ??
-    employeeAssignments.find((assignment) => assignment.status !== 'completed') ??
-    employeeAssignments[0] ??
-    null;
-  const nextAssignment = employeeAssignments.find(
-    (assignment) => assignment.id !== currentAssignment?.id && assignment.status !== 'completed',
-  ) ?? null;
-  const currentTask = tasks.find((task) => task.id === currentAssignment?.taskId);
-  const nextTask = tasks.find((task) => task.id === nextAssignment?.taskId);
-  const employeeClockEvents = useMemo(
-    () => clockEvents.filter((event) => event.employeeId === currentEmployee?.id),
-    [clockEvents, currentEmployee?.id],
-  );
-  const timecardSummary = useMemo(() => computeTimecardSummary(employeeClockEvents), [employeeClockEvents]);
-  const clockStatusLabel = timecardSummary.statusLabel;
-
-  const supervisor = useMemo(
-    () =>
-      employees.find((employee) => {
-        if (employee.id === currentEmployee?.id || employee.status !== 'active') return false;
-        return /manager|supervisor|lead/i.test(employee.role);
-      }) ?? null,
-    [currentEmployee?.id, employees],
-  );
-
-  const activeCrewMarkers = useMemo(
-    () =>
-      employees
-        .map((employee) => {
-          const lastClockIn = clockEvents.find((event) => event.employeeId === employee.id && event.eventType === 'in');
-          if (!lastClockIn?.locationLat || !lastClockIn?.locationLng) return null;
-          return {
-            id: employee.id,
-            name: `${employee.firstName} ${employee.lastName}`.trim(),
-            latitude: lastClockIn.locationLat,
-            longitude: lastClockIn.locationLng,
-          };
-        })
-        .filter((marker): marker is { id: string; name: string; latitude: number; longitude: number } => Boolean(marker)),
-    [clockEvents, employees],
-  );
-
-  const mapCenter =
-    activeProperty?.latitude && activeProperty?.longitude
-      ? ([activeProperty.latitude, activeProperty.longitude] as [number, number])
-      : locationQuery.data?.ok && locationQuery.data.data
-        ? ([locationQuery.data.data.latitude, locationQuery.data.data.longitude] as [number, number])
-        : null;
-
-  const isLoading =
-    propertiesQuery.isLoading ||
-    employeesQuery.isLoading ||
-    tasksQuery.isLoading ||
-    assignmentsQuery.isLoading ||
-    scheduleQuery.isLoading ||
-    clockEventsQuery.isLoading;
-
-  async function recordClockEvent(eventType: ClockAction) {
-    if (!supabase || !currentEmployee?.id || !effectivePropertyId) {
-      toast.error('Your field profile is not ready yet.');
+  const fetchFieldData = useCallback(async () => {
+    if (!supabase || !employeeId || !orgId) {
+      setLoading(false);
+      setError('Field profile is not available for this account.');
       return;
     }
 
-    const coordinates = locationQuery.data?.ok ? locationQuery.data.data : null;
-    const pendingEvent: PendingClockEvent = {
-      employee_id: currentEmployee.id,
-      property_id: effectivePropertyId,
-      event_type: eventType,
-      timestamp: new Date().toISOString(),
-      location_lat: coordinates?.latitude ?? null,
-      location_lng: coordinates?.longitude ?? null,
-      localId: crypto.randomUUID(),
-    };
+    setLoading(true);
+    setError(null);
 
-    setPendingClockEvents((current) => [...current, pendingEvent]);
+    const [{ data: employeeRow, error: employeeError }, { data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: propertyRows, error: propertyError }] = await Promise.all([
+      supabase.from('employees').select('id, first_name, last_name').eq('org_id', orgId).eq('id', employeeId).maybeSingle(),
+      supabase
+        .from('schedule_entries')
+        .select('property_id, shift_start, shift_end')
+        .eq('org_id', orgId)
+        .eq('employee_id', employeeId)
+        .eq('date', boardDate)
+        .limit(1),
+      supabase
+        .from('assignments')
+        .select('id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at')
+        .eq('org_id', orgId)
+        .eq('employee_id', employeeId)
+        .eq('date', boardDate)
+        .order('order_index', { ascending: true }),
+      supabase
+        .from('tasks')
+        .select('id, category')
+        .eq('org_id', orgId),
+      supabase
+        .from('properties')
+        .select('id, name')
+        .eq('org_id', orgId),
+    ]);
 
-    const { error } = await supabase.from('clock_events').insert({
-      employee_id: currentEmployee.id,
-      property_id: effectivePropertyId,
-      event_type: eventType,
-      timestamp: pendingEvent.timestamp,
-      location_lat: pendingEvent.location_lat,
-      location_lng: pendingEvent.location_lng,
+    if (employeeError || shiftError || assignmentsError || tasksError || propertyError) {
+      setError(
+        employeeError?.message ||
+          shiftError?.message ||
+          assignmentsError?.message ||
+          tasksError?.message ||
+          propertyError?.message ||
+          'Unable to load field data.',
+      );
+      setLoading(false);
+      return;
+    }
+
+    setEmployee(
+      employeeRow
+        ? {
+            id: String(employeeRow.id),
+            firstName: String(employeeRow.first_name ?? ''),
+            lastName: String(employeeRow.last_name ?? ''),
+          }
+        : null,
+    );
+
+    const shiftRow = shiftRows?.[0];
+    setShift(
+      shiftRow
+        ? {
+            propertyId: shiftRow.property_id ? String(shiftRow.property_id) : null,
+            shiftStart: String(shiftRow.shift_start ?? '').slice(0, 5),
+            shiftEnd: String(shiftRow.shift_end ?? '').slice(0, 5),
+          }
+        : null,
+    );
+
+    const normalizedAssignments: FieldAssignment[] = (assignmentRows ?? []).map((row) => ({
+      id: String(row.id),
+      taskId: row.task_id ? String(row.task_id) : null,
+      title: String(row.title ?? 'Task'),
+      location: row.location ? String(row.location) : null,
+      notes: row.notes ? String(row.notes) : null,
+      status: (String(row.status ?? 'planned') as AssignmentStatus),
+      orderIndex: Number(row.order_index ?? 0),
+      estimatedHours: Number(row.estimated_hours ?? 0),
+      actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
+      startTime: row.start_time ? String(row.start_time).slice(0, 5) : null,
+      completedAt: row.completed_at ? String(row.completed_at) : null,
+    }));
+    setAssignments(normalizedAssignments);
+
+    const nextActualDraft: Record<string, string> = {};
+    normalizedAssignments.forEach((assignment) => {
+      nextActualDraft[assignment.id] = String(assignment.actualHours ?? assignment.estimatedHours ?? 0);
+    });
+    setActualHoursDraft(nextActualDraft);
+
+    const taskMap: Record<string, TaskMeta> = {};
+    (taskRows ?? []).forEach((row) => {
+      const id = String(row.id);
+      taskMap[id] = {
+        id,
+        category: row.category ? String(row.category) : null,
+      };
+    });
+    setTaskMetaById(taskMap);
+
+    const propertiesById = new Map<string, string>();
+    (propertyRows ?? []).forEach((property: PropertyRecord) => {
+      propertiesById.set(String(property.id), String(property.name));
     });
 
-    if (error) {
-      toast('Saved locally - will sync when connected');
+    if (shiftRow?.property_id && propertiesById.has(String(shiftRow.property_id))) {
+      setPropertyName(propertiesById.get(String(shiftRow.property_id)) ?? 'Assigned Property');
+    } else if (currentUser?.propertyId && propertiesById.has(String(currentUser.propertyId))) {
+      setPropertyName(propertiesById.get(String(currentUser.propertyId)) ?? 'Assigned Property');
+    } else {
+      setPropertyName('Assigned Property');
+    }
+
+    setLoading(false);
+  }, [boardDate, currentUser?.propertyId, employeeId, orgId]);
+
+  useEffect(() => {
+    void fetchFieldData();
+  }, [fetchFieldData]);
+
+  const setSaving = (assignmentId: string, isSaving: boolean) => {
+    setSavingIds((current) => ({ ...current, [assignmentId]: isSaving }));
+  };
+
+  const updateTaskStatus = async (assignment: FieldAssignment) => {
+    if (!supabase) return;
+    const normalized = displayStatus(assignment.status);
+    const nextStatus = normalized === 'planned' ? 'in_progress' : normalized === 'in_progress' ? 'done' : 'done';
+    const nextCompletedAt = nextStatus === 'done' ? new Date().toISOString() : null;
+
+    setSaving(assignment.id, true);
+    setAssignments((current) =>
+      current.map((item) =>
+        item.id === assignment.id ? { ...item, status: nextStatus, completedAt: nextCompletedAt } : item,
+      ),
+    );
+
+    const payload: Record<string, unknown> = {
+      status: nextStatus,
+      completed_at: nextCompletedAt,
+    };
+
+    const { error: updateError } = await supabase.from('assignments').update(payload).eq('id', assignment.id);
+    setSaving(assignment.id, false);
+
+    if (updateError) {
+      setAssignments((current) =>
+        current.map((item) =>
+          item.id === assignment.id ? { ...item, status: assignment.status, completedAt: assignment.completedAt } : item,
+        ),
+      );
+      toast.error('Unable to update task status', { description: updateError.message });
       return;
     }
 
-    setPendingClockEvents((current) => current.filter((item) => item.localId !== pendingEvent.localId));
-    toast.success(eventType === 'in' ? 'Clocked in' : eventType === 'out' ? 'Clocked out' : 'Break started');
-    await queryClient.invalidateQueries({ queryKey: ['clock-events'] });
-  }
+    if (nextStatus === 'done') {
+      toast.success('Task completed');
+    } else if (nextStatus === 'in_progress') {
+      toast.success('Task started');
+    }
+  };
 
-  async function updateAssignmentStatus(assignmentId: string | undefined, status: 'planned' | 'in-progress' | 'completed') {
-    if (!supabase || !assignmentId) {
-      toast.error('This task cannot be updated yet.');
+  const saveActualHours = async (assignmentId: string) => {
+    if (!supabase) return;
+    const rawValue = actualHoursDraft[assignmentId] ?? '0';
+    const parsed = Number(rawValue);
+    if (Number.isNaN(parsed) || parsed < 0 || parsed > 24) {
+      toast.error('Enter actual hours between 0 and 24');
       return;
     }
 
-    const { error } = await supabase.from('assignments').update({ status }).eq('id', assignmentId);
-    if (error) {
-      toast.error('Task status could not be updated.');
+    setSaving(assignmentId, true);
+    setAssignments((current) =>
+      current.map((assignment) =>
+        assignment.id === assignmentId ? { ...assignment, actualHours: parsed } : assignment,
+      ),
+    );
+
+    const { error: updateError } = await supabase
+      .from('assignments')
+      .update({ actual_hours: parsed })
+      .eq('id', assignmentId);
+    setSaving(assignmentId, false);
+
+    if (updateError) {
+      toast.error('Unable to save actual hours', { description: updateError.message });
+      void fetchFieldData();
       return;
     }
 
-    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-    await queryClient.invalidateQueries({ queryKey: ['dashboard-live-data'] });
-    await queryClient.invalidateQueries({ queryKey: ['workflow-live-data'] });
-    toast.success(status === 'completed' ? 'Task marked complete' : 'Task started');
-  }
+    toast.success('Actual hours saved');
+  };
 
-  async function markAssignmentComplete(assignmentId?: string) {
-    await updateAssignmentStatus(assignmentId, 'completed');
-  }
+  const doneCount = useMemo(
+    () => assignments.filter((assignment) => displayStatus(assignment.status) === 'done').length,
+    [assignments],
+  );
+  const actualHoursTotal = useMemo(
+    () => assignments.reduce((sum, assignment) => sum + Number(assignment.actualHours ?? 0), 0),
+    [assignments],
+  );
+  const scheduledHoursTotal = useMemo(
+    () => assignments.reduce((sum, assignment) => sum + Number(assignment.estimatedHours ?? 0), 0),
+    [assignments],
+  );
 
-  const shiftMinutes = getShiftMinutes(employeeSchedule);
-  const progressMinutes = currentAssignment?.duration ?? 0;
-  const completedTasks = employeeAssignments.filter((assignment) => assignment.status === 'completed').length;
-  const canClockIn = !timecardSummary.isClockedIn && !timecardSummary.isOnBreak;
-  const breakButtonLabel = timecardSummary.isOnBreak ? 'Resume' : 'Break';
-  const breakAction: ClockAction = timecardSummary.isOnBreak ? 'in' : 'break';
+  const employeeName = employee ? `${employee.firstName} ${employee.lastName}`.trim() : 'Crew Member';
+  const todayLabel = new Date().toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
-  if (isLoading) {
-    return <MobileFieldSkeleton />;
-  }
-
-  if (!currentUser || !currentEmployee) {
+  if (loading) {
     return (
-      <div className="mx-auto flex min-h-[60vh] w-full max-w-[430px] items-center justify-center px-4 py-8">
-        <Card className="w-full rounded-3xl border-border/70 p-6 text-center shadow-sm">
-          <p className="text-base font-semibold text-foreground">Field access is not ready for this account.</p>
-          <p className="mt-2 text-sm text-muted-foreground">Ask your admin to link your employee record and property.</p>
+      <div className="mx-auto w-full max-w-[520px] px-4 py-4 font-sans">
+        <Card className="rounded-2xl p-5">
+          <p className="text-base">Loading your field workspace...</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto w-full max-w-[520px] px-4 py-4 font-sans">
+        <Card className="rounded-2xl p-5">
+          <p className="text-base text-red-600">{error}</p>
+          <Button className="mt-4 h-12 min-h-12 w-full text-base" onClick={() => void fetchFieldData()}>
+            Retry
+          </Button>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[430px] flex-col gap-4 px-4 py-5">
-      {pendingClockEvents.length > 0 ? (
-        <Card className="rounded-2xl border-amber-300 bg-amber-50 shadow-sm">
-          <div className="flex items-center justify-between gap-3 p-4">
-            <div className="text-sm font-medium text-amber-950">{pendingClockEvents.length} events pending sync</div>
-            <Button size="sm" variant="outline" className="min-h-11 rounded-2xl text-sm" onClick={() => void syncPendingClockEvents(true)}>
-              Sync
-            </Button>
-          </div>
+    <div className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans">
+      <header className="mb-4 rounded-2xl border bg-card p-4">
+        <p className="text-lg font-semibold leading-tight">{employeeName}</p>
+        <p className="mt-1 text-base text-muted-foreground">{todayLabel}</p>
+        <p className="mt-1 text-base text-muted-foreground">{propertyName}</p>
+      </header>
+
+      {!shift ? (
+        <Card className="rounded-2xl p-5">
+          <p className="text-base font-medium">You&apos;re not scheduled today.</p>
         </Card>
-      ) : null}
+      ) : (
+        <>
+          <Card className="mb-4 rounded-2xl p-5">
+            <p className="text-base font-medium">Your shift: {formatTime(shift.shiftStart)} – {formatTime(shift.shiftEnd)}</p>
+          </Card>
 
-      <Card className="rounded-3xl border-border/70 bg-card shadow-sm">
-        <div className="space-y-4 p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">Today&apos;s Assignment</p>
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">{activeProperty?.name ?? 'Assigned Property'}</h1>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  {currentAssignment?.area ?? 'Work location pending'}
-                </span>
-                <span>•</span>
-                <span>{employeeSchedule ? `${formatTime(employeeSchedule.shiftStart)} - ${formatTime(employeeSchedule.shiftEnd)}` : 'Shift pending'}</span>
-              </div>
-            </div>
-            <Badge variant="secondary" className="min-h-11 rounded-full px-3 text-sm">
-              <Clock3 className="mr-1.5 h-4 w-4" />
-              {clockStatusLabel}
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl border border-border/70 bg-background px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Worked</div>
-              <div className="mt-1 text-base font-semibold text-foreground">{timecardSummary.workedHours.toFixed(2)}h</div>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Break</div>
-              <div className="mt-1 text-base font-semibold text-foreground">{timecardSummary.breakMinutes} min</div>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Shift</div>
-              <div className="mt-1 text-base font-semibold text-foreground">{(shiftMinutes / 60).toFixed(1)}h</div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-border/70 bg-muted/40 p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Current Task</p>
-            <h2 className="mt-2 text-lg font-semibold text-foreground">{currentTask?.name ?? 'No active task assigned'}</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {currentTask?.notes || 'Your supervisor will assign the next task when the day is ready.'}
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" className="rounded-full">{currentAssignment?.area ?? 'No work location'}</Badge>
-              <Badge variant="outline" className="rounded-full">{progressMinutes} min estimated</Badge>
-              <Badge variant={currentAssignment?.status === 'completed' ? 'secondary' : 'default'} className="rounded-full">
-                {(currentAssignment?.status ?? 'planned').replace('-', ' ')}
-              </Badge>
-            </div>
-            {currentAssignment ? (
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <Button
-                  className="min-h-11 rounded-2xl text-sm"
-                  variant={currentAssignment.status === 'in-progress' ? 'secondary' : 'outline'}
-                  onClick={() => void updateAssignmentStatus(currentAssignment.id, 'in-progress')}
-                  disabled={currentAssignment.status === 'completed'}
-                >
-                  <PlayCircle className="mr-2 h-4 w-4" />
-                  {currentAssignment.status === 'in-progress' ? 'In Progress' : 'Start Task'}
-                </Button>
-                <Button
-                  className="min-h-11 rounded-2xl text-sm"
-                  onClick={() => void markAssignmentComplete(currentAssignment.id)}
-                  disabled={currentAssignment.status === 'completed'}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Complete Task
-                </Button>
-              </div>
-            ) : null}
-            <div className="mt-4 rounded-2xl border border-dashed border-border/70 bg-background px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Next Up</div>
-              <div className="mt-1 text-sm font-medium text-foreground">{nextTask?.name ?? 'No next task queued yet'}</div>
-              <div className="text-xs text-muted-foreground">{nextAssignment?.area ?? 'Awaiting supervisor assignment'}</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <Button className="min-h-11 rounded-2xl text-sm" onClick={() => void recordClockEvent('in')} disabled={!canClockIn}>
-              Clock In
-            </Button>
-            <Button className="min-h-11 rounded-2xl text-sm" variant="outline" onClick={() => void recordClockEvent(breakAction)} disabled={!timecardSummary.isClockedIn && !timecardSummary.isOnBreak}>
-              {breakButtonLabel}
-            </Button>
-            <Button className="min-h-11 rounded-2xl text-sm" variant="outline" onClick={() => void recordClockEvent('out')} disabled={!timecardSummary.isClockedIn && !timecardSummary.isOnBreak}>
-              Clock Out
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="rounded-3xl border-border/70 bg-card shadow-sm">
-        <div className="space-y-4 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">Task List</p>
-              <h2 className="text-lg font-semibold text-foreground">Today&apos;s Work</h2>
-            </div>
-            <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
-              {employeeAssignments.filter((assignment) => assignment.status === 'completed').length}/{employeeAssignments.length} complete
-            </Badge>
-          </div>
-
-          {employeeAssignments.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-              No tasks are assigned yet. Check with your supervisor for the day&apos;s plan.
-            </div>
+          {assignments.length === 0 ? (
+            <Card className="rounded-2xl p-5">
+              <p className="text-base font-medium">No tasks assigned for today. Check with your supervisor.</p>
+            </Card>
           ) : (
             <div className="space-y-3">
-              {employeeAssignments.map((assignment) => {
-                const task = tasks.find((item) => item.id === assignment.taskId);
-                const estimatedMinutes = task?.duration ?? assignment.duration ?? 0;
-                const isComplete = assignment.status === 'completed';
-                const isCurrent = assignment.id === currentAssignment?.id;
-
+              {assignments.map((assignment) => {
+                const normalizedStatus = displayStatus(assignment.status);
+                const isSaving = Boolean(savingIds[assignment.id]);
+                const category = assignment.taskId ? taskMetaById[assignment.taskId]?.category : null;
                 return (
-                  <button
-                    key={assignment.id ?? `${assignment.employeeId}-${assignment.taskId}-${assignment.area}`}
-                    type="button"
-                    onClick={() => void (isComplete ? updateAssignmentStatus(assignment.id, 'planned') : markAssignmentComplete(assignment.id))}
-                    className={`flex w-full items-start gap-3 rounded-2xl border border-border/70 bg-background px-4 py-4 text-left transition hover:border-primary/40 ${isCurrent ? 'border-primary/40 bg-primary/5' : ''}`}
-                  >
-                    <Checkbox checked={isComplete} className="mt-0.5 h-5 w-5" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className={`text-sm font-semibold ${isComplete ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
-                            {task?.name ?? 'Assigned Task'}
-                          </p>
-                          <p className="mt-1 text-sm text-muted-foreground">{assignment.area}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {(assignment.status ?? 'planned').replace('-', ' ')} {isCurrent ? '• current focus' : ''}
-                          </p>
-                        </div>
-                        <Badge variant={isComplete ? 'secondary' : 'outline'} className="rounded-full text-xs">
-                          {estimatedMinutes} min
-                        </Badge>
-                      </div>
+                  <Card key={assignment.id} className="rounded-2xl p-4">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-semibold">{assignment.title}</h2>
+                      <Badge className="text-sm">{category || 'General'}</Badge>
                     </div>
-                  </button>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <Badge variant="outline" className="text-sm">
+                        {assignment.estimatedHours.toFixed(1)} hrs est.
+                      </Badge>
+                      <Badge className={`text-sm ${statusBadgeClass(assignment.status)}`}>
+                        {statusBadgeLabel(assignment.status)}
+                      </Badge>
+                    </div>
+                    {assignment.startTime ? <p className="text-base">Start: {formatTime(assignment.startTime)}</p> : null}
+                    {assignment.location ? <p className="mt-1 text-base">Location: {assignment.location}</p> : null}
+                    {assignment.notes ? <p className="mt-1 text-base">Notes: {assignment.notes}</p> : null}
+
+                    <Button
+                      className="mt-3 h-12 min-h-12 w-full text-base"
+                      disabled={normalizedStatus === 'done' || isSaving}
+                      variant={normalizedStatus === 'done' ? 'secondary' : 'default'}
+                      onClick={() => void updateTaskStatus(assignment)}
+                    >
+                      {normalizedStatus === 'planned'
+                        ? 'Start Task'
+                        : normalizedStatus === 'in_progress'
+                          ? 'Complete Task'
+                          : 'Completed ✓'}
+                    </Button>
+
+                    {normalizedStatus === 'done' ? (
+                      <div className="mt-3 rounded-xl border p-3">
+                        <label className="mb-2 block text-base font-medium" htmlFor={`actual-hours-${assignment.id}`}>
+                          How long did this take?
+                        </label>
+                        <div className="flex gap-2">
+                          <Input
+                            id={`actual-hours-${assignment.id}`}
+                            type="number"
+                            min={0}
+                            max={24}
+                            step={0.5}
+                            className="h-12 min-h-12 text-base"
+                            value={actualHoursDraft[assignment.id] ?? ''}
+                            onChange={(event) =>
+                              setActualHoursDraft((current) => ({
+                                ...current,
+                                [assignment.id]: event.target.value,
+                              }))
+                            }
+                          />
+                          <Button
+                            className="h-12 min-h-12 px-5 text-base"
+                            disabled={isSaving}
+                            onClick={() => void saveActualHours(assignment.id)}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </Card>
                 );
               })}
             </div>
           )}
+        </>
+      )}
+
+      <footer className="fixed bottom-0 left-0 right-0 border-t bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto w-full max-w-[520px]">
+          <p className="text-base font-semibold">
+            {doneCount}/{assignments.length} tasks done · {actualHoursTotal.toFixed(1)}h actual / {scheduledHoursTotal.toFixed(1)}h scheduled
+          </p>
         </div>
-      </Card>
-
-      <Card className="rounded-3xl border-border/70 bg-card shadow-sm">
-        <div className="space-y-4 p-5">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">Quick Contacts</p>
-            <h2 className="text-lg font-semibold text-foreground">Need help?</h2>
-          </div>
-
-          <div className="rounded-2xl border border-border/70 bg-muted/40 p-4">
-            <p className="text-sm font-semibold text-foreground">{supervisor ? `${supervisor.firstName} ${supervisor.lastName}` : 'Supervisor pending'}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{supervisor?.role ?? 'Crew lead'}</p>
-          </div>
-
-          <div className="grid gap-2">
-            <Button
-              variant="outline"
-              className="min-h-11 justify-start rounded-2xl text-sm"
-              onClick={() => {
-                if (supervisor?.phone) {
-                  window.location.href = `tel:${supervisor.phone}`;
-                } else {
-                  toast.error('No supervisor phone is on file yet.');
-                }
-              }}
-            >
-              <Phone className="mr-2 h-4 w-4" />
-              {supervisor?.phone ? `Call ${supervisor.firstName}` : 'Call supervisor'}
-            </Button>
-            <Button
-              variant="outline"
-              className="min-h-11 justify-start rounded-2xl text-sm"
-              onClick={() => {
-                window.location.href = 'tel:911';
-              }}
-            >
-              <ShieldAlert className="mr-2 h-4 w-4 text-destructive" />
-              Emergency Contact
-            </Button>
-            <Button
-              variant="outline"
-              className="min-h-11 justify-start rounded-2xl text-sm"
-              onClick={() => {
-                window.location.href = '/app/messaging';
-              }}
-            >
-              <MessageSquare className="mr-2 h-4 w-4" />
-              Open Messaging
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="rounded-3xl border-border/70 bg-card shadow-sm">
-        <div className="space-y-4 p-5">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 text-primary" />
-            <div>
-              <p className="text-sm font-semibold text-foreground">Map</p>
-              <p className="text-sm text-muted-foreground">Loads after your assignments so the page stays quick in low signal.</p>
-            </div>
-          </div>
-          {!shouldLoadMap ? (
-            <Skeleton className="h-56 rounded-2xl" />
-          ) : mapCenter ? (
-            <Suspense fallback={<Skeleton className="h-56 rounded-2xl" />}>
-              <MobileFieldMap
-                center={mapCenter}
-                propertyName={activeProperty?.name ?? 'Assigned Property'}
-                workLocation={currentAssignment?.area}
-                crewMarkers={activeCrewMarkers}
-              />
-            </Suspense>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-              Allow location access or add property coordinates in Program Setup to use the field map.
-            </div>
-          )}
-        </div>
-      </Card>
+      </footer>
     </div>
   );
 }
