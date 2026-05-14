@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
+import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 function SummaryCard({
   title,
@@ -269,6 +270,48 @@ export default function CommandCenterOperationalPage() {
     return properties[0] ?? null;
   }, [currentPropertyId, properties]);
   const selectedWeatherQuery = useWeather(selectedProperty?.id);
+  const laborTrendQuery = useQuery({
+    queryKey: ['dashboard-labor-trend-7d', orgId ?? 'no-org'],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as Array<{ date: string; scheduled: number; actual: number }>;
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 6);
+      const startDate = start.toISOString().slice(0, 10);
+      const endDate = today.toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from('assignments')
+        .select('date, estimated_hours, actual_hours')
+        .eq('org_id', orgId)
+        .gte('date', startDate)
+        .lte('date', endDate);
+      if (error) throw error;
+
+      const byDate = new Map<string, { scheduled: number; actual: number }>();
+      for (let i = 0; i < 7; i += 1) {
+        const date = new Date(start);
+        date.setDate(start.getDate() + i);
+        const key = date.toISOString().slice(0, 10);
+        byDate.set(key, { scheduled: 0, actual: 0 });
+      }
+
+      (data ?? []).forEach((row) => {
+        const key = String(row.date ?? '');
+        const current = byDate.get(key);
+        if (!current) return;
+        current.scheduled += Number(row.estimated_hours ?? 0);
+        current.actual += Number(row.actual_hours ?? 0);
+      });
+
+      return Array.from(byDate.entries()).map(([date, sums]) => ({
+        date,
+        scheduled: Number(sums.scheduled.toFixed(1)),
+        actual: Number(sums.actual.toFixed(1)),
+      }));
+    },
+  });
   const sprayWindowQuery = useQuery({
     queryKey: ['dashboard-spray-window', selectedProperty?.id ?? 'none'],
     enabled:
@@ -465,6 +508,14 @@ export default function CommandCenterOperationalPage() {
       tone: blockers >= 3 ? ('critical' as const) : ('warning' as const),
     };
   }, [notes, openIssuesCount, unassignedScheduledCount]);
+  const laborTrendData = useMemo(
+    () =>
+      (laborTrendQuery.data ?? []).map((row) => ({
+        ...row,
+        label: new Date(`${row.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' }),
+      })),
+    [laborTrendQuery.data],
+  );
 
   const isLoading = dashboardDataQuery.isLoading;
   const canLoadDashboard = isReady && Boolean(orgId);
@@ -697,6 +748,36 @@ export default function CommandCenterOperationalPage() {
           )}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">{sprayWindowSummary}</p>
+      </Card>
+
+      <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+        <h3 className="text-sm font-semibold">Labor: Scheduled vs Actual (Last 7 Days)</h3>
+        <div className="mt-4 h-64">
+          {laborTrendQuery.isLoading ? (
+            <Skeleton className="h-full w-full rounded-xl" />
+          ) : laborTrendQuery.error ? (
+            <div className="text-xs text-muted-foreground">Unable to load labor chart.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={laborTrendData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} />
+                <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="scheduled" name="Scheduled" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="actual" name="Actual" radius={[4, 4, 0, 0]}>
+                  {laborTrendData.map((entry) => (
+                    <Cell
+                      key={`actual-cell-${entry.date}`}
+                      fill={entry.actual > entry.scheduled ? '#f97316' : '#16a34a'}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </Card>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
