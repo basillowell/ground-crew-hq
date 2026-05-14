@@ -38,6 +38,22 @@ interface TaskLibraryItem {
   estimated_hours: number | null;
 }
 
+interface OrganizationInfo {
+  name: string;
+  plan: string | null;
+}
+
+interface PropertyItem {
+  id: string;
+  name: string;
+  org_id: string;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
+  created_at: string | null;
+}
+
 function PlaceholderCard({ text }: { text: string }) {
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
@@ -110,8 +126,224 @@ export default function SettingsPage() {
 }
 
 function WorkspaceTab({ orgId }: { orgId: string | null }) {
-  if (!orgId) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading workspace settings…</div>;
-  return <PlaceholderCard text="Workspace settings — manage your organization name, properties, and operational program settings. Coming in the next update." />;
+  const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
+  const [orgNameDraft, setOrgNameDraft] = useState('');
+  const [properties, setProperties] = useState<PropertyItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingOrg, setSavingOrg] = useState(false);
+  const [newPropertyName, setNewPropertyName] = useState('');
+  const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
+  const [editingPropertyName, setEditingPropertyName] = useState('');
+
+  const fetchWorkspaceData = useCallback(async () => {
+    if (!supabase || !orgId) return;
+    setLoading(true);
+    setError(null);
+
+    const [{ data: orgData, error: orgError }, { data: propertiesData, error: propertiesError }] = await Promise.all([
+      supabase.from('organizations').select('name, plan').eq('id', orgId).single(),
+      supabase
+        .from('properties')
+        .select('id, name, org_id, address, latitude, longitude, timezone, created_at')
+        .eq('org_id', orgId)
+        .order('name', { ascending: true }),
+    ]);
+
+    if (orgError || propertiesError) {
+      setError(orgError?.message ?? propertiesError?.message ?? 'Unable to load workspace settings');
+      setLoading(false);
+      return;
+    }
+
+    setOrgInfo((orgData ?? null) as OrganizationInfo | null);
+    setOrgNameDraft(String((orgData as OrganizationInfo | null)?.name ?? ''));
+    setProperties((propertiesData ?? []) as PropertyItem[]);
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    void fetchWorkspaceData();
+  }, [fetchWorkspaceData, orgId]);
+
+  const saveOrganization = async () => {
+    if (!supabase || !orgId || !orgNameDraft.trim()) return;
+    setSavingOrg(true);
+    setError(null);
+    const { error: updateError } = await supabase.from('organizations').update({ name: orgNameDraft.trim() }).eq('id', orgId);
+    setSavingOrg(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setOrgInfo((current) => (current ? { ...current, name: orgNameDraft.trim() } : current));
+  };
+
+  const addProperty = async () => {
+    if (!supabase || !orgId || !newPropertyName.trim()) return;
+    setError(null);
+    const { data, error: insertError } = await supabase
+      .from('properties')
+      .insert({ name: newPropertyName.trim(), org_id: orgId })
+      .select('id, name, org_id, address, latitude, longitude, timezone, created_at')
+      .single();
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    setProperties((current) => [...current, data as PropertyItem].sort((a, b) => a.name.localeCompare(b.name)));
+    setNewPropertyName('');
+  };
+
+  const startPropertyEdit = (property: PropertyItem) => {
+    setEditingPropertyId(property.id);
+    setEditingPropertyName(property.name);
+  };
+
+  const savePropertyEdit = async (propertyId: string) => {
+    if (!supabase || !orgId || !editingPropertyName.trim()) return;
+    setError(null);
+    const { error: updateError } = await supabase
+      .from('properties')
+      .update({ name: editingPropertyName.trim() })
+      .eq('id', propertyId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setProperties((current) =>
+      current
+        .map((property) => (property.id === propertyId ? { ...property, name: editingPropertyName.trim() } : property))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    setEditingPropertyId(null);
+    setEditingPropertyName('');
+  };
+
+  const cancelPropertyEdit = () => {
+    setEditingPropertyId(null);
+    setEditingPropertyName('');
+  };
+
+  const deleteProperty = async (propertyId: string) => {
+    if (!supabase || !orgId) return;
+    const confirmed = window.confirm('Delete this property?');
+    if (!confirmed) return;
+    setError(null);
+    const { error: deleteError } = await supabase.from('properties').delete().eq('id', propertyId).eq('org_id', orgId);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+    setProperties((current) => current.filter((property) => property.id !== propertyId));
+  };
+
+  if (!orgId || loading) {
+    return (
+      <div style={{ display: 'grid', gap: '12px' }}>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '13px' }}>
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[#166534] border-t-transparent" />
+            Loading workspace settings...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+        <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
+        <button onClick={() => void fetchWorkspaceData()}>Retry</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Organization Info</h3>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gap: '6px', minWidth: '240px' }}>
+            <label style={{ color: '#6b7280', fontSize: '12px' }}>Organization name</label>
+            <input value={orgNameDraft} onChange={(event) => setOrgNameDraft(event.target.value)} />
+          </div>
+          <div style={{ display: 'grid', gap: '6px' }}>
+            <label style={{ color: '#6b7280', fontSize: '12px' }}>Plan</label>
+            <span style={{ border: '1px solid #e5e7eb', borderRadius: '999px', padding: '4px 10px', fontSize: '12px', width: 'fit-content' }}>
+              {(orgInfo?.plan ?? 'starter').toString()}
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={() => void saveOrganization()}
+          disabled={savingOrg}
+          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+        >
+          {savingOrg ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Properties ({properties.length})</h3>
+        {properties.length === 0 ? (
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No properties yet. Add your first property below.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', textAlign: 'left' }}>
+                  <th style={{ padding: '8px' }}>Name</th>
+                  <th style={{ padding: '8px' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {properties.map((property) => (
+                  <tr key={property.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '8px' }}>
+                      {editingPropertyId === property.id ? (
+                        <input value={editingPropertyName} onChange={(event) => setEditingPropertyName(event.target.value)} />
+                      ) : (
+                        property.name
+                      )}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {editingPropertyId === property.id ? (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => void savePropertyEdit(property.id)} style={{ color: '#166534' }}>Save</button>
+                          <button onClick={cancelPropertyEdit}>Cancel</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => startPropertyEdit(property)}>Edit</button>
+                          <button onClick={() => void deleteProperty(property.id)} style={{ color: '#dc2626' }}>Delete</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div style={{ marginTop: '8px', display: 'grid', gap: '8px', maxWidth: '420px' }}>
+          <label style={{ color: '#6b7280', fontSize: '12px' }}>Add property</label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input placeholder="Property name" value={newPropertyName} onChange={(event) => setNewPropertyName(event.target.value)} style={{ flex: 1 }} />
+            <button
+              onClick={() => void addProperty()}
+              style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function WorkforceTab({ orgId }: { orgId: string | null }) {
