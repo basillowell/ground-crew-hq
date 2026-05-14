@@ -15,3 +15,7 @@ coverage/
 ValetPro_clean/
 ValetPro/
 ValetPro_repo/
+.claude/
+node_modules/
+dist/
+.vite/
