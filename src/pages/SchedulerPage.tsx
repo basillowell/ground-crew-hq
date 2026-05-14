@@ -61,6 +61,9 @@ export default function SchedulerPage() {
   const { currentPropertyId, currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [copyWeekDialogOpen, setCopyWeekDialogOpen] = useState(false);
+  const [copyAssignmentsChecked, setCopyAssignmentsChecked] = useState(false);
+  const [copyWeekSaving, setCopyWeekSaving] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const weekDays = useMemo(() => buildWeekDays(weekStart), [weekStart]);
@@ -126,6 +129,21 @@ export default function SchedulerPage() {
     status: 'scheduled' as ScheduleEntry['status'],
     notes: '',
   });
+
+  const sourceWeekRangeLabel = useMemo(
+    () => `${weekDays[0]?.label ?? ''} - ${weekDays[6]?.label ?? ''}`,
+    [weekDays],
+  );
+  const targetWeekRangeLabel = useMemo(() => {
+    if (!weekDays[0]?.date || !weekDays[6]?.date) return '';
+    const targetStart = new Date(`${weekDays[0].date}T00:00:00`);
+    const targetEnd = new Date(`${weekDays[6].date}T00:00:00`);
+    targetStart.setDate(targetStart.getDate() + 7);
+    targetEnd.setDate(targetEnd.getDate() + 7);
+    const startLabel = targetStart.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+    const endLabel = targetEnd.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+    return `${startLabel} - ${endLabel}`;
+  }, [weekDays]);
 
   useEffect(() => {
     const fetchSchedulerData = async () => {
@@ -337,47 +355,166 @@ export default function SchedulerPage() {
     toast.success('Shift removed');
   }
 
+  function openCopyWeekDialog() {
+    setCopyAssignmentsChecked(false);
+    setCopyWeekDialogOpen(true);
+  }
+
+  function generateUuid() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2, 14)}`;
+  }
+
   async function copyWeek() {
-    if (!supabase) { toast.error('Database not available.'); return; }
+    if (!supabase) {
+      toast.error('Database not available.');
+      return;
+    }
+    if (!currentUser?.orgId) {
+      toast.error('Organization context unavailable.');
+      return;
+    }
     const weekStartDate = weekDays[0]?.date;
     const weekEndDate = weekDays[6]?.date;
     if (!weekStartDate || !weekEndDate) return;
-    const source = new Date(`${weekStartDate}T00:00:00`);
-    const target = new Date(source);
-    target.setDate(target.getDate() + 7);
-    const confirmed = window.confirm(
-      `Copy week of ${source.toLocaleDateString()} to ${target.toLocaleDateString()}?`,
-    );
-    if (!confirmed) return;
+
+    setCopyWeekSaving(true);
 
     const weekEntries = scheduleList.filter((entry) => entry.date >= weekStartDate && entry.date <= weekEndDate);
     if (weekEntries.length === 0) {
+      setCopyWeekSaving(false);
       toast.message('Nothing to copy', { description: 'No entries found in the current week.' });
       return;
     }
 
+    const targetWeekStartDate = new Date(`${weekStartDate}T00:00:00`);
+    targetWeekStartDate.setDate(targetWeekStartDate.getDate() + 7);
+    const targetWeekEndDate = new Date(`${weekEndDate}T00:00:00`);
+    targetWeekEndDate.setDate(targetWeekEndDate.getDate() + 7);
+    const targetStartKey = toDateKey(targetWeekStartDate);
+    const targetEndKey = toDateKey(targetWeekEndDate);
+
+    const { data: existingTargetWeekEntries, error: existingEntriesError } = await supabase
+      .from('schedule_entries')
+      .select('id, date')
+      .eq('org_id', currentUser.orgId)
+      .gte('date', targetStartKey)
+      .lte('date', targetEndKey);
+
+    if (existingEntriesError) {
+      setCopyWeekSaving(false);
+      toast.error('Copy failed', { description: existingEntriesError.message });
+      return;
+    }
+
+    const targetDaysWithEntries = new Set((existingTargetWeekEntries ?? []).map((entry) => String(entry.date)));
+    const sourceToTargetDateMap = new Map<string, string>();
     const inserts: Record<string, unknown>[] = [];
+
     for (const entry of weekEntries) {
       const copiedDate = new Date(`${entry.date}T00:00:00`);
       copiedDate.setDate(copiedDate.getDate() + 7);
+      const targetDate = toDateKey(copiedDate);
+      sourceToTargetDateMap.set(entry.date, targetDate);
+      if (targetDaysWithEntries.has(targetDate)) continue;
+
       const employee = employeeList.find((person) => person.id === entry.employeeId);
       const row: Record<string, unknown> = {
+        id: generateUuid(),
         employee_id: entry.employeeId,
-        date: toDateKey(copiedDate),
+        date: targetDate,
         shift_start: entry.shiftStart,
         shift_end: entry.shiftEnd,
-        status: entry.status,
+        status: 'scheduled',
         notes: (entry as ScheduleEntry & { notes?: string | null }).notes ?? null,
+        org_id: currentUser.orgId,
       };
       if (employee?.propertyId) row.property_id = employee.propertyId;
-      if (currentUser?.orgId) row.org_id = currentUser.orgId;
       inserts.push(row);
     }
 
-    const { error } = await supabase.from('schedule_entries').insert(inserts);
-    if (error) { toast.error('Copy failed', { description: error.message }); return; }
+    if (inserts.length > 0) {
+      const { error } = await supabase.from('schedule_entries').insert(inserts);
+      if (error) {
+        setCopyWeekSaving(false);
+        toast.error('Copy failed', { description: error.message });
+        return;
+      }
+    }
+
+    if (copyAssignmentsChecked) {
+      const { data: sourceAssignments, error: sourceAssignmentsError } = await supabase
+        .from('assignments')
+        .select('employee_id, property_id, task_id, date, title, location, status, notes, order_index, estimated_hours, actual_hours, start_time')
+        .eq('org_id', currentUser.orgId)
+        .gte('date', weekStartDate)
+        .lte('date', weekEndDate);
+
+      if (sourceAssignmentsError) {
+        setCopyWeekSaving(false);
+        toast.error('Copy failed', { description: sourceAssignmentsError.message });
+        return;
+      }
+
+      const { data: existingTargetAssignments, error: existingTargetAssignmentsError } = await supabase
+        .from('assignments')
+        .select('date')
+        .eq('org_id', currentUser.orgId)
+        .gte('date', targetStartKey)
+        .lte('date', targetEndKey);
+
+      if (existingTargetAssignmentsError) {
+        setCopyWeekSaving(false);
+        toast.error('Copy failed', { description: existingTargetAssignmentsError.message });
+        return;
+      }
+
+      const targetDaysWithAssignments = new Set((existingTargetAssignments ?? []).map((assignment) => String(assignment.date)));
+      const assignmentInserts: Record<string, unknown>[] = [];
+
+      for (const assignment of sourceAssignments ?? []) {
+        const sourceDate = String(assignment.date ?? '');
+        const targetDate = sourceToTargetDateMap.get(sourceDate);
+        if (!targetDate || targetDaysWithEntries.has(targetDate) || targetDaysWithAssignments.has(targetDate)) continue;
+        assignmentInserts.push({
+          id: generateUuid(),
+          org_id: currentUser.orgId,
+          employee_id: assignment.employee_id,
+          property_id: assignment.property_id,
+          task_id: assignment.task_id,
+          date: targetDate,
+          title: assignment.title,
+          location: assignment.location,
+          status: 'planned',
+          notes: assignment.notes,
+          order_index: assignment.order_index,
+          estimated_hours: assignment.estimated_hours,
+          actual_hours: null,
+          start_time: assignment.start_time,
+          completed_at: null,
+        });
+      }
+
+      if (assignmentInserts.length > 0) {
+        const { error: assignmentInsertError } = await supabase.from('assignments').insert(assignmentInserts);
+        if (assignmentInsertError) {
+          setCopyWeekSaving(false);
+          toast.error('Copy failed', { description: assignmentInsertError.message });
+          return;
+        }
+      }
+    }
+
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-    toast.success('Week copied', { description: `${inserts.length} shifts added.` });
+    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    setCopyWeekSaving(false);
+    setCopyWeekDialogOpen(false);
+    setWeekStart(targetStartKey);
+    toast.success('Week copied', {
+      description: `${inserts.length} shift${inserts.length === 1 ? '' : 's'} added to next week.`,
+    });
   }
 
   function exportWeekToCalendar() {
@@ -462,7 +599,7 @@ export default function SchedulerPage() {
         <Button size="sm" className="h-8 gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
           <Plus className="h-3.5 w-3.5" /> Add Shift
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={copyWeek} data-testid="button-copy-week">
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={openCopyWeekDialog} data-testid="button-copy-week">
           <Copy className="h-3.5 w-3.5" /> Copy Week
         </Button>
         <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportWeekToCalendar}>
@@ -865,6 +1002,40 @@ export default function SchedulerPage() {
               <Button variant="outline" onClick={handleCloseModal}>Cancel</Button>
               <Button onClick={() => void handleSaveShift()} disabled={isSaving} data-testid="button-save-shift">
                 {isSaving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Shift'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={copyWeekDialogOpen} onOpenChange={setCopyWeekDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Copy this week&apos;s schedule to next week?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="rounded-md border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">Source week</p>
+              <p className="font-medium">{sourceWeekRangeLabel}</p>
+            </div>
+            <div className="rounded-md border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">Target week</p>
+              <p className="font-medium">{targetWeekRangeLabel}</p>
+            </div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={copyAssignmentsChecked}
+                onChange={(event) => setCopyAssignmentsChecked(event.target.checked)}
+              />
+              <span>Also copy task assignments</span>
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setCopyWeekDialogOpen(false)} disabled={copyWeekSaving}>
+                Cancel
+              </Button>
+              <Button onClick={() => void copyWeek()} disabled={copyWeekSaving}>
+                {copyWeekSaving ? 'Copying...' : 'Confirm Copy'}
               </Button>
             </div>
           </div>
