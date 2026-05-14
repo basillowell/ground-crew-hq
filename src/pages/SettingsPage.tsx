@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -138,7 +139,15 @@ export default function SettingsPage() {
       {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId ?? ''} />}
       {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
       {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
-      {tab === 'Access' && <AccessTab key="access" userEmail={user?.email ?? ''} userRole={userRole} orgId={orgId} />}
+      {tab === 'Access' && (
+        <AccessTab
+          key="access"
+          userEmail={user?.email ?? ''}
+          userRole={userRole}
+          orgId={orgId}
+          employeeName={currentUser?.fullName ?? ''}
+        />
+      )}
       {tab === 'Help' && <HelpTab key="help" />}
     </div>
   );
@@ -586,17 +595,100 @@ function AccessTab({
   userEmail,
   userRole,
   orgId,
+  employeeName,
 }: {
   userEmail: string;
   userRole: string | null;
   orgId: string | null;
+  employeeName: string;
 }) {
-  if (!orgId) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading access settings…</div>;
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [organizationName, setOrganizationName] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchOrganizationName = useCallback(async () => {
+    if (!supabase || !orgId) return;
+    setLoading(true);
+    setError(null);
+    const { data, error: fetchError } = await supabase
+      .from('organizations')
+      .select('name')
+      .eq('id', orgId)
+      .single();
+    if (fetchError) {
+      setError(fetchError.message);
+      setLoading(false);
+      return;
+    }
+    setOrganizationName(String(data?.name ?? ''));
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    void fetchOrganizationName();
+  }, [fetchOrganizationName, orgId]);
+
+  const handleSignOut = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    navigate('/');
+  };
+
+  const handleClearAppCache = () => {
+    localStorage.clear();
+    queryClient.clear();
+    window.location.reload();
+  };
+
+  if (!orgId || loading) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading access settings…</div>;
+
+  if (error) {
+    return (
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+        <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
+        <button onClick={() => void fetchOrganizationName()}>Retry</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
-      <PlaceholderCard text="Access settings — view your account details and manage team access. Coming in the next update." />
-      <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>{userEmail || 'No user email'}</p>
-      <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Role: {userRole ?? 'Not available'}</p>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '8px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Your Account</h3>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Email:</strong> {userEmail || 'Not available'}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Role:</strong> {userRole ?? 'Not available'}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Employee:</strong> {employeeName || 'Not available'}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Organization:</strong> {organizationName || 'Not available'}</p>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Session Management</h3>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => void handleSignOut()}
+            style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+          >
+            Sign Out
+          </button>
+          <button
+            onClick={handleClearAppCache}
+            style={{ border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+          >
+            Clear App Cache
+          </button>
+        </div>
+      </div>
+
+      <div style={{ border: '1px solid #fecaca', borderRadius: '12px', padding: '16px', background: '#fef2f2' }}>
+        <h3 style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: 600, color: '#b91c1c' }}>Danger Zone</h3>
+        <p style={{ margin: 0, color: '#7f1d1d', fontSize: '13px' }}>
+          To delete your account or change your email, contact support at support@groundcrewhq.com.
+        </p>
+      </div>
     </div>
   );
 }
