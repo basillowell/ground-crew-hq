@@ -54,6 +54,25 @@ interface PropertyItem {
   created_at: string | null;
 }
 
+interface WorkforceSummaryRow {
+  role: string | null;
+  department: string | null;
+}
+
+interface WeatherLocationItem {
+  id: string;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+  is_active?: boolean | null;
+}
+
+interface WeatherDisplayPrefsRow {
+  id?: string;
+  org_id: string;
+  enabled_widgets?: string[] | null;
+}
+
 function PlaceholderCard({ text }: { text: string }) {
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
@@ -347,13 +366,220 @@ function WorkspaceTab({ orgId }: { orgId: string | null }) {
 }
 
 function WorkforceTab({ orgId }: { orgId: string | null }) {
-  if (!orgId) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading workforce settings…</div>;
-  return <PlaceholderCard text="Workforce settings — define crew roles, departments, and labor rate categories. Coming in the next update." />;
+  const [rows, setRows] = useState<WorkforceSummaryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchWorkforceSummary = useCallback(async () => {
+    if (!supabase || !orgId) return;
+    setLoading(true);
+    setError(null);
+    const { data, error: fetchError } = await supabase
+      .from('employees')
+      .select('role, department')
+      .eq('org_id', orgId);
+    if (fetchError) {
+      setError(fetchError.message);
+      setLoading(false);
+      return;
+    }
+    setRows((data ?? []) as WorkforceSummaryRow[]);
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    void fetchWorkforceSummary();
+  }, [fetchWorkforceSummary, orgId]);
+
+  const roleCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    rows.forEach((row) => {
+      const key = row.role?.trim() || 'Unassigned';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [rows]);
+
+  const departmentCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    rows.forEach((row) => {
+      const key = row.department?.trim() || 'Unassigned';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [rows]);
+
+  if (!orgId || loading) {
+    return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading workforce settings…</div>;
+  }
+
+  if (error) {
+    return (
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+        <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
+        <button onClick={() => void fetchWorkforceSummary()}>Retry</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '12px' }}>
+      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Workforce Summary</h3>
+      <div style={{ display: 'grid', gap: '8px' }}>
+        <p style={{ margin: 0, color: '#374151', fontSize: '13px' }}>
+          <strong>Roles:</strong>{' '}
+          {roleCounts.length > 0 ? roleCounts.map(([name, count]) => `${name} (${count})`).join(' · ') : 'No roles available'}
+        </p>
+        <p style={{ margin: 0, color: '#374151', fontSize: '13px' }}>
+          <strong>Departments:</strong>{' '}
+          {departmentCounts.length > 0
+            ? departmentCounts.map(([name, count]) => `${name} (${count})`).join(' · ')
+            : 'No departments available'}
+        </p>
+      </div>
+      <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+        To change employee roles, go to the Employees page.
+      </p>
+    </div>
+  );
 }
 
 function WeatherTab({ orgId }: { orgId: string | null }) {
-  if (!orgId) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading weather settings…</div>;
-  return <PlaceholderCard text="Weather settings — configure your active weather station location and dashboard display preferences. Coming in the next update." />;
+  const [locations, setLocations] = useState<WeatherLocationItem[]>([]);
+  const [prefs, setPrefs] = useState<{ show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }>({
+    show_hourly: true,
+    show_forecast: true,
+    show_rainfall: true,
+  });
+  const [loading, setLoading] = useState(true);
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchWeatherSettings = useCallback(async () => {
+    if (!supabase || !orgId) return;
+    setLoading(true);
+    setError(null);
+    const [{ data: locationData, error: locationError }, { data: prefsData, error: prefsError }] = await Promise.all([
+      supabase
+        .from('weather_locations')
+        .select('id, name, latitude, longitude, is_active')
+        .eq('org_id', orgId),
+      supabase
+        .from('weather_display_prefs')
+        .select('id, org_id, enabled_widgets')
+        .eq('org_id', orgId)
+        .maybeSingle(),
+    ]);
+
+    if (locationError || prefsError) {
+      setError(locationError?.message ?? prefsError?.message ?? 'Unable to load weather settings');
+      setLoading(false);
+      return;
+    }
+
+    setLocations((locationData ?? []) as WeatherLocationItem[]);
+
+    const enabledWidgets = ((prefsData as WeatherDisplayPrefsRow | null)?.enabled_widgets ?? []) as string[];
+    const defaultWidgets = ['hourly-forecast', 'daily-forecast', 'rain', 'precipitation'];
+    const hasWidgets = enabledWidgets.length > 0;
+    setPrefs({
+      show_hourly: hasWidgets ? enabledWidgets.includes('hourly-forecast') || enabledWidgets.includes('hourly_forecast') : defaultWidgets.includes('hourly-forecast'),
+      show_forecast: hasWidgets ? enabledWidgets.includes('daily-forecast') || enabledWidgets.includes('7day_forecast') : defaultWidgets.includes('daily-forecast'),
+      show_rainfall: hasWidgets ? enabledWidgets.includes('rain') || enabledWidgets.includes('precipitation') : true,
+    });
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    void fetchWeatherSettings();
+  }, [fetchWeatherSettings, orgId]);
+
+  const savePrefs = useCallback(async (nextPrefs: { show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }) => {
+    if (!supabase || !orgId) return;
+    setSavingPrefs(true);
+    setError(null);
+    const enabledWidgets = [
+      ...(nextPrefs.show_hourly ? ['hourly-forecast'] : []),
+      ...(nextPrefs.show_forecast ? ['daily-forecast'] : []),
+      ...(nextPrefs.show_rainfall ? ['rain'] : []),
+    ];
+    const { error: upsertError } = await supabase
+      .from('weather_display_prefs')
+      .upsert(
+        {
+          org_id: orgId,
+          enabled_widgets: enabledWidgets,
+        },
+        { onConflict: 'org_id' },
+      );
+    setSavingPrefs(false);
+    if (upsertError) {
+      setError(upsertError.message);
+    }
+  }, [orgId]);
+
+  const updatePref = (key: 'show_hourly' | 'show_forecast' | 'show_rainfall', checked: boolean) => {
+    const next = { ...prefs, [key]: checked };
+    setPrefs(next);
+    void savePrefs(next);
+  };
+
+  const activeLocation = useMemo(
+    () => locations.find((location) => location.is_active) ?? locations[0] ?? null,
+    [locations],
+  );
+
+  if (!orgId || loading) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading weather settings…</div>;
+
+  if (error) {
+    return (
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+        <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
+        <button onClick={() => void fetchWeatherSettings()}>Retry</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Active Weather Location</h3>
+        {activeLocation ? (
+          <>
+            <p style={{ margin: 0, fontSize: '13px', color: '#111827' }}>{activeLocation.name}</p>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
+              {activeLocation.latitude ?? '—'}, {activeLocation.longitude ?? '—'}
+            </p>
+          </>
+        ) : (
+          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>No weather location configured.</p>
+        )}
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+          Weather data is sourced from Open-Meteo based on this location.
+        </p>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
+          Display Preferences {savingPrefs ? '· Saving…' : ''}
+        </h3>
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: '#374151' }}>
+          <input type="checkbox" checked={prefs.show_hourly} onChange={(event) => updatePref('show_hourly', event.target.checked)} />
+          Show hourly
+        </label>
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: '#374151' }}>
+          <input type="checkbox" checked={prefs.show_forecast} onChange={(event) => updatePref('show_forecast', event.target.checked)} />
+          Show forecast
+        </label>
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: '#374151' }}>
+          <input type="checkbox" checked={prefs.show_rainfall} onChange={(event) => updatePref('show_rainfall', event.target.checked)} />
+          Show rainfall
+        </label>
+      </div>
+    </div>
+  );
 }
 
 function AccessTab({
