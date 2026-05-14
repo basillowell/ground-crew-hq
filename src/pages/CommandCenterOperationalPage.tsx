@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -347,6 +347,29 @@ export default function CommandCenterOperationalPage() {
       });
     },
   });
+  const equipmentAlertsQuery = useQuery({
+    queryKey: ['dashboard-equipment-alerts', orgId ?? 'no-org'],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60,
+    queryFn: async () => {
+      if (!supabase || !orgId) {
+        return [] as Array<{ id: string; name: string | null; unit_name: string | null; type: string | null; last_serviced: string | null }>;
+      }
+      const thresholdDate = new Date();
+      thresholdDate.setDate(thresholdDate.getDate() - 90);
+      const thresholdKey = thresholdDate.toISOString().slice(0, 10);
+
+      const { data, error } = await supabase
+        .from('equipment_units')
+        .select('id, name, unit_name, type, last_serviced')
+        .eq('org_id', orgId)
+        .eq('active', true)
+        .lt('last_serviced', thresholdKey)
+        .order('last_serviced', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; name: string | null; unit_name: string | null; type: string | null; last_serviced: string | null }>;
+    },
+  });
 
   const onboardingDismissKey = useMemo(
     () => (currentUser?.orgId ? `gcrew-onboarding-dismissed-${currentUser.orgId}` : ''),
@@ -590,6 +613,26 @@ export default function CommandCenterOperationalPage() {
     toast.success('Morning brief posted');
   }
 
+  const markEquipmentServiced = useCallback(
+    async (equipmentId: string) => {
+      if (!supabase || !orgId) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const { error } = await supabase
+        .from('equipment_units')
+        .update({ last_serviced: today })
+        .eq('id', equipmentId)
+        .eq('org_id', orgId);
+      if (error) {
+        toast.error('Could not update service date', { description: error.message });
+        return;
+      }
+      await equipmentAlertsQuery.refetch();
+      await dashboardDataQuery.refetch();
+      toast.success('Equipment marked serviced');
+    },
+    [dashboardDataQuery, equipmentAlertsQuery, orgId],
+  );
+
   return (
     <div className="h-full overflow-auto bg-background p-6">
       {showGettingStarted ? (
@@ -776,6 +819,61 @@ export default function CommandCenterOperationalPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+
+      <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+        <h3 className="text-sm font-semibold">Equipment Alerts</h3>
+        <div className="mt-3">
+          {equipmentAlertsQuery.isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg" />
+            </div>
+          ) : equipmentAlertsQuery.error ? (
+            <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+              Unable to load equipment service alerts.
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-2"
+                onClick={() => void equipmentAlertsQuery.refetch()}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : (equipmentAlertsQuery.data ?? []).length === 0 ? (
+            <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+              All equipment is up to date ✓
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {(equipmentAlertsQuery.data ?? []).map((item) => {
+                const displayName = item.unit_name || item.name || 'Equipment';
+                const servicedDate = item.last_serviced ? new Date(item.last_serviced) : null;
+                const overdueDays = servicedDate
+                  ? Math.max(0, Math.floor((Date.now() - servicedDate.getTime()) / (1000 * 60 * 60 * 24)) - 90)
+                  : 0;
+                return (
+                  <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                    <div className="text-sm">
+                      <span className="font-medium">⚠️ {displayName}</span>
+                      <span className="text-muted-foreground">
+                        {' '}— overdue for service by {overdueDays} day{overdueDays === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void markEquipmentServiced(item.id)}
+                    >
+                      Mark Serviced
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </Card>
