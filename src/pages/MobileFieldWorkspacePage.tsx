@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 
@@ -37,6 +38,7 @@ type EmployeeRecord = {
   id: string;
   firstName: string;
   lastName: string;
+  language: string | null;
 };
 
 type TaskMeta = {
@@ -83,6 +85,7 @@ function statusBadgeClass(status: AssignmentStatus) {
 const QUICK_HOURS_OPTIONS = ['1', '1.5', '2', '2.5', '3', '4'];
 
 export default function MobileFieldWorkspacePage() {
+  const LANG_STORAGE_KEY = 'ground-crew-field-lang';
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,10 +108,12 @@ export default function MobileFieldWorkspacePage() {
   const [needsLocation, setNeedsLocation] = useState('');
   const [needsNotes, setNeedsNotes] = useState('');
   const [needsPhotoBase64, setNeedsPhotoBase64] = useState<string | null>(null);
+  const [language, setLanguage] = useState<FieldLanguage>('en');
 
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
   const boardDate = todayKey();
+  const t = fieldTranslations[language];
 
   useEffect(() => {
     const timerId = window.setInterval(() => setLiveNow(new Date()), 60_000);
@@ -129,7 +134,7 @@ export default function MobileFieldWorkspacePage() {
     const endOfDayIso = new Date(`${boardDate}T23:59:59`).toISOString();
 
     const [{ data: employeeRow, error: employeeError }, { data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: propertyRows, error: propertyError }, { data: clockRows, error: clockError }] = await Promise.all([
-      supabase.from('employees').select('id, first_name, last_name').eq('org_id', orgId).eq('id', employeeId).maybeSingle(),
+      supabase.from('employees').select('id, first_name, last_name, language').eq('org_id', orgId).eq('id', employeeId).maybeSingle(),
       supabase
         .from('schedule_entries')
         .select('property_id, shift_start, shift_end')
@@ -182,9 +187,22 @@ export default function MobileFieldWorkspacePage() {
             id: String(employeeRow.id),
             firstName: String(employeeRow.first_name ?? ''),
             lastName: String(employeeRow.last_name ?? ''),
+            language: employeeRow.language ? String(employeeRow.language) : null,
           }
         : null,
     );
+
+    if (employeeRow) {
+      const localPref = window.localStorage.getItem(LANG_STORAGE_KEY);
+      const employeeLang = String(employeeRow.language ?? '').toLowerCase();
+      const nextLang: FieldLanguage =
+        localPref === 'en' || localPref === 'es'
+          ? localPref
+          : employeeLang.startsWith('es')
+            ? 'es'
+            : 'en';
+      setLanguage(nextLang);
+    }
 
     const shiftRow = shiftRows?.[0];
     setShift(
@@ -249,7 +267,7 @@ export default function MobileFieldWorkspacePage() {
     }
 
     setLoading(false);
-  }, [boardDate, currentUser?.propertyId, employeeId, orgId]);
+  }, [LANG_STORAGE_KEY, boardDate, currentUser?.propertyId, employeeId, orgId]);
 
   useEffect(() => {
     void fetchFieldData();
@@ -386,8 +404,8 @@ export default function MobileFieldWorkspacePage() {
     const minutes = totalMinutes % 60;
     const startTime = formatTime(new Date(latestClockIn.timestamp).toISOString().slice(11, 16));
     const endTime = formatTime(new Date(latestClockOut.timestamp).toISOString().slice(11, 16));
-    return `Shift complete: ${startTime} – ${endTime} (${hours}h ${minutes}m)`;
-  }, [latestClockIn, latestClockOut]);
+    return `${t.shiftComplete}: ${startTime} – ${endTime} (${hours}h ${minutes}m)`;
+  }, [latestClockIn, latestClockOut, t.shiftComplete]);
 
   const handleClockEvent = useCallback(
     async (eventType: 'clock_in' | 'clock_out') => {
@@ -523,14 +541,41 @@ export default function MobileFieldWorkspacePage() {
   return (
     <div className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans">
       <header className="mb-4 rounded-2xl border bg-card p-4">
-        <p className="text-lg font-semibold leading-tight">{employeeName}</p>
-        <p className="mt-1 text-base text-muted-foreground">{todayLabel}</p>
-        <p className="mt-1 text-base text-muted-foreground">{propertyName}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-lg font-semibold leading-tight">{employeeName}</p>
+            <p className="mt-1 text-base text-muted-foreground">{todayLabel}</p>
+            <p className="mt-1 text-base text-muted-foreground">{propertyName}</p>
+          </div>
+          <div className="flex items-center rounded-md border bg-background p-1 text-xs font-medium">
+            <button
+              type="button"
+              className={`rounded px-2 py-1 ${language === 'en' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+              onClick={() => {
+                setLanguage('en');
+                window.localStorage.setItem(LANG_STORAGE_KEY, 'en');
+              }}
+            >
+              EN
+            </button>
+            <span className="px-1 text-muted-foreground">|</span>
+            <button
+              type="button"
+              className={`rounded px-2 py-1 ${language === 'es' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+              onClick={() => {
+                setLanguage('es');
+                window.localStorage.setItem(LANG_STORAGE_KEY, 'es');
+              }}
+            >
+              ES
+            </button>
+          </div>
+        </div>
       </header>
 
       {!shift ? (
         <Card className="rounded-2xl p-5">
-          <p className="text-base font-medium">You&apos;re not scheduled today.</p>
+          <p className="text-base font-medium">{t.notScheduled}</p>
         </Card>
       ) : (
         <>
@@ -541,7 +586,7 @@ export default function MobileFieldWorkspacePage() {
                 disabled={clockActionSaving}
                 onClick={() => void handleClockEvent('clock_in')}
               >
-                Clock In
+                {t.clockIn}
               </Button>
             ) : isClockedIn ? (
               <div className="space-y-3">
@@ -551,7 +596,7 @@ export default function MobileFieldWorkspacePage() {
                   disabled={clockActionSaving}
                   onClick={() => void handleClockEvent('clock_out')}
                 >
-                  Clock Out
+                  {t.clockOut}
                 </Button>
               </div>
             ) : (
@@ -560,13 +605,13 @@ export default function MobileFieldWorkspacePage() {
           </Card>
 
           <Card className="mb-4 rounded-2xl p-5">
-            <p className="text-base font-medium">Your shift: {formatTime(shift.shiftStart)} – {formatTime(shift.shiftEnd)}</p>
+            <p className="text-base font-medium">{t.yourShift}: {formatTime(shift.shiftStart)} – {formatTime(shift.shiftEnd)}</p>
           </Card>
 
           <Card className="mb-4 rounded-2xl p-4">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-base font-semibold">Task Progress</p>
-              <p className="text-base font-medium">{doneCount}/{assignments.length} tasks done</p>
+              <p className="text-base font-medium">{doneCount}/{assignments.length} {t.tasksDone}</p>
             </div>
             <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
               <div
@@ -578,7 +623,7 @@ export default function MobileFieldWorkspacePage() {
 
           {assignments.length === 0 ? (
             <Card className="rounded-2xl p-5">
-              <p className="text-base font-medium">No tasks assigned for today. Check with your supervisor.</p>
+              <p className="text-base font-medium">{t.noTasks}. Check with your supervisor.</p>
             </Card>
           ) : (
             <div className="space-y-3">
@@ -610,7 +655,7 @@ export default function MobileFieldWorkspacePage() {
                         disabled={isSaving}
                         onClick={() => void updateTaskStatus(assignment, 'in_progress')}
                       >
-                        START
+                        {t.start}
                       </Button>
                     ) : null}
 
@@ -627,12 +672,12 @@ export default function MobileFieldWorkspacePage() {
                             }));
                           }}
                         >
-                          DONE
+                          {t.done}
                         </Button>
 
                         {activeDonePromptId === assignment.id ? (
                           <div className="rounded-xl border p-3">
-                            <p className="mb-2 text-base font-medium">How long did this take?</p>
+                            <p className="mb-2 text-base font-medium">{t.howLong}</p>
                             <div className="grid grid-cols-4 gap-2">
                               {QUICK_HOURS_OPTIONS.map((option) => {
                                 const selected = actualHoursDraft[assignment.id] === option;
@@ -702,7 +747,7 @@ export default function MobileFieldWorkspacePage() {
 
                     {normalizedStatus === 'done' ? (
                       <div className="mt-3 flex h-14 min-h-14 items-center justify-center rounded-md bg-green-100 text-base font-semibold text-green-900">
-                        Completed ✓ · {(assignment.actualHours ?? assignment.estimatedHours ?? 0).toFixed(1)}h
+                        {t.completed} ✓ · {(assignment.actualHours ?? assignment.estimatedHours ?? 0).toFixed(1)}h
                       </div>
                     ) : null}
                   </Card>
@@ -716,10 +761,10 @@ export default function MobileFieldWorkspacePage() {
       <footer className="fixed bottom-0 left-0 right-0 border-t bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto w-full max-w-[520px]">
           <p className="text-base font-semibold">
-            {doneCount}/{assignments.length} tasks done · {actualHoursTotal.toFixed(1)}h actual / {scheduledHoursTotal.toFixed(1)}h scheduled
+            {doneCount}/{assignments.length} {t.tasksDone} · {actualHoursTotal.toFixed(1)}h actual / {scheduledHoursTotal.toFixed(1)}h scheduled
           </p>
           <Button className="mt-2 h-12 min-h-12 w-full text-base" variant="outline" onClick={() => setNeedsOpen(true)}>
-            Report a Need
+            {t.reportNeed}
           </Button>
         </div>
       </footer>
@@ -728,7 +773,7 @@ export default function MobileFieldWorkspacePage() {
         <div className="fixed inset-0 z-50 bg-background">
           <div className="mx-auto flex h-full w-full max-w-[520px] flex-col px-4 pb-4 pt-5">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Report a Need</h2>
+              <h2 className="text-lg font-semibold">{t.reportNeed}</h2>
               <button
                 type="button"
                 className="rounded-md border px-3 py-1.5 text-sm"
