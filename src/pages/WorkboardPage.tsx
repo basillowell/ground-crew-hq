@@ -97,30 +97,49 @@ type NeedsQueueRequest = {
   date: string;
   title: string;
   taskId?: string;
+  submittedBy?: string;
   requestedBy: string;
   requestedByType: 'client' | 'manager' | 'crew';
   priority: 'high' | 'medium' | 'low';
   status: 'new' | 'assigned' | 'dismissed' | string;
   preferredLocation?: string;
+  location?: string;
   notes: string;
   createdAt?: string;
 };
 
 function normalizeTaskRequest(row: Record<string, unknown>): NeedsQueueRequest {
+  const fallbackLocation = row.preferredLocation ? String(row.preferredLocation) : row.preferred_location ? String(row.preferred_location) : undefined;
+  const location = row.location ? String(row.location) : row.preferred_location ? String(row.preferred_location) : row.preferredLocation ? String(row.preferredLocation) : undefined;
   return {
     id: String(row.id ?? ''),
     propertyId: String(row.propertyId ?? row.property_id ?? ''),
     date: String(row.date ?? ''),
     title: String(row.title ?? ''),
     taskId: row.taskId ? String(row.taskId) : row.task_id ? String(row.task_id) : undefined,
+    submittedBy: row.submittedBy ? String(row.submittedBy) : row.submitted_by ? String(row.submitted_by) : row.employee_id ? String(row.employee_id) : undefined,
     requestedBy: String(row.requestedBy ?? row.requested_by ?? 'Client Request'),
     requestedByType: (row.requestedByType ?? row.requested_by_type ?? 'client') as TaskRequest['requestedByType'],
     priority: (row.priority ?? 'medium') as TaskRequest['priority'],
     status: (row.status ?? 'new') as NeedsQueueRequest['status'],
-    preferredLocation: row.preferredLocation ? String(row.preferredLocation) : row.preferred_location ? String(row.preferred_location) : undefined,
+    preferredLocation: fallbackLocation,
+    location,
     notes: String(row.notes ?? ''),
     createdAt: row.createdAt ? String(row.createdAt) : row.created_at ? String(row.created_at) : undefined,
   };
+}
+
+function formatRelativeTime(value?: string) {
+  if (!value) return 'just now';
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return 'just now';
+  const deltaMs = Date.now() - timestamp;
+  const deltaMinutes = Math.max(1, Math.floor(deltaMs / 60000));
+  if (deltaMinutes < 60) return `${deltaMinutes} minute${deltaMinutes === 1 ? '' : 's'} ago`;
+  const deltaHours = Math.floor(deltaMinutes / 60);
+  if (deltaHours < 24) return `${deltaHours} hour${deltaHours === 1 ? '' : 's'} ago`;
+  const deltaDays = Math.floor(deltaHours / 24);
+  return `${deltaDays} day${deltaDays === 1 ? '' : 's'} ago`;
 }
 
 function normalizeWeatherLocation(row: Record<string, unknown>): WeatherLocation {
@@ -251,6 +270,7 @@ export default function WorkboardPage() {
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [linkedRequestId, setLinkedRequestId] = useState<string | null>(null);
+  const [linkedRequestTitle, setLinkedRequestTitle] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
   const [dropTargetEmployeeId, setDropTargetEmployeeId] = useState<string | null>(null);
@@ -379,7 +399,7 @@ export default function WorkboardPage() {
     queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
     queryFn: async () => {
       if (!supabase) return [] as NeedsQueueRequest[];
-      let query = supabase.from('task_requests').select('*').eq('date', boardDate);
+      let query = supabase.from('task_requests').select('*').order('priority', { ascending: true }).order('created_at', { ascending: false });
       if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
       const { data, error } = await query;
       if (error) throw error;
@@ -732,19 +752,36 @@ export default function WorkboardPage() {
   const propertyRequests = useMemo(
     () =>
       taskRequests
-        .filter((r) => (!effectivePropertyId || effectivePropertyId === 'all' || r.propertyId === effectivePropertyId) && r.date === boardDate)
+        .filter((r) => !effectivePropertyId || effectivePropertyId === 'all' || r.propertyId === effectivePropertyId)
         .sort((a, b) => {
           const order = { high: 0, medium: 1, low: 2 } as const;
-          return order[a.priority] - order[b.priority];
+          const priorityDelta = order[a.priority] - order[b.priority];
+          if (priorityDelta !== 0) return priorityDelta;
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bTime - aTime;
         }),
-    [boardDate, effectivePropertyId, taskRequests],
+    [effectivePropertyId, taskRequests],
   );
+
+  const isRequestOpen = useCallback(
+    (status: string) => !['assigned', 'dismissed', 'done', 'closed'].includes(status.toLowerCase()),
+    [],
+  );
+
+  const employeeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const employee of employeeList) {
+      map.set(employee.id, `${employee.firstName} ${employee.lastName}`.trim());
+    }
+    return map;
+  }, [employeeList]);
 
   const filteredRequests = useMemo(() => {
     if (needsFilter === 'all') return propertyRequests;
-    if (needsFilter === 'open') return propertyRequests.filter((r) => r.status !== 'dismissed' && r.status !== 'assigned');
-    return propertyRequests.filter((r) => r.status === 'dismissed' || r.status === 'assigned');
-  }, [propertyRequests, needsFilter]);
+    if (needsFilter === 'open') return propertyRequests.filter((r) => isRequestOpen(String(r.status ?? '')));
+    return propertyRequests.filter((r) => !isRequestOpen(String(r.status ?? '')));
+  }, [propertyRequests, needsFilter, isRequestOpen]);
 
   const scheduledEmployees = useMemo(() => {
     const scheduledIds = new Set(
@@ -1189,7 +1226,7 @@ export default function WorkboardPage() {
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
   const [todayDateKey] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const newRequestsCount = propertyRequests.filter((r) => r.status !== 'dismissed' && r.status !== 'assigned').length;
+  const newRequestsCount = propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length;
 
   const handlePrintDailyPlan = useCallback(() => {
     const printWindow = window.open('', '_blank', 'noopener,noreferrer');
@@ -1374,6 +1411,7 @@ export default function WorkboardPage() {
       return;
     }
     setLinkedRequestId(request.id);
+    setLinkedRequestTitle(request.title);
     const targetTaskId = request.taskId || taskList[0]?.id || '';
     const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
     setEditingAssignmentId(null);
@@ -1383,7 +1421,7 @@ export default function WorkboardPage() {
       propertyId: (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id) ?? '',
       taskId: targetTaskId,
       equipmentId: '',
-      area: request.preferredLocation || propertyWorkLocations[0]?.name || 'Primary zone',
+      area: request.location || request.preferredLocation || propertyWorkLocations[0]?.name || 'Primary zone',
       startTime: '05:30',
       status: 'planned',
       notes: request.notes ?? '',
@@ -1426,7 +1464,7 @@ export default function WorkboardPage() {
       0,
     );
     const selectedTask = taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null;
-    const selectedTaskName = selectedTask?.name ?? 'Task';
+    const selectedTaskName = linkedRequestTitle ?? selectedTask?.name ?? 'Task';
     const selectedTaskId = String(selectedTask?.id ?? '').trim();
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidPattern.test(selectedTaskId)) {
@@ -1515,7 +1553,7 @@ export default function WorkboardPage() {
         .from('task_requests')
         .update({
           status: 'assigned',
-          task_id: assignmentDraft.taskId,
+          task_id: assignmentDraft.taskId || null,
           preferred_location: assignmentDraft.area,
           org_id: currentUser?.orgId ?? null,
         })
@@ -1526,6 +1564,7 @@ export default function WorkboardPage() {
     void queryClient.invalidateQueries({ queryKey: ['workboard-assignment-equipment'] });
     void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
     setLinkedRequestId(null);
+    setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
     setAssignmentDialogOpen(false);
     toast(editingAssignmentId ? 'Assignment updated' : 'Assignment dispatched', {
@@ -1581,7 +1620,14 @@ export default function WorkboardPage() {
       return;
     }
     if (!supabase) return;
+    const confirmed = window.confirm('Dismiss this request?');
+    if (!confirmed) return;
     await supabase.from('task_requests').update({ status: 'dismissed' }).eq('id', requestId);
+    queryClient.setQueryData<NeedsQueueRequest[] | undefined>(taskRequestsQuery.queryKey, (current) =>
+      (current ?? []).map((request) =>
+        request.id === requestId ? { ...request, status: 'dismissed' } : request,
+      ),
+    );
     await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
   }
 
@@ -2342,7 +2388,7 @@ export default function WorkboardPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <ListChecks className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Needs Queue</h3>
+              <h3 className="text-sm font-semibold">Needs Queue ({newRequestsCount})</h3>
               {newRequestsCount > 0 && (
                 <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{newRequestsCount}</Badge>
               )}
@@ -2366,8 +2412,8 @@ export default function WorkboardPage() {
                 {f === 'all'
                   ? `All (${propertyRequests.length})`
                   : f === 'open'
-                    ? `Open (${propertyRequests.filter((r) => r.status !== 'dismissed' && r.status !== 'assigned').length})`
-                    : `Done (${propertyRequests.filter((r) => r.status === 'dismissed' || r.status === 'assigned').length})`}
+                    ? `Open (${propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length})`
+                    : `Done (${propertyRequests.filter((r) => !isRequestOpen(String(r.status ?? ''))).length})`}
               </button>
             ))}
           </div>
@@ -2399,26 +2445,28 @@ export default function WorkboardPage() {
                     </Badge>
                   </div>
                   <div className="text-[11px] text-muted-foreground mb-2">
-                    {request.requestedBy}
-                    {request.preferredLocation ? ` · ${request.preferredLocation}` : ''}
+                    {request.submittedBy && employeeNameById.get(request.submittedBy)
+                      ? employeeNameById.get(request.submittedBy)
+                      : request.requestedBy}
+                    {request.location || request.preferredLocation ? ` · ${request.location || request.preferredLocation}` : ''}
                   </div>
                   {request.notes && (
                     <div className="text-[11px] text-muted-foreground italic mb-2 line-clamp-2">{request.notes}</div>
                   )}
                   <div className="text-[10px] text-muted-foreground mb-2">
-                    Created {request.createdAt ? new Date(request.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
+                    Created {formatRelativeTime(request.createdAt)}
                   </div>
                   <div className="flex gap-1.5">
                     <Button
                       size="sm"
                       className="h-7 text-[11px] flex-1"
                       onClick={() => applyRequestToAssignment(request)}
-                      disabled={fallbackEligibleEmployees.length === 0}
+                      disabled={fallbackEligibleEmployees.length === 0 || !isRequestOpen(String(request.status ?? ''))}
                       data-testid={`button-view-request-${request.id}`}
                     >
-                      View
+                      Assign
                     </Button>
-                    {request.status !== 'dismissed' ? (
+                    {isRequestOpen(String(request.status ?? '')) ? (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -2586,7 +2634,16 @@ export default function WorkboardPage() {
       </div>
 
       {/* ─── ASSIGNMENT DIALOG ─── */}
-      <Dialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen}>
+      <Dialog
+        open={assignmentDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setAssignmentDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setLinkedRequestId(null);
+            setLinkedRequestTitle(null);
+          }
+        }}
+      >
         <DialogContent className="inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 md:inset-auto md:h-auto md:w-full md:max-w-lg md:translate-x-[-50%] md:translate-y-[-50%] md:rounded-lg md:border md:p-6">
           <div className="flex h-full flex-col overflow-hidden">
           <DialogHeader>
@@ -2650,6 +2707,7 @@ export default function WorkboardPage() {
                   if (e.target.value === '__manage_task_library__') {
                     setAssignmentDialogOpen(false);
                     setLinkedRequestId(null);
+                    setLinkedRequestTitle(null);
                     navigate('/app/settings?tab=Tasks');
                     return;
                   }
@@ -2690,6 +2748,7 @@ export default function WorkboardPage() {
                 onClick={() => {
                   setAssignmentDialogOpen(false);
                   setLinkedRequestId(null);
+                  setLinkedRequestTitle(null);
                   navigate('/app/settings?tab=Tasks');
                 }}
               >
@@ -2778,7 +2837,7 @@ export default function WorkboardPage() {
           </div>
 
           <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-card px-4 py-3 md:static md:border-t-0 md:bg-transparent md:px-0 md:py-2">
-            <Button className="min-h-11" variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); }}>
+            <Button className="min-h-11" variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); setLinkedRequestTitle(null); }}>
               Cancel
             </Button>
             <Button className="min-h-11" onClick={saveAssignment} data-testid="button-save-assignment">
