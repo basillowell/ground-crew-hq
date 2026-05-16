@@ -440,6 +440,16 @@ export default function MobileFieldWorkspacePage() {
 
       setClockActionSaving(false);
       if (insertError) {
+        console.error('[CLOCK_EVENT_ERROR]', {
+          error: insertError,
+          payload: {
+            employee_id: employeeId,
+            property_id: propertyId,
+            org_id: orgId,
+            event_type: eventType,
+            timestamp: optimisticEvent.timestamp,
+          },
+        });
         setClockEvents((current) => current.filter((event) => event.id !== optimisticEvent.id));
         toast.error(`Unable to ${eventType === 'clock_in' ? 'clock in' : 'clock out'}`, {
           description: insertError.message,
@@ -459,7 +469,8 @@ export default function MobileFieldWorkspacePage() {
         ),
       );
 
-      toast.success(eventType === 'clock_in' ? 'Clocked in' : 'Clocked out');
+      const successTime = formatTime(String(data?.timestamp ?? optimisticEvent.timestamp).slice(11, 16));
+      toast.success(eventType === 'clock_in' ? `Clocked in at ${successTime}` : `Clocked out at ${successTime}`);
     },
     [currentUser?.propertyId, employeeId, orgId, shift?.propertyId],
   );

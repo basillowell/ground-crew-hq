@@ -361,9 +361,10 @@ function WorkspaceTab({
       return;
     }
 
-    const [{ count: employeeCount }, { count: taskCount }, { count: equipmentCount }] = await Promise.all([
+    const [{ count: employeeCount }, { count: taskCount }, { count: equipmentTypeCount }, { count: equipmentCount }] = await Promise.all([
       supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('equipment_types').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('equipment_units').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
     ]);
 
@@ -546,23 +547,85 @@ function WorkspaceTab({
       }
     }
 
-    if ((equipmentCount ?? 0) === 0) {
-      const equipmentRows = [
-        { name: 'Toro Greensmaster 3150', type: 'Mowing', status: 'available', unit_name: 'Toro Greensmaster 3150', active: true },
-        { name: 'John Deere 2500E', type: 'Mowing', status: 'available', unit_name: 'John Deere 2500E', active: true },
-        { name: 'Toro Workman HDX', type: 'Utility', status: 'available', unit_name: 'Toro Workman HDX', active: true },
-        { name: 'Stihl FS 131', type: 'Trimming', status: 'in_use', unit_name: 'Stihl FS 131', active: true },
-      ].map((equipment) => ({
-        id: crypto.randomUUID(),
-        org_id: orgId,
-        property_id: activePropertyId,
-        ...equipment,
-      }));
-      const { error: equipmentError } = await supabase.from('equipment_units').insert(equipmentRows);
-      if (equipmentError) {
+    let equipmentTypesByName = new Map<string, { id: string; name: string }>();
+    if ((equipmentTypeCount ?? 0) === 0) {
+      const equipmentTypeRows = [
+        { id: crypto.randomUUID(), org_id: orgId, property_id: activePropertyId, name: 'Walk Mower', short_name: 'WM', category: 'Mowing', active: true },
+        { id: crypto.randomUUID(), org_id: orgId, property_id: activePropertyId, name: 'Riding Mower', short_name: 'RM', category: 'Mowing', active: true },
+        { id: crypto.randomUUID(), org_id: orgId, property_id: activePropertyId, name: 'Utility Vehicle', short_name: 'UV', category: 'Transport', active: true },
+        { id: crypto.randomUUID(), org_id: orgId, property_id: activePropertyId, name: 'String Trimmer', short_name: 'ST', category: 'Trimming', active: true },
+        { id: crypto.randomUUID(), org_id: orgId, property_id: activePropertyId, name: 'Sprayer', short_name: 'SP', category: 'Chemical', active: true },
+        { id: crypto.randomUUID(), org_id: orgId, property_id: activePropertyId, name: 'Aerator', short_name: 'AE', category: 'Maintenance', active: true },
+      ];
+      const { data: insertedTypes, error: typeInsertError } = await supabase
+        .from('equipment_types')
+        .insert(equipmentTypeRows)
+        .select('id, name');
+      if (typeInsertError) {
         setLoadingDemoData(false);
-        setError(equipmentError.message);
+        setError(typeInsertError.message);
         return;
+      }
+      equipmentTypesByName = new Map(
+        ((insertedTypes ?? []) as Array<{ id: string; name: string }>).map((row) => [row.name, row]),
+      );
+    } else {
+      const { data: existingTypes, error: typeFetchError } = await supabase
+        .from('equipment_types')
+        .select('id, name')
+        .eq('org_id', orgId)
+        .order('name', { ascending: true });
+      if (typeFetchError) {
+        setLoadingDemoData(false);
+        setError(typeFetchError.message);
+        return;
+      }
+      equipmentTypesByName = new Map(
+        ((existingTypes ?? []) as Array<{ id: string; name: string }>).map((row) => [row.name, row]),
+      );
+    }
+
+    if ((equipmentCount ?? 0) === 0) {
+      const now = new Date();
+      const daysAgo = (days: number) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - days);
+        return d.toISOString().slice(0, 10);
+      };
+      const equipmentSeed = [
+        { name: 'Toro Greensmaster 3150', unit_name: 'T-001', type: 'Walk Mower', status: 'available', location: 'Equipment barn', last_serviced: daysAgo(30) },
+        { name: 'John Deere 2500E', unit_name: 'JD-001', type: 'Riding Mower', status: 'available', location: 'Equipment barn', last_serviced: daysAgo(95) },
+        { name: 'Toro Workman HDX', unit_name: 'T-002', type: 'Utility Vehicle', status: 'in_use', location: 'Course', last_serviced: daysAgo(45) },
+        { name: 'Stihl FS 131', unit_name: 'ST-001', type: 'String Trimmer', status: 'available', location: 'Equipment barn', last_serviced: daysAgo(10) },
+      ];
+
+      const equipmentRows = equipmentSeed
+        .map((equipment) => {
+          const equipmentTypeId = equipmentTypesByName.get(equipment.type)?.id ?? null;
+          if (!equipmentTypeId) return null;
+          return {
+            id: crypto.randomUUID(),
+            org_id: orgId,
+            property_id: activePropertyId,
+            equipment_type_id: equipmentTypeId,
+            name: equipment.name,
+            unit_name: equipment.unit_name,
+            type: equipment.type,
+            status: equipment.status,
+            location: equipment.location,
+            last_serviced: equipment.last_serviced,
+            active: true,
+          };
+        })
+        .filter(Boolean);
+
+      if (equipmentRows.length > 0) {
+        const { error: equipmentError } = await supabase.from('equipment_units').insert(equipmentRows);
+        if (equipmentError) {
+          setLoadingDemoData(false);
+          setError(equipmentError.message);
+          return;
+        }
       }
     }
 
