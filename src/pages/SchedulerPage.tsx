@@ -5,15 +5,16 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle } from 'lucide-react';
+import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle, Cloud, CloudRain, Sun } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEmployees } from '@/lib/supabase-queries';
+import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
+import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
 
 type WeekTemplateItem = {
   id: string;
@@ -26,6 +27,18 @@ type WeekTemplateItem = {
     property_id?: string | null;
     status?: string;
   }>;
+};
+
+type AssignmentSummary = {
+  employeeId: string;
+  date: string;
+  title: string;
+  estimatedHours: number;
+};
+
+type DayWeather = {
+  temp: number;
+  weatherCode: number;
 };
 
 function toDateKey(date: Date) {
@@ -62,6 +75,17 @@ function shiftHours(start: string, end: string): number {
   return Math.max(0, (eh * 60 + em - (sh * 60 + sm)) / 60);
 }
 
+function toCoveragePercent(assignedHours: number, scheduledHours: number): number {
+  if (scheduledHours <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((assignedHours / scheduledHours) * 100)));
+}
+
+function weatherIconForCode(code: number) {
+  if (code >= 51) return CloudRain;
+  if (code >= 1) return Cloud;
+  return Sun;
+}
+
 const STATUS_STYLES: Record<string, { cell: string; label: string }> = {
   scheduled: { cell: 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/35 dark:border-emerald-800 dark:text-emerald-200 dark:hover:bg-emerald-950/50', label: 'Scheduled' },
   'day-off': { cell: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/35 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950/50', label: 'Day Off' },
@@ -94,11 +118,71 @@ export default function SchedulerPage() {
 
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
+  const propertiesQuery = useProperties(currentUser?.orgId);
   const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '07:30', end: '16:00' });
   const [schedulerDefaultsLoading, setSchedulerDefaultsLoading] = useState(true);
   const [shiftTemplates, setShiftTemplates] = useState<Array<{ id: string; name: string; start: string; end: string; days: string[]; active: boolean }>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [loadTimeoutReached, setLoadTimeoutReached] = useState(false);
+  const [activeDetailCell, setActiveDetailCell] = useState<string | null>(null);
+
+  const assignmentsWeekQuery = useQuery({
+    queryKey: ['scheduler-week-assignments', weekStart, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
+    staleTime: 1000 * 60,
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return [] as AssignmentSummary[];
+      const weekStartDate = weekDays[0]?.date;
+      const weekEndDate = weekDays[6]?.date;
+      if (!weekStartDate || !weekEndDate) return [] as AssignmentSummary[];
+      let query = supabase
+        .from('assignments')
+        .select('employee_id, date, title, estimated_hours, org_id, property_id')
+        .eq('org_id', currentUser.orgId)
+        .gte('date', weekStartDate)
+        .lte('date', weekEndDate);
+      if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        employeeId: String(row.employee_id ?? ''),
+        date: String(row.date ?? ''),
+        title: String(row.title ?? ''),
+        estimatedHours: Number(row.estimated_hours ?? 0),
+      }));
+    },
+  });
+
+  const selectedProperty = useMemo(() => {
+    const properties = propertiesQuery.data ?? [];
+    if (propertyScope && propertyScope !== 'all') {
+      return properties.find((property) => property.id === propertyScope) ?? null;
+    }
+    return properties.find((property) => typeof property.latitude === 'number' && typeof property.longitude === 'number') ?? null;
+  }, [propertiesQuery.data, propertyScope]);
+
+  const weekWeatherQuery = useQuery({
+    queryKey: ['scheduler-week-weather', weekStart, selectedProperty?.id ?? 'none'],
+    enabled: Boolean(selectedProperty?.latitude && selectedProperty?.longitude),
+    staleTime: 1000 * 60 * 10,
+    queryFn: async () => {
+      if (!selectedProperty?.latitude || !selectedProperty?.longitude) return {} as Record<string, DayWeather>;
+      const payload = await fetchOpenMeteoWeather({
+        latitude: selectedProperty.latitude,
+        longitude: selectedProperty.longitude,
+        timezone: 'America/New_York',
+      });
+      const byDate = new Map<string, DayWeather>();
+      payload.hourly.forEach((point) => {
+        const dateKey = point.time.slice(0, 10);
+        const hour = new Date(point.time).getHours();
+        if (hour === 12 || !byDate.has(dateKey)) {
+          byDate.set(dateKey, { temp: Number(point.temperature ?? 0), weatherCode: Number(point.weatherCode ?? 0) });
+        }
+      });
+      return Object.fromEntries(byDate.entries());
+    },
+  });
 
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
@@ -148,6 +232,7 @@ export default function SchedulerPage() {
 
   useEffect(() => {
     setMobileDayIndex(0);
+    setActiveDetailCell(null);
   }, [weekStart]);
 
   const [draft, setDraft] = useState({
@@ -268,6 +353,48 @@ export default function SchedulerPage() {
       scheduledHours,
     };
   }, [activeEmployees, scheduleList, weekDays]);
+
+  const assignmentsByCell = useMemo(() => {
+    const map = new Map<string, AssignmentSummary[]>();
+    (assignmentsWeekQuery.data ?? []).forEach((assignment) => {
+      const key = `${assignment.employeeId}-${assignment.date}`;
+      const current = map.get(key) ?? [];
+      current.push(assignment);
+      map.set(key, current);
+    });
+    return map;
+  }, [assignmentsWeekQuery.data]);
+
+  const departmentStyleForEmployee = (employee: (typeof employeeList)[number]) => {
+    const role = String(employee.role ?? '').toLowerCase();
+    const department = String(employee.department ?? '').toLowerCase();
+    if (role.includes('field staff') || department.includes('field staff')) {
+      return {
+        cell: 'border-amber-500 bg-amber-100 text-amber-900 hover:bg-amber-200',
+        badge: 'border-amber-400 bg-amber-200 text-amber-900',
+        label: 'Field Staff',
+      };
+    }
+    if (department.includes('maintenance')) {
+      return {
+        cell: 'border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-200',
+        badge: 'border-emerald-400 bg-emerald-200 text-emerald-900',
+        label: 'Maintenance',
+      };
+    }
+    if (department.includes('irrigation')) {
+      return {
+        cell: 'border-blue-500 bg-blue-100 text-blue-900 hover:bg-blue-200',
+        badge: 'border-blue-400 bg-blue-200 text-blue-900',
+        label: 'Irrigation',
+      };
+    }
+    return {
+      cell: 'border-gray-400 bg-gray-100 text-gray-900 hover:bg-gray-200',
+      badge: 'border-gray-300 bg-gray-200 text-gray-800',
+      label: employee.department?.trim() || 'General',
+    };
+  };
 
   function openAddShift(employeeId?: string, date?: string) {
     if (isReadOnly) return;
@@ -944,13 +1071,21 @@ export default function SchedulerPage() {
                   </th>
                   {weekDays.map((day) => {
                     const isToday = day.date === today;
+                    const dayWeather = (weekWeatherQuery.data ?? {})[day.date];
+                    const WeatherIcon = dayWeather ? weatherIconForCode(dayWeather.weatherCode) : null;
                     return (
                       <th
                         key={day.date}
-                        className={`text-center px-2 py-3 font-medium text-xs min-w-[110px] ${isToday ? 'text-primary' : 'text-muted-foreground'}`}
+                        className={`text-center px-2 py-3 font-medium text-xs min-w-[110px] ${isToday ? 'bg-primary/10 ring-1 ring-primary/40 text-primary' : 'text-muted-foreground'}`}
                       >
                         <div className={`text-[10px] uppercase tracking-wider ${isToday ? 'text-primary' : ''}`}>{day.short}</div>
                         <div className={`text-base font-bold mt-0.5 ${isToday ? 'text-primary' : 'text-foreground'}`}>{day.dayNum}</div>
+                        {dayWeather && WeatherIcon ? (
+                          <div className="mt-1 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
+                            <WeatherIcon className="h-3 w-3" />
+                            <span>{Math.round(dayWeather.temp)}°</span>
+                          </div>
+                        ) : null}
                         {isToday && <div className="h-1 w-1 rounded-full bg-primary mx-auto mt-1" />}
                       </th>
                     );
@@ -998,6 +1133,7 @@ export default function SchedulerPage() {
                         {weekDays.map((day) => {
                           const entry = scheduleList.find((s) => s.employeeId === emp.id && s.date === day.date);
                           const isToday = day.date === today;
+                          const cellKey = `${emp.id}-${day.date}`;
 
                           if (entry?.status === 'scheduled') {
                             weekHours += shiftHours(entry.shiftStart, entry.shiftEnd);
@@ -1022,25 +1158,42 @@ export default function SchedulerPage() {
 
                           const style = STATUS_STYLES[entry.status] ?? STATUS_STYLES.scheduled;
                           const entryNotes = (entry as ScheduleEntry & { notes?: string | null }).notes;
+                          const departmentStyle = departmentStyleForEmployee(emp);
+                          const cellAssignments = assignmentsByCell.get(cellKey) ?? [];
+                          const scheduledHours = shiftHours(entry.shiftStart, entry.shiftEnd);
+                          const assignedHours = cellAssignments.reduce((sum, assignment) => sum + Number(assignment.estimatedHours ?? 0), 0);
+                          const coverage = toCoveragePercent(assignedHours, scheduledHours);
+                          const detailOpen = activeDetailCell === cellKey;
                           return (
-                            <td key={day.date} className={`px-2 py-2 ${isToday ? 'bg-primary/5' : ''}`}>
+                            <td
+                              key={day.date}
+                              className={`relative px-2 py-2 ${isToday ? 'bg-primary/5' : ''}`}
+                              onMouseEnter={() => setActiveDetailCell(cellKey)}
+                              onMouseLeave={() => setActiveDetailCell((current) => (current === cellKey ? null : current))}
+                            >
                               <button
                                 type="button"
                                 disabled={isReadOnly}
-                                className={`w-full rounded-lg border px-2 py-1.5 text-center text-xs transition-colors ${style.cell}`}
-                                onClick={() => openEditShift(emp.id, day, entry)}
+                                className={`w-full rounded-lg border px-2 py-1.5 text-center text-xs transition-colors ${entry.status === 'scheduled' ? departmentStyle.cell : style.cell}`}
+                                onClick={() => {
+                                  if (window.matchMedia('(max-width: 767px)').matches && activeDetailCell !== cellKey) {
+                                    setActiveDetailCell(cellKey);
+                                    return;
+                                  }
+                                  openEditShift(emp.id, day, entry);
+                                }}
                                 data-testid={`button-edit-shift-${emp.id}-${day.date}`}
                               >
                                 {entry.status === 'scheduled' ? (
                                   <>
-                                    <div className="font-semibold text-[11px] text-emerald-700 dark:text-emerald-300">
+                                    <div className="font-semibold text-[11px]">
                                       {formatTime(entry.shiftStart)} - {formatTime(entry.shiftEnd)}
                                     </div>
                                     <Badge
                                       variant="outline"
-                                      className="mt-1 h-5 border-emerald-300 bg-emerald-100 px-1.5 text-[9px] uppercase tracking-wide text-emerald-700"
+                                      className={`mt-1 h-5 px-1.5 text-[9px] uppercase tracking-wide ${departmentStyle.badge}`}
                                     >
-                                      Scheduled
+                                      {departmentStyle.label}
                                     </Badge>
                                     {entryNotes ? <div className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{entryNotes}</div> : null}
                                   </>
@@ -1063,6 +1216,26 @@ export default function SchedulerPage() {
                                   </>
                                 )}
                               </button>
+                              {detailOpen ? (
+                                <div className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 w-60 -translate-x-1/2 rounded-lg border bg-popover p-3 text-left shadow-lg">
+                                  <div className="text-xs font-semibold text-foreground">{emp.firstName} {emp.lastName} · {emp.role}</div>
+                                  <div className="mt-1 text-[11px] text-muted-foreground">
+                                    Shift: {formatTime(entry.shiftStart)} - {formatTime(entry.shiftEnd)} ({scheduledHours.toFixed(1)}h)
+                                  </div>
+                                  <div className="mt-1 text-[11px] text-muted-foreground">
+                                    Assigned tasks: {cellAssignments.length}
+                                  </div>
+                                  {cellAssignments.length > 0 ? (
+                                    <ul className="mt-1 list-disc pl-4 text-[11px] text-muted-foreground">
+                                      {cellAssignments.slice(0, 3).map((assignment, idx) => (
+                                        <li key={`${cellKey}-assignment-${idx}`}>{assignment.title || 'Task'}</li>
+                                      ))}
+                                    </ul>
+                                  ) : null}
+                                  <div className="mt-1 text-[11px] text-muted-foreground">Coverage: {coverage}% of shift covered</div>
+                                  {entryNotes ? <div className="mt-1 text-[11px] text-muted-foreground">Notes: {entryNotes}</div> : null}
+                                </div>
+                              ) : null}
                             </td>
                           );
                         })}
