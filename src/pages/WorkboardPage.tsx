@@ -49,6 +49,8 @@ import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
 import { formatTime } from '@/utils/formatTime';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { EmptyState } from '@/components/EmptyState';
+import { CardSkeleton } from '@/components/CardSkeleton';
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
@@ -1918,7 +1920,11 @@ export default function WorkboardPage() {
     '';
 
   if (isLoadingBoard) {
-    return <PageSkeleton />;
+    return (
+      <div className="p-6">
+        <CardSkeleton />
+      </div>
+    );
   }
 
   if (boardErrorMessage) {
@@ -2182,15 +2188,13 @@ export default function WorkboardPage() {
           </div>
 
           {orderedDispatchBoard.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center gap-3">
-              <Users className="h-10 w-10 text-muted-foreground/40" />
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">No crew scheduled for {boardDate}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Build shifts in the Scheduler, then return here to dispatch tasks.
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              icon={Users}
+              title="No crew scheduled today"
+              description="Add shifts in the Scheduler to see your crew here."
+              actionLabel="Open Scheduler"
+              onAction={() => navigate('/app/scheduler')}
+            />
           ) : viewMode === 'timeline' ? (
             <GanttTimeline
               employees={orderedDispatchBoard.map((l) => l.employee)}

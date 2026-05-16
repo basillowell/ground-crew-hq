@@ -15,6 +15,8 @@ import { supabase } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
 import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
+import { EmptyState } from '@/components/EmptyState';
+import { TableSkeleton } from '@/components/TableSkeleton';
 
 type WeekTemplateItem = {
   id: string;
@@ -971,13 +973,8 @@ export default function SchedulerPage() {
       {/* ── Weekly schedule grid ── */}
       <div className="flex-1 overflow-auto">
         {isLoading && !loadTimeoutReached ? (
-          <div className="p-4 grid gap-2">
-            <div className="rounded-xl border border-dashed bg-muted/25 px-4 py-3 text-xs text-muted-foreground">
-              Loading weekly schedule and crew coverage...
-            </div>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 animate-pulse rounded-xl border bg-muted/50" />
-            ))}
+          <div className="p-4">
+            <TableSkeleton />
           </div>
         ) : queryErrorMessage || loadTimeoutReached ? (
           <div className="p-4">
@@ -1001,6 +998,16 @@ export default function SchedulerPage() {
                 Retry
               </Button>
             </div>
+          </div>
+        ) : summary.scheduled === 0 ? (
+          <div className="p-4">
+            <EmptyState
+              icon={CalendarDays}
+              title="No shifts this week"
+              description="Click + Add Shift to schedule your crew."
+              actionLabel="Add Shift"
+              onAction={() => openAddShift()}
+            />
           </div>
         ) : (
           <>
@@ -1407,7 +1414,7 @@ export default function SchedulerPage() {
                 </div>
                 {schedulerDefaultsLoading && !schedulerDefaults.start && (
                   <div className="col-span-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+                    <span className="inline-block h-3 w-10 animate-pulse rounded bg-muted" />
                     Loading operational hours…
                   </div>
                 )}

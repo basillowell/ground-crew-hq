@@ -15,6 +15,9 @@ import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
+import { EmptyState } from '@/components/EmptyState';
+import { CardSkeleton } from '@/components/CardSkeleton';
+import { LayoutDashboard } from 'lucide-react';
 
 function SummaryCard({
   title,
@@ -943,17 +946,7 @@ export default function CommandCenterOperationalPage() {
         </p>
       </div>
 
-      {isLoading && !queryTimeoutReached ? (
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Card key={`ops-skeleton-${index}`} className="rounded-2xl border p-5 shadow-sm">
-              <Skeleton className="h-3 w-28" />
-              <Skeleton className="mt-3 h-8 w-40" />
-              <Skeleton className="mt-2 h-3 w-56" />
-            </Card>
-          ))}
-        </div>
-      ) : null}
+      {isLoading && !queryTimeoutReached ? <div className="mb-6"><CardSkeleton /></div> : null}
 
       {isLoading && queryTimeoutReached ? (
         <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
@@ -1028,6 +1021,18 @@ export default function CommandCenterOperationalPage() {
           tone={blockersSummary.tone}
         />
       </div> : null}
+
+      {!isLoading && crewScheduledCount === 0 && tasksAssignedCount === 0 ? (
+        <div className="mb-6">
+          <EmptyState
+            icon={LayoutDashboard}
+            title="Welcome to Ground Crew HQ"
+            description="Set up your schedule and tasks to see today's operations summary."
+            actionLabel="Open Scheduler"
+            onAction={() => navigate('/app/scheduler')}
+          />
+        </div>
+      ) : null}
 
       <Card className="mb-6 rounded-2xl border p-4 md:p-5 shadow-sm">
         <h3 className="text-sm font-semibold">Spray Window — Today</h3>
@@ -1255,12 +1260,13 @@ export default function CommandCenterOperationalPage() {
             ))}
           </div>
         ) : scheduledRows.length === 0 ? (
-          <div className="rounded-xl border border-dashed px-4 py-8 text-center">
-            <p className="text-sm text-muted-foreground">No crew scheduled today</p>
-            <Button className="mt-3" size="sm" onClick={() => navigate('/app/scheduler')}>
-              Go to Scheduler
-            </Button>
-          </div>
+          <EmptyState
+            icon={Users}
+            title="No crew scheduled today"
+            description="Add shifts in the Scheduler to see your crew here."
+            actionLabel="Open Scheduler"
+            onAction={() => navigate('/app/scheduler')}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">

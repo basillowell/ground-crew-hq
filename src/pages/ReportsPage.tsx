@@ -3,6 +3,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { EmptyState } from '@/components/EmptyState';
+import { TableSkeleton } from '@/components/TableSkeleton';
+import { BarChart3 } from 'lucide-react';
 
 type PropertyRow = {
   id: string;
@@ -403,11 +406,15 @@ export default function ReportsPage() {
         </div>
 
         {loading ? (
-          <PageSkeleton />
+          <TableSkeleton />
         ) : error ? (
           <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
         ) : laborRows.length === 0 ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No labor data for this date range.</p>
+          <EmptyState
+            icon={BarChart3}
+            title="No report data available"
+            description="Schedule shifts and assign tasks to generate labor reports."
+          />
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -470,11 +477,15 @@ export default function ReportsPage() {
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
         <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Cost by Task</h3>
         {loading ? (
-          <PageSkeleton />
+          <TableSkeleton />
         ) : error ? (
           <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
         ) : costByTaskRows.length === 0 ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No task cost data for this date range.</p>
+          <EmptyState
+            icon={BarChart3}
+            title="No report data available"
+            description="Schedule shifts and assign tasks to generate labor reports."
+          />
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', fontSize: '13px' }}>

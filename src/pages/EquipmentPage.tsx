@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { EmptyState } from '@/components/EmptyState';
+import { TableSkeleton } from '@/components/TableSkeleton';
 
 type EquipmentUnitRow = {
   id: string;
@@ -296,7 +298,11 @@ export default function EquipmentPage() {
   }, [fetchEquipment, isReadOnly, orgId]);
 
   if (!orgId || loading) {
-    return <PageSkeleton />;
+    return (
+      <div className="p-6">
+        <TableSkeleton />
+      </div>
+    );
   }
 
   return (
@@ -331,8 +337,14 @@ export default function EquipmentPage() {
           <tbody>
             {scopedRows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                  No equipment found. Add your first unit.
+                <td colSpan={6} className="px-3 py-8">
+                  <EmptyState
+                    icon={Wrench}
+                    title="No equipment tracked yet"
+                    description="Add your first piece of equipment to start tracking maintenance."
+                    actionLabel="Add Equipment"
+                    onAction={!isReadOnly ? startAdd : undefined}
+                  />
                 </td>
               </tr>
             ) : (
@@ -462,7 +474,13 @@ export default function EquipmentPage() {
 
       <div className="space-y-3 md:hidden">
         {scopedRows.length === 0 ? (
-          <div className="rounded-lg border p-4 text-sm text-muted-foreground">No equipment found. Add your first unit.</div>
+          <EmptyState
+            icon={Wrench}
+            title="No equipment tracked yet"
+            description="Add your first piece of equipment to start tracking maintenance."
+            actionLabel="Add Equipment"
+            onAction={!isReadOnly ? startAdd : undefined}
+          />
         ) : (
           scopedRows.map((row) => {
             const isEditing = editingId === row.id && editDraft;

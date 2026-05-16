@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { TableSkeleton } from '@/components/TableSkeleton';
 
 type EmployeeRow = {
   id: string;
@@ -254,7 +255,11 @@ export default function EmployeesPage() {
   }, [fetchPageData, isReadOnly, orgId]);
 
   if (!orgId || loading) {
-    return <PageSkeleton />;
+    return (
+      <div className="p-6">
+        <TableSkeleton />
+      </div>
+    );
   }
 
   return (

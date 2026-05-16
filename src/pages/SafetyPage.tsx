@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Shield, FileText, CheckCircle, AlertTriangle, Users } from 'lucide-react';
+import { EmptyState } from '@/components/EmptyState';
 
 const safetyItems = [
   { title: 'Chemical Handling Training', status: 'completed', assignees: 6, dueDate: '2024-03-01' },
@@ -18,6 +19,20 @@ const incidents = [
 const statusVariant = { completed: 'success', 'in-progress': 'info', upcoming: 'neutral', overdue: 'danger' } as const;
 
 export default function SafetyPage() {
+  if (safetyItems.length === 0) {
+    return (
+      <div className="p-4 mx-auto max-w-5xl">
+        <EmptyState
+          icon={Shield}
+          title="No safety talks recorded"
+          description="Log your first toolbox talk to keep a safety record."
+          actionLabel="Log Safety Talk"
+          onAction={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 max-w-5xl mx-auto">
       <h2 className="text-lg font-semibold mb-4">Safety Management</h2>
