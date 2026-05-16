@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { TableSkeleton } from '@/components/TableSkeleton';
+import { toast } from '@/components/ui/sonner';
 
 type EmployeeRow = {
   id: string;
@@ -175,11 +176,13 @@ export default function EmployeesPage() {
 
     if (insertError) {
       setError(insertError.message);
+      toast.error(`Failed to add employee: ${insertError.message}`);
       return;
     }
 
     closeAddModal();
     await fetchPageData();
+    toast.success(`Added employee: ${addDraft.first_name.trim()} ${addDraft.last_name.trim()}`);
   }, [addDraft, closeAddModal, fetchPageData, isReadOnly, orgId]);
 
   const startEdit = useCallback((employee: EmployeeRow) => {
@@ -224,11 +227,13 @@ export default function EmployeesPage() {
 
     if (updateError) {
       setError(updateError.message);
+      toast.error(`Failed to update employee: ${updateError.message}`);
       return;
     }
 
     cancelEdit();
     await fetchPageData();
+    toast.success(`Updated employee: ${editDraft.first_name.trim()} ${editDraft.last_name.trim()}`);
   }, [cancelEdit, editDraft, fetchPageData, isReadOnly, orgId]);
 
   const deactivateEmployee = useCallback(async (employee: EmployeeRow) => {
@@ -248,10 +253,12 @@ export default function EmployeesPage() {
 
     if (updateError) {
       setError(updateError.message);
+      toast.error(`Failed to deactivate employee: ${updateError.message}`);
       return;
     }
 
     await fetchPageData();
+    toast.success(`Deactivated employee: ${name}`);
   }, [fetchPageData, isReadOnly, orgId]);
 
   if (!orgId || loading) {

@@ -11,6 +11,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
+import { toast } from '@/components/ui/sonner';
 
 type EquipmentUnitRow = {
   id: string;
@@ -231,11 +232,13 @@ export default function EquipmentPage() {
     setAddSaving(false);
     if (insertError) {
       setError(insertError.message);
+      toast.error(`Failed to add equipment: ${insertError.message}`);
       return;
     }
 
     cancelAdd();
     await fetchEquipment();
+    toast.success(`Added equipment: ${addDraft.name.trim()}`);
   }, [addDraft, cancelAdd, fetchEquipment, isReadOnly, orgId, propertyId, typeNameById]);
 
   const startEdit = useCallback((row: EquipmentUnitRow & { displayName: string; displayType: string; normalizedStatus: EquipmentStatus }) => {
@@ -278,10 +281,12 @@ export default function EquipmentPage() {
     setRowSavingId(null);
     if (updateError) {
       setError(updateError.message);
+      toast.error(`Failed to update equipment: ${updateError.message}`);
       return;
     }
     cancelEdit();
     await fetchEquipment();
+    toast.success(`Updated equipment: ${editDraft.name.trim()}`);
   }, [cancelEdit, editDraft, fetchEquipment, isReadOnly, orgId, typeNameById]);
 
   const removeRow = useCallback(async (id: string) => {
@@ -292,9 +297,11 @@ export default function EquipmentPage() {
     setDeleteId(null);
     if (deleteError) {
       setError(deleteError.message);
+      toast.error(`Failed to delete equipment: ${deleteError.message}`);
       return;
     }
     await fetchEquipment();
+    toast.success('Equipment deleted');
   }, [fetchEquipment, isReadOnly, orgId]);
 
   if (!orgId || loading) {

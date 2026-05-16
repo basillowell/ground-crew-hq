@@ -508,13 +508,14 @@ export default function SchedulerPage() {
     setIsSaving(false);
 
     if (response.error) {
-      toast.error('Shift save failed', { description: response.error.message });
+      toast.error(`Failed to save shift: ${response.error.message}`);
       return;
     }
 
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
     handleCloseModal();
-    toast.success(existing ? 'Shift updated' : 'Shift added');
+    const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : 'crew member';
+    toast.success(existing ? `Shift updated for ${employeeName}` : `Shift added for ${employeeName}`);
   }
 
   async function handleDeleteShift() {
@@ -527,10 +528,12 @@ export default function SchedulerPage() {
       .delete()
       .eq('id', existing.id)
       .eq('org_id', currentUser?.orgId ?? '');
-    if (error) { toast.error('Delete failed', { description: error.message }); return; }
+    if (error) { toast.error(`Failed to delete shift: ${error.message}`); return; }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
     handleCloseModal();
-    toast.success('Shift removed');
+    const removedEmployee = employeeList.find((e) => e.id === draft.employeeId);
+    const removedName = removedEmployee ? `${removedEmployee.firstName} ${removedEmployee.lastName}` : 'crew member';
+    toast.success(`Shift removed for ${removedName}`);
   }
 
   function openCopyWeekDialog() {
@@ -604,7 +607,7 @@ export default function SchedulerPage() {
     setTemplateActionSaving(false);
 
     if (error) {
-      toast.error('Template save failed', { description: error.message });
+      toast.error(`Failed to save week template: ${error.message}`);
       return;
     }
 
@@ -619,7 +622,7 @@ export default function SchedulerPage() {
       ...current,
     ]);
     setSaveTemplateDialogOpen(false);
-    toast.success('Week template saved');
+    toast.success(`Week template saved: ${name}`);
   }
 
   async function applyWeekTemplate() {
@@ -639,7 +642,7 @@ export default function SchedulerPage() {
       .gte('date', weekStartDate)
       .lte('date', weekEndDate);
     if (existingError) {
-      toast.error('Template apply failed', { description: existingError.message });
+      toast.error(`Failed to apply week template: ${existingError.message}`);
       return;
     }
 
@@ -677,7 +680,7 @@ export default function SchedulerPage() {
     const { error } = await supabase.from('schedule_entries').insert(inserts);
     setTemplateActionSaving(false);
     if (error) {
-      toast.error('Template apply failed', { description: error.message });
+      toast.error(`Failed to apply week template: ${error.message}`);
       return;
     }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
@@ -724,7 +727,7 @@ export default function SchedulerPage() {
 
     if (existingEntriesError) {
       setCopyWeekSaving(false);
-      toast.error('Copy failed', { description: existingEntriesError.message });
+      toast.error(`Failed to copy week: ${existingEntriesError.message}`);
       return;
     }
 
@@ -758,7 +761,7 @@ export default function SchedulerPage() {
       const { error } = await supabase.from('schedule_entries').insert(inserts);
       if (error) {
         setCopyWeekSaving(false);
-        toast.error('Copy failed', { description: error.message });
+        toast.error(`Failed to copy week: ${error.message}`);
         return;
       }
     }
@@ -773,7 +776,7 @@ export default function SchedulerPage() {
 
       if (sourceAssignmentsError) {
         setCopyWeekSaving(false);
-        toast.error('Copy failed', { description: sourceAssignmentsError.message });
+        toast.error(`Failed to copy assignments: ${sourceAssignmentsError.message}`);
         return;
       }
 
@@ -786,7 +789,7 @@ export default function SchedulerPage() {
 
       if (existingTargetAssignmentsError) {
         setCopyWeekSaving(false);
-        toast.error('Copy failed', { description: existingTargetAssignmentsError.message });
+        toast.error(`Failed to copy assignments: ${existingTargetAssignmentsError.message}`);
         return;
       }
 
@@ -820,7 +823,7 @@ export default function SchedulerPage() {
         const { error: assignmentInsertError } = await supabase.from('assignments').insert(assignmentInserts);
         if (assignmentInsertError) {
           setCopyWeekSaving(false);
-          toast.error('Copy failed', { description: assignmentInsertError.message });
+          toast.error(`Failed to copy assignments: ${assignmentInsertError.message}`);
           return;
         }
       }
@@ -831,7 +834,7 @@ export default function SchedulerPage() {
     setCopyWeekSaving(false);
     setCopyWeekDialogOpen(false);
     setWeekStart(targetStartKey);
-    toast.success('Week copied', {
+    toast.success('Week copied to next week', {
       description: `${inserts.length} shift${inserts.length === 1 ? '' : 's'} added to next week.`,
     });
   }

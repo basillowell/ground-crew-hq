@@ -2074,7 +2074,7 @@ export default function WorkboardPage() {
     }
 
     if (linkedRequestId) {
-      await supabase
+      const { error: linkedRequestError } = await supabase
         .from('task_requests')
         .update({
           status: 'assigned',
@@ -2083,6 +2083,9 @@ export default function WorkboardPage() {
           org_id: currentUser?.orgId ?? null,
         })
         .eq('id', linkedRequestId);
+      if (linkedRequestError) {
+        toast.error(`Failed to update linked request: ${linkedRequestError.message}`);
+      }
     }
 
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
@@ -2148,13 +2151,18 @@ export default function WorkboardPage() {
     if (!supabase) return;
     const confirmed = window.confirm('Dismiss this request?');
     if (!confirmed) return;
-    await supabase.from('task_requests').update({ status: 'dismissed' }).eq('id', requestId);
+    const { error } = await supabase.from('task_requests').update({ status: 'dismissed' }).eq('id', requestId);
+    if (error) {
+      toast.error(`Failed to dismiss request: ${error.message}`);
+      return;
+    }
     queryClient.setQueryData<NeedsQueueRequest[] | undefined>(taskRequestsQuery.queryKey, (current) =>
       (current ?? []).map((request) =>
         request.id === requestId ? { ...request, status: 'dismissed' } : request,
       ),
     );
     await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
+    toast.success('Request dismissed');
   }
 
   async function reorderEmployeeAssignments(
@@ -2289,7 +2297,7 @@ export default function WorkboardPage() {
       (request.property_id && request.property_id !== 'all' ? request.property_id : null) ??
       (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null);
     if (!resolvedPropertyId) {
-      toast.error('Cannot approve request', { description: 'Missing property context.' });
+      toast.error('Cannot approve request: missing property context.');
       return;
     }
 
@@ -2349,7 +2357,7 @@ export default function WorkboardPage() {
       .eq('id', request.id)
       .eq('org_id', currentUser.orgId);
     if (requestError) {
-      toast.error('Assignment created, request update failed', { description: requestError.message });
+      toast.error(`Assignment created but request update failed: ${requestError.message}`);
       return;
     }
 
@@ -2378,10 +2386,11 @@ export default function WorkboardPage() {
       author: noteDraft.author.trim() || 'Operations Admin',
       date: boardDate,
     });
-    if (error) { toast('Unable to save note', { description: error.message }); return; }
+    if (error) { toast.error(`Failed to save note: ${error.message}`); return; }
     await queryClient.invalidateQueries({ queryKey: ['notes'] });
     setNoteDialogOpen(false);
     setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
+    toast.success('Note saved');
   }
 
   function persistLaneOrder(nextOrder: string[]) {

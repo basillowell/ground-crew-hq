@@ -319,14 +319,14 @@ export default function MobileFieldWorkspacePage() {
             : item,
         ),
       );
-      toast.error('Unable to update task status', { description: updateError.message });
+      toast.error(`Failed to update task status: ${updateError.message}`);
       return;
     }
 
     if (nextStatus === 'done') {
-      toast.success('Task completed');
+      toast.success(`Task completed: ${assignment.title}`);
     } else if (nextStatus === 'in_progress') {
-      toast.success('Task started');
+      toast.success(`Task started: ${assignment.title}`);
     }
   };
 
@@ -451,9 +451,7 @@ export default function MobileFieldWorkspacePage() {
           },
         });
         setClockEvents((current) => current.filter((event) => event.id !== optimisticEvent.id));
-        toast.error(`Unable to ${eventType === 'clock_in' ? 'clock in' : 'clock out'}`, {
-          description: insertError.message,
-        });
+        toast.error(`Failed to ${eventType === 'clock_in' ? 'clock in' : 'clock out'}: ${insertError.message}`);
         return;
       }
 
@@ -528,7 +526,7 @@ export default function MobileFieldWorkspacePage() {
     setNeedsSaving(false);
 
     if (insertError) {
-      toast.error('Unable to submit request', { description: insertError.message });
+      toast.error(`Failed to submit request: ${insertError.message}`);
       return;
     }
 

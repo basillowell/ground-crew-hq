@@ -264,9 +264,11 @@ function WorkspaceTab({
     setSavingOrg(false);
     if (updateError) {
       setError(updateError.message);
+      toast.error(`Failed to save organization name: ${updateError.message}`);
       return;
     }
     setOrgInfo((current) => (current ? { ...current, name: orgNameDraft.trim() } : current));
+    toast.success(`Organization name updated to ${orgNameDraft.trim()}`);
   };
 
   const addProperty = async () => {
@@ -279,9 +281,11 @@ function WorkspaceTab({
       .single();
     if (insertError) {
       setError(insertError.message);
+      toast.error(`Failed to add property: ${insertError.message}`);
       return;
     }
     setProperties((current) => [...current, data as PropertyItem].sort((a, b) => a.name.localeCompare(b.name)));
+    toast.success(`Property added: ${newPropertyName.trim()}`);
     setNewPropertyName('');
   };
 
@@ -300,6 +304,7 @@ function WorkspaceTab({
       .eq('org_id', orgId);
     if (updateError) {
       setError(updateError.message);
+      toast.error(`Failed to update property: ${updateError.message}`);
       return;
     }
     setProperties((current) =>
@@ -309,6 +314,7 @@ function WorkspaceTab({
     );
     setEditingPropertyId(null);
     setEditingPropertyName('');
+    toast.success(`Property renamed to ${editingPropertyName.trim()}`);
   };
 
   const cancelPropertyEdit = () => {
@@ -324,9 +330,11 @@ function WorkspaceTab({
     const { error: deleteError } = await supabase.from('properties').delete().eq('id', propertyId).eq('org_id', orgId);
     if (deleteError) {
       setError(deleteError.message);
+      toast.error(`Failed to delete property: ${deleteError.message}`);
       return;
     }
     setProperties((current) => current.filter((property) => property.id !== propertyId));
+    toast.success('Property deleted');
   };
 
   const loadDemoData = async () => {
@@ -358,6 +366,7 @@ function WorkspaceTab({
     if (!activePropertyId) {
       setLoadingDemoData(false);
       setError('Add a property first to load demo data.');
+      toast.error('Failed to load demo data: add a property first.');
       return;
     }
 
@@ -396,6 +405,7 @@ function WorkspaceTab({
       if (employeeError) {
         setLoadingDemoData(false);
         setError(employeeError.message);
+        toast.error(`Failed to seed demo employees: ${employeeError.message}`);
         return;
       }
       demoEmployees = (insertedEmployees ?? []) as Array<{ id: string; first_name: string; last_name: string }>;
@@ -410,6 +420,7 @@ function WorkspaceTab({
       if (existingError) {
         setLoadingDemoData(false);
         setError(existingError.message);
+        toast.error(`Failed to read employees for demo seed: ${existingError.message}`);
         return;
       }
       demoEmployees = (existingEmployees ?? []) as Array<{ id: string; first_name: string; last_name: string }>;
@@ -450,6 +461,7 @@ function WorkspaceTab({
       if (taskInsertError) {
         setLoadingDemoData(false);
         setError(taskInsertError.message);
+        toast.error(`Failed to seed demo tasks: ${taskInsertError.message}`);
         return;
       }
       taskRowsForAssignments = (insertedTasks ?? []) as Array<{ id: string; name: string; estimated_hours: number | null }>;
@@ -465,6 +477,7 @@ function WorkspaceTab({
       if (existingTaskError) {
         setLoadingDemoData(false);
         setError(existingTaskError.message);
+        toast.error(`Failed to read tasks for demo seed: ${existingTaskError.message}`);
         return;
       }
       taskRowsForAssignments = (existingTasks ?? []) as Array<{ id: string; name: string; estimated_hours: number | null }>;
@@ -480,6 +493,7 @@ function WorkspaceTab({
       if (weekScheduleError) {
         setLoadingDemoData(false);
         setError(weekScheduleError.message);
+        toast.error(`Failed to read schedules for demo seed: ${weekScheduleError.message}`);
         return;
       }
       const existingWeekKeySet = new Set((existingWeekSchedule ?? []).map((row) => `${row.employee_id}-${row.date}`));
@@ -502,6 +516,7 @@ function WorkspaceTab({
         if (scheduleError) {
           setLoadingDemoData(false);
           setError(scheduleError.message);
+          toast.error(`Failed to seed demo schedule entries: ${scheduleError.message}`);
           return;
         }
       }
@@ -516,6 +531,7 @@ function WorkspaceTab({
         if (assignmentFetchError) {
           setLoadingDemoData(false);
           setError(assignmentFetchError.message);
+          toast.error(`Failed to read assignments for demo seed: ${assignmentFetchError.message}`);
           return;
         }
         const assignedTodaySet = new Set((existingAssignments ?? []).map((row) => row.employee_id as string));
@@ -541,6 +557,7 @@ function WorkspaceTab({
           if (assignmentInsertError) {
             setLoadingDemoData(false);
             setError(assignmentInsertError.message);
+            toast.error(`Failed to seed demo assignments: ${assignmentInsertError.message}`);
             return;
           }
         }
@@ -564,6 +581,7 @@ function WorkspaceTab({
       if (typeInsertError) {
         setLoadingDemoData(false);
         setError(typeInsertError.message);
+        toast.error(`Failed to seed equipment types: ${typeInsertError.message}`);
         return;
       }
       equipmentTypesByName = new Map(
@@ -578,6 +596,7 @@ function WorkspaceTab({
       if (typeFetchError) {
         setLoadingDemoData(false);
         setError(typeFetchError.message);
+        toast.error(`Failed to read equipment types: ${typeFetchError.message}`);
         return;
       }
       equipmentTypesByName = new Map(
@@ -624,6 +643,7 @@ function WorkspaceTab({
         if (equipmentError) {
           setLoadingDemoData(false);
           setError(equipmentError.message);
+          toast.error(`Failed to seed equipment units: ${equipmentError.message}`);
           return;
         }
       }
@@ -893,7 +913,10 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
     setSavingPrefs(false);
     if (upsertError) {
       setError(upsertError.message);
+      toast.error(`Failed to save weather display preferences: ${upsertError.message}`);
+      return;
     }
+    toast.success('Weather display preferences saved');
   }, [orgId]);
 
   const updatePref = (key: 'show_hourly' | 'show_forecast' | 'show_rainfall', checked: boolean) => {
@@ -926,9 +949,11 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
     setSavingLocation(false);
     if (upsertError) {
       setError(upsertError.message);
+      toast.error(`Failed to save weather location: ${upsertError.message}`);
       return;
     }
     await fetchWeatherSettings();
+    toast.success(`Weather location saved: ${setupLocationName.trim()}`);
   }, [fetchWeatherSettings, orgId, setupArea, setupLocationName]);
 
   if (!orgId || loading) return <PageSkeleton />;
@@ -1181,6 +1206,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
 
     if (insertError) {
       setError(insertError.message);
+      toast.error(`Failed to add task: ${insertError.message}`);
       return;
     }
     setTasks((current) =>
@@ -1192,6 +1218,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     setNewCategory('General');
     setNewPriority('2');
     setNewEstimatedHours('1');
+    toast.success(`Task added: ${newName.trim()}`);
   };
 
   const removeTask = async (taskId: string) => {
@@ -1201,9 +1228,12 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     const { error: deleteError } = await supabase.from('tasks').delete().eq('id', taskId).eq('org_id', orgId);
     if (deleteError) {
       setError(deleteError.message);
+      toast.error(`Failed to delete task: ${deleteError.message}`);
       return;
     }
+    const deletedTaskName = tasks.find((task) => task.id === taskId)?.name ?? 'Task';
     setTasks((current) => current.filter((task) => task.id !== taskId));
+    toast.success(`Task deleted: ${deletedTaskName}`);
   };
 
   const startEditTask = (task: TaskLibraryItem) => {
@@ -1235,6 +1265,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       .eq('org_id', orgId);
     if (updateError) {
       setError(updateError.message);
+      toast.error(`Failed to update task: ${updateError.message}`);
       return;
     }
     setTasks((current) =>
@@ -1250,6 +1281,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
           : task,
       ),
     );
+    toast.success(`Task updated: ${editDraft.name.trim()}`);
     cancelEditTask();
   };
 
@@ -1495,9 +1527,11 @@ function SchedulerTab({ orgId }: { orgId: string }) {
     setSaving(false);
     if (saveError) {
       setError(saveError.message);
+      toast.error(`Failed to save scheduler settings: ${saveError.message}`);
       return;
     }
     setSaved(true);
+    toast.success('Scheduler settings saved');
     window.setTimeout(() => setSaved(false), 2000);
   };
 
@@ -1520,20 +1554,25 @@ function SchedulerTab({ orgId }: { orgId: string }) {
     setAlertsSaving(false);
     if (saveError) {
       setError(saveError.message);
+      toast.error(`Failed to save alert thresholds: ${saveError.message}`);
       return;
     }
     setAlertsSaved(true);
+    toast.success('Alert thresholds saved');
     window.setTimeout(() => setAlertsSaved(false), 2000);
   };
 
   const deleteTemplate = async (templateId: string) => {
     if (!supabase) return;
+    const templateName = templates.find((template) => template.id === templateId)?.name ?? 'template';
     const { error: deleteError } = await supabase.from('shift_templates').delete().eq('id', templateId);
     if (deleteError) {
       setTemplatesError(deleteError.message);
+      toast.error(`Failed to delete shift template: ${deleteError.message}`);
       return;
     }
     setTemplates((current) => current.filter((template) => template.id !== templateId));
+    toast.success(`Shift template deleted: ${templateName}`);
   };
 
   const addTemplate = async () => {
@@ -1552,9 +1591,11 @@ function SchedulerTab({ orgId }: { orgId: string }) {
       .single();
     if (insertError) {
       setTemplatesError(insertError.message);
+      toast.error(`Failed to add shift template: ${insertError.message}`);
       return;
     }
     setTemplates((current) => [...current, data as ShiftTemplate]);
+    toast.success(`Shift template added: ${newName.trim()}`);
     setNewName('');
     setNewStart('05:00');
     setNewEnd('13:30');
