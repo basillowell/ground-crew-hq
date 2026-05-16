@@ -80,6 +80,8 @@ function statusBadgeClass(status: AssignmentStatus) {
   return 'bg-slate-100 text-slate-800';
 }
 
+const QUICK_HOURS_OPTIONS = ['1', '1.5', '2', '2.5', '3', '4'];
+
 export default function MobileFieldWorkspacePage() {
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -91,6 +93,8 @@ export default function MobileFieldWorkspacePage() {
   const [propertyName, setPropertyName] = useState<string>('Assigned Property');
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [actualHoursDraft, setActualHoursDraft] = useState<Record<string, string>>({});
+  const [activeDonePromptId, setActiveDonePromptId] = useState<string | null>(null);
+  const [showOtherActualInputId, setShowOtherActualInputId] = useState<string | null>(null);
   const [clockEvents, setClockEvents] = useState<ClockEventRecord[]>([]);
   const [clockActionSaving, setClockActionSaving] = useState(false);
   const [liveNow, setLiveNow] = useState<Date>(new Date());
@@ -255,16 +259,21 @@ export default function MobileFieldWorkspacePage() {
     setSavingIds((current) => ({ ...current, [assignmentId]: isSaving }));
   };
 
-  const updateTaskStatus = async (assignment: FieldAssignment) => {
+  const updateTaskStatus = async (
+    assignment: FieldAssignment,
+    nextStatus: 'in_progress' | 'done',
+    actualHours?: number,
+  ) => {
     if (!supabase) return;
-    const normalized = displayStatus(assignment.status);
-    const nextStatus = normalized === 'planned' ? 'in_progress' : normalized === 'in_progress' ? 'done' : 'done';
     const nextCompletedAt = nextStatus === 'done' ? new Date().toISOString() : null;
+    const nextActualHours = nextStatus === 'done' ? actualHours ?? assignment.estimatedHours : assignment.actualHours;
 
     setSaving(assignment.id, true);
     setAssignments((current) =>
       current.map((item) =>
-        item.id === assignment.id ? { ...item, status: nextStatus, completedAt: nextCompletedAt } : item,
+        item.id === assignment.id
+          ? { ...item, status: nextStatus, completedAt: nextCompletedAt, actualHours: nextActualHours }
+          : item,
       ),
     );
 
@@ -272,6 +281,9 @@ export default function MobileFieldWorkspacePage() {
       status: nextStatus,
       completed_at: nextCompletedAt,
     };
+    if (nextStatus === 'done') {
+      payload.actual_hours = nextActualHours;
+    }
 
     const { error: updateError } = await supabase.from('assignments').update(payload).eq('id', assignment.id);
     setSaving(assignment.id, false);
@@ -279,7 +291,14 @@ export default function MobileFieldWorkspacePage() {
     if (updateError) {
       setAssignments((current) =>
         current.map((item) =>
-          item.id === assignment.id ? { ...item, status: assignment.status, completedAt: assignment.completedAt } : item,
+          item.id === assignment.id
+            ? {
+                ...item,
+                status: assignment.status,
+                completedAt: assignment.completedAt,
+                actualHours: assignment.actualHours,
+              }
+            : item,
         ),
       );
       toast.error('Unable to update task status', { description: updateError.message });
@@ -293,35 +312,17 @@ export default function MobileFieldWorkspacePage() {
     }
   };
 
-  const saveActualHours = async (assignmentId: string) => {
-    if (!supabase) return;
+  const completeTaskWithHours = async (assignment: FieldAssignment) => {
+    const assignmentId = assignment.id;
     const rawValue = actualHoursDraft[assignmentId] ?? '0';
     const parsed = Number(rawValue);
     if (Number.isNaN(parsed) || parsed < 0 || parsed > 24) {
       toast.error('Enter actual hours between 0 and 24');
       return;
     }
-
-    setSaving(assignmentId, true);
-    setAssignments((current) =>
-      current.map((assignment) =>
-        assignment.id === assignmentId ? { ...assignment, actualHours: parsed } : assignment,
-      ),
-    );
-
-    const { error: updateError } = await supabase
-      .from('assignments')
-      .update({ actual_hours: parsed })
-      .eq('id', assignmentId);
-    setSaving(assignmentId, false);
-
-    if (updateError) {
-      toast.error('Unable to save actual hours', { description: updateError.message });
-      void fetchFieldData();
-      return;
-    }
-
-    toast.success('Actual hours saved');
+    await updateTaskStatus(assignment, 'done', parsed);
+    setActiveDonePromptId(null);
+    setShowOtherActualInputId(null);
   };
 
   const doneCount = useMemo(
@@ -336,6 +337,7 @@ export default function MobileFieldWorkspacePage() {
     () => assignments.reduce((sum, assignment) => sum + Number(assignment.estimatedHours ?? 0), 0),
     [assignments],
   );
+  const completionPct = assignments.length > 0 ? Math.round((doneCount / assignments.length) * 100) : 0;
 
   const employeeName = employee ? `${employee.firstName} ${employee.lastName}`.trim() : 'Crew Member';
   const todayLabel = new Date().toLocaleDateString(undefined, {
@@ -561,6 +563,19 @@ export default function MobileFieldWorkspacePage() {
             <p className="text-base font-medium">Your shift: {formatTime(shift.shiftStart)} – {formatTime(shift.shiftEnd)}</p>
           </Card>
 
+          <Card className="mb-4 rounded-2xl p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-base font-semibold">Task Progress</p>
+              <p className="text-base font-medium">{doneCount}/{assignments.length} tasks done</p>
+            </div>
+            <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-green-600 transition-all duration-300"
+                style={{ width: `${completionPct}%` }}
+              />
+            </div>
+          </Card>
+
           {assignments.length === 0 ? (
             <Card className="rounded-2xl p-5">
               <p className="text-base font-medium">No tasks assigned for today. Check with your supervisor.</p>
@@ -589,48 +604,105 @@ export default function MobileFieldWorkspacePage() {
                     {assignment.location ? <p className="mt-1 text-base">Location: {assignment.location}</p> : null}
                     {assignment.notes ? <p className="mt-1 text-base">Notes: {assignment.notes}</p> : null}
 
-                    <Button
-                      className="mt-3 h-12 min-h-12 w-full text-base"
-                      disabled={normalizedStatus === 'done' || isSaving}
-                      variant={normalizedStatus === 'done' ? 'secondary' : 'default'}
-                      onClick={() => void updateTaskStatus(assignment)}
-                    >
-                      {normalizedStatus === 'planned'
-                        ? 'Start Task'
-                        : normalizedStatus === 'in_progress'
-                          ? 'Complete Task'
-                          : 'Completed ✓'}
-                    </Button>
+                    {normalizedStatus === 'planned' ? (
+                      <Button
+                        className="mt-3 h-14 min-h-14 w-full bg-green-600 text-base font-semibold hover:bg-green-700"
+                        disabled={isSaving}
+                        onClick={() => void updateTaskStatus(assignment, 'in_progress')}
+                      >
+                        START
+                      </Button>
+                    ) : null}
+
+                    {normalizedStatus === 'in_progress' ? (
+                      <div className="mt-3 space-y-3">
+                        <Button
+                          className="h-14 min-h-14 w-full bg-blue-600 text-base font-semibold hover:bg-blue-700"
+                          disabled={isSaving}
+                          onClick={() => {
+                            setActiveDonePromptId(assignment.id);
+                            setActualHoursDraft((current) => ({
+                              ...current,
+                              [assignment.id]: current[assignment.id] ?? String(assignment.estimatedHours || 0),
+                            }));
+                          }}
+                        >
+                          DONE
+                        </Button>
+
+                        {activeDonePromptId === assignment.id ? (
+                          <div className="rounded-xl border p-3">
+                            <p className="mb-2 text-base font-medium">How long did this take?</p>
+                            <div className="grid grid-cols-4 gap-2">
+                              {QUICK_HOURS_OPTIONS.map((option) => {
+                                const selected = actualHoursDraft[assignment.id] === option;
+                                return (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    className={`h-11 rounded-md border text-sm font-medium ${selected ? 'border-green-700 bg-green-100 text-green-900' : 'border-input bg-background text-foreground'}`}
+                                    onClick={() => {
+                                      setActualHoursDraft((current) => ({ ...current, [assignment.id]: option }));
+                                      setShowOtherActualInputId(null);
+                                    }}
+                                  >
+                                    {option}h
+                                  </button>
+                                );
+                              })}
+                              <button
+                                type="button"
+                                className={`h-11 rounded-md border text-sm font-medium ${showOtherActualInputId === assignment.id ? 'border-green-700 bg-green-100 text-green-900' : 'border-input bg-background text-foreground'}`}
+                                onClick={() => setShowOtherActualInputId(assignment.id)}
+                              >
+                                Other
+                              </button>
+                            </div>
+
+                            {showOtherActualInputId === assignment.id ? (
+                              <Input
+                                type="number"
+                                min={0}
+                                max={24}
+                                step={0.5}
+                                className="mt-2 h-11 text-base"
+                                value={actualHoursDraft[assignment.id] ?? ''}
+                                onChange={(event) =>
+                                  setActualHoursDraft((current) => ({
+                                    ...current,
+                                    [assignment.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                            ) : null}
+
+                            <div className="mt-3 flex gap-2">
+                              <Button
+                                className="h-11 min-h-11 flex-1 text-base"
+                                disabled={isSaving}
+                                onClick={() => void completeTaskWithHours(assignment)}
+                              >
+                                Confirm Done
+                              </Button>
+                              <Button
+                                className="h-11 min-h-11 px-4 text-base"
+                                variant="outline"
+                                onClick={() => {
+                                  setActiveDonePromptId(null);
+                                  setShowOtherActualInputId(null);
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     {normalizedStatus === 'done' ? (
-                      <div className="mt-3 rounded-xl border p-3">
-                        <label className="mb-2 block text-base font-medium" htmlFor={`actual-hours-${assignment.id}`}>
-                          How long did this take?
-                        </label>
-                        <div className="flex gap-2">
-                          <Input
-                            id={`actual-hours-${assignment.id}`}
-                            type="number"
-                            min={0}
-                            max={24}
-                            step={0.5}
-                            className="h-12 min-h-12 text-base"
-                            value={actualHoursDraft[assignment.id] ?? ''}
-                            onChange={(event) =>
-                              setActualHoursDraft((current) => ({
-                                ...current,
-                                [assignment.id]: event.target.value,
-                              }))
-                            }
-                          />
-                          <Button
-                            className="h-12 min-h-12 px-5 text-base"
-                            disabled={isSaving}
-                            onClick={() => void saveActualHours(assignment.id)}
-                          >
-                            Save
-                          </Button>
-                        </div>
+                      <div className="mt-3 flex h-14 min-h-14 items-center justify-center rounded-md bg-green-100 text-base font-semibold text-green-900">
+                        Completed ✓ · {(assignment.actualHours ?? assignment.estimatedHours ?? 0).toFixed(1)}h
                       </div>
                     ) : null}
                   </Card>
