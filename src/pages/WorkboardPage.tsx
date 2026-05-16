@@ -359,6 +359,7 @@ export default function WorkboardPage() {
   const [department, setDepartment] = useState('Maintenance');
   const [groupFilter, setGroupFilter] = useState('all');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [isAssignmentModalDirty, setIsAssignmentModalDirty] = useState(false);
   const [quickTaskDialogOpen, setQuickTaskDialogOpen] = useState(false);
   const [quickPlanDialogOpen, setQuickPlanDialogOpen] = useState(false);
   const [taskTemplateDialogOpen, setTaskTemplateDialogOpen] = useState(false);
@@ -1778,6 +1779,7 @@ export default function WorkboardPage() {
       notes: '',
     });
     setAssignToAllScheduledCrew(false);
+    setIsAssignmentModalDirty(false);
     setAssignmentDialogOpen(true);
   }
 
@@ -1807,6 +1809,7 @@ export default function WorkboardPage() {
       notes: '',
     });
     setAssignToAllScheduledCrew(false);
+    setIsAssignmentModalDirty(false);
     setAssignmentDialogOpen(true);
   }
 
@@ -1832,8 +1835,36 @@ export default function WorkboardPage() {
       notes: request.notes ?? '',
     });
     setAssignToAllScheduledCrew(false);
+    setIsAssignmentModalDirty(false);
     setAssignmentDialogOpen(true);
   }
+
+  const closeAssignmentDialog = useCallback(
+    (forceDiscard = false) => {
+      if (!forceDiscard && isAssignmentModalDirty) {
+        const shouldDiscard = window.confirm('You have unsaved changes. Discard?');
+        if (!shouldDiscard) return false;
+      }
+      setAssignmentDialogOpen(false);
+      setLinkedRequestId(null);
+      setLinkedRequestTitle(null);
+      setAssignToAllScheduledCrew(false);
+      setWeatherConflictOverride(false);
+      setIsAssignmentModalDirty(false);
+      return true;
+    },
+    [isAssignmentModalDirty],
+  );
+
+  useEffect(() => {
+    if (!assignmentDialogOpen || !isAssignmentModalDirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [assignmentDialogOpen, isAssignmentModalDirty]);
 
   async function saveAssignment(ignoreWeatherConflict = false) {
     if (isReadOnly) {
@@ -2096,7 +2127,8 @@ export default function WorkboardPage() {
     setEditingAssignmentId(null);
     setAssignToAllScheduledCrew(false);
     setWeatherConflictOverride(false);
-    setAssignmentDialogOpen(false);
+    setIsAssignmentModalDirty(false);
+    closeAssignmentDialog(true);
   }
 
   async function removeAssignment(assignmentId: string) {
@@ -3332,12 +3364,11 @@ export default function WorkboardPage() {
       <Dialog
         open={assignmentDialogOpen}
         onOpenChange={(nextOpen) => {
-          setAssignmentDialogOpen(nextOpen);
-          if (!nextOpen) {
-            setLinkedRequestId(null);
-            setLinkedRequestTitle(null);
-            setAssignToAllScheduledCrew(false);
+          if (nextOpen) {
+            setAssignmentDialogOpen(true);
+            return;
           }
+          closeAssignmentDialog();
         }}
       >
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
@@ -3362,7 +3393,10 @@ export default function WorkboardPage() {
                 <label className="text-xs text-muted-foreground">Crew member</label>
                 <select
                   value={assignmentDraft.employeeId}
-                  onChange={(e) => setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value })}
+                  onChange={(e) => {
+                    setIsAssignmentModalDirty(true);
+                    setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value });
+                  }}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   data-testid="select-assignment-employee"
                 >
@@ -3384,7 +3418,10 @@ export default function WorkboardPage() {
                 <label className="text-xs text-muted-foreground">Property</label>
                 <select
                   value={assignmentDraft.propertyId}
-                  onChange={(e) => setAssignmentDraft({ ...assignmentDraft, propertyId: e.target.value })}
+                  onChange={(e) => {
+                    setIsAssignmentModalDirty(true);
+                    setAssignmentDraft({ ...assignmentDraft, propertyId: e.target.value });
+                  }}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="">Select property</option>
@@ -3403,12 +3440,11 @@ export default function WorkboardPage() {
                 value={assignmentDraft.taskId}
                 onChange={(e) => {
                   if (e.target.value === '__manage_task_library__') {
-                    setAssignmentDialogOpen(false);
-                    setLinkedRequestId(null);
-                    setLinkedRequestTitle(null);
+                    if (!closeAssignmentDialog()) return;
                     navigate('/app/settings?tab=Tasks');
                     return;
                   }
+                  setIsAssignmentModalDirty(true);
                   setAssignmentDraft({
                     ...assignmentDraft,
                     taskId: e.target.value,
@@ -3444,9 +3480,7 @@ export default function WorkboardPage() {
                 type="button"
                 className="mt-2 block text-xs font-medium text-primary hover:underline"
                 onClick={() => {
-                  setAssignmentDialogOpen(false);
-                  setLinkedRequestId(null);
-                  setLinkedRequestTitle(null);
+                  if (!closeAssignmentDialog()) return;
                   navigate('/app/settings?tab=Tasks');
                 }}
               >
@@ -3460,7 +3494,10 @@ export default function WorkboardPage() {
                   <input
                     type="checkbox"
                     checked={assignToAllScheduledCrew}
-                    onChange={(e) => setAssignToAllScheduledCrew(e.target.checked)}
+                    onChange={(e) => {
+                      setIsAssignmentModalDirty(true);
+                      setAssignToAllScheduledCrew(e.target.checked);
+                    }}
                   />
                   Assign to all scheduled crew
                 </label>
@@ -3479,9 +3516,12 @@ export default function WorkboardPage() {
 
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Equipment</label>
-              <select
-                value={assignmentDraft.equipmentId}
-                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, equipmentId: e.target.value })}
+                <select
+                  value={assignmentDraft.equipmentId}
+                  onChange={(e) => {
+                    setIsAssignmentModalDirty(true);
+                    setAssignmentDraft({ ...assignmentDraft, equipmentId: e.target.value });
+                  }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-assignment-equipment"
               >
@@ -3496,10 +3536,13 @@ export default function WorkboardPage() {
 
             <div>
               <label className="text-xs text-muted-foreground">Start time</label>
-              <Input
-                type="time"
-                value={assignmentDraft.startTime}
-                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, startTime: e.target.value })}
+                <Input
+                  type="time"
+                  value={assignmentDraft.startTime}
+                  onChange={(e) => {
+                    setIsAssignmentModalDirty(true);
+                    setAssignmentDraft({ ...assignmentDraft, startTime: e.target.value });
+                  }}
                 className="mt-1"
                 data-testid="input-assignment-start"
               />
@@ -3509,9 +3552,12 @@ export default function WorkboardPage() {
 
             <div>
               <label className="text-xs text-muted-foreground">Status</label>
-              <select
-                value={assignmentDraft.status}
-                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, status: e.target.value as Assignment['status'] })}
+                <select
+                  value={assignmentDraft.status}
+                  onChange={(e) => {
+                    setIsAssignmentModalDirty(true);
+                    setAssignmentDraft({ ...assignmentDraft, status: e.target.value as Assignment['status'] });
+                  }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-assignment-status"
               >
@@ -3526,7 +3572,10 @@ export default function WorkboardPage() {
               {propertyWorkLocations.length > 0 ? (
                 <select
                   value={assignmentDraft.area}
-                  onChange={(e) => setAssignmentDraft({ ...assignmentDraft, area: e.target.value })}
+                  onChange={(e) => {
+                    setIsAssignmentModalDirty(true);
+                    setAssignmentDraft({ ...assignmentDraft, area: e.target.value });
+                  }}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   data-testid="select-assignment-area"
                 >
@@ -3537,7 +3586,10 @@ export default function WorkboardPage() {
               ) : (
                 <Input
                   value={assignmentDraft.area}
-                  onChange={(e) => setAssignmentDraft({ ...assignmentDraft, area: e.target.value })}
+                  onChange={(e) => {
+                    setIsAssignmentModalDirty(true);
+                    setAssignmentDraft({ ...assignmentDraft, area: e.target.value });
+                  }}
                   className="mt-1"
                   data-testid="input-assignment-area"
                 />
@@ -3548,7 +3600,10 @@ export default function WorkboardPage() {
               <label className="text-xs text-muted-foreground">Notes</label>
               <textarea
                 value={assignmentDraft.notes}
-                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, notes: e.target.value })}
+                onChange={(e) => {
+                  setIsAssignmentModalDirty(true);
+                  setAssignmentDraft({ ...assignmentDraft, notes: e.target.value });
+                }}
                 className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 data-testid="input-assignment-notes"
               />
@@ -3564,10 +3619,7 @@ export default function WorkboardPage() {
                     variant="outline"
                     onClick={() => {
                       setWeatherConflictOverride(false);
-                      setAssignmentDialogOpen(false);
-                      setLinkedRequestId(null);
-                      setLinkedRequestTitle(null);
-                      setAssignToAllScheduledCrew(false);
+                      closeAssignmentDialog();
                     }}
                   >
                     Cancel
@@ -3597,7 +3649,7 @@ export default function WorkboardPage() {
           </div>
 
           <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-card px-4 py-3 md:static md:border-t-0 md:bg-transparent md:px-0 md:py-2">
-            <Button className="min-h-11" variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); setLinkedRequestTitle(null); setAssignToAllScheduledCrew(false); setWeatherConflictOverride(false); }}>
+            <Button className="min-h-11" variant="outline" onClick={() => closeAssignmentDialog()}>
               Cancel
             </Button>
             <Button

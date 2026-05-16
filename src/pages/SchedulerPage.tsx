@@ -101,6 +101,7 @@ export default function SchedulerPage() {
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [isShiftModalDirty, setIsShiftModalDirty] = useState(false);
   const [copyWeekDialogOpen, setCopyWeekDialogOpen] = useState(false);
   const [copyAssignmentsChecked, setCopyAssignmentsChecked] = useState(false);
   const [copyWeekSaving, setCopyWeekSaving] = useState(false);
@@ -410,6 +411,7 @@ export default function SchedulerPage() {
       notes: '',
     });
     setSelectedTemplateId('');
+    setIsShiftModalDirty(false);
     setDialogOpen(true);
   }
 
@@ -425,11 +427,17 @@ export default function SchedulerPage() {
       notes: ext.notes ?? '',
     });
     setSelectedTemplateId('');
+    setIsShiftModalDirty(false);
     setDialogOpen(true);
   }
 
-  function handleCloseModal() {
+  function handleCloseModal(forceDiscard = false) {
+    if (!forceDiscard && isShiftModalDirty) {
+      const shouldDiscard = window.confirm('You have unsaved changes. Discard?');
+      if (!shouldDiscard) return;
+    }
     setDialogOpen(false);
+    setIsShiftModalDirty(false);
     setSelectedTemplateId('');
     setDraft((cur) => ({
       ...cur,
@@ -438,6 +446,16 @@ export default function SchedulerPage() {
       notes: '',
     }));
   }
+
+  useEffect(() => {
+    if (!dialogOpen || !isShiftModalDirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dialogOpen, isShiftModalDirty]);
 
   async function handleSaveShift() {
     if (isReadOnly) return;
@@ -513,7 +531,7 @@ export default function SchedulerPage() {
     }
 
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-    handleCloseModal();
+    handleCloseModal(true);
     const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : 'crew member';
     toast.success(existing ? `Shift updated for ${employeeName}` : `Shift added for ${employeeName}`);
   }
@@ -530,7 +548,7 @@ export default function SchedulerPage() {
       .eq('org_id', currentUser?.orgId ?? '');
     if (error) { toast.error(`Failed to delete shift: ${error.message}`); return; }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-    handleCloseModal();
+    handleCloseModal(true);
     const removedEmployee = employeeList.find((e) => e.id === draft.employeeId);
     const removedName = removedEmployee ? `${removedEmployee.firstName} ${removedEmployee.lastName}` : 'crew member';
     toast.success(`Shift removed for ${removedName}`);
@@ -1320,7 +1338,10 @@ export default function SchedulerPage() {
               <label className="text-xs text-muted-foreground">Crew member</label>
               <select
                 value={draft.employeeId}
-                onChange={(e) => setDraft({ ...draft, employeeId: e.target.value })}
+                onChange={(e) => {
+                  setIsShiftModalDirty(true);
+                  setDraft({ ...draft, employeeId: e.target.value });
+                }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-shift-employee"
               >
@@ -1338,7 +1359,10 @@ export default function SchedulerPage() {
               <label className="text-xs text-muted-foreground">Date</label>
               <select
                 value={draft.date}
-                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+                onChange={(e) => {
+                  setIsShiftModalDirty(true);
+                  setDraft({ ...draft, date: e.target.value });
+                }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-shift-date"
               >
@@ -1353,7 +1377,10 @@ export default function SchedulerPage() {
               <label className="text-xs text-muted-foreground">Status</label>
               <select
                 value={draft.status}
-                onChange={(e) => setDraft({ ...draft, status: e.target.value as ScheduleEntry['status'] })}
+                onChange={(e) => {
+                  setIsShiftModalDirty(true);
+                  setDraft({ ...draft, status: e.target.value as ScheduleEntry['status'] });
+                }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-shift-status"
               >
@@ -1376,6 +1403,7 @@ export default function SchedulerPage() {
                       setSelectedTemplateId(nextId);
                       const template = shiftTemplates.find((item) => item.id === nextId);
                       if (template) {
+                        setIsShiftModalDirty(true);
                         setDraft((current) => ({
                           ...current,
                           shiftStart: template.start.slice(0, 5),
@@ -1398,7 +1426,10 @@ export default function SchedulerPage() {
                   <Input
                     type="time"
                     value={draft.shiftStart}
-                    onChange={(e) => setDraft({ ...draft, shiftStart: e.target.value })}
+                    onChange={(e) => {
+                      setIsShiftModalDirty(true);
+                      setDraft({ ...draft, shiftStart: e.target.value });
+                    }}
                     className="mt-1"
                     disabled={schedulerDefaultsLoading && !schedulerDefaults.start}
                     data-testid="input-shift-start"
@@ -1409,7 +1440,10 @@ export default function SchedulerPage() {
                   <Input
                     type="time"
                     value={draft.shiftEnd}
-                    onChange={(e) => setDraft({ ...draft, shiftEnd: e.target.value })}
+                    onChange={(e) => {
+                      setIsShiftModalDirty(true);
+                      setDraft({ ...draft, shiftEnd: e.target.value });
+                    }}
                     className="mt-1"
                     disabled={schedulerDefaultsLoading && !schedulerDefaults.start}
                     data-testid="input-shift-end"
@@ -1436,7 +1470,10 @@ export default function SchedulerPage() {
               <label className="text-xs text-muted-foreground">Notes</label>
               <Textarea
                 value={draft.notes}
-                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                onChange={(e) => {
+                  setIsShiftModalDirty(true);
+                  setDraft({ ...draft, notes: e.target.value });
+                }}
                 placeholder="Optional shift note"
                 className="mt-1 min-h-20 resize-y"
                 data-testid="input-shift-notes"
@@ -1453,7 +1490,7 @@ export default function SchedulerPage() {
               <span />
             )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleCloseModal}>Cancel</Button>
+              <Button variant="outline" onClick={() => handleCloseModal()}>Cancel</Button>
               <Button onClick={() => void handleSaveShift()} disabled={isSaving} data-testid="button-save-shift">
                 {isSaving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Shift'}
               </Button>

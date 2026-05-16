@@ -87,6 +87,7 @@ export default function EmployeesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [addDraft, setAddDraft] = useState<AddEmployeeDraft>(emptyAddDraft);
   const [addSaving, setAddSaving] = useState(false);
+  const [isAddModalDirty, setIsAddModalDirty] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<EditEmployeeDraft | null>(null);
@@ -146,13 +147,29 @@ export default function EmployeesPage() {
 
   const openAddModal = useCallback(() => {
     setAddDraft(emptyAddDraft());
+    setIsAddModalDirty(false);
     setAddOpen(true);
   }, []);
 
-  const closeAddModal = useCallback(() => {
+  const closeAddModal = useCallback((forceDiscard = false) => {
+    if (!forceDiscard && isAddModalDirty) {
+      const shouldDiscard = window.confirm('You have unsaved changes. Discard?');
+      if (!shouldDiscard) return;
+    }
     setAddOpen(false);
     setAddDraft(emptyAddDraft());
-  }, []);
+    setIsAddModalDirty(false);
+  }, [isAddModalDirty]);
+
+  useEffect(() => {
+    if (!addOpen || !isAddModalDirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [addOpen, isAddModalDirty]);
 
   const saveNewEmployee = useCallback(async () => {
     if (isReadOnly) return;
@@ -180,7 +197,7 @@ export default function EmployeesPage() {
       return;
     }
 
-    closeAddModal();
+    closeAddModal(true);
     await fetchPageData();
     toast.success(`Added employee: ${addDraft.first_name.trim()} ${addDraft.last_name.trim()}`);
   }, [addDraft, closeAddModal, fetchPageData, isReadOnly, orgId]);
@@ -474,7 +491,16 @@ export default function EmployeesPage() {
         )}
       </div>
 
-      <Dialog open={addOpen && !isReadOnly} onOpenChange={setAddOpen}>
+      <Dialog
+        open={addOpen && !isReadOnly}
+        onOpenChange={(open) => {
+          if (open) {
+            setAddOpen(true);
+            return;
+          }
+          closeAddModal();
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Employee</DialogTitle>
@@ -483,24 +509,24 @@ export default function EmployeesPage() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs text-muted-foreground">First Name</label>
-                <Input className="mt-1" value={addDraft.first_name} onChange={(event) => setAddDraft({ ...addDraft, first_name: event.target.value })} required />
+                <Input className="mt-1" value={addDraft.first_name} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, first_name: event.target.value }); }} required />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground">Last Name</label>
-                <Input className="mt-1" value={addDraft.last_name} onChange={(event) => setAddDraft({ ...addDraft, last_name: event.target.value })} required />
+                <Input className="mt-1" value={addDraft.last_name} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, last_name: event.target.value }); }} required />
               </div>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Role</label>
-              <Input className="mt-1" value={addDraft.role} onChange={(event) => setAddDraft({ ...addDraft, role: event.target.value })} placeholder="Field Staff" />
+              <Input className="mt-1" value={addDraft.role} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, role: event.target.value }); }} placeholder="Field Staff" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Department</label>
-              <Input className="mt-1" value={addDraft.department} onChange={(event) => setAddDraft({ ...addDraft, department: event.target.value })} placeholder="Maintenance" />
+              <Input className="mt-1" value={addDraft.department} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, department: event.target.value }); }} placeholder="Maintenance" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Property</label>
-              <select value={addDraft.property_id} onChange={(event) => setAddDraft({ ...addDraft, property_id: event.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+              <select value={addDraft.property_id} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, property_id: event.target.value }); }} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">No property</option>
                 {properties.map((property) => (
                   <option key={property.id} value={property.id}>
@@ -513,7 +539,7 @@ export default function EmployeesPage() {
               <label className="text-xs text-muted-foreground">Status</label>
               <select
                 value={addDraft.status}
-                onChange={(event) => setAddDraft({ ...addDraft, status: event.target.value as 'active' | 'inactive' })}
+                onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, status: event.target.value as 'active' | 'inactive' }); }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="active">Active</option>
@@ -528,7 +554,7 @@ export default function EmployeesPage() {
                 min="0"
                 step="0.01"
                 value={addDraft.hourly_rate}
-                onChange={(event) => setAddDraft({ ...addDraft, hourly_rate: event.target.value })}
+                onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, hourly_rate: event.target.value }); }}
                 placeholder="0.00"
               />
             </div>
@@ -537,7 +563,7 @@ export default function EmployeesPage() {
             </p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={closeAddModal}>
+            <Button variant="outline" onClick={() => closeAddModal()}>
               Cancel
             </Button>
             <Button onClick={() => void saveNewEmployee()} disabled={addSaving || !addDraft.first_name.trim() || !addDraft.last_name.trim()}>
