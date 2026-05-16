@@ -886,10 +886,59 @@ export default function CommandCenterOperationalPage() {
           <p>
             👥 Crew: {crewScheduledCount} scheduled | ✅ Tasks: {tasksAssignedCount} assigned
           </p>
+          <div className="flex flex-wrap gap-3">
+            {crewScheduledCount === 0 ? (
+              <button
+                type="button"
+                className="text-xs font-medium text-primary underline hover:text-primary/80"
+                onClick={() => navigate('/app/scheduler')}
+              >
+                Schedule Crew
+              </button>
+            ) : null}
+            {tasksAssignedCount === 0 ? (
+              <button
+                type="button"
+                className="text-xs font-medium text-primary underline hover:text-primary/80"
+                onClick={() => navigate('/app/workboard?quickPlan=1')}
+              >
+                Quick Plan
+              </button>
+            ) : null}
+            {crewScheduledCount > 0 && tasksAssignedCount > 0 ? (
+              <button
+                type="button"
+                className="text-xs font-medium text-primary underline hover:text-primary/80"
+                onClick={() => navigate('/app/workboard')}
+              >
+                Open Workboard
+              </button>
+            ) : null}
+          </div>
           <p>🌤️ Weather: {morningWeatherLine}</p>
+          <div>
+            <button
+              type="button"
+              className="text-xs font-medium text-primary underline hover:text-primary/80"
+              onClick={() => navigate('/app/weather')}
+            >
+              View Full Weather
+            </button>
+          </div>
           <p>
             ⚠️ Alerts: {overdueEquipmentCount} equipment overdue | {openNeedsCount} open needs
           </p>
+          {overdueEquipmentCount > 0 ? (
+            <div>
+              <button
+                type="button"
+                className="text-xs font-medium text-primary underline hover:text-primary/80"
+                onClick={() => navigate('/app/equipment')}
+              >
+                Review Equipment
+              </button>
+            </div>
+          ) : null}
         </div>
       </Card>
 
