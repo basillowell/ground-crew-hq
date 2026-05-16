@@ -301,13 +301,13 @@ export function AppLayout({ children }: AppLayoutProps) {
           />
         ) : null}
         <div
-          className={`fixed inset-y-0 left-0 z-40 w-72 overflow-y-auto transform bg-background transition-transform duration-200 ease-in-out md:translate-x-0 ${
+          className={`fixed top-0 left-0 h-screen w-60 overflow-y-auto z-40 bg-sidebar border-r flex flex-col transform transition-transform duration-200 ease-in-out ${
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           }`}
         >
           <AppSidebarRefined onNavigate={closeMobileSidebar} />
         </div>
-        <div className={`flex h-screen min-w-0 flex-1 flex-col overflow-hidden md:ml-72 ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
+        <div className={`ml-0 md:ml-60 min-h-screen overflow-y-auto flex min-w-0 flex-1 flex-col ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
           <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}
@@ -334,7 +334,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               setDepartment,
             }}
           >
-            <main className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,248,246,1))]">
+            <main className="flex-1 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,248,246,1))]">
               <div className="md:hidden border-b bg-background/85 px-4 py-2">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Workflow Date</div>
                 <div className="text-sm font-medium text-foreground">
