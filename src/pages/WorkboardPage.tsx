@@ -360,6 +360,7 @@ export default function WorkboardPage() {
   const [quickPlanSuggestions, setQuickPlanSuggestions] = useState<QuickPlanSuggestion[]>([]);
   const [selectedQuickPlanIds, setSelectedQuickPlanIds] = useState<string[]>([]);
   const [quickPlanEmptyMessage, setQuickPlanEmptyMessage] = useState<string | null>(null);
+  const [assignToAllScheduledCrew, setAssignToAllScheduledCrew] = useState(false);
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
     scheduledCrew: false,
     weather: true,
@@ -1656,6 +1657,7 @@ export default function WorkboardPage() {
       status: 'planned',
       notes: '',
     });
+    setAssignToAllScheduledCrew(false);
     setAssignmentDialogOpen(true);
   }
 
@@ -1684,6 +1686,7 @@ export default function WorkboardPage() {
       status: assignment.status,
       notes: '',
     });
+    setAssignToAllScheduledCrew(false);
     setAssignmentDialogOpen(true);
   }
 
@@ -1708,6 +1711,7 @@ export default function WorkboardPage() {
       status: 'planned',
       notes: request.notes ?? '',
     });
+    setAssignToAllScheduledCrew(false);
     setAssignmentDialogOpen(true);
   }
 
@@ -1716,7 +1720,12 @@ export default function WorkboardPage() {
       toast.info('Demo mode is read-only.');
       return;
     }
-    if (!supabase || !assignmentDraft.employeeId || !assignmentDraft.taskId) return;
+    if (!supabase || !assignmentDraft.taskId) return;
+    if (!assignToAllScheduledCrew && !assignmentDraft.employeeId) return;
+    if (assignToAllScheduledCrew && !editingAssignmentId && scheduledEmployees.length === 0) {
+      toast.error('No scheduled crew available for bulk assign.');
+      return;
+    }
     const resolvedPropertyId =
       (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ??
       assignmentDraft.propertyId ??
@@ -1767,28 +1776,87 @@ export default function WorkboardPage() {
     }
 
 
+    let error: { message?: string; code?: string } | null = null;
     const assignmentId = editingAssignmentId ?? makeId();
-    const basePayload: Record<string, unknown> = {
-      id: assignmentId,
-      org_id: currentUser?.orgId ?? null,
-      employee_id: assignmentDraft.employeeId,
-      property_id: resolvedPropertyId,
-      task_id: selectedTaskId,
-      title: selectedTaskName,
-      date: boardDate,
-      status: 'planned',
-      estimated_hours: estimatedHours,
-      order_index: existingEmployeeAssignments.length,
-    };
-    if (assignmentDraft.startTime) basePayload.start_time = assignmentDraft.startTime;
-    if (assignmentDraft.area.trim()) basePayload.location = assignmentDraft.area.trim();
-    if (assignmentDraft.notes.trim()) basePayload.notes = assignmentDraft.notes.trim();
-    if (assignmentDraft.equipmentId) {
-      basePayload.equipment_unit_id = assignmentDraft.equipmentId;
-      basePayload.equipment_id = assignmentDraft.equipmentId;
+
+    if (assignToAllScheduledCrew && !editingAssignmentId) {
+      const scheduledByEmployee = new Map(
+        scheduleList
+          .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
+          .map((entry) => [entry.employeeId, entry]),
+      );
+      const rowsToInsert: Record<string, unknown>[] = [];
+      const orderIndexByEmployee = dayAssignments.reduce<Record<string, number>>((acc, assignment) => {
+        acc[assignment.employeeId] = (acc[assignment.employeeId] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      scheduledEmployees.forEach((employee) => {
+        const shift = scheduledByEmployee.get(employee.id);
+        const propertyIdForEmployee =
+          (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : shift?.propertyId) ??
+          activeProperty?.id ??
+          properties[0]?.id ??
+          null;
+        if (!propertyIdForEmployee) return;
+        const nextOrder = (orderIndexByEmployee[employee.id] ?? 0) + 1;
+        orderIndexByEmployee[employee.id] = nextOrder;
+        const row: Record<string, unknown> = {
+          id: makeId(),
+          org_id: currentUser?.orgId ?? null,
+          employee_id: employee.id,
+          property_id: propertyIdForEmployee,
+          task_id: selectedTaskId,
+          title: selectedTaskName,
+          date: boardDate,
+          status: 'planned',
+          estimated_hours: estimatedHours,
+          order_index: nextOrder,
+        };
+        if (assignmentDraft.startTime) row.start_time = assignmentDraft.startTime;
+        if (assignmentDraft.area.trim()) row.location = assignmentDraft.area.trim();
+        if (assignmentDraft.notes.trim()) row.notes = assignmentDraft.notes.trim();
+        if (assignmentDraft.equipmentId) {
+          row.equipment_unit_id = assignmentDraft.equipmentId;
+          row.equipment_id = assignmentDraft.equipmentId;
+        }
+        rowsToInsert.push(row);
+      });
+
+      if (rowsToInsert.length === 0) {
+        toast.error('No scheduled crew available for bulk assign.');
+        return;
+      }
+      const insertResult = await supabase.from('assignments').insert(rowsToInsert);
+      error = insertResult.error;
+      if (!error) {
+        toast.success(`Assigned ${selectedTaskName} to ${rowsToInsert.length} crew members.`);
+      }
+    } else {
+      const basePayload: Record<string, unknown> = {
+        id: assignmentId,
+        org_id: currentUser?.orgId ?? null,
+        employee_id: assignmentDraft.employeeId,
+        property_id: resolvedPropertyId,
+        task_id: selectedTaskId,
+        title: selectedTaskName,
+        date: boardDate,
+        status: 'planned',
+        estimated_hours: estimatedHours,
+        order_index: existingEmployeeAssignments.length,
+      };
+      if (assignmentDraft.startTime) basePayload.start_time = assignmentDraft.startTime;
+      if (assignmentDraft.area.trim()) basePayload.location = assignmentDraft.area.trim();
+      if (assignmentDraft.notes.trim()) basePayload.notes = assignmentDraft.notes.trim();
+      if (assignmentDraft.equipmentId) {
+        basePayload.equipment_unit_id = assignmentDraft.equipmentId;
+        basePayload.equipment_id = assignmentDraft.equipmentId;
+      }
+      const upsertResult = await supabase.from('assignments').upsert(basePayload);
+      error = upsertResult.error;
     }
-    let { error } = await supabase.from('assignments').upsert(basePayload);
-    if (error) {
+
+    if (error && !(assignToAllScheduledCrew && !editingAssignmentId)) {
       const fallbackPayload: Record<string, unknown> = {
         id: assignmentId,
         org_id: currentUser?.orgId ?? null,
@@ -1817,18 +1885,20 @@ export default function WorkboardPage() {
       return;
     }
 
-    const optimisticAssignment: Assignment = {
-      id: assignmentId,
-      employeeId: assignmentDraft.employeeId,
-      taskId: selectedTaskId,
-      equipmentId: assignmentDraft.equipmentId || undefined,
-      date: boardDate,
-      startTime: assignmentDraft.startTime || '06:00',
-      duration: estimatedMinutes,
-      area: assignmentDraft.area.trim() || 'Primary zone',
-      status: assignmentDraft.status ?? 'planned',
-    };
-    upsertAssignmentInCache(optimisticAssignment);
+    if (!(assignToAllScheduledCrew && !editingAssignmentId)) {
+      const optimisticAssignment: Assignment = {
+        id: assignmentId,
+        employeeId: assignmentDraft.employeeId,
+        taskId: selectedTaskId,
+        equipmentId: assignmentDraft.equipmentId || undefined,
+        date: boardDate,
+        startTime: assignmentDraft.startTime || '06:00',
+        duration: estimatedMinutes,
+        area: assignmentDraft.area.trim() || 'Primary zone',
+        status: assignmentDraft.status ?? 'planned',
+      };
+      upsertAssignmentInCache(optimisticAssignment);
+    }
 
     if (linkedRequestId) {
       await supabase
@@ -1848,12 +1918,15 @@ export default function WorkboardPage() {
     setLinkedRequestId(null);
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
+    setAssignToAllScheduledCrew(false);
     setAssignmentDialogOpen(false);
-    toast(editingAssignmentId ? 'Assignment updated' : 'Assignment dispatched', {
-      description: editingAssignmentId
-        ? 'The crew board has been updated.'
-        : 'Task has been dispatched to the crew member.',
-    });
+    if (!(assignToAllScheduledCrew && !editingAssignmentId)) {
+      toast(editingAssignmentId ? 'Assignment updated' : 'Assignment dispatched', {
+        description: editingAssignmentId
+          ? 'The crew board has been updated.'
+          : 'Task has been dispatched to the crew member.',
+      });
+    }
   }
 
   async function removeAssignment(assignmentId: string) {
@@ -3017,6 +3090,7 @@ export default function WorkboardPage() {
           if (!nextOpen) {
             setLinkedRequestId(null);
             setLinkedRequestTitle(null);
+            setAssignToAllScheduledCrew(false);
           }
         }}
       >
@@ -3037,26 +3111,28 @@ export default function WorkboardPage() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Crew member</label>
-              <select
-                value={assignmentDraft.employeeId}
-                onChange={(e) => setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                data-testid="select-assignment-employee"
-              >
-                {fallbackEligibleEmployees.length === 0 && <option value="">No employees available</option>}
-                {fallbackEligibleEmployees.map((e) => {
-                  const shift = getShiftForEmployee(scheduleList, e.id, boardDate);
-                  const shiftStr = shift ? ` (${formatTime(shift.shiftStart)}–${formatTime(shift.shiftEnd)})` : '';
-                  return (
-                    <option key={e.id} value={e.id}>
-                      {e.firstName} {e.lastName}{shiftStr} · {e.group}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+            {!assignToAllScheduledCrew || editingAssignmentId ? (
+              <div className="col-span-2">
+                <label className="text-xs text-muted-foreground">Crew member</label>
+                <select
+                  value={assignmentDraft.employeeId}
+                  onChange={(e) => setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value })}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  data-testid="select-assignment-employee"
+                >
+                  {fallbackEligibleEmployees.length === 0 && <option value="">No employees available</option>}
+                  {fallbackEligibleEmployees.map((e) => {
+                    const shift = getShiftForEmployee(scheduleList, e.id, boardDate);
+                    const shiftStr = shift ? ` (${formatTime(shift.shiftStart)}–${formatTime(shift.shiftEnd)})` : '';
+                    return (
+                      <option key={e.id} value={e.id}>
+                        {e.firstName} {e.lastName}{shiftStr} · {e.group}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            ) : null}
             {effectivePropertyId === 'all' ? (
               <div className="col-span-2">
                 <label className="text-xs text-muted-foreground">Property</label>
@@ -3131,6 +3207,29 @@ export default function WorkboardPage() {
                 + Manage task library
               </button>
             </div>
+
+            {!editingAssignmentId ? (
+              <div className="col-span-2 rounded-lg border bg-muted/20 px-3 py-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={assignToAllScheduledCrew}
+                    onChange={(e) => setAssignToAllScheduledCrew(e.target.checked)}
+                  />
+                  Assign to all scheduled crew
+                </label>
+                {assignToAllScheduledCrew && assignmentDraft.taskId ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Will assign{' '}
+                    <span className="font-medium text-foreground">
+                      {taskLibrary.find((task) => task.id === assignmentDraft.taskId)?.name ?? 'selected task'}
+                    </span>{' '}
+                    to {scheduledEmployees.length} crew member{scheduledEmployees.length === 1 ? '' : 's'}:{' '}
+                    {scheduledEmployees.map((employee) => `${employee.firstName} ${employee.lastName}`).join(', ')}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Equipment</label>
@@ -3213,7 +3312,7 @@ export default function WorkboardPage() {
           </div>
 
           <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-card px-4 py-3 md:static md:border-t-0 md:bg-transparent md:px-0 md:py-2">
-            <Button className="min-h-11" variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); setLinkedRequestTitle(null); }}>
+            <Button className="min-h-11" variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); setLinkedRequestTitle(null); setAssignToAllScheduledCrew(false); }}>
               Cancel
             </Button>
             <Button className="min-h-11" onClick={saveAssignment} data-testid="button-save-assignment">
