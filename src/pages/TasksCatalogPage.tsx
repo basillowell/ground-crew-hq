@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { handleSupabaseError } from '@/utils/handleSupabaseError';
 
 type TaskListItem = {
   id: string;
@@ -59,7 +60,7 @@ export default function TasksCatalogPage() {
       if (queryError) throw queryError;
       setTasks((data ?? []) as TaskListItem[]);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load tasks.';
+      const message = handleSupabaseError(err, 'TasksCatalogPage.fetchTasks') || 'Failed to load tasks.';
       setError(message);
       setTasks([]);
     } finally {

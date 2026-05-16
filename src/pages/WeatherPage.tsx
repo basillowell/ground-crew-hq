@@ -34,6 +34,7 @@ import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo'
 import { DEFAULT_WEATHER_LOCATION, useWeather, getWeatherIconMeta } from '@/lib/weather';
 import { fetchAndLogOpenMeteoWeather } from '@/lib/weather/fetchAndLog';
 import { supabase } from '@/lib/supabase';
+import { handleSupabaseError } from '@/utils/handleSupabaseError';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperties, useProgramSettings, useWeatherLocations, useWorkLocations } from '@/lib/supabase-queries';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -918,8 +919,9 @@ export default function WeatherPage() {
         });
       }
     } catch (error) {
+      const message = handleSupabaseError(error, 'WeatherPage.handleLocationSearch');
       toast('Location search failed', {
-        description: (error as Error)?.message ?? 'Could not search Open-Meteo geocoding.',
+        description: message || 'Could not search Open-Meteo geocoding.',
       });
     } finally {
       setLocationSearchLoading(false);
@@ -1005,8 +1007,9 @@ export default function WeatherPage() {
         });
       }
     } catch (error) {
+      const message = handleSupabaseError(error, 'WeatherPage.handleOnboardingSearch');
       toast('Location search failed', {
-        description: (error as Error)?.message ?? 'Could not search Open-Meteo geocoding.',
+        description: message || 'Could not search Open-Meteo geocoding.',
       });
     } finally {
       setOnboardingSearchLoading(false);
@@ -1106,8 +1109,9 @@ export default function WeatherPage() {
         navigate('/app/settings?section=properties');
       }
     } catch (error) {
+      const message = handleSupabaseError(error, 'WeatherPage.handleSaveOnboardingWeatherArea');
       toast('Setup failed', {
-        description: (error as Error)?.message ?? 'Could not complete weather setup.',
+        description: message || 'Could not complete weather setup.',
       });
     } finally {
       setOnboardingSaving(false);
@@ -2067,8 +2071,9 @@ export default function WeatherPage() {
       await saveSelectedLocation();
       return true;
     } catch (error) {
+      const message = handleSupabaseError(error, 'WeatherPage.handleDrawerLocationChange');
       toast.error('Could not save weather area', {
-        description: (error as Error)?.message ?? 'Unknown save failure',
+        description: message || 'Unknown save failure',
       });
       return false;
     }

@@ -2,6 +2,7 @@ import { createEvents, type EventAttributes } from 'ics';
 import type { Employee, ScheduleEntry } from '@/data/seedData';
 import { supabase } from '@/lib/supabase';
 import { fetchOpenMeteoWeather, type OpenMeteoWeatherPayload } from '@/lib/openMeteo';
+import { handleSupabaseError } from '@/utils/handleSupabaseError';
 
 export type IntegrationResult<T> = {
   ok: boolean;
@@ -167,7 +168,7 @@ export async function sendSmsNotification(payload: { to: string; message: string
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : 'SMS delivery failed.',
+      error: handleSupabaseError(error, 'integrations.sendSmsNotification') || 'SMS delivery failed.',
     };
   }
 }

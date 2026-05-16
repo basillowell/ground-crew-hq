@@ -3,7 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { toast, Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
@@ -93,6 +93,18 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
     // Intentionally swallow here and render a recoverable UI instead of crashing the session.
   }
 
+  private reportIssue = () => {
+    const message = this.state.message || "Unknown runtime error";
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(message);
+    }
+    const subject = encodeURIComponent("Ground Crew HQ — Runtime Error Report");
+    const body = encodeURIComponent(`Please review this runtime error:\n\n${message}`);
+    if (typeof window !== "undefined") {
+      window.location.href = `mailto:support@groundcrewhq.com?subject=${subject}&body=${body}`;
+    }
+  };
+
   render() {
     if (!this.state.hasError) {
       return this.props.children;
@@ -121,11 +133,21 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
             >
               Return to Login
             </button>
+            <button
+              className="h-10 rounded-md border px-4 text-sm"
+              onClick={this.reportIssue}
+            >
+              Report Issue
+            </button>
           </div>
         </div>
       </div>
     );
   }
+}
+
+function RouteElementBoundary({ children }: { children: ReactNode }) {
+  return <RouteErrorBoundary>{children}</RouteErrorBoundary>;
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -205,31 +227,39 @@ function LandingRoute() {
 
 function AppRoutes() {
   return (
-    <RouteErrorBoundary>
-      <AppLayout>
-        <Routes>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Suspense fallback={<PageRouteFallback />}><CommandCenterPage /></Suspense>} />
-          <Route path="workboard" element={<Suspense fallback={<PageRouteFallback />}><WorkboardPage /></Suspense>} />
-          <Route path="employees" element={<Suspense fallback={<PageRouteFallback />}><EmployeesPage /></Suspense>} />
-          <Route path="scheduler" element={<Suspense fallback={<PageRouteFallback />}><SchedulerPage key="scheduler-route" /></Suspense>} />
-          <Route path="equipment" element={<Suspense fallback={<PageRouteFallback />}><EquipmentPage /></Suspense>} />
-          <Route path="breakroom" element={<Suspense fallback={<PageRouteFallback />}><BreakroomPage /></Suspense>} />
-          <Route path="weather" element={<Suspense fallback={<PageRouteFallback />}><WeatherPage /></Suspense>} />
-          <Route path="applications" element={<Suspense fallback={<PageRouteFallback />}><ApplicationsPage /></Suspense>} />
-          <Route path="messaging" element={<Suspense fallback={<PageRouteFallback />}><MessagingPage /></Suspense>} />
-          <Route path="reports" element={<Suspense fallback={<PageRouteFallback />}><ReportsPage /></Suspense>} />
-          <Route path="safety" element={<Suspense fallback={<PageRouteFallback />}><SafetyPage /></Suspense>} />
-          <Route path="settings" element={<Suspense fallback={<PageRouteFallback />}><SettingsPage /></Suspense>} />
-          <Route path="field" element={<Suspense fallback={<PageRouteFallback />}><MobileFieldPage /></Suspense>} />
-        </Routes>
-      </AppLayout>
-    </RouteErrorBoundary>
+    <AppLayout>
+      <Routes>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><CommandCenterPage /></Suspense></RouteElementBoundary>} />
+        <Route path="workboard" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><WorkboardPage /></Suspense></RouteElementBoundary>} />
+        <Route path="employees" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><EmployeesPage /></Suspense></RouteElementBoundary>} />
+        <Route path="scheduler" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><SchedulerPage key="scheduler-route" /></Suspense></RouteElementBoundary>} />
+        <Route path="equipment" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><EquipmentPage /></Suspense></RouteElementBoundary>} />
+        <Route path="breakroom" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><BreakroomPage /></Suspense></RouteElementBoundary>} />
+        <Route path="weather" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><WeatherPage /></Suspense></RouteElementBoundary>} />
+        <Route path="applications" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><ApplicationsPage /></Suspense></RouteElementBoundary>} />
+        <Route path="messaging" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><MessagingPage /></Suspense></RouteElementBoundary>} />
+        <Route path="reports" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><ReportsPage /></Suspense></RouteElementBoundary>} />
+        <Route path="safety" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><SafetyPage /></Suspense></RouteElementBoundary>} />
+        <Route path="settings" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><SettingsPage /></Suspense></RouteElementBoundary>} />
+        <Route path="field" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><MobileFieldPage /></Suspense></RouteElementBoundary>} />
+      </Routes>
+    </AppLayout>
   );
 }
 
 function AppWithNotificationSetup() {
   const { currentUser } = useAuth();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (event: PromiseRejectionEvent) => {
+      console.error("[UnhandledRejection]", event.reason);
+      toast.error("Something went wrong. Your data is safe.");
+    };
+    window.addEventListener("unhandledrejection", handler);
+    return () => window.removeEventListener("unhandledrejection", handler);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !currentUser) return;
@@ -330,8 +360,8 @@ function AppWithNotificationSetup() {
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<LandingRoute />} />
-          <Route path="/pricing" element={<Suspense fallback={<RouteFallback />}><PricingPage /></Suspense>} />
+          <Route path="/" element={<RouteElementBoundary><LandingRoute /></RouteElementBoundary>} />
+          <Route path="/pricing" element={<RouteElementBoundary><Suspense fallback={<RouteFallback />}><PricingPage /></Suspense></RouteElementBoundary>} />
           <Route
             path="/app/*"
             element={(
@@ -340,7 +370,7 @@ function AppWithNotificationSetup() {
               </ProtectedRoute>
             )}
           />
-          <Route path="*" element={<Suspense fallback={<RouteFallback />}><NotFound /></Suspense>} />
+          <Route path="*" element={<RouteElementBoundary><Suspense fallback={<RouteFallback />}><NotFound /></Suspense></RouteElementBoundary>} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
