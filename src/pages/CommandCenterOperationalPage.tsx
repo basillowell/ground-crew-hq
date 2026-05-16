@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
 
 function SummaryCard({
@@ -52,14 +52,14 @@ function OpsSignalCard({
 }) {
   const toneClass =
     tone === 'good'
-      ? 'border-emerald-200/70 bg-emerald-50/60'
+      ? 'border-green-500 bg-emerald-50/60'
       : tone === 'warning'
-        ? 'border-amber-200/70 bg-amber-50/60'
+        ? 'border-yellow-500 bg-amber-50/60'
         : tone === 'critical'
-          ? 'border-red-200/70 bg-red-50/50'
-          : 'border-border bg-card';
+          ? 'border-red-500 bg-red-50/50'
+          : 'border-gray-400 bg-card';
   return (
-    <Card className={`rounded-2xl p-5 shadow-sm ${toneClass}`}>
+    <Card className={`rounded-2xl border-l-4 p-5 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${toneClass}`}>
       <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{title}</div>
       <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
       <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
@@ -605,48 +605,65 @@ export default function CommandCenterOperationalPage() {
       };
     }
     const current = selectedWeatherQuery.data.current;
-    if (current.windSpeed >= 20 || current.weatherCode >= 95) {
+    const temperature = Math.round(current.temperature);
+    const windSpeed = Math.round(current.windSpeed);
+    const rainChance = Math.round(Number((current as { precipitationProbability?: number }).precipitationProbability ?? 0));
+    if (temperature > 100 || windSpeed > 15 || rainChance > 60) {
       return {
-        value: `${Math.round(current.temperature)}F / High Risk`,
+        value: `${temperature}F / High Risk`,
         subtitle: `Wind ${Math.round(current.windSpeed)} mph · review field plans`,
         tone: 'critical' as const,
       };
     }
-    if (current.windSpeed >= 12) {
+    if ((temperature >= 90 && temperature <= 100) || (windSpeed >= 10 && windSpeed <= 15)) {
       return {
-        value: `${Math.round(current.temperature)}F / Caution`,
+        value: `${temperature}F / Caution`,
         subtitle: `Wind ${Math.round(current.windSpeed)} mph · monitor spray windows`,
         tone: 'warning' as const,
       };
     }
     return {
-      value: `${Math.round(current.temperature)}F / Stable`,
+      value: `${temperature}F / Stable`,
       subtitle: `Wind ${Math.round(current.windSpeed)} mph · normal operating window`,
       tone: 'good' as const,
     };
   }, [selectedProperty, selectedWeatherQuery.data, selectedWeatherQuery.error, selectedWeatherQuery.isLoading]);
 
+  const scheduleCoveragePercent = useMemo(() => {
+    if (crewScheduledCount === 0) return 0;
+    const covered = crewScheduledCount - unassignedScheduledCount;
+    return Math.round((covered / crewScheduledCount) * 100);
+  }, [crewScheduledCount, unassignedScheduledCount]);
+
   const coverageSummary = useMemo(() => {
     if (crewScheduledCount === 0) {
       return {
-        value: 'No shifts scheduled',
+        value: '0% covered',
         subtitle: 'Open Scheduler to assign today’s crew.',
         tone: 'critical' as const,
       };
     }
-    if (unassignedScheduledCount > 0) {
+    if (scheduleCoveragePercent < 50) {
       return {
-        value: `${crewScheduledCount - unassignedScheduledCount}/${crewScheduledCount} covered`,
+        value: `${scheduleCoveragePercent}% covered`,
+        subtitle: `${unassignedScheduledCount} scheduled crew still need assignments`,
+        tone: 'critical' as const,
+      };
+    }
+    if (scheduleCoveragePercent < 80) {
+      return {
+        value: `${scheduleCoveragePercent}% covered`,
         subtitle: `${unassignedScheduledCount} scheduled crew still need assignments`,
         tone: 'warning' as const,
       };
     }
+
     return {
-      value: `${crewScheduledCount}/${crewScheduledCount} covered`,
+      value: `${scheduleCoveragePercent}% covered`,
       subtitle: 'All scheduled crew have assignments.',
       tone: 'good' as const,
     };
-  }, [crewScheduledCount, unassignedScheduledCount]);
+  }, [crewScheduledCount, scheduleCoveragePercent, unassignedScheduledCount]);
 
   const blockersSummary = useMemo(() => {
     const alertCount = notes.filter((note) => note.type === 'alert').length;
@@ -661,7 +678,7 @@ export default function CommandCenterOperationalPage() {
     return {
       value: `${blockers} active blocker${blockers === 1 ? '' : 's'}`,
       subtitle: `${openIssuesCount} equipment issues · ${unassignedScheduledCount} unassigned crew · ${alertCount} alerts`,
-      tone: blockers >= 3 ? ('critical' as const) : ('warning' as const),
+      tone: 'critical' as const,
     };
   }, [notes, openIssuesCount, unassignedScheduledCount]);
   const laborTrendData = useMemo(
@@ -961,10 +978,18 @@ export default function CommandCenterOperationalPage() {
           value={`${tasksAssignedCount} assigned`}
           subtitle={
             tasksAssignedCount === 0
-              ? 'No assignments created yet for today.'
+              ? crewScheduledCount > 0
+                ? 'Crew is scheduled, but no tasks are assigned yet.'
+                : 'No crew and no tasks scheduled yet.'
               : `${pendingAssignmentsCount} still in progress or planned`
           }
-          tone={tasksAssignedCount === 0 ? 'warning' : 'neutral'}
+          tone={
+            tasksAssignedCount > 0
+              ? 'good'
+              : crewScheduledCount > 0
+                ? 'warning'
+                : 'neutral'
+          }
         />
         <OpsSignalCard
           title="Weather Risk"
@@ -978,9 +1003,17 @@ export default function CommandCenterOperationalPage() {
           subtitle={
             equipmentUnits.length === 0
               ? 'Add equipment units to track operational readiness.'
-              : `${openIssuesCount} units flagged as maintenance/out-of-service`
+              : `${overdueEquipmentCount} units overdue for service`
           }
-          tone={equipmentUnits.length === 0 ? 'warning' : openIssuesCount > 0 ? 'warning' : 'good'}
+          tone={
+            equipmentUnits.length === 0
+              ? 'neutral'
+              : overdueEquipmentCount === 0
+                ? 'good'
+                : overdueEquipmentCount <= 2
+                  ? 'warning'
+                  : 'critical'
+          }
         />
         <OpsSignalCard
           title="Schedule Coverage"
@@ -1016,7 +1049,11 @@ export default function CommandCenterOperationalPage() {
                 <div
                   className="pointer-events-none absolute -top-1 bottom-0 w-0.5 bg-foreground/80"
                   style={{ left: `${sprayCurrentMarkerPercent}%` }}
-                />
+                >
+                  <span className="absolute -top-4 -translate-x-1/2 text-[10px] font-medium text-foreground">
+                    Now
+                  </span>
+                </div>
               ) : null}
               <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>6:00 AM</span>
@@ -1046,7 +1083,15 @@ export default function CommandCenterOperationalPage() {
                 <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="scheduled" name="Scheduled" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="scheduled" name="Scheduled" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                  <LabelList
+                    dataKey="scheduled"
+                    position="top"
+                    fontSize={10}
+                    fill="#2563eb"
+                    formatter={(value: number) => value.toFixed(1)}
+                  />
+                </Bar>
                 <Bar dataKey="actual" name="Actual" radius={[4, 4, 0, 0]}>
                   {laborTrendData.map((entry) => (
                     <Cell
@@ -1054,6 +1099,13 @@ export default function CommandCenterOperationalPage() {
                       fill={entry.actual > entry.scheduled ? '#f97316' : '#16a34a'}
                     />
                   ))}
+                  <LabelList
+                    dataKey="actual"
+                    position="top"
+                    fontSize={10}
+                    fill="#166534"
+                    formatter={(value: number) => value.toFixed(1)}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
