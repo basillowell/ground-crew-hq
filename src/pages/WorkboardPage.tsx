@@ -506,12 +506,10 @@ export default function WorkboardPage() {
       if (!supabase) return [] as NeedsQueueRequest[];
       let query = supabase.from('task_requests').select('*').order('priority', { ascending: true }).order('created_at', { ascending: false });
       if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
       const { data, error } = await query;
       if (error) throw error;
-      const normalized = (data ?? []).map((row) => normalizeTaskRequest(row as Record<string, unknown>));
-      return effectivePropertyId && effectivePropertyId !== 'all'
-        ? normalized.filter((r) => r.propertyId === effectivePropertyId)
-        : normalized;
+      return (data ?? []).map((row) => normalizeTaskRequest(row as Record<string, unknown>));
     },
     staleTime: 1000 * 60 * 2,
     refetchInterval: 1000 * 30,

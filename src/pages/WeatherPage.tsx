@@ -374,7 +374,17 @@ export default function WeatherPage() {
 
   useEffect(() => {
     if (weatherLocationsQuery.data) {
-      setWeatherLocations(weatherLocationsQuery.data);
+      let nextLocations = weatherLocationsQuery.data;
+      if (weatherScopePropertyId && weatherScopePropertyId !== 'all') {
+        const scopedProperty = properties.find((property) => property.id === weatherScopePropertyId);
+        const scopedPropertyName = scopedProperty?.name.trim().toLowerCase() ?? '';
+        nextLocations = nextLocations.filter((location) => {
+          if (location.propertyId === weatherScopePropertyId) return true;
+          if (!scopedPropertyName) return false;
+          return (location.property ?? '').trim().toLowerCase() === scopedPropertyName;
+        });
+      }
+      setWeatherLocations(nextLocations);
     }
     if (weatherStationsQuery.data) {
       setWeatherStations(weatherStationsQuery.data);
@@ -385,7 +395,7 @@ export default function WeatherPage() {
     if (rainfallEntriesQuery.data) {
       setRainEntries(rainfallEntriesQuery.data);
     }
-  }, [rainfallEntriesQuery.data, weatherLocationsQuery.data, weatherLogsQuery.data, weatherStationsQuery.data]);
+  }, [properties, rainfallEntriesQuery.data, weatherLocationsQuery.data, weatherLogsQuery.data, weatherScopePropertyId, weatherStationsQuery.data]);
 
   const currentProperty = properties.find((property) => property.id === weatherScopePropertyId) ?? null;
   const hasLocation = hasValidCoordinates(currentProperty?.latitude, currentProperty?.longitude);

@@ -277,7 +277,7 @@ export default function CommandCenterOperationalPage() {
   }, [currentPropertyId, properties]);
   const selectedWeatherQuery = useWeather(selectedProperty?.id);
   const laborTrendQuery = useQuery({
-    queryKey: ['dashboard-labor-trend-7d', orgId ?? 'no-org'],
+    queryKey: ['dashboard-labor-trend-7d', orgId ?? 'no-org', propertyScope ?? 'all'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
@@ -287,12 +287,16 @@ export default function CommandCenterOperationalPage() {
       start.setDate(start.getDate() - 6);
       const startDate = start.toISOString().slice(0, 10);
       const endDate = today.toISOString().slice(0, 10);
-      const { data, error } = await supabase
+      let query = supabase
         .from('assignments')
         .select('date, estimated_hours, actual_hours')
         .eq('org_id', orgId)
         .gte('date', startDate)
         .lte('date', endDate);
+      if (propertyScope && propertyScope !== 'all') {
+        query = query.eq('property_id', propertyScope);
+      }
+      const { data, error } = await query;
       if (error) throw error;
 
       const byDate = new Map<string, { scheduled: number; actual: number }>();
@@ -354,17 +358,21 @@ export default function CommandCenterOperationalPage() {
     },
   });
   const morningNeedsQuery = useQuery({
-    queryKey: ['dashboard-morning-open-needs', orgId ?? 'no-org', todayKey],
+    queryKey: ['dashboard-morning-open-needs', orgId ?? 'no-org', todayKey, propertyScope ?? 'all'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60,
     queryFn: async () => {
       if (!supabase || !orgId) return 0;
-      const { count, error } = await supabase
+      let query = supabase
         .from('task_requests')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .eq('date', todayKey)
         .eq('status', 'open');
+      if (propertyScope && propertyScope !== 'all') {
+        query = query.eq('property_id', propertyScope);
+      }
+      const { count, error } = await query;
       if (error) throw error;
       return count ?? 0;
     },
@@ -405,7 +413,7 @@ export default function CommandCenterOperationalPage() {
     },
   });
   const equipmentAlertsQuery = useQuery({
-    queryKey: ['dashboard-equipment-alerts', orgId ?? 'no-org'],
+    queryKey: ['dashboard-equipment-alerts', orgId ?? 'no-org', propertyScope ?? 'all'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60,
     queryFn: async () => {
@@ -416,19 +424,23 @@ export default function CommandCenterOperationalPage() {
       thresholdDate.setDate(thresholdDate.getDate() - 90);
       const thresholdKey = thresholdDate.toISOString().slice(0, 10);
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('equipment_units')
         .select('id, name, unit_name, type, last_serviced')
         .eq('org_id', orgId)
         .eq('active', true)
         .lt('last_serviced', thresholdKey)
         .order('last_serviced', { ascending: true });
+      if (propertyScope && propertyScope !== 'all') {
+        query = query.eq('property_id', propertyScope);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Array<{ id: string; name: string | null; unit_name: string | null; type: string | null; last_serviced: string | null }>;
     },
   });
   const weeklyLaborCostQuery = useQuery({
-    queryKey: ['dashboard-weekly-labor-cost', orgId ?? 'no-org', todayKey],
+    queryKey: ['dashboard-weekly-labor-cost', orgId ?? 'no-org', todayKey, propertyScope ?? 'all'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
@@ -446,13 +458,18 @@ export default function CommandCenterOperationalPage() {
       const startDate = weekStart.toISOString().slice(0, 10);
       const endDate = weekEnd.toISOString().slice(0, 10);
 
+      let assignmentsQuery = supabase
+        .from('assignments')
+        .select('date, employee_id, actual_hours')
+        .eq('org_id', orgId)
+        .gte('date', startDate)
+        .lte('date', endDate);
+      if (propertyScope && propertyScope !== 'all') {
+        assignmentsQuery = assignmentsQuery.eq('property_id', propertyScope);
+      }
+
       const [assignmentsResult, employeesResult] = await Promise.all([
-        supabase
-          .from('assignments')
-          .select('date, employee_id, actual_hours')
-          .eq('org_id', orgId)
-          .gte('date', startDate)
-          .lte('date', endDate),
+        assignmentsQuery,
         supabase
           .from('employees')
           .select('id, hourly_rate')
