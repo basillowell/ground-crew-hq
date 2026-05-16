@@ -276,6 +276,12 @@ type TaskWeatherWarning = {
   message: string;
 };
 
+type DispatchWeatherConflict = {
+  hasSprayConflict: boolean;
+  sprayMessage: string | null;
+  heatMessage: string | null;
+};
+
 type WorkboardWeatherSnapshot = {
   temperature: number;
   windSpeed: number;
@@ -361,6 +367,7 @@ export default function WorkboardPage() {
   const [selectedQuickPlanIds, setSelectedQuickPlanIds] = useState<string[]>([]);
   const [quickPlanEmptyMessage, setQuickPlanEmptyMessage] = useState<string | null>(null);
   const [assignToAllScheduledCrew, setAssignToAllScheduledCrew] = useState(false);
+  const [weatherConflictOverride, setWeatherConflictOverride] = useState(false);
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
     scheduledCrew: false,
     weather: true,
@@ -857,6 +864,46 @@ export default function WorkboardPage() {
   );
 
   const escalationThresholds = escalationThresholdsQuery.data ?? DEFAULT_ESCALATION_THRESHOLDS;
+
+  const dispatchWeatherConflict = useMemo<DispatchWeatherConflict>(() => {
+    if (!weatherSnapshot) {
+      return { hasSprayConflict: false, sprayMessage: null, heatMessage: null };
+    }
+
+    const selectedTask = taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null;
+    const categoryText = String(selectedTask?.category ?? '').toLowerCase();
+    const sprayCategory = categoryText.includes('spray') || categoryText.includes('irrigation') || categoryText.includes('application');
+
+    const windOver = weatherSnapshot.windSpeed > escalationThresholds.windSpeedSprayCutoffMph;
+    const rainOver = weatherSnapshot.precipitationProbability > escalationThresholds.rainProbabilitySprayCutoffPct;
+    const hasSprayConflict = sprayCategory && (windOver || rainOver);
+
+    const sprayMessage = hasSprayConflict
+      ? `⚠️ Weather conflict: Wind is ${Math.round(weatherSnapshot.windSpeed)}mph (limit: ${Math.round(escalationThresholds.windSpeedSprayCutoffMph)}mph) — spraying may be unsafe. Dispatch anyway?`
+      : null;
+
+    const heatMessage =
+      weatherSnapshot.temperature > escalationThresholds.heatAdvisoryTempF
+        ? `🔴 Heat advisory: ${Math.round(weatherSnapshot.temperature)}°F — ensure crew has water breaks.`
+        : null;
+
+    return {
+      hasSprayConflict,
+      sprayMessage,
+      heatMessage,
+    };
+  }, [
+    assignmentDraft.taskId,
+    escalationThresholds.heatAdvisoryTempF,
+    escalationThresholds.rainProbabilitySprayCutoffPct,
+    escalationThresholds.windSpeedSprayCutoffMph,
+    taskLibrary,
+    weatherSnapshot,
+  ]);
+
+  useEffect(() => {
+    setWeatherConflictOverride(false);
+  }, [assignmentDraft.taskId, assignmentDraft.employeeId, assignmentDraft.startTime, boardDate]);
 
   const isRequestOpen = useCallback(
     (status: string) => !['assigned', 'dismissed', 'done', 'closed'].includes(status.toLowerCase()),
@@ -1715,7 +1762,7 @@ export default function WorkboardPage() {
     setAssignmentDialogOpen(true);
   }
 
-  async function saveAssignment() {
+  async function saveAssignment(ignoreWeatherConflict = false) {
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
       return;
@@ -1757,6 +1804,12 @@ export default function WorkboardPage() {
     const selectedTask = taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null;
     const selectedTaskName = linkedRequestTitle ?? selectedTask?.name ?? 'Task';
     const selectedTaskId = String(selectedTask?.id ?? '').trim();
+
+    if (dispatchWeatherConflict.hasSprayConflict && !weatherConflictOverride && !ignoreWeatherConflict) {
+      toast.warning('Weather conflict detected. Review warning before dispatching.');
+      return;
+    }
+
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidPattern.test(selectedTaskId)) {
       console.error('[Workboard] Invalid task UUID selected', {
@@ -1919,6 +1972,7 @@ export default function WorkboardPage() {
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
     setAssignToAllScheduledCrew(false);
+    setWeatherConflictOverride(false);
     setAssignmentDialogOpen(false);
     if (!(assignToAllScheduledCrew && !editingAssignmentId)) {
       toast(editingAssignmentId ? 'Assignment updated' : 'Assignment dispatched', {
@@ -3307,15 +3361,59 @@ export default function WorkboardPage() {
                 data-testid="input-assignment-notes"
               />
             </div>
+
+            {dispatchWeatherConflict.sprayMessage ? (
+              <div className="col-span-2 rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
+                <p className="font-medium">{dispatchWeatherConflict.sprayMessage}</p>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setWeatherConflictOverride(false);
+                      setAssignmentDialogOpen(false);
+                      setLinkedRequestId(null);
+                      setLinkedRequestTitle(null);
+                      setAssignToAllScheduledCrew(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-yellow-600 text-white hover:bg-yellow-700"
+                    onClick={() => {
+                      setWeatherConflictOverride(true);
+                      void saveAssignment(true);
+                    }}
+                  >
+                    Dispatch Anyway
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {dispatchWeatherConflict.heatMessage ? (
+              <div className="col-span-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+                <p className="font-medium">{dispatchWeatherConflict.heatMessage}</p>
+              </div>
+            ) : null}
           </div>
 
           </div>
 
           <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-card px-4 py-3 md:static md:border-t-0 md:bg-transparent md:px-0 md:py-2">
-            <Button className="min-h-11" variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); setLinkedRequestTitle(null); setAssignToAllScheduledCrew(false); }}>
+            <Button className="min-h-11" variant="outline" onClick={() => { setAssignmentDialogOpen(false); setLinkedRequestId(null); setLinkedRequestTitle(null); setAssignToAllScheduledCrew(false); setWeatherConflictOverride(false); }}>
               Cancel
             </Button>
-            <Button className="min-h-11" onClick={saveAssignment} data-testid="button-save-assignment">
+            <Button
+              className="min-h-11"
+              onClick={saveAssignment}
+              data-testid="button-save-assignment"
+              disabled={dispatchWeatherConflict.hasSprayConflict && !weatherConflictOverride}
+            >
               {editingAssignmentId ? 'Save Changes' : 'Dispatch'}
             </Button>
           </div>
