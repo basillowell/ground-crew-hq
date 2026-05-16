@@ -10,6 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEmployees } from '@/lib/supabase-queries';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { ErrorRetry } from '@/components/ErrorRetry';
 
 type MessageRecord = {
   id: string;
@@ -75,6 +77,11 @@ export default function MessagingPage() {
 
   const employees = employeesQuery.data ?? [];
   const recentMessages = messagesQuery.data ?? [];
+  const loadError =
+    (employeesQuery.error as { message?: string } | null)?.message ||
+    (messagesQuery.error as { message?: string } | null)?.message ||
+    (authUserQuery.error as { message?: string } | null)?.message ||
+    '';
 
   const filtered = useMemo(
     () =>
@@ -96,6 +103,25 @@ export default function MessagingPage() {
     setSubject('');
     setBody('');
   };
+
+  if (!currentUser?.orgId || employeesQuery.isLoading || authUserQuery.isLoading) {
+    return <PageSkeleton />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <ErrorRetry
+          message={loadError}
+          onRetry={() => {
+            void employeesQuery.refetch();
+            void authUserQuery.refetch();
+            void messagesQuery.refetch();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">

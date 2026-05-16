@@ -47,6 +47,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
 import { formatTime } from '@/utils/formatTime';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { ErrorRetry } from '@/components/ErrorRetry';
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
@@ -1892,43 +1894,29 @@ export default function WorkboardPage() {
     '';
 
   if (isLoadingBoard) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-          Loading workflow board and labor context...
-        </div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (boardErrorMessage) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <div className="max-w-xl rounded-xl border border-dashed p-6 text-center">
-          <p className="text-sm font-medium text-foreground">Workflow data is temporarily unavailable.</p>
-          <p className="mt-1 text-xs text-muted-foreground">{boardErrorMessage}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-3"
-            onClick={() => {
-              void propertiesQuery.refetch();
-              void employeesQuery.refetch();
-              void assignmentsQuery.refetch();
-              void scheduleQuery.refetch();
-              void tasksQuery.refetch();
-              void equipmentQuery.refetch();
-              void notesQuery.refetch();
-              void taskRequestsQuery.refetch();
-              void pendingTaskRequestsQuery.refetch();
-              void weatherLogsQuery.refetch();
-              void weatherLocationsQuery.refetch();
-              void workLocationsQuery.refetch();
-            }}
-          >
-            Retry
-          </Button>
-        </div>
+      <div className="p-6">
+        <ErrorRetry
+          message={boardErrorMessage}
+          onRetry={() => {
+            void propertiesQuery.refetch();
+            void employeesQuery.refetch();
+            void assignmentsQuery.refetch();
+            void scheduleQuery.refetch();
+            void tasksQuery.refetch();
+            void equipmentQuery.refetch();
+            void notesQuery.refetch();
+            void taskRequestsQuery.refetch();
+            void pendingTaskRequestsQuery.refetch();
+            void weatherLogsQuery.refetch();
+            void weatherLocationsQuery.refetch();
+            void workLocationsQuery.refetch();
+          }}
+        />
       </div>
     );
   }

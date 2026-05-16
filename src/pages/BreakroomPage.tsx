@@ -17,6 +17,8 @@ import {
   useWeatherLocations,
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { ErrorRetry } from '@/components/ErrorRetry';
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -28,13 +30,38 @@ export default function BreakroomPage() {
   const { currentDate, department } = useOperations();
   const boardDate = toDateKey(currentDate);
   const propertyId = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
-  const employees = useEmployees(propertyId, currentUser?.orgId).data ?? [];
-  const tasks = useTasks(propertyId, currentUser?.orgId).data ?? [];
-  const assignments = useAssignments(boardDate, propertyId, currentUser?.orgId).data ?? [];
-  const notes = useNotes(propertyId, currentUser?.orgId).data ?? [];
-  const scheduleEntries = useScheduleEntries(boardDate, propertyId, currentUser?.orgId).data ?? [];
-  const weatherLogs = useWeatherDailyLogs().data ?? [];
-  const weatherLocations = useWeatherLocations().data ?? [];
+  const employeesQuery = useEmployees(propertyId, currentUser?.orgId);
+  const tasksQuery = useTasks(propertyId, currentUser?.orgId);
+  const assignmentsQuery = useAssignments(boardDate, propertyId, currentUser?.orgId);
+  const notesQuery = useNotes(propertyId, currentUser?.orgId);
+  const scheduleEntriesQuery = useScheduleEntries(boardDate, propertyId, currentUser?.orgId);
+  const weatherLogsQuery = useWeatherDailyLogs();
+  const weatherLocationsQuery = useWeatherLocations();
+  const employees = employeesQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
+  const assignments = assignmentsQuery.data ?? [];
+  const notes = notesQuery.data ?? [];
+  const scheduleEntries = scheduleEntriesQuery.data ?? [];
+  const weatherLogs = weatherLogsQuery.data ?? [];
+  const weatherLocations = weatherLocationsQuery.data ?? [];
+  const isLoading =
+    !currentUser?.orgId ||
+    employeesQuery.isLoading ||
+    tasksQuery.isLoading ||
+    assignmentsQuery.isLoading ||
+    notesQuery.isLoading ||
+    scheduleEntriesQuery.isLoading ||
+    weatherLogsQuery.isLoading ||
+    weatherLocationsQuery.isLoading;
+  const errorMessage =
+    (employeesQuery.error as { message?: string } | null)?.message ||
+    (tasksQuery.error as { message?: string } | null)?.message ||
+    (assignmentsQuery.error as { message?: string } | null)?.message ||
+    (notesQuery.error as { message?: string } | null)?.message ||
+    (scheduleEntriesQuery.error as { message?: string } | null)?.message ||
+    (weatherLogsQuery.error as { message?: string } | null)?.message ||
+    (weatherLocationsQuery.error as { message?: string } | null)?.message ||
+    '';
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -116,6 +143,26 @@ export default function BreakroomPage() {
     () => notes.filter((note) => note.date === boardDate || note.type === 'general').slice(0, 6),
     [boardDate, notes],
   );
+
+  if (isLoading) return <PageSkeleton />;
+  if (errorMessage) {
+    return (
+      <div className="p-6">
+        <ErrorRetry
+          message={errorMessage}
+          onRetry={() => {
+            void employeesQuery.refetch();
+            void tasksQuery.refetch();
+            void assignmentsQuery.refetch();
+            void notesQuery.refetch();
+            void scheduleEntriesQuery.refetch();
+            void weatherLogsQuery.refetch();
+            void weatherLocationsQuery.refetch();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-4">

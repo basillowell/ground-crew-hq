@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Clock3, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { ErrorRetry } from '@/components/ErrorRetry';
 
 type EquipmentUnitRow = {
   id: string;
@@ -294,14 +296,7 @@ export default function EquipmentPage() {
   }, [fetchEquipment, isReadOnly, orgId]);
 
   if (!orgId || loading) {
-    return (
-      <div className="p-6">
-        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-          <Clock3 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-          Loading equipment...
-        </div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (
@@ -319,14 +314,7 @@ export default function EquipmentPage() {
         ) : null}
       </div>
 
-      {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <p>{error}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => void fetchEquipment()}>
-            Retry
-          </Button>
-        </div>
-      ) : null}
+      {error ? <ErrorRetry message={error} onRetry={() => void fetchEquipment()} /> : null}
 
       <div className="hidden overflow-x-auto rounded-lg border md:block">
         <table className="min-w-full text-sm">

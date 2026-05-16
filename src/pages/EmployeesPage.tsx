@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { ErrorRetry } from '@/components/ErrorRetry';
 
 type EmployeeRow = {
   id: string;
@@ -252,13 +254,7 @@ export default function EmployeesPage() {
   }, [fetchPageData, isReadOnly, orgId]);
 
   if (!orgId || loading) {
-    return (
-      <div className="p-6">
-        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-          Loading crew roster...
-        </div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (
@@ -276,14 +272,7 @@ export default function EmployeesPage() {
         ) : null}
       </div>
 
-      {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <p>{error}</p>
-          <Button size="sm" variant="outline" className="mt-2" onClick={() => void fetchPageData()}>
-            Retry
-          </Button>
-        </div>
-      ) : null}
+      {error ? <ErrorRetry message={error} onRetry={() => void fetchPageData()} /> : null}
 
       <div className="hidden overflow-x-auto rounded-lg border md:block">
         <table className="min-w-full text-sm">

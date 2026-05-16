@@ -8,6 +8,8 @@ import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { ErrorRetry } from '@/components/ErrorRetry';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 
@@ -505,24 +507,13 @@ export default function MobileFieldWorkspacePage() {
   };
 
   if (loading) {
-    return (
-      <div className="mx-auto w-full max-w-[520px] px-4 py-4 font-sans">
-        <Card className="rounded-2xl p-5">
-          <p className="text-base">Loading your field workspace...</p>
-        </Card>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (error) {
     return (
       <div className="mx-auto w-full max-w-[520px] px-4 py-4 font-sans">
-        <Card className="rounded-2xl p-5">
-          <p className="text-base text-red-600">{error}</p>
-          <Button className="mt-4 h-12 min-h-12 w-full text-base" onClick={() => void fetchFieldData()}>
-            Retry
-          </Button>
-        </Card>
+        <ErrorRetry message={error} onRetry={() => void fetchFieldData()} />
       </div>
     );
   }

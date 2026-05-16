@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { ErrorRetry } from '@/components/ErrorRetry';
 
 type PropertyRow = {
   id: string;
@@ -352,7 +354,7 @@ export default function ReportsPage() {
   }, [costByTaskRows, costByTaskTotals, laborRows, totals]);
 
   if (!orgId) {
-    return <div style={{ padding: '1.5rem', color: '#6b7280', fontSize: '14px' }}>Loading reports...</div>;
+    return <PageSkeleton />;
   }
 
   return (
@@ -401,12 +403,9 @@ export default function ReportsPage() {
         </div>
 
         {loading ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Loading report data...</p>
+          <PageSkeleton />
         ) : error ? (
-          <div>
-            <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
-            <button onClick={() => void fetchReportData()}>Retry</button>
-          </div>
+          <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
         ) : laborRows.length === 0 ? (
           <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No labor data for this date range.</p>
         ) : (
@@ -471,9 +470,9 @@ export default function ReportsPage() {
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
         <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Cost by Task</h3>
         {loading ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Loading task cost data...</p>
+          <PageSkeleton />
         ) : error ? (
-          <p style={{ margin: 0, color: '#dc2626', fontSize: '13px' }}>Could not load task cost breakdown.</p>
+          <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
         ) : costByTaskRows.length === 0 ? (
           <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No task cost data for this date range.</p>
         ) : (

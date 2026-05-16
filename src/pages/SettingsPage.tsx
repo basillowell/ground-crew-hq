@@ -5,6 +5,8 @@ import { formatTime } from '@/utils/formatTime';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
+import { ErrorRetry } from '@/components/ErrorRetry';
+import { PageSkeleton } from '@/components/PageSkeleton';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -568,25 +570,11 @@ function WorkspaceTab({
     toast.success('Demo data loaded! Navigate to the Workboard to see it.');
   };
 
-  if (!orgId || loading) {
-    return (
-      <div style={{ display: 'grid', gap: '12px' }}>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '13px' }}>
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[#166534] border-t-transparent" />
-            Loading workspace settings...
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
     return (
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
-        <button onClick={() => void fetchWorkspaceData()}>Retry</button>
-      </div>
+      <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkspaceData()} />
     );
   }
 
@@ -736,16 +724,11 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [rows]);
 
-  if (!orgId || loading) {
-    return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading workforce settings…</div>;
-  }
+  if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
     return (
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
-        <button onClick={() => void fetchWorkforceSummary()}>Retry</button>
-      </div>
+      <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkforceSummary()} />
     );
   }
 
@@ -857,14 +840,11 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
     [locations],
   );
 
-  if (!orgId || loading) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading weather settings…</div>;
+  if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
     return (
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
-        <button onClick={() => void fetchWeatherSettings()}>Retry</button>
-      </div>
+      <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWeatherSettings()} />
     );
   }
 
@@ -961,14 +941,11 @@ function AccessTab({
     window.location.reload();
   };
 
-  if (!orgId || loading) return <div style={{ color: '#6b7280', fontSize: '13px' }}>Loading access settings…</div>;
+  if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
     return (
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <p style={{ margin: '0 0 10px', color: '#dc2626', fontSize: '13px' }}>Failed to load: {error}</p>
-        <button onClick={() => void fetchOrganizationName()}>Retry</button>
-      </div>
+      <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchOrganizationName()} />
     );
   }
 
@@ -1156,15 +1133,9 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
         <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>Reusable tasks for daily workflow planning.</p>
 
         {!orgId || loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '13px' }}>
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[#166534] border-t-transparent" />
-            Loading tasks...
-          </div>
+          <PageSkeleton />
         ) : error ? (
-          <div>
-            <p style={{ color: '#dc2626', marginBottom: '10px' }}>Failed to load: {error}</p>
-            <button onClick={() => void fetchTasks()}>Retry</button>
-          </div>
+          <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchTasks()} />
         ) : tasks.length === 0 ? (
           <p style={{ color: '#6b7280', fontSize: '13px' }}>No tasks yet. Add your first task below.</p>
         ) : (
@@ -1470,12 +1441,9 @@ function SchedulerTab({ orgId }: { orgId: string }) {
         <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>Define your property's standard operating window</p>
 
         {loading ? (
-          <div style={{ height: '200px', borderRadius: '10px', background: '#e5e7eb', animation: 'pulse 1.5s infinite' }} />
+          <PageSkeleton />
         ) : error ? (
-          <div>
-            <p style={{ color: '#dc2626', marginBottom: '10px' }}>Failed to load: {error}</p>
-            <button onClick={() => void fetchSettings()}>Retry</button>
-          </div>
+          <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchSettings()} />
         ) : settings ? (
           <div style={{ display: 'grid', gap: '14px' }}>
             <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr' }}>
@@ -1554,12 +1522,9 @@ function SchedulerTab({ orgId }: { orgId: string }) {
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
         <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Shift Templates</h3>
         {templatesLoading ? (
-          <div style={{ height: '140px', borderRadius: '10px', background: '#e5e7eb', animation: 'pulse 1.5s infinite' }} />
+          <PageSkeleton />
         ) : templatesError ? (
-          <div>
-            <p style={{ color: '#dc2626', marginBottom: '10px' }}>Failed to load: {templatesError}</p>
-            <button onClick={() => void fetchTemplates()}>Retry</button>
-          </div>
+          <ErrorRetry message={`Failed to load: ${templatesError}`} onRetry={() => void fetchTemplates()} />
         ) : (
           <div style={{ display: 'grid', gap: '10px' }}>
             {templates.map((template) => (
