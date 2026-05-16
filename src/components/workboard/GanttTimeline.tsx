@@ -1,7 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useMemo, useState } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import type { Assignment, Employee, Task, EquipmentUnit, ScheduleEntry } from '@/data/seedData';
+import type { Assignment, Employee, EquipmentUnit, ScheduleEntry, Task } from '@/data/seedData';
 import { formatTime } from '@/utils/formatTime';
 
 interface GanttTimelineProps {
@@ -15,61 +14,58 @@ interface GanttTimelineProps {
   onDropTask?: (employeeId: string, startMinute: number) => void;
 }
 
-const HOUR_START = 5;
-const HOUR_END = 18;
-const TOTAL_HOURS = HOUR_END - HOUR_START;
-const HOUR_WIDTH = 80;
+const TIMELINE_START_MIN = 6 * 60;
+const TIMELINE_END_MIN = 18 * 60;
+const TIMELINE_TOTAL_MIN = TIMELINE_END_MIN - TIMELINE_START_MIN;
 
-function timeToMinutes(t: string) {
-  const [h, m] = t.split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
-function minuteToLeft(minute: number) {
-  return ((minute - HOUR_START * 60) / (TOTAL_HOURS * 60)) * 100;
+function timeToMinutes(value?: string) {
+  if (!value) return TIMELINE_START_MIN;
+  const [hours, minutes] = value.slice(0, 5).split(':').map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return TIMELINE_START_MIN;
+  return hours * 60 + minutes;
 }
 
-function durationToWidth(duration: number) {
-  return (duration / (TOTAL_HOURS * 60)) * 100;
+function minuteToPct(minute: number) {
+  return ((minute - TIMELINE_START_MIN) / TIMELINE_TOTAL_MIN) * 100;
 }
 
-function TaskBar({ assignment, task, equipment, onClick }: {
+function categoryTone(category: string | null | undefined) {
+  const value = String(category ?? '').toLowerCase();
+  if (value.includes('maintenance')) return { bg: '#dcfce7', border: '#16a34a', text: '#14532d' };
+  if (value.includes('irrigation')) return { bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a' };
+  if (value.includes('field') || value.includes('mowing')) return { bg: '#fef3c7', border: '#d97706', text: '#78350f' };
+  return { bg: '#f3f4f6', border: '#6b7280', text: '#1f2937' };
+}
+
+function normalizeStatus(status?: string) {
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'in_progress' || value === 'in-progress') return 'in_progress';
+  if (value === 'done' || value === 'complete' || value === 'completed') return 'done';
+  return 'planned';
+}
+
+function hourLabel(hour24: number) {
+  const period = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:00 ${period}`;
+}
+
+type AssignmentBar = {
   assignment: Assignment;
-  task?: Task;
-  equipment?: EquipmentUnit;
-  onClick?: () => void;
-}) {
-  const startMin = timeToMinutes(assignment.startTime);
-  const left = minuteToLeft(startMin);
-  const width = durationToWidth(assignment.duration);
-  const color = task?.color || '#6b7280';
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          className="absolute top-1 bottom-1 rounded-md cursor-pointer flex items-center px-2 text-[11px] font-medium text-white shadow-sm transition-all hover:shadow-md hover:brightness-110 hover:scale-[1.02] active:scale-[0.98]"
-          style={{
-            left: `${left}%`,
-            width: `${Math.max(width, 2)}%`,
-            backgroundColor: color,
-            zIndex: 10,
-          }}
-          onClick={onClick}
-        >
-          <span className="truncate">{task?.name || 'Task'}</span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs max-w-[220px]">
-        <div className="font-semibold">{task?.name}</div>
-        <div className="text-muted-foreground">
-          {formatTime(assignment.startTime)} · {assignment.duration}min · {assignment.area}
-        </div>
-        {equipment && <div className="text-muted-foreground">🚜 {equipment.unitNumber}</div>}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+  taskName: string;
+  taskCategory: string | null;
+  equipmentName: string | null;
+  startMinute: number;
+  durationMinute: number;
+  endMinute: number;
+  leftPct: number;
+  widthPct: number;
+  status: 'planned' | 'in_progress' | 'done';
+};
 
 export function GanttTimeline({
   employees,
@@ -81,129 +77,161 @@ export function GanttTimeline({
   onAssignmentClick,
   onDropTask,
 }: GanttTimelineProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dragOverEmployee, setDragOverEmployee] = useState<string | null>(null);
+  const [now, setNow] = useState<Date>(new Date());
 
-  const hours = useMemo(() =>
-    Array.from({ length: TOTAL_HOURS }, (_, i) => {
-      const h = HOUR_START + i;
-      return { label: `${h > 12 ? h - 12 : h}${h >= 12 ? 'p' : 'a'}`, hour: h };
-    }),
-    []
-  );
-
-  const nowMinute = useMemo(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const nowLeft = minuteToLeft(nowMinute);
-  const showNow = nowMinute >= HOUR_START * 60 && nowMinute <= HOUR_END * 60;
+  const hours = useMemo(() => Array.from({ length: 13 }, (_, i) => 6 + i), []);
+  const isToday = date === new Date().toISOString().slice(0, 10);
+  const nowMinute = now.getHours() * 60 + now.getMinutes();
+  const showNow = isToday && nowMinute >= TIMELINE_START_MIN && nowMinute <= TIMELINE_END_MIN;
+  const nowLeftPct = minuteToPct(nowMinute);
 
   return (
-    <div className="border rounded-xl bg-card overflow-hidden">
-      {/* Header */}
-      <div className="flex border-b bg-muted/30 sticky top-0 z-20">
-        <div className="w-[180px] shrink-0 p-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-r">
-          Crew Member
-        </div>
-        <div className="flex-1 flex relative">
-          {hours.map((h) => (
-            <div
-              key={h.hour}
-              className="flex-1 text-center text-[10px] font-medium text-muted-foreground py-2 border-r border-dashed border-border/50"
-            >
-              {h.label}
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="overflow-x-auto">
+        <div className="min-w-[980px]">
+          <div className="grid grid-cols-[220px_1fr] border-b bg-muted/25">
+            <div className="border-r px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Crew
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Rows */}
-      <div className="divide-y">
-        {employees.map((emp) => {
-          const empAssignments = assignments.filter((a) => a.employeeId === emp.id && a.date === date);
-          const shift = scheduleEntries.find((s) => s.employeeId === emp.id && s.date === date);
-          const totalMin = empAssignments.reduce((s, a) => s + a.duration, 0);
-          const isDragOver = dragOverEmployee === emp.id;
-
-          return (
-            <div
-              key={emp.id}
-              className={`flex min-h-[48px] transition-colors ${isDragOver ? 'bg-primary/5' : 'hover:bg-muted/20'}`}
-              onDragOver={(e) => { e.preventDefault(); setDragOverEmployee(emp.id); }}
-              onDragLeave={() => setDragOverEmployee(null)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOverEmployee(null);
-                if (containerRef.current && onDropTask) {
-                  const rect = containerRef.current.getBoundingClientRect();
-                  const nameColWidth = 180;
-                  const relX = e.clientX - rect.left - nameColWidth;
-                  const pct = relX / (rect.width - nameColWidth);
-                  const minute = Math.round(HOUR_START * 60 + pct * TOTAL_HOURS * 60);
-                  onDropTask(emp.id, minute);
-                }
-              }}
-            >
-              {/* Name col */}
-              <div className="w-[180px] shrink-0 flex items-center gap-2.5 px-3 border-r">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[10px] font-bold">
-                  {emp.firstName[0]}{emp.lastName[0]}
+            <div className="relative">
+              <div className="grid grid-cols-12">
+                {hours.slice(0, 12).map((hour) => (
+                  <div key={`timeline-hour-${hour}`} className="border-r px-1 py-2 text-center text-[11px] text-muted-foreground last:border-r-0">
+                    {hourLabel(hour)}
+                  </div>
+                ))}
+              </div>
+              {showNow ? (
+                <div
+                  className="pointer-events-none absolute bottom-0 top-0 z-20 border-l-2 border-dotted border-red-500"
+                  style={{ left: `${clamp(nowLeftPct, 0, 100)}%` }}
+                >
+                  <span className="absolute -top-5 -translate-x-1/2 rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                    Now
+                  </span>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-medium truncate">{emp.firstName} {emp.lastName}</div>
-                  <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                    {shift ? `${formatTime(shift.shiftStart)}–${formatTime(shift.shiftEnd)}` : 'No shift'}
-                    {totalMin > 0 && <span>· {Math.floor(totalMin / 60)}h{totalMin % 60 > 0 ? `${totalMin % 60}m` : ''}</span>}
+              ) : null}
+            </div>
+          </div>
+
+          <div className="divide-y">
+            {employees.map((employee) => {
+              const shift = scheduleEntries.find((entry) => entry.employeeId === employee.id && entry.date === date);
+              const shiftStart = clamp(timeToMinutes(shift?.shiftStart), TIMELINE_START_MIN, TIMELINE_END_MIN);
+              const shiftEndRaw = timeToMinutes(shift?.shiftEnd);
+              const shiftEnd = clamp(shiftEndRaw <= shiftStart ? shiftStart + 30 : shiftEndRaw, TIMELINE_START_MIN, TIMELINE_END_MIN);
+              const shiftLeftPct = minuteToPct(shiftStart);
+              const shiftWidthPct = Math.max(minuteToPct(shiftEnd) - shiftLeftPct, 1);
+
+              const bars: AssignmentBar[] = assignments
+                .filter((assignment) => assignment.employeeId === employee.id && assignment.date === date)
+                .map((assignment) => {
+                  const task = tasks.find((item) => item.id === assignment.taskId);
+                  const equipmentUnit = assignment.equipmentId ? equipment.find((item) => item.id === assignment.equipmentId) : null;
+                  const status = normalizeStatus(assignment.status);
+                  const startMinuteRaw = assignment.startTime ? timeToMinutes(assignment.startTime) : shiftStart;
+                  const startMinute = clamp(startMinuteRaw, TIMELINE_START_MIN, TIMELINE_END_MIN - 15);
+                  const estimatedHourDuration = Number(assignment.estimatedHours ?? 0);
+                  const assignmentDuration = estimatedHourDuration > 0 ? Math.round(estimatedHourDuration * 60) : Math.max(30, Number(assignment.duration ?? 30));
+                  const durationMinute = clamp(assignmentDuration, 15, TIMELINE_TOTAL_MIN);
+                  const endMinute = clamp(startMinute + durationMinute, TIMELINE_START_MIN, TIMELINE_END_MIN);
+                  const leftPct = minuteToPct(startMinute);
+                  const widthPct = Math.max(minuteToPct(endMinute) - leftPct, 1.5);
+                  return {
+                    assignment,
+                    taskName: task?.name ?? assignment.taskId ?? 'Task',
+                    taskCategory: task?.category ?? null,
+                    equipmentName: equipmentUnit?.unitNumber ?? equipmentUnit?.name ?? null,
+                    startMinute,
+                    durationMinute,
+                    endMinute,
+                    leftPct,
+                    widthPct,
+                    status,
+                  };
+                });
+
+              return (
+                <div key={`timeline-row-${employee.id}`} className="grid grid-cols-[220px_1fr]">
+                  <div className="border-r px-3 py-2">
+                    <p className="truncate text-sm font-semibold">{employee.firstName} {employee.lastName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{employee.role || 'Crew'} · {formatTime(shift?.shiftStart || '')} – {formatTime(shift?.shiftEnd || '')}</p>
+                  </div>
+
+                  <div
+                    className="relative min-h-16"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (!onDropTask) return;
+                      const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      const pct = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+                      const startMinute = TIMELINE_START_MIN + Math.round(pct * TIMELINE_TOTAL_MIN);
+                      onDropTask(employee.id, startMinute);
+                    }}
+                  >
+                    <div className="absolute inset-0 grid grid-cols-12">
+                      {hours.slice(0, 12).map((hour) => (
+                        <div key={`grid-${employee.id}-${hour}`} className="border-r border-dashed border-border/50 last:border-r-0" />
+                      ))}
+                    </div>
+
+                    <div
+                      className="absolute bottom-2 top-2 rounded-md bg-slate-200/60"
+                      style={{ left: `${shiftLeftPct}%`, width: `${shiftWidthPct}%` }}
+                    />
+
+                    {bars.map((bar) => {
+                      const tone = categoryTone(bar.taskCategory);
+                      const opacity = bar.status === 'in_progress' ? 1 : bar.status === 'done' ? 0.3 : 0.5;
+                      return (
+                        <Tooltip key={`bar-${bar.assignment.id ?? `${employee.id}-${bar.startMinute}`}`}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="absolute top-2 h-[calc(100%-16px)] rounded-md border px-2 text-left text-[11px] font-semibold shadow-sm transition hover:brightness-105"
+                              style={{
+                                left: `${bar.leftPct}%`,
+                                width: `${bar.widthPct}%`,
+                                backgroundColor: tone.bg,
+                                borderColor: tone.border,
+                                color: tone.text,
+                                opacity,
+                              }}
+                              onClick={() => onAssignmentClick?.(bar.assignment)}
+                            >
+                              <span className="block truncate">
+                                {bar.status === 'done' ? '✓ ' : ''}{bar.taskName}
+                              </span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[280px] text-xs">
+                            <p className="font-semibold">{bar.taskName}</p>
+                            <p className="text-muted-foreground">Category: {bar.taskCategory || 'General'}</p>
+                            <p className="text-muted-foreground">
+                              Time: {formatTime(String(Math.floor(bar.startMinute / 60)).padStart(2, '0') + ':' + String(bar.startMinute % 60).padStart(2, '0'))}
+                              {' '}–{' '}
+                              {formatTime(String(Math.floor(bar.endMinute / 60)).padStart(2, '0') + ':' + String(bar.endMinute % 60).padStart(2, '0'))}
+                            </p>
+                            <p className="text-muted-foreground">Duration: {(bar.durationMinute / 60).toFixed(1)}h</p>
+                            <p className="text-muted-foreground">Status: {bar.status === 'in_progress' ? 'In Progress' : bar.status === 'done' ? 'Done' : 'Planned'}</p>
+                            {bar.equipmentName ? <p className="text-muted-foreground">Equipment: {bar.equipmentName}</p> : null}
+                            {bar.assignment.area ? <p className="text-muted-foreground">Area: {bar.assignment.area}</p> : null}
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
-
-              {/* Timeline */}
-              <div className="flex-1 relative" ref={employees.indexOf(emp) === 0 ? containerRef : undefined}>
-                {/* Hour grid lines */}
-                {hours.map((h) => (
-                  <div
-                    key={h.hour}
-                    className="absolute top-0 bottom-0 border-r border-dashed border-border/30"
-                    style={{ left: `${((h.hour - HOUR_START) / TOTAL_HOURS) * 100}%` }}
-                  />
-                ))}
-
-                {/* Shift background */}
-                {shift && shift.status === 'scheduled' && (
-                  <div
-                    className="absolute top-0.5 bottom-0.5 rounded bg-accent/40"
-                    style={{
-                      left: `${minuteToLeft(timeToMinutes(shift.shiftStart))}%`,
-                      width: `${durationToWidth(timeToMinutes(shift.shiftEnd) - timeToMinutes(shift.shiftStart))}%`,
-                    }}
-                  />
-                )}
-
-                {/* Now indicator */}
-                {showNow && (
-                  <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-destructive/60 z-30"
-                    style={{ left: `${nowLeft}%` }}
-                  />
-                )}
-
-                {/* Task bars */}
-                {empAssignments.map((a) => (
-                  <TaskBar
-                    key={a.id || `${a.employeeId}-${a.startTime}`}
-                    assignment={a}
-                    task={tasks.find((t) => t.id === a.taskId)}
-                    equipment={a.equipmentId ? equipment.find((eq) => eq.id === a.equipmentId) : undefined}
-                    onClick={() => onAssignmentClick?.(a)}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
