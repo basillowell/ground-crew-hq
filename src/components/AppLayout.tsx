@@ -126,8 +126,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const deptQuery = useDepartmentOptions();
   const todayKey = currentDate.toISOString().slice(0, 10);
   const employeesQuery = useEmployees(currentPropertyId, orgId);
-  const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId);
-  const assignmentsQuery = useAssignments(todayKey, currentPropertyId);
+  const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
+  const assignmentsQuery = useAssignments(todayKey, currentPropertyId, orgId);
   const equipmentQuery = useEquipmentUnits(currentPropertyId, orgId);
 
   const programSetting = programSettingQuery.data ?? null;
@@ -268,7 +268,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
+      <div className="flex h-screen w-full overflow-hidden bg-background">
         {isReadOnlyDemo && showDemoBanner ? (
           <div className="fixed inset-x-0 top-0 z-50 h-9 bg-blue-600 text-white">
             <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-3 text-xs md:px-4">
@@ -301,13 +301,13 @@ export function AppLayout({ children }: AppLayoutProps) {
           />
         ) : null}
         <div
-          className={`fixed inset-y-0 left-0 z-40 w-72 transform transition-transform duration-200 ease-in-out md:static md:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-40 w-72 overflow-y-auto transform bg-background transition-transform duration-200 ease-in-out md:translate-x-0 ${
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           }`}
         >
           <AppSidebarRefined onNavigate={closeMobileSidebar} />
         </div>
-        <div className={`flex-1 flex flex-col min-w-0 ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
+        <div className={`flex h-screen min-w-0 flex-1 flex-col overflow-hidden md:ml-72 ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
           <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}
@@ -334,7 +334,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               setDepartment,
             }}
           >
-            <main className="flex-1 overflow-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,248,246,1))]">
+            <main className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,248,246,1))]">
               <div className="md:hidden border-b bg-background/85 px-4 py-2">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Workflow Date</div>
                 <div className="text-sm font-medium text-foreground">

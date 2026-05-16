@@ -534,7 +534,10 @@ export default function WorkboardPage() {
   });
 
   const properties = propertiesQuery.data ?? [];
-  const employeeList = employeesQuery.data ?? [];
+  const employeeList = useMemo(
+    () => (employeesQuery.data ?? []).filter((employee) => String(employee.role ?? '').toLowerCase() !== 'viewer'),
+    [employeesQuery.data],
+  );
   const assignmentList = assignmentsQuery.data ?? [];
   const scheduleList = scheduleQuery.data ?? [];
   const taskList = useMemo(

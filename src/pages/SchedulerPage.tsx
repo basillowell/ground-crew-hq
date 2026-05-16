@@ -124,7 +124,10 @@ export default function SchedulerPage() {
     })),
   });
 
-  const employeeList = employeesQuery.data ?? [];
+  const employeeList = useMemo(
+    () => (employeesQuery.data ?? []).filter((employee) => String(employee.role ?? '').toLowerCase() !== 'viewer'),
+    [employeesQuery.data],
+  );
   const scheduleList = useMemo(() => weekScheduleQueries.flatMap((q) => q.data ?? []), [weekScheduleQueries]);
   const isLoading = employeesQuery.isLoading || weekScheduleQueries.some((q) => q.isLoading);
   const queryErrorMessage =
