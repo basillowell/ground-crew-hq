@@ -306,6 +306,16 @@ type EscalationAlert = {
   timestamp: string;
 };
 
+type QuickPlanSuggestion = {
+  sourceId: string;
+  employeeId: string;
+  taskId: string | null;
+  title: string;
+  estimatedHours: number;
+  status: string;
+  propertyId: string | null;
+};
+
 export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -317,6 +327,7 @@ export default function WorkboardPage() {
   const [groupFilter, setGroupFilter] = useState('all');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [quickTaskDialogOpen, setQuickTaskDialogOpen] = useState(false);
+  const [quickPlanDialogOpen, setQuickPlanDialogOpen] = useState(false);
   const [taskTemplateDialogOpen, setTaskTemplateDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
@@ -343,6 +354,12 @@ export default function WorkboardPage() {
   const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
   const [applyingTaskTemplate, setApplyingTaskTemplate] = useState(false);
   const [expandedMobileCrewIds, setExpandedMobileCrewIds] = useState<string[]>([]);
+  const [quickPlanLoading, setQuickPlanLoading] = useState(false);
+  const [quickPlanApplying, setQuickPlanApplying] = useState(false);
+  const [quickPlanError, setQuickPlanError] = useState<string | null>(null);
+  const [quickPlanSuggestions, setQuickPlanSuggestions] = useState<QuickPlanSuggestion[]>([]);
+  const [selectedQuickPlanIds, setSelectedQuickPlanIds] = useState<string[]>([]);
+  const [quickPlanEmptyMessage, setQuickPlanEmptyMessage] = useState<string | null>(null);
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
     scheduledCrew: false,
     weather: true,
@@ -1173,6 +1190,185 @@ export default function WorkboardPage() {
       void fetchTaskLibrary();
     }
   }, [fetchTaskLibrary, scheduledEmployees, taskLibrary.length, taskLibraryError, taskLibraryLoading]);
+
+  const quickPlanDayLabel = useMemo(
+    () => new Date(`${boardDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
+    [boardDate],
+  );
+
+  const quickPlanSuggestionsByEmployee = useMemo(() => {
+    const byEmployee = new Map<string, QuickPlanSuggestion[]>();
+    quickPlanSuggestions.forEach((item) => {
+      if (!byEmployee.has(item.employeeId)) byEmployee.set(item.employeeId, []);
+      byEmployee.get(item.employeeId)!.push(item);
+    });
+    return byEmployee;
+  }, [quickPlanSuggestions]);
+
+  const toggleQuickPlanSuggestion = useCallback((sourceId: string) => {
+    setSelectedQuickPlanIds((current) =>
+      current.includes(sourceId) ? current.filter((id) => id !== sourceId) : [...current, sourceId],
+    );
+  }, []);
+
+  const openQuickPlanDialog = useCallback(async () => {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
+    if (!supabase || !currentUser?.orgId) return;
+
+    setQuickPlanDialogOpen(true);
+    setQuickPlanLoading(true);
+    setQuickPlanError(null);
+    setQuickPlanSuggestions([]);
+    setSelectedQuickPlanIds([]);
+    setQuickPlanEmptyMessage(null);
+
+    const selectedDate = new Date(`${boardDate}T00:00:00`);
+    const previousDate = new Date(selectedDate);
+    previousDate.setDate(previousDate.getDate() - 7);
+    const previousDateKey = previousDate.toISOString().slice(0, 10);
+
+    const { data, error } = await supabase
+      .from('assignments')
+      .select('id, employee_id, task_id, title, estimated_hours, status, property_id')
+      .eq('org_id', currentUser.orgId)
+      .eq('date', previousDateKey)
+      .in('status', ['planned', 'in_progress', 'done']);
+
+    setQuickPlanLoading(false);
+
+    if (error) {
+      setQuickPlanError(error.message);
+      return;
+    }
+
+    const suggestions = (data ?? []).map((row) => ({
+      sourceId: String(row.id),
+      employeeId: String(row.employee_id ?? ''),
+      taskId: row.task_id ? String(row.task_id) : null,
+      title: String(row.title ?? 'Task'),
+      estimatedHours: Number(row.estimated_hours ?? 0),
+      status: String(row.status ?? 'planned'),
+      propertyId: row.property_id ? String(row.property_id) : null,
+    })).filter((item) => item.employeeId);
+
+    if (suggestions.length === 0) {
+      setQuickPlanEmptyMessage(`No plan found for last ${quickPlanDayLabel}. Use Add Task or Apply Template to build today's plan.`);
+      return;
+    }
+
+    setQuickPlanSuggestions(suggestions);
+    setSelectedQuickPlanIds(suggestions.map((item) => item.sourceId));
+  }, [boardDate, currentUser?.orgId, isReadOnly, quickPlanDayLabel]);
+
+  const applyQuickPlan = useCallback(async () => {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
+    if (!supabase || !currentUser?.orgId) return;
+
+    const selected = quickPlanSuggestions.filter((item) => selectedQuickPlanIds.includes(item.sourceId));
+    if (selected.length === 0) {
+      toast.error('Select at least one task to apply.');
+      return;
+    }
+
+    const scheduledByEmployee = new Map(
+      scheduleList
+        .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
+        .map((entry) => [entry.employeeId, entry]),
+    );
+
+    const skippedEmployeeIds = new Set<string>();
+    const rowsToInsert: Array<Record<string, unknown>> = [];
+    const assignmentCountByEmployee = dayAssignments.reduce<Record<string, number>>((acc, assignment) => {
+      acc[assignment.employeeId] = (acc[assignment.employeeId] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    selected.forEach((item) => {
+      const shift = scheduledByEmployee.get(item.employeeId);
+      if (!shift) {
+        skippedEmployeeIds.add(item.employeeId);
+        return;
+      }
+      const nextOrder = (assignmentCountByEmployee[item.employeeId] ?? 0) + 1;
+      assignmentCountByEmployee[item.employeeId] = nextOrder;
+      rowsToInsert.push({
+        id: makeId(),
+        org_id: currentUser.orgId,
+        employee_id: item.employeeId,
+        property_id:
+          (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : shift.propertyId) ??
+          item.propertyId ??
+          activeProperty?.id ??
+          properties[0]?.id ??
+          null,
+        task_id: item.taskId,
+        title: item.title,
+        date: boardDate,
+        status: 'planned',
+        estimated_hours: item.estimatedHours,
+        order_index: nextOrder,
+        start_time: shift.shiftStart ?? null,
+      });
+    });
+
+    if (rowsToInsert.length === 0) {
+      const skippedNames = Array.from(skippedEmployeeIds)
+        .map((id) => employeeList.find((employee) => employee.id === id))
+        .filter(Boolean)
+        .map((employee) => `${employee!.firstName} ${employee!.lastName}`);
+      toast.info(
+        skippedNames.length > 0
+          ? `${skippedNames.join(', ')} ${skippedNames.length > 1 ? 'are' : 'is'} not scheduled today — skipping their tasks.`
+          : 'No scheduled crew matched last week plan.',
+      );
+      return;
+    }
+
+    setQuickPlanApplying(true);
+    const { error } = await supabase.from('assignments').insert(rowsToInsert);
+    setQuickPlanApplying(false);
+
+    if (error) {
+      toast.error(`Could not apply quick plan: ${error.message}`);
+      return;
+    }
+
+    const skippedNames = Array.from(skippedEmployeeIds)
+      .map((id) => employeeList.find((employee) => employee.id === id))
+      .filter(Boolean)
+      .map((employee) => `${employee!.firstName} ${employee!.lastName}`);
+
+    if (skippedNames.length > 0) {
+      toast.info(`${skippedNames.join(', ')} ${skippedNames.length > 1 ? 'are' : 'is'} not scheduled today — skipping their tasks.`);
+    }
+
+    toast.success(`Applied ${rowsToInsert.length} task${rowsToInsert.length === 1 ? '' : 's'} from last ${quickPlanDayLabel}.`);
+    setQuickPlanDialogOpen(false);
+    setQuickPlanSuggestions([]);
+    setSelectedQuickPlanIds([]);
+    setQuickPlanEmptyMessage(null);
+    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+  }, [
+    activeProperty?.id,
+    boardDate,
+    currentUser?.orgId,
+    dayAssignments,
+    effectivePropertyId,
+    employeeList,
+    isReadOnly,
+    properties,
+    queryClient,
+    quickPlanDayLabel,
+    quickPlanSuggestions,
+    scheduleList,
+    selectedQuickPlanIds,
+  ]);
 
   const applyDailyTaskTemplate = useCallback(async () => {
     if (isReadOnly) {
@@ -2035,6 +2231,17 @@ export default function WorkboardPage() {
                 Add Task
               </Button>
             ) : null}
+            {!isReadOnly ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0"
+                onClick={() => void openQuickPlanDialog()}
+                data-testid="button-open-quick-plan"
+              >
+                Quick Plan
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -2723,6 +2930,86 @@ export default function WorkboardPage() {
       </div>
 
       {/* ─── ASSIGNMENT DIALOG ─── */}
+      <Dialog
+        open={quickPlanDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setQuickPlanDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setQuickPlanLoading(false);
+            setQuickPlanError(null);
+            setQuickPlanEmptyMessage(null);
+            setQuickPlanSuggestions([]);
+            setSelectedQuickPlanIds([]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Last {quickPlanDayLabel}&apos;s Plan — Apply to today?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {quickPlanLoading ? (
+              <div className="space-y-2">
+                <div className="h-10 animate-pulse rounded-md bg-muted/40" />
+                <div className="h-10 animate-pulse rounded-md bg-muted/40" />
+                <div className="h-10 animate-pulse rounded-md bg-muted/40" />
+              </div>
+            ) : quickPlanError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                Failed to load quick plan: {quickPlanError}
+              </div>
+            ) : quickPlanEmptyMessage ? (
+              <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
+                {quickPlanEmptyMessage}
+              </div>
+            ) : (
+              <div className="max-h-80 space-y-3 overflow-y-auto rounded-md border p-3">
+                {Array.from(quickPlanSuggestionsByEmployee.entries()).map(([employeeId, items]) => {
+                  const employee = employeeList.find((row) => row.id === employeeId);
+                  const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown Employee';
+                  return (
+                    <div key={`quick-plan-employee-${employeeId}`}>
+                      <p className="mb-1 text-sm font-semibold">{employeeName}</p>
+                      <div className="space-y-1">
+                        {items.map((item) => (
+                          <label key={item.sourceId} className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted/40">
+                            <input
+                              type="checkbox"
+                              checked={selectedQuickPlanIds.includes(item.sourceId)}
+                              onChange={() => toggleQuickPlanSuggestion(item.sourceId)}
+                            />
+                            <span className="flex-1">
+                              {item.title} ({Number(item.estimatedHours || 0)}h)
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setQuickPlanDialogOpen(false)} disabled={quickPlanApplying}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void applyQuickPlan()}
+              disabled={
+                quickPlanApplying ||
+                quickPlanLoading ||
+                Boolean(quickPlanError) ||
+                Boolean(quickPlanEmptyMessage) ||
+                selectedQuickPlanIds.length === 0
+              }
+            >
+              {quickPlanApplying ? 'Applying...' : 'Apply'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={assignmentDialogOpen}
         onOpenChange={(nextOpen) => {
