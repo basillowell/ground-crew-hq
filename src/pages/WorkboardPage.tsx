@@ -69,6 +69,26 @@ function formatMinutesAsHoursAndMinutes(totalMinutes: number) {
   return `${hours}h ${minutes}m`;
 }
 
+function normalizeAssignmentStatus(status?: string) {
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'in_progress' || value === 'in-progress') return 'in-progress';
+  if (value === 'done' || value === 'complete' || value === 'completed') return 'done';
+  return 'planned';
+}
+
+function coverageBadgeClass(coveragePercent: number) {
+  if (coveragePercent >= 80) return 'bg-green-100 text-green-700 border-green-200';
+  if (coveragePercent >= 50) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+  return 'bg-red-100 text-red-700 border-red-200';
+}
+
+function taskRowClass(status: string) {
+  const normalized = normalizeAssignmentStatus(status);
+  if (normalized === 'in-progress') return 'border-l-[3px] border-l-blue-500 bg-blue-50';
+  if (normalized === 'done') return 'border-l-[3px] border-l-green-500 bg-green-50';
+  return 'border-l-[3px] border-l-gray-400 bg-card';
+}
+
 function makeId() {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -327,6 +347,7 @@ export default function WorkboardPage() {
     notes: false,
     escalations: false,
   });
+  const [workOrdersExpanded, setWorkOrdersExpanded] = useState(false);
 
   const triggerAssignmentFlash = useCallback((assignmentId: string, tone: 'complete' | 'started') => {
     if (!assignmentId) return;
@@ -2126,27 +2147,34 @@ export default function WorkboardPage() {
                   {workOrders.length > 0 ? 'Work Orders' : 'Work Orders (Schedule fallback)'}
                 </h3>
               </div>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{boardDate}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{boardDate}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => setWorkOrdersExpanded((current) => !current)}
+                >
+                  {workOrdersExpanded ? 'Hide' : 'Show'}
+                </Button>
+              </div>
             </div>
-            {workOrderBoardItems.length === 0 ? (
+            {!workOrdersExpanded ? (
+              <p className="text-xs text-muted-foreground">Collapsed. Click Show to view work orders.</p>
+            ) : workOrderBoardItems.length === 0 ? (
               <p className="text-xs text-muted-foreground">No work orders or schedule entries found for this date.</p>
             ) : (
-              <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:gap-2 md:overflow-visible md:pb-0 md:grid-cols-2">
+              <div className="flex gap-2 overflow-x-auto pb-1">
                 {workOrderBoardItems.map((item) => (
-                  <div key={item.id} className={`min-w-[260px] rounded-2xl border p-3 md:min-w-0 ${PRIORITY_COLOR[item.priority] ?? 'bg-muted/20 border-border'}`}>
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{item.title}</span>
-                      <Badge variant="outline" className="h-5 px-1.5 text-[10px] capitalize">
-                        {item.priority}
-                      </Badge>
-                    </div>
-                    {item.employeeName ? <p className="mb-1 text-xs text-muted-foreground">{item.employeeName}</p> : null}
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px] capitalize">
-                        {item.status}
-                      </Badge>
-                      {item.source === 'schedule_fallback' ? <span>Derived from schedule entries</span> : <span>From work_orders</span>}
-                    </div>
+                  <div key={item.id} className={`min-w-[420px] rounded-xl border px-3 py-2 ${PRIORITY_COLOR[item.priority] ?? 'bg-muted/20 border-border'}`}>
+                    <p className="truncate text-sm">
+                      <span className="font-medium">{item.employeeName || 'Crew'}</span>
+                      <span className="text-muted-foreground"> · </span>
+                      <span>{item.title}</span>
+                      <span className="text-muted-foreground"> · </span>
+                      <span className="capitalize">{item.status || 'planned'}</span>
+                    </p>
                   </div>
                 ))}
               </div>
@@ -2185,12 +2213,13 @@ export default function WorkboardPage() {
                   <span className="text-right">Status</span>
                 </div>
               </div>
-              {orderedDispatchBoard.map((lane, index) => {
+              {orderedDispatchBoard.map((lane) => {
                 const laneFlashTone = lane.employeeAssignments.reduce<'complete' | 'started' | null>((tone, assignment) => {
                   const assignmentId = assignment.id ?? '';
                   const nextTone = assignmentFlashMap[assignmentId];
                   return nextTone ?? tone;
                 }, null);
+                const initials = `${lane.employee.firstName?.[0] ?? ''}${lane.employee.lastName?.[0] ?? ''}`.toUpperCase();
                 return (
                   <div
                     key={lane.employee.id}
@@ -2280,7 +2309,14 @@ export default function WorkboardPage() {
                     {isExpanded ? (
                       <div className="border-t px-3 py-3">
                         {lane.employeeAssignments.length === 0 ? (
-                          <p className="mb-3 text-sm text-muted-foreground">No tasks assigned yet.</p>
+                          <div className="rounded-xl border border-dashed p-4 text-center">
+                            <p className="text-sm text-muted-foreground">No tasks assigned</p>
+                            {!isReadOnly ? (
+                              <Button size="sm" className="mt-3 min-h-11 w-full" onClick={() => openAssignmentDialog(lane.employee.id)}>
+                                + Assign Task
+                              </Button>
+                            ) : null}
+                          </div>
                         ) : (
                           <div className="space-y-2">
                             {lane.employeeAssignments.map((assignment) => {

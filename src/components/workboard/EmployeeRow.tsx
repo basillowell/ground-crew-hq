@@ -1,10 +1,9 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StatusChip } from '@/components/StatusChip';
 import { AvatarInitials } from '@/components/shared';
 import { TaskBlock } from './TaskBlock';
-import { GripVertical, Clock, Plus } from 'lucide-react';
+import { GripVertical, Plus } from 'lucide-react';
 import type { Employee, Assignment, Task } from '@/data/seedData';
 
 interface EmployeeRowProps {
@@ -30,12 +29,19 @@ interface EmployeeRowProps {
   weatherWarningsByAssignment?: Record<string, Array<{ level: 'warning' | 'danger'; message: string }>>;
 }
 
+function coverageBadgeClass(coveragePercent: number | undefined) {
+  if (typeof coveragePercent !== 'number') return 'bg-muted text-muted-foreground border-border';
+  if (coveragePercent >= 80) return 'bg-green-100 text-green-800 border-green-200';
+  if (coveragePercent >= 50) return 'bg-amber-100 text-amber-800 border-amber-200';
+  return 'bg-red-100 text-red-800 border-red-200';
+}
+
 export function EmployeeRow({
   employee,
-  assignments: empAssignments,
+  assignments: employeeAssignments,
   tasks,
   shiftLabel,
-  laneSummary,
+  laneSummary: _laneSummary,
   laneWarning,
   orderIndex,
   isDragging,
@@ -52,11 +58,7 @@ export function EmployeeRow({
   coveragePercent,
   weatherWarningsByAssignment,
 }: EmployeeRowProps) {
-  const sortedAssignments = [...empAssignments];
-  const totalMinutes = sortedAssignments.reduce((s, a) => s + a.duration, 0);
-  const hours = Math.floor(totalMinutes / 60);
-  const mins = totalMinutes % 60;
-  const nextTask = sortedAssignments[0] ? tasks.find((task) => task.id === sortedAssignments[0].taskId) : null;
+  const sortedAssignments = [...employeeAssignments];
 
   return (
     <Card
@@ -73,95 +75,72 @@ export function EmployeeRow({
           draggable
           onDragStart={() => onDragStart?.(employee.id)}
           onDragEnd={onDragEnd}
-          className="cursor-grab text-muted-foreground/60 mt-1 flex items-center gap-1 rounded-full border border-dashed px-2 py-1 text-[11px] hover:border-primary/30 hover:text-primary"
+          className="mt-1 flex cursor-grab items-center gap-1 rounded-full border border-dashed px-2 py-1 text-[11px] text-muted-foreground/60 hover:border-primary/30 hover:text-primary"
           title="Drag to reorder employee lanes for the display board"
         >
           <GripVertical className="h-4 w-4" />
           <span>Lane</span>
         </button>
         <AvatarInitials firstName={employee.firstName} lastName={employee.lastName} size="md" className="mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-base font-semibold">{employee.firstName} {employee.lastName}</span>
+            <span className="text-sm text-muted-foreground">{employee.role}</span>
             {typeof orderIndex === 'number' ? <Badge variant="secondary">Lane {orderIndex + 1}</Badge> : null}
-            <StatusChip variant="success">{employee.group}</StatusChip>
-            <StatusChip variant="neutral">{employee.department}</StatusChip>
-            <Badge variant="outline">{sortedAssignments.length} tasks</Badge>
-            {typeof coveragePercent === 'number' ? (
-              <Badge
-                className={
-                  coveragePercent >= 80
-                    ? 'bg-green-100 text-green-800'
-                    : coveragePercent >= 50
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-red-100 text-red-800'
-                }
-              >
-                Coverage: {Math.round(coveragePercent)}%
-              </Badge>
-            ) : null}
-            <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {hours}h {mins}m
-            </span>
+            <Badge variant="outline" className="rounded-full bg-muted/40">{shiftLabel || 'No shift'}</Badge>
+            <Badge variant="outline" className={`rounded-full ${coverageBadgeClass(coveragePercent)}`}>
+              {typeof coveragePercent === 'number' ? `${Math.round(coveragePercent)}%` : '—'}
+            </Badge>
+            <Badge variant="outline" className="ml-auto">{sortedAssignments.length} task{sortedAssignments.length === 1 ? '' : 's'}</Badge>
           </div>
-          <div className="text-xs text-muted-foreground mb-3">
-            {employee.role} · {employee.workerType} · {employee.language} {shiftLabel ? `· Shift ${shiftLabel}` : ''}
-          </div>
-          {laneSummary ? (
-            <div className="mb-3 rounded-xl border bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground">
-              {laneSummary}
-            </div>
-          ) : null}
+
           {laneWarning ? (
             <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
               {laneWarning}
             </div>
           ) : null}
-          <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <Badge variant="outline">{sortedAssignments.length > 0 ? 'Assigned' : 'Awaiting assignment'}</Badge>
-            {nextTask ? (
-              <span>
-                Next up: <span className="font-medium text-foreground">{nextTask.name}</span>
-              </span>
-            ) : (
-              <span>No task order has been built yet.</span>
-            )}
-          </div>
+
           <div className="space-y-2">
-            {sortedAssignments.length === 0 && (
-              <div className="rounded-xl border border-dashed px-3 py-3 text-xs text-muted-foreground">
-                No tasks assigned yet for this crew member on the selected board date.
+            {sortedAssignments.length === 0 ? (
+              <div className="rounded-xl border border-dashed px-3 py-5 text-center">
+                <p className="text-sm text-muted-foreground">No tasks assigned</p>
+                <Button variant="outline" size="sm" className="mt-3 h-8" onClick={() => onAddTask?.(employee.id)}>
+                  + Assign Task
+                </Button>
               </div>
+            ) : (
+              sortedAssignments.map((assignment) => {
+                const task = tasks.find((item) => item.id === assignment.taskId);
+                return task ? (
+                  <TaskBlock
+                    key={assignment.id}
+                    task={task}
+                    assignment={assignment}
+                    priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
+                    weatherWarnings={weatherWarningsByAssignment?.[assignment.id ?? ''] ?? []}
+                    draggable
+                    onDragStart={onTaskDragStart ? () => onTaskDragStart(employee.id, assignment.id ?? '') : undefined}
+                    onDrop={onTaskDropOnTask ? () => onTaskDropOnTask(employee.id, assignment.id ?? '') : undefined}
+                    onEdit={onEditAssignment ? () => onEditAssignment(assignment) : undefined}
+                    onRemove={onRemoveAssignment ? () => onRemoveAssignment(assignment.id) : undefined}
+                  />
+                ) : null;
+              })
             )}
-            {sortedAssignments.map((a) => {
-              const task = tasks.find(t => t.id === a.taskId);
-              return task ? (
-                <TaskBlock
-                  key={a.id}
-                  task={task}
-                  assignment={a}
-                  priorityIndex={sortedAssignments.findIndex((assignment) => assignment.id === a.id)}
-                  weatherWarnings={weatherWarningsByAssignment?.[a.id ?? ''] ?? []}
-                  draggable
-                  onDragStart={onTaskDragStart ? () => onTaskDragStart(employee.id, a.id ?? '') : undefined}
-                  onDrop={onTaskDropOnTask ? () => onTaskDropOnTask(employee.id, a.id ?? '') : undefined}
-                  onEdit={onEditAssignment ? () => onEditAssignment(a) : undefined}
-                  onRemove={onRemoveAssignment ? () => onRemoveAssignment(a.id) : undefined}
-                />
-              ) : null;
-            })}
           </div>
-          <div className="mt-3 flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs text-muted-foreground border border-dashed border-border px-3"
-              onClick={() => onAddTask?.(employee.id)}
-            >
-              <Plus className="h-3 w-3 mr-1" /> Add Task
-            </Button>
-          </div>
+
+          {sortedAssignments.length > 0 ? (
+            <div className="mt-3 flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 border border-dashed border-border px-3 text-xs text-muted-foreground"
+                onClick={() => onAddTask?.(employee.id)}
+              >
+                <Plus className="mr-1 h-3 w-3" /> Add Task
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
     </Card>
