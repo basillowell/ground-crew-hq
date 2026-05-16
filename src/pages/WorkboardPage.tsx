@@ -142,6 +142,17 @@ function formatRelativeTime(value?: string) {
   return `${deltaDays} day${deltaDays === 1 ? '' : 's'} ago`;
 }
 
+function normalizeEscalationThresholds(value: unknown): EscalationThresholds {
+  const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  return {
+    equipmentServiceOverdueDays: Number(raw.equipment_service_overdue_days ?? DEFAULT_ESCALATION_THRESHOLDS.equipmentServiceOverdueDays),
+    shiftCoverageWarningPct: Number(raw.shift_coverage_warning_pct ?? DEFAULT_ESCALATION_THRESHOLDS.shiftCoverageWarningPct),
+    windSpeedSprayCutoffMph: Number(raw.wind_speed_spray_cutoff_mph ?? DEFAULT_ESCALATION_THRESHOLDS.windSpeedSprayCutoffMph),
+    rainProbabilitySprayCutoffPct: Number(raw.rain_probability_spray_cutoff_pct ?? DEFAULT_ESCALATION_THRESHOLDS.rainProbabilitySprayCutoffPct),
+    heatAdvisoryTempF: Number(raw.heat_advisory_temp_f ?? DEFAULT_ESCALATION_THRESHOLDS.heatAdvisoryTempF),
+  };
+}
+
 function normalizeWeatherLocation(row: Record<string, unknown>): WeatherLocation {
   return {
     id: String(row.id ?? ''),
@@ -246,6 +257,22 @@ type WorkboardWeatherSnapshot = {
   windSpeed: number;
   precipitationProbability: number;
   weatherCode: number;
+};
+
+type EscalationThresholds = {
+  equipmentServiceOverdueDays: number;
+  shiftCoverageWarningPct: number;
+  windSpeedSprayCutoffMph: number;
+  rainProbabilitySprayCutoffPct: number;
+  heatAdvisoryTempF: number;
+};
+
+const DEFAULT_ESCALATION_THRESHOLDS: EscalationThresholds = {
+  equipmentServiceOverdueDays: 90,
+  shiftCoverageWarningPct: 50,
+  windSpeedSprayCutoffMph: 10,
+  rainProbabilitySprayCutoffPct: 40,
+  heatAdvisoryTempF: 95,
 };
 
 type EscalationAlert = {
@@ -410,6 +437,25 @@ export default function WorkboardPage() {
     },
     staleTime: 1000 * 60 * 2,
     refetchInterval: 1000 * 30,
+  });
+
+  const escalationThresholdsQuery = useQuery({
+    queryKey: ['workboard-escalation-thresholds', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return DEFAULT_ESCALATION_THRESHOLDS;
+      const { data, error } = await supabase
+        .from('scheduler_settings')
+        .select('escalation_config')
+        .eq('org_id', currentUser.orgId)
+        .single();
+      if (error) {
+        return DEFAULT_ESCALATION_THRESHOLDS;
+      }
+      const config = (data as { escalation_config?: unknown } | null)?.escalation_config;
+      return normalizeEscalationThresholds(config);
+    },
+    staleTime: 1000 * 60,
   });
 
   const pendingTaskRequestsQuery = useQuery({
@@ -764,6 +810,8 @@ export default function WorkboardPage() {
     [effectivePropertyId, taskRequests],
   );
 
+  const escalationThresholds = escalationThresholdsQuery.data ?? DEFAULT_ESCALATION_THRESHOLDS;
+
   const isRequestOpen = useCallback(
     (status: string) => !['assigned', 'dismissed', 'done', 'closed'].includes(status.toLowerCase()),
     [],
@@ -895,8 +943,8 @@ export default function WorkboardPage() {
         category.includes('spray') || category.includes('irrigation') || category.includes('application');
       const isMowingTask = category === 'mowing';
 
-      const windHighForSpray = weatherSnapshot.windSpeed > 10;
-      const rainHighForSpray = weatherSnapshot.precipitationProbability > 40;
+      const windHighForSpray = weatherSnapshot.windSpeed > escalationThresholds.windSpeedSprayCutoffMph;
+      const rainHighForSpray = weatherSnapshot.precipitationProbability > escalationThresholds.rainProbabilitySprayCutoffPct;
       if (isSprayingTask && windHighForSpray && rainHighForSpray) {
         warnings.push({ level: 'danger', message: '🛑 Unsafe spray conditions' });
       } else if (isSprayingTask) {
@@ -921,12 +969,12 @@ export default function WorkboardPage() {
         });
       }
 
-      if (weatherSnapshot.temperature > 105) {
+      if (weatherSnapshot.temperature > escalationThresholds.heatAdvisoryTempF + 10) {
         warnings.push({
           level: 'danger',
           message: '🛑 Extreme heat — consider rescheduling',
         });
-      } else if (weatherSnapshot.temperature > 95) {
+      } else if (weatherSnapshot.temperature > escalationThresholds.heatAdvisoryTempF) {
         warnings.push({
           level: 'warning',
           message: '🔴 Heat advisory — schedule water breaks',
@@ -938,7 +986,7 @@ export default function WorkboardPage() {
       }
       return acc;
     }, {});
-  }, [dayAssignments, taskList, weatherSnapshot]);
+  }, [dayAssignments, escalationThresholds.heatAdvisoryTempF, escalationThresholds.rainProbabilitySprayCutoffPct, escalationThresholds.windSpeedSprayCutoffMph, taskList, weatherSnapshot]);
 
   const orderedDispatchBoard = useMemo(() => {
     const ranking = new Map(laneOrder.map((id, i) => [id, i]));
@@ -982,39 +1030,49 @@ export default function WorkboardPage() {
       });
     }
 
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const overdueThresholdDays = Math.max(1, escalationThresholds.equipmentServiceOverdueDays);
+    const overdueThresholdDate = new Date();
+    overdueThresholdDate.setDate(overdueThresholdDate.getDate() - overdueThresholdDays);
     let overdueCount = 0;
     let maxOverdueDays = 0;
     for (const unit of equipmentList as Array<Record<string, unknown>>) {
       const lastServicedRaw = String(unit.lastService ?? unit.last_serviced ?? '');
       if (!lastServicedRaw) continue;
       const lastServicedDate = new Date(lastServicedRaw);
-      if (Number.isNaN(lastServicedDate.getTime()) || lastServicedDate >= ninetyDaysAgo) continue;
-      const overdueDays = Math.max(0, Math.floor((Date.now() - lastServicedDate.getTime()) / (1000 * 60 * 60 * 24)) - 90);
+      if (Number.isNaN(lastServicedDate.getTime()) || lastServicedDate >= overdueThresholdDate) continue;
+      const overdueDays = Math.max(
+        0,
+        Math.floor((Date.now() - lastServicedDate.getTime()) / (1000 * 60 * 60 * 24)) - overdueThresholdDays,
+      );
       overdueCount += 1;
       if (overdueDays > maxOverdueDays) maxOverdueDays = overdueDays;
     }
     if (overdueCount > 0) {
       alerts.push({
         id: `equipment-overdue-${boardDate}`,
-        severity: maxOverdueDays >= 180 ? 'critical' : 'warning',
+        severity: maxOverdueDays >= overdueThresholdDays ? 'critical' : 'warning',
         message: `${overdueCount} equipment unit${overdueCount === 1 ? '' : 's'} overdue for service`,
         timestamp: nowIso,
       });
     }
 
-    const lowCoverageCount = orderedDispatchBoard.filter((lane) => lane.shiftMinutes > 0 && lane.coveragePercent < 50).length;
+    const lowCoverageCount = orderedDispatchBoard.filter(
+      (lane) => lane.shiftMinutes > 0 && lane.coveragePercent < escalationThresholds.shiftCoverageWarningPct,
+    ).length;
     if (lowCoverageCount > 0) {
       alerts.push({
         id: `coverage-low-${boardDate}`,
         severity: 'warning',
-        message: `Shift coverage below 50% for ${lowCoverageCount} crew member${lowCoverageCount === 1 ? '' : 's'}`,
+        message: `Shift coverage below ${Math.round(escalationThresholds.shiftCoverageWarningPct)}% for ${lowCoverageCount} crew member${lowCoverageCount === 1 ? '' : 's'}`,
         timestamp: nowIso,
       });
     }
 
-    if (weatherSnapshot && (weatherSnapshot.windSpeed > 15 || weatherSnapshot.precipitationProbability > 60)) {
+    if (
+      weatherSnapshot &&
+      (weatherSnapshot.windSpeed > escalationThresholds.windSpeedSprayCutoffMph ||
+        weatherSnapshot.precipitationProbability > escalationThresholds.rainProbabilitySprayCutoffPct)
+    ) {
       alerts.push({
         id: `weather-unsafe-${boardDate}`,
         severity: 'critical',
@@ -1023,7 +1081,7 @@ export default function WorkboardPage() {
       });
     }
 
-    const openTaskRequestCount = propertyRequests.filter((request) => request.status === 'open').length;
+    const openTaskRequestCount = propertyRequests.filter((request) => isRequestOpen(String(request.status ?? ''))).length;
     if (openTaskRequestCount > 0) {
       alerts.push({
         id: `open-requests-${boardDate}`,
@@ -1034,7 +1092,7 @@ export default function WorkboardPage() {
     }
 
     return alerts.filter((alert) => !dismissedEscalationIds.includes(alert.id));
-  }, [boardDate, dayAssignments, dismissedEscalationIds, equipmentList, orderedDispatchBoard, propertyRequests, scheduleList, weatherSnapshot]);
+  }, [boardDate, dayAssignments, dismissedEscalationIds, equipmentList, escalationThresholds.equipmentServiceOverdueDays, escalationThresholds.rainProbabilitySprayCutoffPct, escalationThresholds.shiftCoverageWarningPct, escalationThresholds.windSpeedSprayCutoffMph, isRequestOpen, orderedDispatchBoard, propertyRequests, scheduleList, weatherSnapshot]);
 
   const dismissEscalation = useCallback((alertId: string) => {
     setDismissedEscalationIds((current) => (current.includes(alertId) ? current : [...current, alertId]));

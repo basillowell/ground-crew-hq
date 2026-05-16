@@ -18,7 +18,24 @@ interface SchedulerSettings {
   min_shift_hours: number;
   max_shift_hours: number;
   overtime_threshold_hours: number;
+  escalation_config?: Partial<EscalationThresholds> | null;
 }
+
+interface EscalationThresholds {
+  equipment_service_overdue_days: number;
+  shift_coverage_warning_pct: number;
+  wind_speed_spray_cutoff_mph: number;
+  rain_probability_spray_cutoff_pct: number;
+  heat_advisory_temp_f: number;
+}
+
+const DEFAULT_ESCALATION_THRESHOLDS: EscalationThresholds = {
+  equipment_service_overdue_days: 90,
+  shift_coverage_warning_pct: 50,
+  wind_speed_spray_cutoff_mph: 10,
+  rain_probability_spray_cutoff_pct: 40,
+  heat_advisory_temp_f: 95,
+};
 
 interface ShiftTemplate {
   id: string;
@@ -1265,9 +1282,12 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
 
 function SchedulerTab({ orgId }: { orgId: string }) {
   const [settings, setSettings] = useState<SchedulerSettings | null>(null);
+  const [alertsConfig, setAlertsConfig] = useState<EscalationThresholds>(DEFAULT_ESCALATION_THRESHOLDS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [alertsSaving, setAlertsSaving] = useState(false);
+  const [alertsSaved, setAlertsSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<ShiftTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -1287,6 +1307,17 @@ function SchedulerTab({ orgId }: { orgId: string }) {
     { key: 'sun', label: 'S' },
   ] as const;
 
+  const normalizeAlertsConfig = (value: unknown): EscalationThresholds => {
+    const raw = (value && typeof value === 'object' ? value : {}) as Partial<EscalationThresholds>;
+    return {
+      equipment_service_overdue_days: Number(raw.equipment_service_overdue_days ?? DEFAULT_ESCALATION_THRESHOLDS.equipment_service_overdue_days),
+      shift_coverage_warning_pct: Number(raw.shift_coverage_warning_pct ?? DEFAULT_ESCALATION_THRESHOLDS.shift_coverage_warning_pct),
+      wind_speed_spray_cutoff_mph: Number(raw.wind_speed_spray_cutoff_mph ?? DEFAULT_ESCALATION_THRESHOLDS.wind_speed_spray_cutoff_mph),
+      rain_probability_spray_cutoff_pct: Number(raw.rain_probability_spray_cutoff_pct ?? DEFAULT_ESCALATION_THRESHOLDS.rain_probability_spray_cutoff_pct),
+      heat_advisory_temp_f: Number(raw.heat_advisory_temp_f ?? DEFAULT_ESCALATION_THRESHOLDS.heat_advisory_temp_f),
+    };
+  };
+
   const fetchSettings = useCallback(async () => {
     if (!supabase) {
       setLoading(false);
@@ -1305,7 +1336,9 @@ function SchedulerTab({ orgId }: { orgId: string }) {
       setLoading(false);
       return;
     }
-    setSettings(data as SchedulerSettings);
+    const nextSettings = data as SchedulerSettings;
+    setSettings(nextSettings);
+    setAlertsConfig(normalizeAlertsConfig(nextSettings.escalation_config));
     setLoading(false);
   }, [orgId]);
 
@@ -1368,6 +1401,31 @@ function SchedulerTab({ orgId }: { orgId: string }) {
     }
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
+  };
+
+  const saveAlertsConfig = async () => {
+    if (!supabase || !orgId) return;
+    setAlertsSaving(true);
+    setError(null);
+    const { error: saveError } = await supabase
+      .from('scheduler_settings')
+      .update({
+        escalation_config: {
+          equipment_service_overdue_days: Number(alertsConfig.equipment_service_overdue_days),
+          shift_coverage_warning_pct: Number(alertsConfig.shift_coverage_warning_pct),
+          wind_speed_spray_cutoff_mph: Number(alertsConfig.wind_speed_spray_cutoff_mph),
+          rain_probability_spray_cutoff_pct: Number(alertsConfig.rain_probability_spray_cutoff_pct),
+          heat_advisory_temp_f: Number(alertsConfig.heat_advisory_temp_f),
+        },
+      })
+      .eq('org_id', orgId);
+    setAlertsSaving(false);
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+    setAlertsSaved(true);
+    window.setTimeout(() => setAlertsSaved(false), 2000);
   };
 
   const deleteTemplate = async (templateId: string) => {
@@ -1549,6 +1607,101 @@ function SchedulerTab({ orgId }: { orgId: string }) {
             }}
           >
             Save template
+          </button>
+        </div>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 600 }}>Alerts</h3>
+        <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>
+          Configure escalation thresholds used by the Workboard escalation center.
+        </p>
+        <div style={{ display: 'grid', gap: '12px' }}>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: '#6b7280' }}>Alert when equipment not serviced for X days</span>
+            <input
+              type="number"
+              min={1}
+              value={alertsConfig.equipment_service_overdue_days}
+              onChange={(event) =>
+                setAlertsConfig((current) => ({
+                  ...current,
+                  equipment_service_overdue_days: Number(event.target.value || '0'),
+                }))
+              }
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: '#6b7280' }}>Warn when crew coverage drops below X%</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={alertsConfig.shift_coverage_warning_pct}
+              onChange={(event) =>
+                setAlertsConfig((current) => ({
+                  ...current,
+                  shift_coverage_warning_pct: Number(event.target.value || '0'),
+                }))
+              }
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: '#6b7280' }}>Flag spray tasks when wind exceeds X mph</span>
+            <input
+              type="number"
+              min={1}
+              value={alertsConfig.wind_speed_spray_cutoff_mph}
+              onChange={(event) =>
+                setAlertsConfig((current) => ({
+                  ...current,
+                  wind_speed_spray_cutoff_mph: Number(event.target.value || '0'),
+                }))
+              }
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: '#6b7280' }}>Flag spray tasks when rain chance exceeds X%</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={alertsConfig.rain_probability_spray_cutoff_pct}
+              onChange={(event) =>
+                setAlertsConfig((current) => ({
+                  ...current,
+                  rain_probability_spray_cutoff_pct: Number(event.target.value || '0'),
+                }))
+              }
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: '#6b7280' }}>Show heat advisory above X°F</span>
+            <input
+              type="number"
+              min={1}
+              value={alertsConfig.heat_advisory_temp_f}
+              onChange={(event) =>
+                setAlertsConfig((current) => ({
+                  ...current,
+                  heat_advisory_temp_f: Number(event.target.value || '0'),
+                }))
+              }
+            />
+          </label>
+          <button
+            onClick={() => void saveAlertsConfig()}
+            style={{
+              width: 'fit-content',
+              border: 'none',
+              borderRadius: '8px',
+              color: '#ffffff',
+              background: alertsSaved ? '#15803d' : '#166534',
+              padding: '8px 14px',
+              cursor: 'pointer',
+            }}
+          >
+            {alertsSaving ? 'Saving...' : alertsSaved ? 'Saved ✓' : 'Save alerts'}
           </button>
         </div>
       </div>
