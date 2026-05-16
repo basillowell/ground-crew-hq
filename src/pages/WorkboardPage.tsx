@@ -97,6 +97,33 @@ function makeId() {
     : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2, 14)}`;
 }
 
+const VALID_ASSIGNMENT_STATUSES = new Set(['planned', 'in_progress', 'done']);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidUuid(value: string | null | undefined) {
+  return UUID_PATTERN.test(String(value ?? '').trim());
+}
+
+function isValidAssignmentDate(value: string | null | undefined) {
+  return DATE_PATTERN.test(String(value ?? '').trim());
+}
+
+function validateAssignmentWritePayload(payload: {
+  employee_id: string;
+  task_id: string;
+  org_id: string;
+  date: string;
+  status: string;
+}) {
+  if (!isValidUuid(payload.employee_id)) return 'Invalid employee ID. Please select a crew member.';
+  if (!isValidUuid(payload.task_id)) return 'Invalid task ID. Please reselect a task.';
+  if (!payload.org_id) return 'Missing organization context.';
+  if (!isValidAssignmentDate(payload.date)) return 'Invalid assignment date.';
+  if (!VALID_ASSIGNMENT_STATUSES.has(payload.status)) return 'Invalid assignment status.';
+  return null;
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -978,6 +1005,18 @@ export default function WorkboardPage() {
     },
     [assignmentsQuery.queryKey, queryClient],
   );
+
+  const appendAssignmentToCaches = useCallback(
+    (nextAssignment: Assignment) => {
+      const scopedAssignmentsKey = ['assignments', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'];
+      const dateAssignmentsKey = ['assignments', currentUser?.orgId ?? 'all-orgs', boardDate];
+
+      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) => [...(current ?? []), nextAssignment]);
+      queryClient.setQueryData<Assignment[]>(scopedAssignmentsKey, (current) => [...(current ?? []), nextAssignment]);
+      queryClient.setQueryData<Assignment[]>(dateAssignmentsKey, (current) => [...(current ?? []), nextAssignment]);
+    },
+    [assignmentsQuery.queryKey, boardDate, currentUser?.orgId, effectivePropertyId, queryClient],
+  );
   const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
     if (workOrders.length > 0) {
       return workOrders.slice(0, 6).map((row) => ({
@@ -1337,6 +1376,7 @@ export default function WorkboardPage() {
       return acc;
     }, {});
 
+    let hasValidationFailure = false;
     selected.forEach((item) => {
       const shift = scheduledByEmployee.get(item.employeeId);
       if (!shift) {
@@ -1345,7 +1385,7 @@ export default function WorkboardPage() {
       }
       const nextOrder = (assignmentCountByEmployee[item.employeeId] ?? 0) + 1;
       assignmentCountByEmployee[item.employeeId] = nextOrder;
-      rowsToInsert.push({
+      const row = {
         id: makeId(),
         org_id: currentUser.orgId,
         employee_id: item.employeeId,
@@ -1362,8 +1402,22 @@ export default function WorkboardPage() {
         estimated_hours: item.estimatedHours,
         order_index: nextOrder,
         start_time: shift.shiftStart ?? null,
+      };
+      const validationError = validateAssignmentWritePayload({
+        employee_id: String(row.employee_id ?? ''),
+        task_id: String(row.task_id ?? ''),
+        org_id: String(row.org_id ?? ''),
+        date: String(row.date ?? ''),
+        status: String(row.status ?? ''),
       });
+      if (validationError) {
+        toast.error(validationError);
+        hasValidationFailure = true;
+        return;
+      }
+      rowsToInsert.push(row);
     });
+    if (hasValidationFailure) return;
 
     if (rowsToInsert.length === 0) {
       const skippedNames = Array.from(skippedEmployeeIds)
@@ -1383,6 +1437,7 @@ export default function WorkboardPage() {
     setQuickPlanApplying(false);
 
     if (error) {
+      console.error('[ASSIGNMENT ERROR]', { error, payload: rowsToInsert });
       toast.error(`Could not apply quick plan: ${error.message}`);
       return;
     }
@@ -1489,10 +1544,28 @@ export default function WorkboardPage() {
     }
 
     setApplyingTaskTemplate(true);
+    const validationError = rowsToInsert
+      .map((row) =>
+        validateAssignmentWritePayload({
+          employee_id: String(row.employee_id ?? ''),
+          task_id: String(row.task_id ?? ''),
+          org_id: String(row.org_id ?? ''),
+          date: String(row.date ?? ''),
+          status: String(row.status ?? ''),
+        }),
+      )
+      .find(Boolean);
+    if (validationError) {
+      toast.error(validationError);
+      setApplyingTaskTemplate(false);
+      return;
+    }
+
     const { error } = await supabase.from('assignments').insert(rowsToInsert);
     setApplyingTaskTemplate(false);
 
     if (error) {
+      console.error('[ASSIGNMENT ERROR]', { error, payload: rowsToInsert });
       toast.error(`Could not apply task template: ${error.message}`);
       return;
     }
@@ -1773,6 +1846,14 @@ export default function WorkboardPage() {
       toast.error('No scheduled crew available for bulk assign.');
       return;
     }
+    if (!currentUser?.orgId) {
+      toast.error('Missing organization context.');
+      return;
+    }
+    if (!isValidAssignmentDate(boardDate)) {
+      toast.error('Invalid assignment date.');
+      return;
+    }
     const resolvedPropertyId =
       (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ??
       assignmentDraft.propertyId ??
@@ -1810,13 +1891,7 @@ export default function WorkboardPage() {
       return;
     }
 
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidPattern.test(selectedTaskId)) {
-      console.error('[Workboard] Invalid task UUID selected', {
-        selectedTaskId,
-        draftTaskId: assignmentDraft.taskId,
-        selectedTask,
-      });
+    if (!isValidUuid(selectedTaskId)) {
       toast.error('Selected task is invalid. Please reselect the task.');
       return;
     }
@@ -1828,23 +1903,21 @@ export default function WorkboardPage() {
       });
     }
 
-
-    let error: { message?: string; code?: string } | null = null;
-    const assignmentId = editingAssignmentId ?? makeId();
-
     if (assignToAllScheduledCrew && !editingAssignmentId) {
       const scheduledByEmployee = new Map(
         scheduleList
           .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
           .map((entry) => [entry.employeeId, entry]),
       );
-      const rowsToInsert: Record<string, unknown>[] = [];
+      const rowsToInsert: Array<Record<string, unknown>> = [];
+      const optimisticAssignments: Assignment[] = [];
       const orderIndexByEmployee = dayAssignments.reduce<Record<string, number>>((acc, assignment) => {
         acc[assignment.employeeId] = (acc[assignment.employeeId] ?? 0) + 1;
         return acc;
       }, {});
 
-      scheduledEmployees.forEach((employee) => {
+      let hasValidationFailure = false;
+      for (const employee of scheduledEmployees) {
         const shift = scheduledByEmployee.get(employee.id);
         const propertyIdForEmployee =
           (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : shift?.propertyId) ??
@@ -1854,9 +1927,10 @@ export default function WorkboardPage() {
         if (!propertyIdForEmployee) return;
         const nextOrder = (orderIndexByEmployee[employee.id] ?? 0) + 1;
         orderIndexByEmployee[employee.id] = nextOrder;
+        const assignmentId = makeId();
         const row: Record<string, unknown> = {
-          id: makeId(),
-          org_id: currentUser?.orgId ?? null,
+          id: assignmentId,
+          org_id: currentUser.orgId,
           employee_id: employee.id,
           property_id: propertyIdForEmployee,
           task_id: selectedTaskId,
@@ -1873,28 +1947,81 @@ export default function WorkboardPage() {
           row.equipment_unit_id = assignmentDraft.equipmentId;
           row.equipment_id = assignmentDraft.equipmentId;
         }
+        const validationError = validateAssignmentWritePayload({
+          employee_id: String(row.employee_id ?? ''),
+          task_id: String(row.task_id ?? ''),
+          org_id: String(row.org_id ?? ''),
+          date: String(row.date ?? ''),
+          status: String(row.status ?? ''),
+        });
+        if (validationError) {
+          toast.error(validationError);
+          hasValidationFailure = true;
+          break;
+        }
+
         rowsToInsert.push(row);
-      });
+        optimisticAssignments.push({
+          id: assignmentId,
+          employeeId: employee.id,
+          taskId: selectedTaskId,
+          equipmentId: assignmentDraft.equipmentId || undefined,
+          date: boardDate,
+          startTime: assignmentDraft.startTime || '06:00',
+          duration: estimatedMinutes,
+          area: assignmentDraft.area.trim() || 'Primary zone',
+          status: 'planned',
+        });
+      }
+
+      if (hasValidationFailure) return;
 
       if (rowsToInsert.length === 0) {
         toast.error('No scheduled crew available for bulk assign.');
         return;
       }
-      const insertResult = await supabase.from('assignments').insert(rowsToInsert);
-      error = insertResult.error;
-      if (!error) {
-        toast.success(`Assigned ${selectedTaskName} to ${rowsToInsert.length} crew members.`);
+
+      const { data, error } = await supabase
+        .from('assignments')
+        .insert(rowsToInsert)
+        .select();
+
+      if (error) {
+        console.error('[ASSIGNMENT ERROR]', { error, payload: rowsToInsert });
+        toast.error(`Task assignment failed: ${error.message}`);
+        return;
       }
+
+      const insertedRows = (data ?? []) as Array<Record<string, unknown>>;
+      if (insertedRows.length > 0) {
+        insertedRows.forEach((row) => {
+          appendAssignmentToCaches({
+            id: String(row.id ?? ''),
+            employeeId: String(row.employee_id ?? ''),
+            taskId: String(row.task_id ?? ''),
+            equipmentId: row.equipment_unit_id ? String(row.equipment_unit_id) : undefined,
+            date: String(row.date ?? boardDate),
+            startTime: String(row.start_time ?? (assignmentDraft.startTime || '06:00')),
+            duration: Math.round(Number(row.estimated_hours ?? 0) * 60),
+            area: String(row.location ?? (assignmentDraft.area.trim() || 'Primary zone')),
+            status: normalizeAssignmentStatus(String(row.status ?? 'planned')) as Assignment['status'],
+          });
+        });
+      } else {
+        optimisticAssignments.forEach((assignment) => appendAssignmentToCaches(assignment));
+      }
+      toast.success(`Assigned ${selectedTaskName} to ${rowsToInsert.length} crew members.`);
     } else {
+      const assignmentId = editingAssignmentId ?? makeId();
       const basePayload: Record<string, unknown> = {
         id: assignmentId,
-        org_id: currentUser?.orgId ?? null,
+        org_id: currentUser.orgId,
         employee_id: assignmentDraft.employeeId,
         property_id: resolvedPropertyId,
         task_id: selectedTaskId,
         title: selectedTaskName,
         date: boardDate,
-        status: 'planned',
+        status: assignmentDraft.status ?? 'planned',
         estimated_hours: estimatedHours,
         order_index: existingEmployeeAssignments.length,
       };
@@ -1905,52 +2032,45 @@ export default function WorkboardPage() {
         basePayload.equipment_unit_id = assignmentDraft.equipmentId;
         basePayload.equipment_id = assignmentDraft.equipmentId;
       }
-      const upsertResult = await supabase.from('assignments').upsert(basePayload);
-      error = upsertResult.error;
-    }
-
-    if (error && !(assignToAllScheduledCrew && !editingAssignmentId)) {
-      const fallbackPayload: Record<string, unknown> = {
-        id: assignmentId,
-        org_id: currentUser?.orgId ?? null,
-        employee_id: assignmentDraft.employeeId,
-        property_id: resolvedPropertyId,
-        task_id: selectedTaskId,
-        title: selectedTaskName,
-        date: boardDate,
-        status: 'planned',
-        estimated_hours: estimatedHours,
-      };
-      if (assignmentDraft.startTime) fallbackPayload.start_time = assignmentDraft.startTime;
-      if (assignmentDraft.area.trim()) fallbackPayload.location = assignmentDraft.area.trim();
-      if (assignmentDraft.notes.trim()) fallbackPayload.notes = assignmentDraft.notes.trim();
-      if (assignmentDraft.equipmentId) {
-        fallbackPayload.equipment_unit_id = assignmentDraft.equipmentId;
-        fallbackPayload.equipment_id = assignmentDraft.equipmentId;
+      const validationError = validateAssignmentWritePayload({
+        employee_id: String(basePayload.employee_id ?? ''),
+        task_id: String(basePayload.task_id ?? ''),
+        org_id: String(basePayload.org_id ?? ''),
+        date: String(basePayload.date ?? ''),
+        status: String(basePayload.status ?? ''),
+      });
+      if (validationError) {
+        toast.error(validationError);
+        return;
       }
-      const fallback = await supabase.from('assignments').upsert(fallbackPayload);
-      error = fallback.error;
-    }
 
-    if (error) {
-      console.error('[Workboard] Assignment upsert failed', { message: error.message, code: error.code, employeeId: assignmentDraft.employeeId, taskId: assignmentDraft.taskId });
-      toast('Unable to save assignment', { description: error.message });
-      return;
-    }
+      const { data, error } = await supabase
+        .from('assignments')
+        .upsert(basePayload)
+        .select()
+        .single();
 
-    if (!(assignToAllScheduledCrew && !editingAssignmentId)) {
+      if (error) {
+        console.error('[ASSIGNMENT ERROR]', { error, payload: basePayload });
+        toast.error(`Task assignment failed: ${error.message}`);
+        return;
+      }
+
       const optimisticAssignment: Assignment = {
         id: assignmentId,
-        employeeId: assignmentDraft.employeeId,
-        taskId: selectedTaskId,
-        equipmentId: assignmentDraft.equipmentId || undefined,
-        date: boardDate,
-        startTime: assignmentDraft.startTime || '06:00',
-        duration: estimatedMinutes,
-        area: assignmentDraft.area.trim() || 'Primary zone',
-        status: assignmentDraft.status ?? 'planned',
+        employeeId: String(data?.employee_id ?? assignmentDraft.employeeId),
+        taskId: String(data?.task_id ?? selectedTaskId),
+        equipmentId: data?.equipment_unit_id ? String(data.equipment_unit_id) : assignmentDraft.equipmentId || undefined,
+        date: String(data?.date ?? boardDate),
+        startTime: String(data?.start_time ?? (assignmentDraft.startTime || '06:00')),
+        duration: Math.round(Number(data?.estimated_hours ?? estimatedHours) * 60),
+        area: String(data?.location ?? (assignmentDraft.area.trim() || 'Primary zone')),
+        status: normalizeAssignmentStatus(String(data?.status ?? assignmentDraft.status ?? 'planned')) as Assignment['status'],
       };
-      upsertAssignmentInCache(optimisticAssignment);
+      appendAssignmentToCaches(optimisticAssignment);
+      const selectedEmployee = employeeList.find((employee) => employee.id === optimisticAssignment.employeeId);
+      const employeeName = selectedEmployee ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}`.trim() : 'crew member';
+      toast.success(`${selectedTaskName} assigned to ${employeeName}`);
     }
 
     if (linkedRequestId) {
@@ -1974,13 +2094,6 @@ export default function WorkboardPage() {
     setAssignToAllScheduledCrew(false);
     setWeatherConflictOverride(false);
     setAssignmentDialogOpen(false);
-    if (!(assignToAllScheduledCrew && !editingAssignmentId)) {
-      toast(editingAssignmentId ? 'Assignment updated' : 'Assignment dispatched', {
-        description: editingAssignmentId
-          ? 'The crew board has been updated.'
-          : 'Task has been dispatched to the crew member.',
-      });
-    }
   }
 
   async function removeAssignment(assignmentId: string) {
@@ -1991,6 +2104,8 @@ export default function WorkboardPage() {
     if (!supabase) return;
     const assignmentToRemove = dayAssignments.find((assignment) => assignment.id === assignmentId);
     if (!assignmentToRemove) return;
+    const confirmed = window.confirm('Remove this task assignment?');
+    if (!confirmed) return;
 
     removeAssignmentFromCache(assignmentId);
 
@@ -1998,10 +2113,12 @@ export default function WorkboardPage() {
       delete pendingDeleteTimeoutsRef.current[assignmentId];
       const { error } = await supabase.from('assignments').delete().eq('id', assignmentId);
       if (error) {
+        console.error('[ASSIGNMENT ERROR]', { error, payload: { id: assignmentId } });
         upsertAssignmentInCache(assignmentToRemove);
-        toast('Unable to remove assignment', { description: error.message });
+        toast.error(`Failed to remove task: ${error.message}`);
         return;
       }
+      toast.success('Task removed');
       void queryClient.invalidateQueries({ queryKey: ['assignments'] });
     }, 3000);
 
@@ -2079,11 +2196,13 @@ export default function WorkboardPage() {
       .upsert(orderUpdates, { onConflict: 'id' });
 
     if (error) {
-      toast.error('Unable to save task order', { description: error.message });
+      console.error('[ASSIGNMENT ERROR]', { error, payload: orderUpdates });
+      toast.error(`Task order update failed: ${error.message}`);
       void queryClient.invalidateQueries({ queryKey: ['assignments'] });
       return;
     }
 
+    toast.success('Task order updated');
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
   }
 
@@ -2098,27 +2217,61 @@ export default function WorkboardPage() {
     const resolvedPropertyId =
       (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ??
       activeProperty?.id ??
-      'b50b42cd-903e-4280-9373-1d9cae97b2b3';
+      null;
+    if (!resolvedPropertyId) {
+      toast.error('Missing property context.');
+      return;
+    }
+    const fallbackTaskId = taskLibrary.find((task) => isValidUuid(task.id))?.id ?? '';
+    if (!isValidUuid(fallbackTaskId)) {
+      toast.error('Quick task requires a valid task in the task library.');
+      return;
+    }
     const orderIndex = assignmentList.filter(
       (assignment) => assignment.employeeId === quickTaskDraft.employeeId && assignment.date === quickTaskDraft.date,
     ).length;
-    const { error } = await supabase.from('assignments').insert({
+    const payload = {
       id: makeId(),
       org_id: currentUser.orgId,
       employee_id: quickTaskDraft.employeeId,
       property_id: resolvedPropertyId,
-      task_id: null,
+      task_id: fallbackTaskId,
       date: quickTaskDraft.date,
+      title: 'Quick task',
       notes: quickTaskDraft.notes.trim(),
       location: quickTaskDraft.location.trim() || null,
       status: 'planned',
       order_index: orderIndex,
       start_time: '05:30',
+      estimated_hours: 0,
+    };
+    const validationError = validateAssignmentWritePayload({
+      employee_id: payload.employee_id,
+      task_id: payload.task_id,
+      org_id: payload.org_id,
+      date: payload.date,
+      status: payload.status,
     });
-    if (error) {
-      toast.error('Unable to add task', { description: error.message });
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
+    const { data, error } = await supabase.from('assignments').insert(payload).select().single();
+    if (error) {
+      console.error('[ASSIGNMENT ERROR]', { error, payload });
+      toast.error(`Task assignment failed: ${error.message}`);
+      return;
+    }
+    appendAssignmentToCaches({
+      id: String(data?.id ?? payload.id),
+      employeeId: String(data?.employee_id ?? payload.employee_id),
+      taskId: String(data?.task_id ?? payload.task_id),
+      date: String(data?.date ?? payload.date),
+      startTime: String(data?.start_time ?? payload.start_time),
+      duration: Math.round(Number(data?.estimated_hours ?? 0) * 60),
+      area: String(data?.location ?? payload.location ?? 'Primary zone'),
+      status: normalizeAssignmentStatus(String(data?.status ?? payload.status)) as Assignment['status'],
+    });
     await queryClient.invalidateQueries({ queryKey: ['assignments'] });
     setQuickTaskDialogOpen(false);
     toast.success('Task added to workflow', {
@@ -2142,23 +2295,53 @@ export default function WorkboardPage() {
 
     const orderIndex = dayAssignments.filter((a) => a.employeeId === request.employee_id).length + 1;
     const notes = [request.title, request.description].filter(Boolean).join(' — ');
-    const { error: assignmentError } = await supabase.from('assignments').insert({
+    const fallbackTaskId = taskLibrary.find((task) => isValidUuid(task.id))?.id ?? '';
+    if (!isValidUuid(fallbackTaskId)) {
+      toast.error('Request approval requires a valid task in the task library.');
+      return;
+    }
+    const payload = {
       id: makeId(),
       org_id: currentUser.orgId,
       employee_id: request.employee_id,
       property_id: resolvedPropertyId,
-      task_id: null,
+      task_id: fallbackTaskId,
       date: request.date,
+      title: request.title || 'Requested task',
       status: 'planned',
       notes: notes || null,
       order_index: orderIndex,
       location: 'Requested',
       start_time: '05:30',
+      estimated_hours: 0,
+    };
+    const validationError = validateAssignmentWritePayload({
+      employee_id: payload.employee_id,
+      task_id: payload.task_id,
+      org_id: payload.org_id,
+      date: payload.date,
+      status: payload.status,
     });
-    if (assignmentError) {
-      toast.error('Approve failed', { description: assignmentError.message });
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
+    const { data: assignmentRow, error: assignmentError } = await supabase.from('assignments').insert(payload).select().single();
+    if (assignmentError) {
+      console.error('[ASSIGNMENT ERROR]', { error: assignmentError, payload });
+      toast.error(`Task assignment failed: ${assignmentError.message}`);
+      return;
+    }
+    appendAssignmentToCaches({
+      id: String(assignmentRow?.id ?? payload.id),
+      employeeId: String(assignmentRow?.employee_id ?? payload.employee_id),
+      taskId: String(assignmentRow?.task_id ?? payload.task_id),
+      date: String(assignmentRow?.date ?? payload.date),
+      startTime: String(assignmentRow?.start_time ?? payload.start_time),
+      duration: Math.round(Number(assignmentRow?.estimated_hours ?? 0) * 60),
+      area: String(assignmentRow?.location ?? payload.location ?? 'Requested'),
+      status: normalizeAssignmentStatus(String(assignmentRow?.status ?? payload.status)) as Assignment['status'],
+    });
 
     const { error: requestError } = await supabase
       .from('task_requests')
