@@ -3148,7 +3148,7 @@ export default function WorkboardPage() {
           }
         }}
       >
-        <DialogContent className="inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-0 md:inset-auto md:h-auto md:w-full md:max-w-lg md:translate-x-[-50%] md:translate-y-[-50%] md:rounded-lg md:border md:p-6">
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <div className="flex h-full flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>

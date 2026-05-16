@@ -83,6 +83,7 @@ interface WorkforceSummaryRow {
 interface WeatherLocationItem {
   id: string;
   name: string;
+  area?: string | null;
   latitude: number | null;
   longitude: number | null;
   is_active?: boolean | null;
@@ -763,7 +764,10 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
   });
   const [loading, setLoading] = useState(true);
   const [savingPrefs, setSavingPrefs] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [setupLocationName, setSetupLocationName] = useState('Main Course');
+  const [setupArea, setSetupArea] = useState('General');
 
   const fetchWeatherSettings = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -772,7 +776,7 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
     const [{ data: locationData, error: locationError }, { data: prefsData, error: prefsError }] = await Promise.all([
       supabase
         .from('weather_locations')
-        .select('id, name, latitude, longitude, is_active')
+        .select('id, name, area, latitude, longitude, is_active')
         .eq('org_id', orgId),
       supabase
         .from('weather_display_prefs')
@@ -840,6 +844,30 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
     [locations],
   );
 
+  const saveWeatherLocationSetup = useCallback(async () => {
+    if (!supabase || !orgId || !setupLocationName.trim()) return;
+    setSavingLocation(true);
+    setError(null);
+    const payload: Record<string, unknown> = {
+      org_id: orgId,
+      name: setupLocationName.trim(),
+      area: setupArea,
+      is_active: true,
+      property: setupArea,
+      latitude: 27.3364,
+      longitude: -82.5307,
+    };
+    const { error: upsertError } = await supabase
+      .from('weather_locations')
+      .insert(payload);
+    setSavingLocation(false);
+    if (upsertError) {
+      setError(upsertError.message);
+      return;
+    }
+    await fetchWeatherSettings();
+  }, [fetchWeatherSettings, orgId, setupArea, setupLocationName]);
+
   if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
@@ -856,11 +884,47 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
           <>
             <p style={{ margin: 0, fontSize: '13px', color: '#111827' }}>{activeLocation.name}</p>
             <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
+              Area: {activeLocation.area ?? 'General'}
+            </p>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
               {activeLocation.latitude ?? '—'}, {activeLocation.longitude ?? '—'}
             </p>
           </>
         ) : (
-          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>No weather location configured.</p>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>No weather location configured. Set up your first location below.</p>
+            <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+              Location name
+              <input
+                value={setupLocationName}
+                onChange={(event) => setSetupLocationName(event.target.value)}
+                style={{ height: '36px', border: '1px solid #d1d5db', borderRadius: '6px', padding: '0 10px' }}
+                placeholder="Sarasota Polo Club"
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+              Area
+              <select
+                value={setupArea}
+                onChange={(event) => setSetupArea(event.target.value)}
+                style={{ height: '36px', border: '1px solid #d1d5db', borderRadius: '6px', padding: '0 10px' }}
+              >
+                <option value="General">General</option>
+                <option value="Main Course">Main Course</option>
+                <option value="Practice Range">Practice Range</option>
+                <option value="North Fields">North Fields</option>
+                <option value="South Fields">South Fields</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void saveWeatherLocationSetup()}
+              disabled={savingLocation || !setupLocationName.trim()}
+              style={{ height: '36px', borderRadius: '6px', border: '1px solid #166534', background: '#166534', color: '#fff', fontSize: '13px', fontWeight: 600 }}
+            >
+              {savingLocation ? 'Saving...' : 'Save Location'}
+            </button>
+          </div>
         )}
         <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
           Weather data is sourced from Open-Meteo based on this location.

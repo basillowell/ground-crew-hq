@@ -1303,7 +1303,7 @@ export default function SchedulerPage() {
           handleCloseModal();
         }}
       >
-        <DialogContent className="inset-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-4 md:inset-auto md:h-auto md:w-full md:max-w-md md:translate-x-[-50%] md:translate-y-[-50%] md:rounded-lg md:border md:p-6">
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />

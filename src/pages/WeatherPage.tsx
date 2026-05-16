@@ -2156,248 +2156,31 @@ export default function WeatherPage() {
 
   if (needsPropertyWeatherOnboarding && !isInitialWeatherSetupLoading && !hasWeatherSetupError) {
     return (
-      <div className="p-4 max-w-3xl mx-auto min-h-[70vh] flex items-center">
-        <Card className="w-full p-6 space-y-5">
+      <div className="p-4 max-w-4xl mx-auto">
+        <Card className="p-6 text-sm space-y-3">
+          <p className="text-lg font-semibold">Weather is not configured.</p>
+          <p className="text-muted-foreground">
+            Go to Settings → Weather to set up your location.
+          </p>
           <div>
-            <p className="text-xl font-semibold">Set up weather for {currentProperty?.name ?? 'this property'}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Choose how to find your property location. This takes about 60 seconds.
-            </p>
+            <Button onClick={() => navigate('/app/settings?tab=Weather')}>Open Settings → Weather</Button>
           </div>
-
-          {onboardingStep === 1 ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <button
-                  type="button"
-                  onClick={() => void handleOnboardingUseCurrentLocation()}
-                  className="rounded-xl border p-4 text-left hover:bg-muted/30 transition"
-                >
-                  <Crosshair className="h-5 w-5 text-primary" />
-                  <p className="mt-2 text-sm font-semibold">Use my current location</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Best for mobile — uses your device GPS</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setOnboardingMethod((current) => (current === 'search' ? 'none' : 'search'))}
-                  className="rounded-xl border p-4 text-left hover:bg-muted/30 transition"
-                >
-                  <Search className="h-5 w-5 text-primary" />
-                  <p className="mt-2 text-sm font-semibold">Search by address or city</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Type your property address or nearest city</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setOnboardingMethod((current) => (current === 'manual' ? 'none' : 'manual'))}
-                  className="rounded-xl border p-4 text-left hover:bg-muted/30 transition"
-                >
-                  <MapPin className="h-5 w-5 text-primary" />
-                  <p className="mt-2 text-sm font-semibold">Enter coordinates manually</p>
-                  <p className="mt-1 text-xs text-muted-foreground">For properties already in another system</p>
-                </button>
-              </div>
-
-              {onboardingMethod === 'search' ? (
-                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      value={onboardingSearchQuery}
-                      onChange={(event) => setOnboardingSearchQuery(event.target.value)}
-                      placeholder="e.g. 123 Main St, Sarasota FL"
-                    />
-                    <Button onClick={() => void handleOnboardingSearch()} disabled={onboardingSearchLoading || !onboardingSearchQuery.trim()}>
-                      {onboardingSearchLoading ? 'Searching...' : 'Search'}
-                    </Button>
-                  </div>
-                  {onboardingSearchResults.length ? (
-                    <div className="space-y-2">
-                      {onboardingSearchResults.map((result) => (
-                        <button
-                          key={`${result.label}-${result.latitude}-${result.longitude}`}
-                          type="button"
-                          onClick={() => {
-                            setOnboardingSelectedLat(result.latitude);
-                            setOnboardingSelectedLng(result.longitude);
-                            setOnboardingSelectedLabel(result.label);
-                            setOnboardingStep(2);
-                          }}
-                          className="w-full rounded-lg border bg-background px-3 py-2 text-left text-sm hover:bg-muted/30"
-                        >
-                          <div className="font-medium">{result.label}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {result.latitude.toFixed(4)}, {result.longitude.toFixed(4)}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {onboardingMethod === 'manual' ? (
-                <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Input
-                      type="number"
-                      step="0.0001"
-                      value={onboardingManualLat}
-                      onChange={(event) => setOnboardingManualLat(event.target.value)}
-                      placeholder="Latitude"
-                    />
-                    <Input
-                      type="number"
-                      step="0.0001"
-                      value={onboardingManualLng}
-                      onChange={(event) => setOnboardingManualLng(event.target.value)}
-                      placeholder="Longitude"
-                    />
-                  </div>
-                  <Button variant="outline" onClick={handleOnboardingManualConfirm}>
-                    Confirm Coordinates
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {onboardingStep === 2 ? (
-            <div className="space-y-4">
-              <Card className="p-4 border-dashed">
-                <p className="text-sm font-semibold">Weather will be loaded for:</p>
-                <p className="mt-2 text-lg font-semibold">{onboardingSelectedLabel || `${onboardingSelectedLat}, ${onboardingSelectedLng}`}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Coordinates: {onboardingSelectedLat?.toFixed(4)}, {onboardingSelectedLng?.toFixed(4)}
-                </p>
-                <div className="mt-4 flex gap-2">
-                  <Button variant="outline" onClick={() => setOnboardingStep(1)}>
-                    ← Change location
-                  </Button>
-                  <Button onClick={() => setOnboardingStep(3)}>
-                    Looks right →
-                  </Button>
-                </div>
-              </Card>
-
-              <Card className="p-4">
-                <p className="text-sm font-semibold">Current conditions at this location:</p>
-                {onboardingPreviewQuery.isLoading ? (
-                  <p className="mt-2 text-sm text-muted-foreground">Loading preview...</p>
-                ) : onboardingPreviewQuery.data ? (
-                  <div className="mt-2 text-sm">
-                    <span className="font-semibold">{Math.round(onboardingPreviewQuery.data.current.temperature)}F</span>
-                    <span className="text-muted-foreground"> · {getWeatherConditionMeta(onboardingPreviewQuery.data.current.weatherCode).label}</span>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">Preview unavailable right now.</p>
-                )}
-              </Card>
-            </div>
-          ) : null}
-
-          {onboardingStep === 3 ? (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">What do you call this area?</label>
-                <Input
-                  id="onboarding-area-name"
-                  className="mt-2"
-                  value={onboardingAreaName}
-                  onChange={(event) => setOnboardingAreaName(event.target.value)}
-                  placeholder="e.g. Main Course, North Fields, Tournament Grounds"
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  You can add more weather areas later for different zones of your property.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {['Main Course', 'Practice Range', 'Maintenance Yard', 'Tournament Grounds', 'North Fields', 'South Fields'].map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      className="rounded-full border px-3 py-1 text-xs hover:bg-muted/30"
-                      onClick={() => setOnboardingAreaName(name)}
-                    >
-                      {name}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="rounded-full border px-3 py-1 text-xs hover:bg-muted/30"
-                    onClick={() => {
-                      const input = document.getElementById('onboarding-area-name') as HTMLInputElement | null;
-                      input?.focus();
-                    }}
-                  >
-                    Custom...
-                  </button>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setOnboardingStep(2)}>
-                  ← Back
-                </Button>
-                <Button onClick={() => void handleSaveOnboardingWeatherArea()} disabled={onboardingSaving}>
-                  {onboardingSaving ? 'Saving...' : 'Save and load weather →'}
-                </Button>
-              </div>
-            </div>
-          ) : null}
         </Card>
       </div>
     );
   }
 
   if (isWeatherSetupIncomplete && !isInitialWeatherSetupLoading && !hasWeatherSetupError) {
-    const noAreasExist = weatherLocations.length === 0;
-    const noStationsExist = scopedStationCount === 0;
     return (
-      <div className="p-4 max-w-7xl mx-auto">
-        {locationSetupBlock}
-        <Card className="p-6 text-sm space-y-4">
+      <div className="p-4 max-w-4xl mx-auto">
+        <Card className="p-6 text-sm space-y-3">
+          <p className="text-lg font-semibold">Weather is not configured.</p>
+          <p className="text-muted-foreground">
+            Go to Settings → Weather to set up your location.
+          </p>
           <div>
-            <p className="font-semibold">Weather setup is not complete yet.</p>
-            <p className="mt-1 text-muted-foreground">
-              {noAreasExist
-                ? 'Create your first weather area so live conditions and forecasts can load.'
-                : noStationsExist
-                  ? 'Add your first station for this property so a primary source can drive live weather.'
-                  : 'Complete setup to continue.'}
-            </p>
+            <Button onClick={() => navigate('/app/settings?tab=Weather')}>Open Settings → Weather</Button>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <Button size="sm" className="gap-1" onClick={createStarterWeatherArea}>
-              <Plus className="h-3.5 w-3.5" /> Create Area from Property
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1"
-              onClick={addWeatherAreaFromLocation}
-              disabled={!selectedWorkLocationId || availableWorkLocations.length === 0}
-            >
-              <MapPinned className="h-3.5 w-3.5" /> Add Area from Work Location
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1" onClick={() => void applyDeviceLocationFallback()}>
-              <Crosshair className="h-3.5 w-3.5" /> Use Device Location
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1" onClick={addFirstStationFromSetup}>
-              <Radar className="h-3.5 w-3.5" /> Add First Station
-            </Button>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <Input
-              value={customAreaName}
-              onChange={(event) => setCustomAreaName(event.target.value)}
-              placeholder="Create a custom weather area (e.g., Tournament Grounds)"
-            />
-            <Button size="sm" variant="outline" className="gap-1" onClick={addCustomWeatherArea}>
-              <Plus className="h-3.5 w-3.5" /> Create Custom Area
-            </Button>
-          </div>
-          {!selectedWorkLocationId && availableWorkLocations.length > 0 ? (
-            <p className="text-xs text-muted-foreground">Pick a work location in Weather Management to enable one-click area import.</p>
-          ) : null}
         </Card>
       </div>
     );
@@ -2440,37 +2223,14 @@ export default function WeatherPage() {
     }
 
     return (
-      <div className="p-4 max-w-7xl mx-auto">
-        {locationSetupBlock}
-        <Card className="p-6 text-sm space-y-4">
+      <div className="p-4 max-w-4xl mx-auto">
+        <Card className="p-6 text-sm space-y-3">
+          <p className="text-lg font-semibold">Weather is not configured.</p>
+          <p className="text-muted-foreground">
+            Go to Settings → Weather to set up your location.
+          </p>
           <div>
-            <p className="font-semibold">Weather setup is not complete yet.</p>
-            <p className="mt-1 text-muted-foreground">
-              Create a weather area, connect a station, or use device location so Operations View can load live weather.
-            </p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Button size="sm" className="gap-1" onClick={createStarterWeatherArea}>
-              <Plus className="h-3.5 w-3.5" /> Create Weather Area
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1"
-              onClick={() => {
-                if (!selectedLocation) {
-                  createStarterWeatherArea();
-                  return;
-                }
-                addStation();
-                setSettingsDrawerOpen(true);
-              }}
-            >
-              <Radar className="h-3.5 w-3.5" /> Add Station
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1" onClick={() => void applyDeviceLocationFallback()}>
-              <Crosshair className="h-3.5 w-3.5" /> Use Device Location
-            </Button>
+            <Button onClick={() => navigate('/app/settings?tab=Weather')}>Open Settings → Weather</Button>
           </div>
         </Card>
       </div>
