@@ -34,6 +34,7 @@ import { APP_VERSION } from '@/constants/version';
 
 interface AppSidebarRefinedProps {
   onNavigate?: () => void;
+  hasSevereWeatherAlert?: boolean;
 }
 
 type NavRole = 'employee' | 'admin';
@@ -106,7 +107,7 @@ const employeeNavSections: NavSection[] = [
   },
 ];
 
-export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate }: AppSidebarRefinedProps) {
+export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate, hasSevereWeatherAlert = false }: AppSidebarRefinedProps) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
@@ -171,11 +172,21 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate }:
                         to={item.url}
                         end
                         onClick={onNavigate}
-                        className="rounded-lg border border-transparent px-2.5 py-2 text-sidebar-foreground transition-colors duration-150 hover:border-sidebar-border/60 hover:bg-sidebar-accent"
+                        className="relative rounded-lg border border-transparent px-2.5 py-2 text-sidebar-foreground transition-colors duration-150 hover:border-sidebar-border/60 hover:bg-sidebar-accent"
                         activeClassName="border-sidebar-primary/40 bg-sidebar-accent text-sidebar-primary font-semibold shadow-[inset_0_0_0_1px_rgba(47,168,102,0.16)]"
                       >
                         <item.icon className="h-4 w-4" />
-                        {!collapsed ? <span>{item.title}</span> : null}
+                        {!collapsed ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span>{item.title}</span>
+                            {item.title === 'Weather' && hasSevereWeatherAlert ? (
+                              <span className="h-2 w-2 rounded-full bg-red-500" aria-label="Severe weather alert active" />
+                            ) : null}
+                          </span>
+                        ) : null}
+                        {collapsed && item.title === 'Weather' && hasSevereWeatherAlert ? (
+                          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" aria-label="Severe weather alert active" />
+                        ) : null}
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

@@ -34,6 +34,8 @@ import { fetchPrimaryStationSnapshot, fetchStationForecastDetail, fetchWeatherSt
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { DEFAULT_WEATHER_LOCATION, useWeather, getWeatherIconMeta } from '@/lib/weather';
 import { fetchAndLogOpenMeteoWeather } from '@/lib/weather/fetchAndLog';
+import { sendNotification } from '@/lib/notifications';
+import { fetchNwsAlerts, type NwsAlertItem } from '@/lib/nwsAlerts';
 import { supabase } from '@/lib/supabase';
 import { handleSupabaseError } from '@/utils/handleSupabaseError';
 import { useAuth } from '@/contexts/AuthContext';
@@ -74,6 +76,23 @@ function hasValidCoordinates(latitude?: number, longitude?: number) {
 function isLegacyPlaceholderCoordinates(latitude?: number, longitude?: number) {
   if (!hasValidCoordinates(latitude, longitude)) return false;
   return Math.abs((latitude ?? 0) - 35.78) < 0.0001 && Math.abs((longitude ?? 0) - (-78.64)) < 0.0001;
+}
+
+function formatAlertUntilLabel(expires?: string | null) {
+  if (!expires) return 'Timing unavailable';
+  const parsed = new Date(expires);
+  if (Number.isNaN(parsed.getTime())) return 'Timing unavailable';
+  return `Until ${parsed.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+}
+
+function getAlertSeverityStyles(severity: string) {
+  if (severity === 'Extreme' || severity === 'Severe') {
+    return 'border-red-300 bg-red-50 text-red-950';
+  }
+  if (severity === 'Moderate') {
+    return 'border-amber-300 bg-amber-50 text-amber-950';
+  }
+  return 'border-yellow-300 bg-yellow-50 text-yellow-950';
 }
 
 function mapWeatherStationRow(row: any): WeatherStation {
@@ -343,6 +362,7 @@ export default function WeatherPage() {
   const [removeAreaId, setRemoveAreaId] = useState<string | null>(null);
   const [widgetPrefsId, setWidgetPrefsId] = useState<string | null>(null);
   const [weatherLoadTimedOut, setWeatherLoadTimedOut] = useState(false);
+  const [expandedAlertIds, setExpandedAlertIds] = useState<string[]>([]);
 
   const settingsDefaultWeather = useMemo(() => {
     const locationName = programSetting?.weatherDefaultLocationName?.trim() || 'Sarasota Polo Club';
@@ -448,6 +468,46 @@ export default function WeatherPage() {
   const radarLatitude = selectedLocation?.latitude ?? selectedProperty?.latitude ?? 27.3364;
   const radarLongitude = selectedLocation?.longitude ?? selectedProperty?.longitude ?? -82.5307;
   const radarPropertyLabel = selectedProperty?.name ?? selectedLocation?.name ?? 'Selected Property';
+  const nwsAlertsQuery = useQuery({
+    queryKey: ['nws-alerts', currentUser?.orgId ?? 'all-orgs', selectedLocation?.id ?? 'none', radarLatitude, radarLongitude],
+    enabled: Boolean(currentUser?.orgId && Number.isFinite(radarLatitude) && Number.isFinite(radarLongitude)),
+    queryFn: () => fetchNwsAlerts(radarLatitude, radarLongitude),
+    staleTime: 1000 * 60 * 3,
+    refetchInterval: 1000 * 60 * 5,
+  });
+  const nwsAlerts = nwsAlertsQuery.data ?? [];
+  const severeNwsAlerts = useMemo(
+    () => nwsAlerts.filter((alert) => alert.severity === 'Extreme' || alert.severity === 'Severe'),
+    [nwsAlerts],
+  );
+
+  useEffect(() => {
+    const hasSevereAlerts = severeNwsAlerts.length > 0;
+    window.sessionStorage.setItem('ground-crew-severe-weather-alert', hasSevereAlerts ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('ground-crew-weather-alert-changed', { detail: { hasSevere: hasSevereAlerts } }));
+  }, [severeNwsAlerts]);
+
+  useEffect(() => {
+    if (!severeNwsAlerts.length) return;
+    const seenStorageKey = 'ground-crew-seen-weather-alerts';
+    let parsedIds: string[] = [];
+    try {
+      parsedIds = JSON.parse(window.sessionStorage.getItem(seenStorageKey) ?? '[]') as string[];
+    } catch {
+      parsedIds = [];
+    }
+    const seenIds = new Set<string>(parsedIds);
+    let hasUpdate = false;
+    severeNwsAlerts.forEach((alert) => {
+      if (seenIds.has(alert.id)) return;
+      sendNotification(`⚠️ ${alert.event}`, alert.headline, '/app/weather');
+      seenIds.add(alert.id);
+      hasUpdate = true;
+    });
+    if (hasUpdate) {
+      window.sessionStorage.setItem(seenStorageKey, JSON.stringify(Array.from(seenIds)));
+    }
+  }, [severeNwsAlerts]);
 
   useEffect(() => {
     if (!activeConfiguredLocations.length) {
@@ -2321,6 +2381,63 @@ export default function WeatherPage() {
           propertyName={radarPropertyLabel}
           height="clamp(250px, 45vh, 400px)"
         />
+      </Card>
+
+      <Card className="rounded-2xl border p-4 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
+          <CloudSun className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Active Alerts</h3>
+          {severeNwsAlerts.length > 0 ? <Badge className="ml-auto bg-red-600 text-white hover:bg-red-600">Severe</Badge> : null}
+        </div>
+        {nwsAlertsQuery.isLoading || nwsAlertsQuery.isFetching ? (
+          <div className="space-y-2">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
+        ) : nwsAlertsQuery.error ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Unable to load NWS alerts right now. Retry in a moment.
+          </p>
+        ) : nwsAlerts.length === 0 ? (
+          <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
+            No active weather alerts for this location ✓
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {nwsAlerts.map((alert: NwsAlertItem) => {
+              const isExpanded = expandedAlertIds.includes(alert.id);
+              return (
+                <button
+                  key={alert.id}
+                  type="button"
+                  onClick={() =>
+                    setExpandedAlertIds((current) =>
+                      current.includes(alert.id) ? current.filter((id) => id !== alert.id) : [...current, alert.id],
+                    )
+                  }
+                  className={`w-full rounded-xl border p-3 text-left transition hover:shadow-sm ${getAlertSeverityStyles(alert.severity)}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{alert.event}</p>
+                      <p className="mt-1 text-xs opacity-90">{alert.headline}</p>
+                    </div>
+                    <Badge variant="outline" className="border-current text-[10px] uppercase">
+                      {alert.severity}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs font-medium">{formatAlertUntilLabel(alert.expires)}</p>
+                  {isExpanded ? (
+                    <div className="mt-2 space-y-2 text-xs leading-relaxed opacity-95">
+                      {alert.description ? <p>{alert.description}</p> : null}
+                      {alert.instruction ? <p className="font-medium">Safety: {alert.instruction}</p> : null}
+                    </div>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       <div className="hidden space-y-4">

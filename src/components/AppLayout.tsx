@@ -133,6 +133,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncFlashActive, setSyncFlashActive] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+  const [hasSevereWeatherAlert, setHasSevereWeatherAlert] = useState(false);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
@@ -331,6 +332,25 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [queryClient]);
 
   useEffect(() => {
+    const readSevereAlertFlag = () => window.sessionStorage.getItem('ground-crew-severe-weather-alert') === 'true';
+    setHasSevereWeatherAlert(readSevereAlertFlag());
+
+    const onWeatherAlertChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ hasSevere?: boolean }>).detail;
+      if (typeof detail?.hasSevere === 'boolean') {
+        setHasSevereWeatherAlert(detail.hasSevere);
+      } else {
+        setHasSevereWeatherAlert(readSevereAlertFlag());
+      }
+    };
+
+    window.addEventListener('ground-crew-weather-alert-changed', onWeatherAlertChanged as EventListener);
+    return () => {
+      window.removeEventListener('ground-crew-weather-alert-changed', onWeatherAlertChanged as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     const fetchSubscriptionStatus = async () => {
       if (!supabase || !orgId) return;
       const { data } = await supabase
@@ -488,7 +508,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           }`}
         >
-          <AppSidebarRefined onNavigate={closeMobileSidebar} />
+          <AppSidebarRefined onNavigate={closeMobileSidebar} hasSevereWeatherAlert={hasSevereWeatherAlert} />
         </div>
         <div className={`ml-0 md:ml-60 min-h-screen overflow-y-auto flex min-w-0 flex-1 flex-col ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
           <WorkflowTopBar
