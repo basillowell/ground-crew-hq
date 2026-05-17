@@ -2631,8 +2631,11 @@ export default function WorkboardPage() {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="flex flex-col flex-1 min-w-0">
             <h1 className="text-lg font-semibold tracking-tight">Workflow</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Assign tasks and manage daily operations.</p>
+          </div>
+          <div className="flex items-center gap-2">
             {activeProperty && (
               <Badge variant="outline" style={{ borderColor: activeProperty.color, color: activeProperty.color }}>
                 {activeProperty.shortName}

@@ -87,7 +87,7 @@ const adminNavSections: NavSection[] = [
       { title: 'Settings', url: '/app/settings', icon: Settings, moduleId: 'command-center' },
     ],
   },
-] as const;
+];
 
 const employeeNavSections: NavSection[] = [
   {
@@ -104,7 +104,7 @@ const employeeNavSections: NavSection[] = [
       { title: 'Messages', url: '/app/messaging', icon: MessageSquare, moduleId: 'workflow' },
     ],
   },
-] as const;
+];
 
 export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate }: AppSidebarRefinedProps) {
   const { state } = useSidebar();
@@ -190,6 +190,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate }:
         <div className="text-[11px] text-sidebar-foreground/85">
           {collapsed ? `v${APP_VERSION}` : `Ground Crew HQ · v${APP_VERSION}`}
         </div>
+        {!collapsed ? <div className="mt-1 text-[10px] text-sidebar-foreground/70">© 2026 Ground Crew HQ</div> : null}
       </SidebarFooter>
     </Sidebar>
   );

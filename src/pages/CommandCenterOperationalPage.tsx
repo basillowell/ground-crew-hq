@@ -34,7 +34,7 @@ function SummaryCard({
       onClick={onClick}
       className="text-left"
     >
-      <Card className="rounded-2xl border p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
+      <Card className="rounded-xl border p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
         <div className="text-xs uppercase tracking-wide text-muted-foreground">{title}</div>
         <div className="mt-2 text-3xl font-semibold">{value}</div>
       </Card>
@@ -62,7 +62,7 @@ function OpsSignalCard({
           ? 'border-red-500 bg-red-50/50'
           : 'border-gray-400 bg-card';
   return (
-    <Card className={`rounded-2xl border-l-4 p-5 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${toneClass}`}>
+    <Card className={`rounded-xl border-l-4 p-5 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${toneClass}`}>
       <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{title}</div>
       <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
       <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
@@ -104,7 +104,7 @@ function PropertySummaryCard({
   const WeatherIcon = weatherMeta.icon;
 
   return (
-    <Card className="rounded-2xl border p-6 shadow-sm">
+    <Card className="rounded-xl border p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-semibold">{property.name}</h3>
@@ -1197,10 +1197,8 @@ export default function CommandCenterOperationalPage() {
       ) : null}
 
       <div className="mb-4">
-        <h2 className="text-2xl font-semibold tracking-tight">Today's Operations Summary</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Are we ready for today? Review readiness, risks, and blockers at a glance.
-        </p>
+        <h1 className="text-lg font-semibold tracking-tight">Operations Summary</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Review readiness, risks, and blockers.</p>
       </div>
 
       {isLoading && !queryTimeoutReached ? <div className="mb-6"><CardSkeleton /></div> : null}

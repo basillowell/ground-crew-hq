@@ -1022,7 +1022,10 @@ export default function SchedulerPage() {
 
       {/* ── Top bar ── */}
       <div className="border-b bg-card px-3 py-3 md:px-5 flex items-center gap-2 md:gap-3 flex-wrap shrink-0">
-        <h1 className="text-lg font-semibold tracking-tight flex-1 min-w-0">Scheduler</h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg font-semibold tracking-tight">Schedule</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Build and manage crew shifts.</p>
+        </div>
 
         {/* Week nav */}
         <div className="flex items-center gap-1">
@@ -1061,23 +1064,23 @@ export default function SchedulerPage() {
 
         {!isReadOnly ? (
           <>
-            <Button size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
+            <Button size="sm" className="h-11 w-full md:h-9 md:w-auto gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
               <Plus className="h-3.5 w-3.5" /> Add Shift
             </Button>
-            <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openSaveTemplateDialog}>
+            <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openSaveTemplateDialog}>
               Save as Template
             </Button>
-            <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openApplyTemplateDialog}>
+            <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openApplyTemplateDialog}>
               Apply Template
             </Button>
-            <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={openCopyWeekDialog} data-testid="button-copy-week">
+            <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openCopyWeekDialog} data-testid="button-copy-week">
               <Copy className="h-3.5 w-3.5" /> Copy Week
             </Button>
           </>
         ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5">
+            <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto">
               <Download className="h-3.5 w-3.5" /> Export
             </Button>
           </DropdownMenuTrigger>

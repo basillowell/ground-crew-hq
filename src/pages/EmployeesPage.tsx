@@ -290,11 +290,11 @@ export default function EmployeesPage() {
     <div className="mx-auto max-w-6xl p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Crew Roster</h1>
-          <p className="text-sm text-muted-foreground">Manage employees for scheduling and daily task assignments.</p>
+          <h1 className="text-lg font-semibold tracking-tight">Team</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage your crew roster.</p>
         </div>
         {!isReadOnly ? (
-        <Button onClick={openAddModal}>
+        <Button size="sm" className="h-9 gap-1.5" onClick={openAddModal}>
           <Plus className="mr-1.5 h-4 w-4" />
           Add Employee
         </Button>
@@ -303,7 +303,7 @@ export default function EmployeesPage() {
 
       {error ? <ErrorRetry message={error} onRetry={() => void fetchPageData()} /> : null}
 
-      <div className="hidden overflow-x-auto rounded-lg border md:block">
+      <div className="hidden overflow-x-auto rounded-xl border md:block">
         <table className="min-w-full text-sm">
           <thead className="bg-muted/30">
             <tr>

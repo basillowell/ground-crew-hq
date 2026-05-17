@@ -316,11 +316,11 @@ export default function EquipmentPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Equipment</h1>
-          <p className="text-sm text-muted-foreground">Manage units, status, and service readiness.</p>
+          <h1 className="text-lg font-semibold tracking-tight">Equipment</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Track maintenance and availability.</p>
         </div>
         {!isReadOnly ? (
-        <Button onClick={startAdd}>
+        <Button size="sm" className="h-9 gap-1.5" onClick={startAdd}>
           <Plus className="mr-1.5 h-4 w-4" />
           Add Equipment
         </Button>
@@ -329,7 +329,7 @@ export default function EquipmentPage() {
 
       {error ? <ErrorRetry message={error} onRetry={() => void fetchEquipment()} /> : null}
 
-      <div className="hidden overflow-x-auto rounded-lg border md:block">
+      <div className="hidden overflow-x-auto rounded-xl border md:block">
         <table className="min-w-full text-sm">
           <thead className="bg-muted/40">
             <tr>

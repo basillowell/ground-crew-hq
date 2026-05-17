@@ -35,7 +35,10 @@ export default function SafetyPage() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
-      <h2 className="text-lg font-semibold mb-4">Safety Management</h2>
+      <div className="mb-4">
+        <h1 className="text-lg font-semibold tracking-tight">Safety</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Toolbox talks and compliance records.</p>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card className="p-4 text-center">

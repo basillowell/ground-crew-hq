@@ -390,8 +390,8 @@ export default function ReportsPage() {
       </div>
 
       <div>
-        <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: 600 }}>Reports</h1>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Labor summary by employee for the selected period.</p>
+        <h1 className="text-lg font-semibold tracking-tight">Reports</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Labor summaries and cost analysis.</p>
       </div>
 
       <div className="no-print" style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '12px' }}>
