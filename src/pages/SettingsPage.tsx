@@ -1335,6 +1335,18 @@ function AccessTab({
     window.location.href = placeholderCheckoutUrl;
   };
 
+  const handleManageBilling = () => {
+    const placeholderPortalUrl = 'https://billing.stripe.com/p/login/placeholder';
+    toast.info('Billing portal integration coming soon.');
+    window.open(placeholderPortalUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCancelSubscription = () => {
+    const confirmed = window.confirm('Cancel Pro subscription?');
+    if (!confirmed) return;
+    toast.info('Contact support@groundcrewhq.com to cancel');
+  };
+
   if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
@@ -1385,6 +1397,35 @@ function AccessTab({
         >
           Upgrade to Pro →
         </button>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Billing</h3>
+        {isPro(subscriptionStatus) ? (
+          <>
+            <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Plan:</strong> Pro ($49/month)</p>
+            <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Status:</strong> Active</p>
+            <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Next billing date:</strong> Coming soon</p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleManageBilling}
+                style={{ border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+              >
+                Manage Billing
+              </button>
+              <button
+                onClick={handleCancelSubscription}
+                style={{ border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+              >
+                Cancel Subscription
+              </button>
+            </div>
+          </>
+        ) : (
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+            You're on the free beta plan. No payment method required.
+          </p>
+        )}
       </div>
 
       <div style={{ border: '1px solid #fecaca', borderRadius: '12px', padding: '16px', background: '#fef2f2' }}>
