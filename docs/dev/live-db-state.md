@@ -394,6 +394,20 @@ If you need a column that is NOT in this file:
 
 ---
 
+## recurring_task_rules
+| Column | Type | Nullable | Default |
+|--------|------|----------|---------|
+| id | uuid | NO | gen_random_uuid() |
+| org_id | uuid | NO | FK organizations |
+| property_id | uuid | YES | FK properties |
+| task_id | uuid | NO | FK tasks |
+| employee_id | uuid | YES | FK employees (null = all scheduled crew) |
+| days_of_week | text[] | NO | '{}' |
+| active | boolean | NO | true |
+| created_at | timestamptz | YES | now() |
+
+---
+
 ## beta_feedback
 | Column | Type | Nullable | Default |
 |--------|------|----------|---------|
