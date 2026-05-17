@@ -25,6 +25,12 @@ type FeatureItem = {
   description: string;
 };
 
+type TestimonialItem = {
+  quote: string;
+  byline: string;
+  initials: string;
+};
+
 const FEATURES: FeatureItem[] = [
   {
     icon: CalendarDays,
@@ -55,6 +61,24 @@ const FEATURES: FeatureItem[] = [
     icon: Wrench,
     title: 'Equipment Tracking',
     description: 'Service alerts, assignment linking, and a full fleet readiness overview.',
+  },
+];
+
+const TESTIMONIALS: TestimonialItem[] = [
+  {
+    quote: '[Placeholder] This replaced our whiteboard in week one.',
+    byline: 'Superintendent, Private Golf Club',
+    initials: 'SP',
+  },
+  {
+    quote: '[Placeholder] The spray window feature alone saves us hours.',
+    byline: 'Assistant Superintendent, Municipal Course',
+    initials: 'AS',
+  },
+  {
+    quote: '[Placeholder] My crew actually uses the mobile app.',
+    byline: 'Head Groundskeeper, Sports Complex',
+    initials: 'HG',
   },
 ];
 
@@ -231,6 +255,24 @@ export default function LaunchPortalPage() {
             Unlike generic field service tools, Ground Crew HQ speaks your language. Mow greens. Roll greens.
             Bunker maintenance. Irrigation check. Your task library, your schedule, your weather.
           </p>
+        </section>
+
+        <section className="mt-16">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-center text-sm font-medium text-emerald-900 md:text-base">
+            Trusted by 5 facilities · 500+ tasks dispatched · 2,000+ hours tracked
+          </div>
+          <h2 className="mt-6 text-2xl font-semibold tracking-tight text-emerald-950">What Superintendents Say</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {TESTIMONIALS.map((item) => (
+              <Card key={item.quote} className="rounded-xl border-emerald-100 bg-white p-5">
+                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
+                  {item.initials}
+                </div>
+                <p className="text-sm leading-6 text-foreground">{item.quote}</p>
+                <p className="mt-3 text-xs font-medium text-muted-foreground">— {item.byline}</p>
+              </Card>
+            ))}
+          </div>
         </section>
 
         <section className="mt-16">
