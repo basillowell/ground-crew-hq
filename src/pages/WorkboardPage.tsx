@@ -2837,42 +2837,61 @@ export default function WorkboardPage() {
   }
 
   async function reorderEmployeeAssignments(
-    employeeId: string,
+    sourceEmployeeId: string,
+    targetEmployeeId: string,
     draggedAssignmentId: string,
     targetAssignmentId: string,
   ) {
     if (!supabase || draggedAssignmentId === targetAssignmentId) return;
-
-    const employeeAssignments = dayAssignments.filter((assignment) => assignment.employeeId === employeeId);
-    const fromIndex = employeeAssignments.findIndex((assignment) => assignment.id === draggedAssignmentId);
-    const toIndex = employeeAssignments.findIndex((assignment) => assignment.id === targetAssignmentId);
+    const sourceAssignments = dayAssignments.filter((assignment) => assignment.employeeId === sourceEmployeeId);
+    const targetAssignments = dayAssignments.filter((assignment) => assignment.employeeId === targetEmployeeId);
+    const fromIndex = sourceAssignments.findIndex((assignment) => assignment.id === draggedAssignmentId);
+    const toIndex = targetAssignments.findIndex((assignment) => assignment.id === targetAssignmentId);
     if (fromIndex < 0 || toIndex < 0) return;
 
-    const reordered = [...employeeAssignments];
-    const [moved] = reordered.splice(fromIndex, 1);
-    reordered.splice(toIndex, 0, moved);
+    const dragged = sourceAssignments[fromIndex];
+    if (!dragged?.id) return;
+    const nextSource = [...sourceAssignments];
+    nextSource.splice(fromIndex, 1);
+    const nextTarget = [...targetAssignments];
+    const targetInsertIndex = sourceEmployeeId === targetEmployeeId ? toIndex : toIndex + 1;
+    if (sourceEmployeeId === targetEmployeeId) {
+      const [movedSame] = nextSource.splice(fromIndex, 1);
+      if (!movedSame) return;
+      nextSource.splice(toIndex, 0, movedSame);
+    } else {
+      nextTarget.splice(targetInsertIndex, 0, { ...dragged, employeeId: targetEmployeeId });
+    }
 
-    queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) => {
-      const existing = current ?? [];
-      const byId = new Map(reordered.map((assignment) => [assignment.id, assignment]));
-      let reorderedCursor = 0;
-      return existing.map((assignment) => {
-        if (assignment.employeeId !== employeeId) return assignment;
-        const next = reordered[reorderedCursor];
-        reorderedCursor += 1;
-        if (!next) return assignment;
-        return byId.get(next.id!) ?? assignment;
-      });
-    });
+    const orderUpdates =
+      sourceEmployeeId === targetEmployeeId
+        ? nextSource.map((assignment, index) => ({
+            id: assignment.id,
+            employee_id: assignment.employeeId,
+            order_index: index,
+          }))
+        : [
+            ...nextSource.map((assignment, index) => ({
+              id: assignment.id,
+              employee_id: sourceEmployeeId,
+              order_index: index,
+            })),
+            ...nextTarget.map((assignment, index) => ({
+              id: assignment.id,
+              employee_id: targetEmployeeId,
+              order_index: index,
+            })),
+          ];
 
-    const orderUpdates = reordered.map((assignment, index) => ({
-      id: assignment.id,
-      order_index: index,
-    }));
+    queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+      (current ?? []).map((assignment) => {
+        const match = orderUpdates.find((update) => update.id === assignment.id);
+        if (!match) return assignment;
+        return { ...assignment, employeeId: match.employee_id, order: match.order_index };
+      }),
+    );
 
-    const { error } = await supabase
-      .from('assignments')
-      .upsert(orderUpdates, { onConflict: 'id' });
+    const { error } = await supabase.from('assignments').upsert(orderUpdates, { onConflict: 'id' });
 
     if (error) {
       console.error('[ASSIGNMENT ERROR]', { error, payload: orderUpdates });
@@ -2881,7 +2900,44 @@ export default function WorkboardPage() {
       return;
     }
 
-    toast.success('Task order updated');
+    if (sourceEmployeeId === targetEmployeeId) {
+      toast.success('Task order updated');
+    } else {
+      toast.success('Task moved to a different crew member');
+    }
+    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+  }
+
+  async function moveTaskToEmployeeLane(sourceEmployeeId: string, targetEmployeeId: string, draggedAssignmentId: string) {
+    if (!supabase || !draggedAssignmentId || sourceEmployeeId === targetEmployeeId) return;
+    const sourceAssignments = dayAssignments.filter((assignment) => assignment.employeeId === sourceEmployeeId);
+    const targetAssignments = dayAssignments.filter((assignment) => assignment.employeeId === targetEmployeeId);
+    const dragged = sourceAssignments.find((assignment) => assignment.id === draggedAssignmentId);
+    if (!dragged?.id) return;
+    const nextSource = sourceAssignments.filter((assignment) => assignment.id !== draggedAssignmentId);
+    const nextTarget = [...targetAssignments, { ...dragged, employeeId: targetEmployeeId }];
+
+    const orderUpdates = [
+      ...nextSource.map((assignment, index) => ({ id: assignment.id, employee_id: sourceEmployeeId, order_index: index })),
+      ...nextTarget.map((assignment, index) => ({ id: assignment.id, employee_id: targetEmployeeId, order_index: index })),
+    ];
+
+    queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+      (current ?? []).map((assignment) => {
+        const match = orderUpdates.find((update) => update.id === assignment.id);
+        if (!match) return assignment;
+        return { ...assignment, employeeId: match.employee_id, order: match.order_index };
+      }),
+    );
+
+    const { error } = await supabase.from('assignments').upsert(orderUpdates, { onConflict: 'id' });
+    if (error) {
+      console.error('[ASSIGNMENT ERROR]', { error, payload: orderUpdates });
+      toast.error(`Task move failed: ${error.message}`);
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      return;
+    }
+    toast.success('Task moved to a different crew member');
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
   }
 
@@ -3574,11 +3630,18 @@ export default function WorkboardPage() {
                   onDragStart={setDraggingEmployeeId}
                   onDragEnter={setDropTargetEmployeeId}
                   onDragEnd={() => { setDraggingEmployeeId(null); setDropTargetEmployeeId(null); }}
-                  onDropRow={moveEmployeeLane}
+                  onDropRow={(targetEmployeeId) => {
+                    if (draggingTask) {
+                      void moveTaskToEmployeeLane(draggingTask.employeeId, targetEmployeeId, draggingTask.assignmentId);
+                      setDraggingTask(null);
+                      return;
+                    }
+                    moveEmployeeLane(targetEmployeeId);
+                  }}
                   onTaskDragStart={(employeeId, assignmentId) => setDraggingTask({ employeeId, assignmentId })}
                   onTaskDropOnTask={(employeeId, targetAssignmentId) => {
-                    if (!draggingTask || draggingTask.employeeId !== employeeId) return;
-                    void reorderEmployeeAssignments(employeeId, draggingTask.assignmentId, targetAssignmentId);
+                    if (!draggingTask) return;
+                    void reorderEmployeeAssignments(draggingTask.employeeId, employeeId, draggingTask.assignmentId, targetAssignmentId);
                     setDraggingTask(null);
                   }}
                   onAddTask={openAssignmentDialog}
