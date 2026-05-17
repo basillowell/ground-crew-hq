@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Calendar, CheckCircle2, Circle, CloudRain, MapPin, Plus, Users, Wrench } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Calendar, CheckCircle2, Circle, CloudRain, HelpCircle, MapPin, Plus, Users, Wrench } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +18,7 @@ import { OnboardingWizardV2 } from '@/components/OnboardingWizardV2';
 import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
 import { LayoutDashboard } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const DAILY_BRIEF_MODEL = 'claude-sonnet-4-20250514';
 const DAILY_BRIEF_STORAGE_PREFIX = 'gchq-daily-brief';
@@ -1622,7 +1623,17 @@ export default function CommandCenterOperationalPage() {
         <Card className={`mb-6 rounded-xl border-l-4 p-5 shadow-sm ${efficiencyScoreSummary.toneClasses}`}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Efficiency Score</div>
+              <div className="inline-flex items-center gap-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                Efficiency Score
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="Efficiency score help">
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Based on task completion, coverage, labor variance, equipment health, and open needs.</TooltipContent>
+                </Tooltip>
+              </div>
               {efficiencyInputsQuery.isLoading ? (
                 <Skeleton className="mt-2 h-10 w-20 rounded-md" />
               ) : (
@@ -1665,7 +1676,17 @@ export default function CommandCenterOperationalPage() {
       ) : null}
 
       <Card className="mb-6 rounded-2xl border p-4 md:p-5 shadow-sm">
-        <h3 className="text-sm font-semibold">Spray Window — Today</h3>
+        <div className="flex items-center gap-1">
+          <h3 className="text-sm font-semibold">Spray Window — Today</h3>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" aria-label="Spray window help">
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Green = safe to spray. Red = wind or rain makes spraying risky.</TooltipContent>
+          </Tooltip>
+        </div>
         <div className="mt-3">
           {sprayWindowQuery.isLoading ? (
             <Skeleton className="h-6 w-full rounded-full" />

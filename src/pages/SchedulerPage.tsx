@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle, Cloud, CloudRain, Sun } from 'lucide-react';
+import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle, Cloud, CloudRain, Sun, HelpCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
@@ -18,6 +18,7 @@ import { formatTime } from '@/utils/formatTime';
 import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 type WeekTemplateItem = {
   id: string;
@@ -1070,12 +1071,28 @@ export default function SchedulerPage() {
             <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openSaveTemplateDialog}>
               Save as Template
             </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" aria-label="Save template help" className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground">
+                  <HelpCircle className="mx-auto h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Save as Template stores this week as a reusable schedule pattern.</TooltipContent>
+            </Tooltip>
             <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openApplyTemplateDialog}>
               Apply Template
             </Button>
             <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openCopyWeekDialog} data-testid="button-copy-week">
               <Copy className="h-3.5 w-3.5" /> Copy Week
             </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" aria-label="Copy week help" className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground">
+                  <HelpCircle className="mx-auto h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Copy Week duplicates this week&apos;s shifts to next week.</TooltipContent>
+            </Tooltip>
           </>
         ) : null}
         <DropdownMenu>

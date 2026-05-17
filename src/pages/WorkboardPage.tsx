@@ -37,6 +37,7 @@ import {
   CloudSun,
   FileText,
   GanttChart,
+  HelpCircle,
   LayoutList,
   ListChecks,
   Mail,
@@ -3115,6 +3116,14 @@ export default function WorkboardPage() {
                 Quick Plan
               </Button>
             ) : null}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" aria-label="Quick plan help" className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground">
+                  <HelpCircle className="mx-auto h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Auto-suggests today&apos;s tasks based on what you did last week.</TooltipContent>
+            </Tooltip>
             <Button
               size="sm"
               variant="outline"

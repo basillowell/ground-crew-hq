@@ -9,6 +9,8 @@ import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { isPro } from '@/utils/planGating';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { HelpCircle } from 'lucide-react';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -789,7 +791,17 @@ function WorkspaceTab({
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Setup Checklist</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Setup Checklist</h3>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" aria-label="Setup checklist help" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+                <HelpCircle size={14} color="#6b7280" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Complete these steps to fully configure your operation.</TooltipContent>
+          </Tooltip>
+        </div>
         {setupComplete ? (
           <p style={{ margin: 0, color: '#166534', fontSize: '13px', fontWeight: 600 }}>Setup complete ✓</p>
         ) : (
@@ -2543,7 +2555,17 @@ function SchedulerTab({ orgId }: { orgId: string }) {
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 600 }}>Alerts</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Alerts</h3>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" aria-label="Escalation settings help" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+                <HelpCircle size={14} color="#6b7280" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Set thresholds for weather and equipment alerts on the workboard.</TooltipContent>
+          </Tooltip>
+        </div>
         <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>
           Configure escalation thresholds used by the Workboard escalation center.
         </p>
