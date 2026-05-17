@@ -100,7 +100,7 @@ function quoteCsv(value: string | number) {
 }
 
 export default function ReportsPage() {
-  const { orgId, currentPropertyId } = useAuth();
+  const { orgId, currentPropertyId, currentUser } = useAuth();
   const [startDate, setStartDate] = useState<string>(() => toIsoDate(startOfWeek(new Date())));
   const [endDate, setEndDate] = useState<string>(() => toIsoDate(endOfWeek(new Date())));
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
@@ -356,18 +356,45 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   }, [costByTaskRows, costByTaskTotals, laborRows, totals]);
 
+  const selectedPropertyName = useMemo(() => {
+    if (selectedPropertyId === 'all') return 'All Properties';
+    return properties.find((property) => property.id === selectedPropertyId)?.name ?? 'Selected Property';
+  }, [properties, selectedPropertyId]);
+
+  const generatedAt = useMemo(
+    () =>
+      new Date().toLocaleString([], {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    [],
+  );
+
   if (!orgId) {
     return <PageSkeleton />;
   }
 
   return (
-    <div style={{ padding: '1rem', display: 'grid', gap: '16px' }}>
+    <div className="main-content" style={{ padding: '1rem', display: 'grid', gap: '16px' }}>
+      <div className="print-header hidden print:block" style={{ marginBottom: '12px' }}>
+        <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700 }}>Ground Crew HQ - Labor Report</h1>
+        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#4b5563' }}>
+          {selectedPropertyName} - {startDate} to {endDate}
+        </p>
+        <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#6b7280' }}>
+          Generated: {generatedAt} - Prepared by: {currentUser?.fullName ?? currentUser?.email ?? 'Ground Crew User'}
+        </p>
+      </div>
+
       <div>
         <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: 600 }}>Reports</h1>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>Labor summary by employee for the selected period.</p>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '12px' }}>
+      <div className="no-print" style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '12px' }}>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button onClick={() => applyPreset('this-week')}>This Week</button>
           <button onClick={() => applyPreset('last-week')}>Last Week</button>
@@ -400,9 +427,14 @@ export default function ReportsPage() {
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Labor Summary</h3>
-          <button onClick={exportCsv} disabled={loading || Boolean(error) || laborRows.length === 0}>
-            Export CSV
-          </button>
+          <div className="no-print" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button onClick={exportCsv} disabled={loading || Boolean(error) || laborRows.length === 0}>
+              Export CSV
+            </button>
+            <button onClick={() => window.print()} disabled={loading || Boolean(error)}>
+              Print
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -521,6 +553,10 @@ export default function ReportsPage() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="print-footer hidden print:block">
+        Ground Crew HQ - ground-crew-hq.vercel.app - Confidential
       </div>
     </div>
   );
