@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { FeedbackWidget } from './FeedbackWidget';
+import { CommandBar } from './CommandBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import type { ProgramSettings } from '@/data/seedData';
 import {
@@ -127,6 +128,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, orgId } = useAuth();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncFlashActive, setSyncFlashActive] = useState(false);
@@ -390,6 +392,11 @@ export function AppLayout({ children }: AppLayoutProps) {
       }
 
       if (!(event.ctrlKey || event.metaKey)) return;
+      if (key === 'k') {
+        event.preventDefault();
+        setCommandBarOpen(true);
+        return;
+      }
 
       if (event.shiftKey && key === 'n' && location.pathname === '/app/scheduler') {
         event.preventDefault();
@@ -500,6 +507,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
             planTier={planTier}
+            onOpenCommandBar={() => setCommandBarOpen(true)}
           />
           <OperationsProvider
             value={{
@@ -524,6 +532,12 @@ export function AppLayout({ children }: AppLayoutProps) {
               {children}
             </main>
             {shouldShowFeedbackWidget ? <FeedbackWidget pagePath={location.pathname} /> : null}
+            <CommandBar
+              open={commandBarOpen}
+              onOpenChange={setCommandBarOpen}
+              currentDate={currentDate}
+              currentPropertyId={currentPropertyId}
+            />
           </OperationsProvider>
         </div>
       </div>

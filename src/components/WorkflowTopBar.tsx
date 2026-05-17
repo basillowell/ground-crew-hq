@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Bell, CalendarDays, ClipboardList, LogOut, Wrench, CalendarClock, Menu } from 'lucide-react';
+import { Bell, CalendarDays, ClipboardList, LogOut, Wrench, CalendarClock, Menu, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +37,7 @@ interface WorkflowTopBarProps {
   onSignOut: () => void;
   programSetting?: ProgramSettings;
   planTier?: 'FREE' | 'PRO';
+  onOpenCommandBar?: () => void;
 }
 
 const formatDate = (d: Date) =>
@@ -67,6 +68,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   onSignOut,
   programSetting,
   planTier = 'FREE',
+  onOpenCommandBar,
 }: WorkflowTopBarProps) {
   const { currentUser } = useAuth();
   const firstName = (currentUser as { firstName?: string } | null)?.firstName ?? currentUser?.fullName?.split(' ')[0] ?? '';
@@ -202,6 +204,16 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden md:inline-flex h-9 rounded-xl border-border/80 bg-background/90 text-xs"
+            onClick={onOpenCommandBar}
+          >
+            <Search className="mr-1.5 h-3.5 w-3.5" />
+            Ask anything
+          </Button>
 
           <div className="hidden text-right md:block">
             <div className="flex items-center justify-end gap-2">
