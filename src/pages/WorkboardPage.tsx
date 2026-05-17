@@ -537,7 +537,7 @@ export default function WorkboardPage() {
         .select('id, equipment_unit_id')
         .eq('org_id', currentUser.orgId)
         .eq('date', boardDate);
-      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
+      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property', effectivePropertyId);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Array<{ id: string; equipment_unit_id: string | null }>;
@@ -2441,7 +2441,7 @@ export default function WorkboardPage() {
       area: request.location || request.preferredLocation || propertyWorkLocations[0]?.name || 'Primary zone',
       startTime: '05:30',
       status: 'planned',
-      notes: request.notes ?? '',
+      notes: request.description ?? '',
     });
     setAssignToAllScheduledCrew(false);
     setIsAssignmentModalDirty(false);
@@ -2785,7 +2785,7 @@ export default function WorkboardPage() {
 
     const timeoutId = window.setTimeout(async () => {
       delete pendingDeleteTimeoutsRef.current[assignmentId];
-      const { error } = await supabase.from('assignments').delete().eq('id', assignmentId);
+      const { error } = await supabase.from('assignments').delete().eq('id', assignmentId).eq('org_id', currentUser.orgId);
       if (error) {
         console.error('[ASSIGNMENT ERROR]', { error, payload: { id: assignmentId } });
         upsertAssignmentInCache(assignmentToRemove);
@@ -2822,7 +2822,11 @@ export default function WorkboardPage() {
     if (!supabase) return;
     const confirmed = window.confirm('Dismiss this request?');
     if (!confirmed) return;
-    const { error } = await supabase.from('task_requests').update({ status: 'dismissed' }).eq('id', requestId);
+    const { error } = await supabase
+      .from('task_requests')
+      .update({ status: 'dismissed' })
+      .eq('id', requestId)
+      .eq('org_id', currentUser?.orgId ?? '');
     if (error) {
       toast.error(`Failed to dismiss request: ${error.message}`);
       return;
@@ -3919,8 +3923,8 @@ export default function WorkboardPage() {
                       : request.requestedBy}
                     {request.location || request.preferredLocation ? ` · ${request.location || request.preferredLocation}` : ''}
                   </div>
-                  {request.notes && (
-                    <div className="text-[11px] text-muted-foreground italic mb-2 line-clamp-2">{request.notes}</div>
+                  {request.description && (
+                    <div className="text-[11px] text-muted-foreground italic mb-2 line-clamp-2">{request.description}</div>
                   )}
                   <div className="text-[10px] text-muted-foreground mb-2">
                     Created {formatRelativeTime(request.createdAt)}

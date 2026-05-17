@@ -2650,7 +2650,11 @@ function SchedulerTab({ orgId }: { orgId: string }) {
   const deleteTemplate = async (templateId: string) => {
     if (!supabase) return;
     const templateName = templates.find((template) => template.id === templateId)?.name ?? 'template';
-    const { error: deleteError } = await supabase.from('shift_templates').delete().eq('id', templateId);
+    const { error: deleteError } = await supabase
+      .from('shift_templates')
+      .delete()
+      .eq('id', templateId)
+      .eq('org_id', currentUser?.orgId ?? '');
     if (deleteError) {
       setTemplatesError(deleteError.message);
       toast.error(`Failed to delete shift template: ${deleteError.message}`);

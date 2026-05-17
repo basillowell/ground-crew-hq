@@ -891,7 +891,7 @@ async function fetchWorkLocations(): Promise<WorkLocation[]> {
 export async function fetchWeatherLocations(propertyId?: string, orgId?: string, activeOnly = false): Promise<WeatherLocation[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let query = client.from('weather_locations').select('*, weather_stations(*)').order('name');
+  let query = client.from('weather_locations').select('*').order('name');
   if (orgId) query = query.eq('org_id', orgId);
   if (activeOnly) query = query.eq('is_active', true);
   const { data, error } = await query;
@@ -1333,11 +1333,11 @@ export function useWeatherDailyLogs() {
   });
 }
 
-export function useWeatherDailyLogsRange(startDate: string, endDate: string, propertyId?: string) {
+export function useWeatherDailyLogsRange(startDate: string, endDate: string, propertyId?: string, orgId?: string) {
   return useQuery({
-    queryKey: ['weather-daily-logs-range', startDate, endDate, propertyId ?? 'all'],
+    queryKey: ['weather-daily-logs-range', startDate, endDate, propertyId ?? 'all', orgId ?? 'all-orgs'],
     queryFn: () => fetchWeatherDailyLogs(startDate, endDate, propertyId),
-    enabled: Boolean(startDate && endDate),
+    enabled: Boolean(orgId && startDate && endDate),
     staleTime: 1000 * 60 * 5,
   });
 }
@@ -1442,20 +1442,20 @@ export function useOvertimeRules(orgId?: string) {
   });
 }
 
-export function useChemicalApplicationLogs(date: string) {
+export function useChemicalApplicationLogs(date: string, orgId?: string) {
   return useQuery({
-    queryKey: ['chemical-application-logs', date],
+    queryKey: ['chemical-application-logs', date, orgId ?? 'all-orgs'],
     queryFn: () => fetchChemicalApplicationLogFieldsForDate(date),
-    enabled: Boolean(date),
+    enabled: Boolean(orgId && date),
     staleTime: 1000 * 60 * 5,
   });
 }
 
-export function useChemicalApplicationLogsRange(startDate: string, endDate: string, propertyId?: string) {
+export function useChemicalApplicationLogsRange(startDate: string, endDate: string, propertyId?: string, orgId?: string) {
   return useQuery({
-    queryKey: ['chemical-application-logs-range', startDate, endDate, propertyId ?? 'all'],
+    queryKey: ['chemical-application-logs-range', startDate, endDate, propertyId ?? 'all', orgId ?? 'all-orgs'],
     queryFn: () => fetchChemicalApplicationLogs(startDate, endDate, propertyId),
-    enabled: Boolean(startDate && endDate),
+    enabled: Boolean(orgId && startDate && endDate),
     staleTime: 1000 * 60 * 5,
   });
 }
