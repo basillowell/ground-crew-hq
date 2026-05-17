@@ -29,15 +29,20 @@ import {
 } from '@/data/seedData';
 import {
   AlertCircle,
+  ClipboardCopy,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
   Clock,
   CloudSun,
+  FileText,
   GanttChart,
   LayoutList,
   ListChecks,
+  Mail,
+  MessageCircle,
   MonitorSmartphone,
+  Printer,
   Radio,
   StickyNote,
   Users,
@@ -416,6 +421,11 @@ export default function WorkboardPage() {
   const [workOrdersExpanded, setWorkOrdersExpanded] = useState(false);
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [selectedScheduleRecipientIds, setSelectedScheduleRecipientIds] = useState<string[]>([]);
+  const [endOfDayDialogOpen, setEndOfDayDialogOpen] = useState(false);
+  const [endOfDayReportText, setEndOfDayReportText] = useState('');
+  const [endOfDayReportCondensed, setEndOfDayReportCondensed] = useState('');
+  const [endOfDayReportSubject, setEndOfDayReportSubject] = useState('');
+  const [endOfDayReportGenerating, setEndOfDayReportGenerating] = useState(false);
   const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -1703,6 +1713,7 @@ export default function WorkboardPage() {
 
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
   const [todayDateKey] = useState(() => new Date().toISOString().slice(0, 10));
+  const showEndOfDayReportButton = useMemo(() => new Date().getHours() >= 14, []);
 
   const newRequestsCount = propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length;
 
@@ -1872,6 +1883,186 @@ export default function WorkboardPage() {
   const dismissSuggestedTask = useCallback((id: string) => {
     setDismissedSuggestionIds((current) => (current.includes(id) ? current : [...current, id]));
   }, []);
+
+  const generateEndOfDayReport = useCallback(async () => {
+    if (!currentUser?.orgId) return;
+    setEndOfDayReportGenerating(true);
+    const propertyLabel = activeProperty?.name || 'All Properties';
+    const reportDate = new Date(`${boardDate}T00:00:00`);
+    const reportDateLabel = reportDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    const crewLines = scheduledEmployees.map((employee) => {
+      const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
+      const employeeAssignments = dayAssignments.filter((assignment) => assignment.employeeId === employee.id);
+      const completedCount = employeeAssignments.filter((assignment) => normalizeAssignmentStatus(assignment.status) === 'done').length;
+      const actualHours = employeeAssignments.reduce((sum, assignment) => sum + Number(assignment.actualHours ?? 0), 0);
+      const shiftLabel = shift ? `${formatTime(shift.shiftStart)} - ${formatTime(shift.shiftEnd)}` : 'No shift';
+      return `${employee.firstName} ${employee.lastName} — ${shiftLabel} — ${completedCount} completed — ${actualHours.toFixed(1)}h actual`;
+    });
+
+    const totalTasks = dayAssignments.length;
+    const completedTasks = dayAssignments.filter((assignment) => normalizeAssignmentStatus(assignment.status) === 'done').length;
+    const completionPct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+    const scheduledHours = dayAssignments.reduce((sum, assignment) => sum + Number(assignment.estimatedHours ?? 0), 0);
+    const actualHours = dayAssignments.reduce((sum, assignment) => sum + Number(assignment.actualHours ?? 0), 0);
+    const varianceHours = actualHours - scheduledHours;
+    const variancePct = scheduledHours > 0 ? (varianceHours / scheduledHours) * 100 : 0;
+
+    const weatherPoints = hourlyWeatherStripQuery.data ?? [];
+    const highTemp = weatherPoints.length > 0 ? Math.max(...weatherPoints.map((point) => point.temp)) : Math.round(weatherSnapshot?.temperature ?? 0);
+    const maxWind = weatherPoints.length > 0 ? Math.max(...weatherPoints.map((point) => point.wind)) : Math.round(weatherSnapshot?.windSpeed ?? 0);
+    const rainTotal = Number(latestWeatherLog?.rainfallTotal ?? 0);
+
+    const overdueThresholdDays = Math.max(1, escalationThresholds.equipmentServiceOverdueDays);
+    const overdueThresholdDate = new Date();
+    overdueThresholdDate.setDate(overdueThresholdDate.getDate() - overdueThresholdDays);
+    const equipmentNotes = (equipmentList as Array<Record<string, unknown>>)
+      .map((unit) => {
+        const unitName = String(unit.unit_name ?? unit.name ?? 'Equipment');
+        const status = String(unit.status ?? '').toLowerCase();
+        const lastServiceRaw = unit.lastService ?? unit.last_serviced;
+        if (status === 'in_use') return `${unitName} — currently in use`;
+        if (lastServiceRaw) {
+          const lastServiceDate = new Date(String(lastServiceRaw));
+          if (!Number.isNaN(lastServiceDate.getTime()) && lastServiceDate < overdueThresholdDate) {
+            const overdueByDays = Math.floor((Date.now() - lastServiceDate.getTime()) / (1000 * 60 * 60 * 24)) - overdueThresholdDays;
+            return `${unitName} — overdue for service by ${Math.max(1, overdueByDays)} day${Math.max(1, overdueByDays) === 1 ? '' : 's'}`;
+          }
+        }
+        return null;
+      })
+      .filter((note): note is string => Boolean(note));
+
+    const openAssignmentItems = dayAssignments
+      .filter((assignment) => {
+        const status = normalizeAssignmentStatus(assignment.status);
+        return status === 'planned' || status === 'in-progress';
+      })
+      .map((assignment) => `${assignment.title} (${normalizeAssignmentStatus(assignment.status).replace('-', ' ')})`);
+
+    const openRequests = propertyRequests
+      .filter((request) => isRequestOpen(String(request.status ?? '')))
+      .map((request) => request.title);
+
+    const reportLines = [
+      'GROUND CREW HQ — DAILY OPERATIONS REPORT',
+      `${propertyLabel} — ${reportDateLabel}`,
+      '',
+      'CREW SUMMARY:',
+      `${scheduledEmployees.length} crew members worked today`,
+      ...(crewLines.length > 0 ? crewLines.map((line) => `- ${line}`) : ['- No crew scheduled']),
+      '',
+      'TASK COMPLETION:',
+      `${completedTasks}/${totalTasks} tasks completed (${completionPct}%)`,
+      `Scheduled hours: ${scheduledHours.toFixed(1)}`,
+      `Actual hours: ${actualHours.toFixed(1)}`,
+      `Variance: ${varianceHours >= 0 ? '+' : ''}${varianceHours.toFixed(1)}h (${variancePct >= 0 ? '+' : ''}${variancePct.toFixed(1)}%)`,
+      '',
+      'WEATHER CONDITIONS:',
+      `High: ${Math.round(highTemp)}°F | Wind: ${Math.round(maxWind)}mph | Rain: ${rainTotal.toFixed(1)}mm`,
+      '',
+      'EQUIPMENT NOTES:',
+      ...(equipmentNotes.length > 0 ? equipmentNotes.map((note) => `- ${note}`) : ['- No equipment flags']),
+      '',
+      'OPEN ITEMS:',
+      ...(openAssignmentItems.length > 0 ? openAssignmentItems.map((item) => `- ${item}`) : ['- No open assignments']),
+      ...(openRequests.length > 0 ? openRequests.map((item) => `- Need: ${item}`) : ['- No open task requests']),
+    ];
+
+    const fullText = reportLines.join('\n');
+    const condensed = [
+      `*Ground Crew HQ — End of Day*`,
+      `*${propertyLabel}*`,
+      `${completedTasks}/${totalTasks} tasks done (${completionPct}%)`,
+      `Crew: ${scheduledEmployees.length} | Hours: ${actualHours.toFixed(1)} actual / ${scheduledHours.toFixed(1)} scheduled`,
+      `Weather: ${Math.round(highTemp)}°F high, ${Math.round(maxWind)}mph wind, ${rainTotal.toFixed(1)}mm rain`,
+      `Open items: ${openAssignmentItems.length} tasks, ${openRequests.length} needs`,
+    ].join('\n');
+
+    setEndOfDayReportText(fullText);
+    setEndOfDayReportCondensed(condensed);
+    setEndOfDayReportSubject(`Ground Crew HQ — End of Day Report — ${propertyLabel} — ${reportDate.toLocaleDateString('en-US')}`);
+
+    if (supabase && currentUser?.orgId && effectivePropertyId && effectivePropertyId !== 'all') {
+      const notePayload = {
+        id: makeId(),
+        org_id: currentUser.orgId,
+        property_id: effectivePropertyId,
+        title: `Daily Operations Report — ${reportDate.toLocaleDateString('en-US')}`,
+        content: fullText,
+        type: 'daily',
+        category: 'daily-report',
+        date: todayDateKey,
+        created_by: currentUser?.appUserId ?? null,
+        author: 'Operations Assistant',
+      };
+      const { error } = await supabase.from('notes').insert(notePayload);
+      if (error) {
+        toast.error(`Failed to archive report: ${error.message}`);
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ['notes'] });
+      }
+    }
+    setEndOfDayReportGenerating(false);
+  }, [
+    activeProperty?.name,
+    boardDate,
+    currentUser?.appUserId,
+    currentUser?.orgId,
+    dayAssignments,
+    effectivePropertyId,
+    equipmentList,
+    escalationThresholds.equipmentServiceOverdueDays,
+    hourlyWeatherStripQuery.data,
+    isRequestOpen,
+    latestWeatherLog?.rainfallTotal,
+    propertyRequests,
+    queryClient,
+    scheduleList,
+    scheduledEmployees,
+    supabase,
+    todayDateKey,
+    weatherSnapshot?.temperature,
+    weatherSnapshot?.windSpeed,
+  ]);
+
+  const openEndOfDayReportDialog = useCallback(() => {
+    setEndOfDayDialogOpen(true);
+    void generateEndOfDayReport();
+  }, [generateEndOfDayReport]);
+
+  const copyEndOfDayReport = useCallback(async () => {
+    if (!endOfDayReportText) return;
+    try {
+      await navigator.clipboard.writeText(endOfDayReportText);
+      toast.success('End of day report copied to clipboard');
+    } catch {
+      toast.error('Unable to copy report');
+    }
+  }, [endOfDayReportText]);
+
+  const emailEndOfDayReport = useCallback(() => {
+    if (!endOfDayReportText) return;
+    window.location.href = `mailto:?subject=${encodeURIComponent(endOfDayReportSubject)}&body=${encodeURIComponent(endOfDayReportText)}`;
+  }, [endOfDayReportSubject, endOfDayReportText]);
+
+  const shareEndOfDayReportWhatsApp = useCallback(() => {
+    if (!endOfDayReportCondensed) return;
+    window.open(`https://wa.me/?text=${encodeURIComponent(endOfDayReportCondensed)}`, '_blank', 'noopener,noreferrer');
+  }, [endOfDayReportCondensed]);
+
+  const printEndOfDayReport = useCallback(() => {
+    if (!endOfDayReportText) return;
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!printWindow) {
+      toast.error('Unable to open print dialog');
+      return;
+    }
+    printWindow.document.write(`<pre style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; white-space: pre-wrap; padding: 20px;">${escapeHtml(endOfDayReportText)}</pre>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }, [endOfDayReportText]);
 
   const handlePrintDailyPlan = useCallback(() => {
     const printWindow = window.open('', '_blank', 'noopener,noreferrer');
@@ -2901,6 +3092,16 @@ export default function WorkboardPage() {
                 data-testid="button-open-task-template"
               >
                 Apply Task Template
+              </Button>
+            ) : null}
+            {showEndOfDayReportButton ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0"
+                onClick={openEndOfDayReportDialog}
+              >
+                End of Day Report
               </Button>
             ) : null}
 
@@ -4264,6 +4465,44 @@ export default function WorkboardPage() {
       </Dialog>
 
       {/* ─── NOTE DIALOG ─── */}
+      <Dialog open={endOfDayDialogOpen} onOpenChange={setEndOfDayDialogOpen}>
+        <DialogContent role="dialog" aria-modal="true" className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-4 w-4" /> End of Day Report
+            </DialogTitle>
+          </DialogHeader>
+          {endOfDayReportGenerating ? (
+            <div className="space-y-2 py-3">
+              <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+              <div className="h-4 w-full animate-pulse rounded bg-muted" />
+              <div className="h-4 w-5/6 animate-pulse rounded bg-muted" />
+              <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+            </div>
+          ) : (
+            <>
+              <div className="max-h-[55vh] overflow-auto rounded-md border bg-muted/20 p-3">
+                <pre className="whitespace-pre-wrap text-xs leading-relaxed">{endOfDayReportText}</pre>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 sm:grid-cols-4">
+                <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => void copyEndOfDayReport()}>
+                  <ClipboardCopy className="h-3.5 w-3.5" /> Copy
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={emailEndOfDayReport}>
+                  <Mail className="h-3.5 w-3.5" /> Email
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={shareEndOfDayReportWhatsApp}>
+                  <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={printEndOfDayReport}>
+                  <Printer className="h-3.5 w-3.5" /> Print
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
         <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
           <DialogHeader>
