@@ -14,7 +14,7 @@ import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo'
 import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { OnboardingWizard } from '@/components/OnboardingWizard';
+import { OnboardingWizardV2 } from '@/components/OnboardingWizardV2';
 import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
 import { LayoutDashboard } from 'lucide-react';
@@ -1226,7 +1226,7 @@ export default function CommandCenterOperationalPage() {
 
   if (shouldShowOnboarding) {
     return (
-      <OnboardingWizard
+      <OnboardingWizardV2
         orgId={orgId}
         userId={currentUser?.appUserId}
         onComplete={() => {
