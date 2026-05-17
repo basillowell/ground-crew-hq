@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { useSearchParams } from 'react-router-dom';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
@@ -39,6 +40,14 @@ type ScheduleEntryTrendRow = {
   shift_start: string | null;
   shift_end: string | null;
   status: string | null;
+};
+
+type EquipmentRow = {
+  id: string;
+  name: string | null;
+  unit_name: string | null;
+  status: string | null;
+  last_serviced: string | null;
 };
 
 type TaskRow = {
@@ -111,11 +120,16 @@ function quoteCsv(value: string | number) {
 }
 
 export default function ReportsPage() {
+  const [searchParams] = useSearchParams();
+  const isFullReportView = searchParams.get('fullReport') === '1';
+  const queryStartDate = searchParams.get('start');
+  const queryEndDate = searchParams.get('end');
+  const queryPropertyId = searchParams.get('property');
   const { orgId, currentPropertyId, currentUser } = useAuth();
-  const [startDate, setStartDate] = useState<string>(() => toIsoDate(startOfWeek(new Date())));
-  const [endDate, setEndDate] = useState<string>(() => toIsoDate(endOfWeek(new Date())));
+  const [startDate, setStartDate] = useState<string>(() => queryStartDate || toIsoDate(startOfWeek(new Date())));
+  const [endDate, setEndDate] = useState<string>(() => queryEndDate || toIsoDate(endOfWeek(new Date())));
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
-    currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : 'all',
+    queryPropertyId || (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : 'all'),
   );
   const [properties, setProperties] = useState<PropertyRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
@@ -126,6 +140,9 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<'summary' | 'trends'>('summary');
   const [trendAssignments, setTrendAssignments] = useState<AssignmentRow[]>([]);
   const [trendScheduleEntries, setTrendScheduleEntries] = useState<ScheduleEntryTrendRow[]>([]);
+  const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
+  const [openNeedsCount, setOpenNeedsCount] = useState(0);
+  const [organizationName, setOrganizationName] = useState('Ground Crew HQ');
 
   const applyPreset = (preset: 'this-week' | 'last-week' | 'this-month' | 'last-month') => {
     const now = new Date();
@@ -204,7 +221,40 @@ export default function ReportsPage() {
       trendScheduleEntriesQuery,
     ]);
 
-    if (assignmentsResult.error || employeesResult.error || propertiesResult.error || tasksResult.error || trendAssignmentsResult.error || trendScheduleEntriesResult.error) {
+    let equipmentQuery = supabase
+      .from('equipment_units')
+      .select('id, name, unit_name, status, last_serviced')
+      .eq('org_id', orgId);
+    if (selectedPropertyId !== 'all') {
+      equipmentQuery = equipmentQuery.eq('property_id', selectedPropertyId);
+    }
+
+    let openNeedsQuery = supabase
+      .from('task_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('status', 'open');
+    if (selectedPropertyId !== 'all') {
+      openNeedsQuery = openNeedsQuery.eq('property_id', selectedPropertyId);
+    }
+
+    const [equipmentResult, openNeedsResult, organizationResult] = await Promise.all([
+      equipmentQuery,
+      openNeedsQuery,
+      supabase.from('organizations').select('name').eq('id', orgId).maybeSingle(),
+    ]);
+
+    if (
+      assignmentsResult.error ||
+      employeesResult.error ||
+      propertiesResult.error ||
+      tasksResult.error ||
+      trendAssignmentsResult.error ||
+      trendScheduleEntriesResult.error ||
+      equipmentResult.error ||
+      openNeedsResult.error ||
+      organizationResult.error
+    ) {
       setError(
         assignmentsResult.error?.message ??
           employeesResult.error?.message ??
@@ -212,6 +262,9 @@ export default function ReportsPage() {
           tasksResult.error?.message ??
           trendAssignmentsResult.error?.message ??
           trendScheduleEntriesResult.error?.message ??
+          equipmentResult.error?.message ??
+          openNeedsResult.error?.message ??
+          organizationResult.error?.message ??
           'Unable to load report data',
       );
       setLoading(false);
@@ -224,6 +277,9 @@ export default function ReportsPage() {
     setTasks((tasksResult.data ?? []) as TaskRow[]);
     setTrendAssignments((trendAssignmentsResult.data ?? []) as AssignmentRow[]);
     setTrendScheduleEntries((trendScheduleEntriesResult.data ?? []) as ScheduleEntryTrendRow[]);
+    setEquipmentRows((equipmentResult.data ?? []) as EquipmentRow[]);
+    setOpenNeedsCount(openNeedsResult.count ?? 0);
+    setOrganizationName(organizationResult.data?.name ?? 'Ground Crew HQ');
     setLoading(false);
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
@@ -529,6 +585,80 @@ export default function ReportsPage() {
     [],
   );
 
+  const completionRate = useMemo(() => {
+    const totalTasks = assignments.length;
+    if (totalTasks === 0) return 0;
+    const doneTasks = assignments.filter((row) => (row.status ?? '').toLowerCase() === 'done').length;
+    return Math.round((doneTasks / totalTasks) * 100);
+  }, [assignments]);
+
+  const overdueEquipmentRows = useMemo(() => {
+    const threshold = new Date();
+    threshold.setDate(threshold.getDate() - 90);
+    const thresholdKey = toIsoDate(threshold);
+    return equipmentRows.filter((row) => (row.last_serviced ?? '') < thresholdKey);
+  }, [equipmentRows]);
+
+  const efficiencyScore = useMemo(() => {
+    const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, value));
+    const now = new Date();
+    const todayKey = toIsoDate(now);
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const start7Key = toIsoDate(sevenDaysAgo);
+
+    const last7Assignments = trendAssignments.filter((row) => row.date >= start7Key && row.date <= todayKey);
+    const totalTasks7 = last7Assignments.length;
+    const doneTasks7 = last7Assignments.filter((row) => (row.status ?? '').toLowerCase() === 'done').length;
+    const completionScore = totalTasks7 > 0 ? (doneTasks7 / totalTasks7) * 30 : 0;
+
+    const todayAssignments = trendAssignments.filter((row) => row.date === todayKey);
+    const assignedHours = todayAssignments.reduce((sum, row) => sum + Number(row.estimated_hours ?? 0), 0);
+    const parseHours = (value: string | null) => {
+      if (!value) return 0;
+      const [hour, minute] = value.slice(0, 5).split(':').map((item) => Number(item));
+      return hour + minute / 60;
+    };
+    const shiftHours = trendScheduleEntries
+      .filter((row) => row.date === todayKey)
+      .reduce((sum, row) => sum + Math.max(0, parseHours(row.shift_end) - parseHours(row.shift_start)), 0);
+    const coverageScore = shiftHours > 0 ? Math.min(25, (assignedHours / shiftHours) * 25) : 0;
+
+    const scheduledHours7 = last7Assignments.reduce((sum, row) => sum + Number(row.estimated_hours ?? 0), 0);
+    const actualHours7 = last7Assignments.reduce((sum, row) => sum + Number(row.actual_hours ?? 0), 0);
+    const varianceScore = scheduledHours7 > 0 ? clamp(20 - (Math.abs(actualHours7 - scheduledHours7) / scheduledHours7) * 20, 0, 20) : 0;
+
+    const overdueCount = overdueEquipmentRows.length;
+    const equipmentScore = overdueCount === 0 ? 15 : overdueCount <= 2 ? 10 : overdueCount >= 5 ? 0 : 5;
+
+    const needsScore = openNeedsCount === 0 ? 10 : openNeedsCount <= 3 ? 5 : 0;
+
+    return Math.round(clamp(completionScore + coverageScore + varianceScore + equipmentScore + needsScore, 0, 100));
+  }, [openNeedsCount, overdueEquipmentRows.length, trendAssignments, trendScheduleEntries]);
+
+  const efficiencyLabel = useMemo(() => {
+    if (efficiencyScore >= 90) return 'Excellent';
+    if (efficiencyScore >= 70) return 'Good';
+    if (efficiencyScore >= 50) return 'Needs Attention';
+    return 'Critical';
+  }, [efficiencyScore]);
+
+  const fullReportUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      fullReport: '1',
+      start: startDate,
+      end: endDate,
+      property: selectedPropertyId,
+    });
+    return `/app/reports?${params.toString()}`;
+  }, [endDate, selectedPropertyId, startDate]);
+
+  useEffect(() => {
+    if (!isFullReportView || loading || error) return;
+    const timeoutId = window.setTimeout(() => window.print(), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [error, isFullReportView, loading]);
+
   if (!orgId) {
     return <PageSkeleton />;
   }
@@ -587,10 +717,49 @@ export default function ReportsPage() {
         <button onClick={() => setActiveTab('trends')} aria-pressed={activeTab === 'trends'}>
           Trends
         </button>
+        <button
+          onClick={() => {
+            const printWindow = window.open(fullReportUrl, '_blank', 'noopener,noreferrer');
+            if (!printWindow) {
+              window.alert('Please allow popups to open the full report.');
+            }
+          }}
+        >
+          Generate Full Report
+        </button>
       </div>
 
-      {activeTab === 'summary' ? (
+      {(activeTab === 'summary' || isFullReportView) ? (
       <>
+      {isFullReportView ? (
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#22c55e', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700 }}>GC</div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{organizationName} - Operations Report</h2>
+              <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#6b7280' }}>
+                {startDate} to {endDate} · Prepared by {currentUser?.fullName ?? currentUser?.email ?? 'Ground Crew User'} · Generated {generatedAt}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isFullReportView ? (
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Executive Summary</h3>
+          <div className="grid gap-[8px] md:grid-cols-3">
+            <div>Total scheduled hours: <strong>{formatHours(totals.scheduledHours)}</strong></div>
+            <div>Total actual hours: <strong>{formatHours(totals.actualHours)}</strong></div>
+            <div>Variance: <strong>{formatHours(totals.variance)}</strong></div>
+            <div>Total labor cost: <strong>{formatCurrency(totals.actualCost)}</strong></div>
+            <div>Tasks completed: <strong>{totals.tasksCompleted}</strong></div>
+            <div>Completion rate: <strong>{completionRate}%</strong></div>
+            <div>Efficiency score: <strong>{efficiencyScore}</strong> ({efficiencyLabel})</div>
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Labor Summary</h3>
@@ -821,6 +990,93 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      {isFullReportView ? (
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Trend Charts</h3>
+            {loading ? (
+              <TableSkeleton />
+            ) : error ? (
+              <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
+            ) : (
+              <div style={{ display: 'grid', gap: '18px' }}>
+                <div style={{ width: '100%', height: '250px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="label" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip formatter={(value: number) => `${value}%`} />
+                      <Line type="monotone" dataKey="completionRate" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ width: '100%', height: '250px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="label" />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => `${value}h`} />
+                      <Area type="monotone" dataKey="scheduledHours" stroke="#3b82f6" fill="#bfdbfe" />
+                      <Area type="monotone" dataKey="actualHours" stroke="#16a34a" fill="#bbf7d0" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ width: '100%', height: '260px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={crewUtilizationData} margin={{ bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" interval={0} angle={-24} textAnchor="end" height={70} />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => `${value}h`} />
+                      <Bar dataKey="averageHours">
+                        {crewUtilizationData.map((row) => (
+                          <Cell key={`util-full-${row.name}`} fill={row.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Equipment Status Summary</h3>
+            {loading ? (
+              <TableSkeleton />
+            ) : equipmentRows.length === 0 ? (
+              <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>No equipment records found for this scope.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <p style={{ margin: 0, fontSize: '13px' }}>
+                  Total units: <strong>{equipmentRows.length}</strong> · Overdue for service: <strong>{overdueEquipmentRows.length}</strong>
+                </p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left', color: '#6b7280' }}>
+                      <th style={{ padding: '8px' }}>Equipment</th>
+                      <th style={{ padding: '8px' }}>Status</th>
+                      <th style={{ padding: '8px' }}>Last Serviced</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {equipmentRows.slice(0, 15).map((row) => (
+                      <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px' }}>{row.unit_name || row.name || 'Equipment'}</td>
+                        <td style={{ padding: '8px' }}>{row.status ?? 'unknown'}</td>
+                        <td style={{ padding: '8px' }}>{row.last_serviced ?? 'Not set'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <div className="print-footer hidden print:block">
         Ground Crew HQ - ground-crew-hq.vercel.app - Confidential
