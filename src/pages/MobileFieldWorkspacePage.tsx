@@ -58,6 +58,11 @@ type ClockEventRecord = {
   timestamp: string;
 };
 
+type DeferredInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+};
+
 type FieldCachePayload = {
   schedule: ShiftEntry | null;
   assignments: FieldAssignment[];
@@ -157,6 +162,9 @@ export default function MobileFieldWorkspacePage() {
   const [needsPhotoBase64, setNeedsPhotoBase64] = useState<string | null>(null);
   const [language, setLanguage] = useState<FieldLanguage>('en');
   const [isOfflineData, setIsOfflineData] = useState(false);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
@@ -164,6 +172,37 @@ export default function MobileFieldWorkspacePage() {
   const t = fieldTranslations[language];
   const cacheKey = `field-cache-${boardDate}`;
   const syncQueueKey = 'field-sync-queue';
+  const installDismissKey = 'ground-crew-install-dismissed-at';
+
+  useEffect(() => {
+    const media = window.matchMedia('(display-mode: standalone)');
+    const checkStandalone = () => {
+      const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+      setIsStandalone(media.matches || iosStandalone);
+    };
+    checkStandalone();
+    media.addEventListener('change', checkStandalone);
+    return () => media.removeEventListener('change', checkStandalone);
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      const dismissedAtRaw = window.localStorage.getItem(installDismissKey);
+      const dismissedAt = dismissedAtRaw ? Number(dismissedAtRaw) : 0;
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+      const dismissActive = Number.isFinite(dismissedAt) && dismissedAt > 0 && Date.now() - dismissedAt < sevenDaysMs;
+      if (dismissActive || isStandalone) {
+        setShowInstallBanner(false);
+        return;
+      }
+      setDeferredInstallPrompt(event as DeferredInstallPromptEvent);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, [isStandalone, installDismissKey]);
 
   const loadSyncQueue = useCallback((): FieldSyncQueueItem[] => {
     try {
@@ -789,6 +828,24 @@ export default function MobileFieldWorkspacePage() {
     toast.success('Calendar event downloaded');
   }, [boardDate, employeeName, propertyName, shift]);
 
+  const dismissInstallBanner = useCallback(() => {
+    window.localStorage.setItem(installDismissKey, String(Date.now()));
+    setShowInstallBanner(false);
+  }, [installDismissKey]);
+
+  const triggerInstallPrompt = useCallback(async () => {
+    if (!deferredInstallPrompt) return;
+    await deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice;
+    if (result.outcome === 'accepted') {
+      toast.success('Ground Crew HQ install started');
+      setShowInstallBanner(false);
+    } else {
+      dismissInstallBanner();
+    }
+    setDeferredInstallPrompt(null);
+  }, [deferredInstallPrompt, dismissInstallBanner]);
+
   if (loading) {
     return <PageSkeleton />;
   }
@@ -803,6 +860,14 @@ export default function MobileFieldWorkspacePage() {
 
   return (
     <div className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans">
+      {isStandalone ? (
+        <div className="mb-3 -mx-4 bg-emerald-600 px-4 py-2 text-sm font-medium text-white">
+          <div className="mx-auto flex w-full max-w-[520px] items-center justify-between">
+            <span>{employeeName}</span>
+            <span>{new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+          </div>
+        </div>
+      ) : null}
       {isOfflineData ? (
         <div className="mb-3 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900">
           You're offline — showing cached data
@@ -1044,6 +1109,22 @@ export default function MobileFieldWorkspacePage() {
           </Button>
         </div>
       </footer>
+
+      {showInstallBanner && deferredInstallPrompt ? (
+        <div className="fixed bottom-24 left-0 right-0 z-40 px-4">
+          <div className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <p className="text-sm text-emerald-900">Install Ground Crew HQ for faster access</p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="h-8" onClick={() => void triggerInstallPrompt()}>
+                Install
+              </Button>
+              <Button size="sm" variant="outline" className="h-8" onClick={dismissInstallBanner}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {needsOpen ? (
         <div className="fixed inset-0 z-50 bg-background">
