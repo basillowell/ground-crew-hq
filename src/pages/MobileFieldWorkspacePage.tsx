@@ -11,6 +11,7 @@ import { formatTime } from '@/utils/formatTime';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
+import { createEvents, type EventAttributes } from 'ics';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 
@@ -59,6 +60,24 @@ type ClockEventRecord = {
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function downloadTextFile(filename: string, contents: string, mimeType: string) {
+  const blob = new Blob([contents], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function toIcsDateParts(date: string, time: string): [number, number, number, number, number] {
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+  return [year, month, day, hour, minute];
 }
 
 function displayStatus(status: AssignmentStatus) {
@@ -535,6 +554,30 @@ export default function MobileFieldWorkspacePage() {
     setNeedsOpen(false);
   };
 
+  const handleAddToCalendar = useCallback(() => {
+    if (!shift) {
+      toast.error('No scheduled shift available for calendar export.');
+      return;
+    }
+    const events: EventAttributes[] = [
+      {
+        title: `${employeeName} Shift`,
+        description: `${employeeName} scheduled shift at ${propertyName}`,
+        start: toIcsDateParts(boardDate, shift.shiftStart),
+        end: toIcsDateParts(boardDate, shift.shiftEnd),
+        status: 'CONFIRMED',
+        organizer: { name: 'Ground Crew HQ', email: 'no-reply@groundcrewhq.local' },
+      },
+    ];
+    const { error: icsError, value } = createEvents(events);
+    if (icsError || !value) {
+      toast.error('Failed to generate calendar event.');
+      return;
+    }
+    downloadTextFile(`shift-${boardDate}.ics`, value, 'text/calendar;charset=utf-8');
+    toast.success('Calendar event downloaded');
+  }, [boardDate, employeeName, propertyName, shift]);
+
   if (loading) {
     return <PageSkeleton />;
   }
@@ -616,6 +659,14 @@ export default function MobileFieldWorkspacePage() {
           <Card className="mb-4 rounded-2xl p-5">
             <p className="text-base font-medium">{t.yourShift}: {formatTime(shift.shiftStart)} – {formatTime(shift.shiftEnd)}</p>
           </Card>
+
+          <Button
+            className="mb-4 h-12 min-h-12 w-full text-base"
+            variant="outline"
+            onClick={handleAddToCalendar}
+          >
+            Add to Calendar
+          </Button>
 
           <Card className="mb-4 rounded-2xl p-4">
             <div className="mb-2 flex items-center justify-between">

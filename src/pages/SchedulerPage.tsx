@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle, Cloud, CloudRain, Sun } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -866,6 +867,88 @@ export default function SchedulerPage() {
     else toast.error('Export failed', { description: result.error });
   }
 
+  function downloadCsv(filename: string, content: string) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportEmployeeWeekIcs(employeeId: string, mode: 'single' | 'my') {
+    const employee = employeeList.find((item) => item.id === employeeId);
+    if (!employee) {
+      toast.error('Crew member not found for export.');
+      return;
+    }
+    const entries = scheduleList.filter(
+      (entry) =>
+        entry.employeeId === employeeId &&
+        weekDays.some((day) => day.date === entry.date) &&
+        entry.status === 'scheduled',
+    );
+    const safeName = `${employee.firstName}-${employee.lastName}`.toLowerCase().replace(/\s+/g, '-');
+    const filename = mode === 'my' ? 'my-schedule.ics' : `${safeName || 'crew'}-week-schedule.ics`;
+    const result = exportScheduleEntriesAsICS({
+      filename,
+      scheduleEntries: entries,
+      employees: employeeList,
+      title: `${employee.firstName} ${employee.lastName} Schedule`,
+    });
+    if (result.ok) toast.success('Calendar export ready', { description: `${result.data?.eventCount ?? 0} shifts exported.` });
+    else toast.error('Export failed', { description: result.error });
+  }
+
+  function exportMyScheduleIcs() {
+    const myEmployeeId = currentUser?.employeeId;
+    if (!myEmployeeId) {
+      toast.error('Your employee profile is not linked for schedule export.');
+      return;
+    }
+    exportEmployeeWeekIcs(myEmployeeId, 'my');
+  }
+
+  function exportAllCrewIcs() {
+    const entries = scheduleList.filter(
+      (entry) => weekDays.some((day) => day.date === entry.date) && entry.status === 'scheduled',
+    );
+    const result = exportScheduleEntriesAsICS({
+      filename: 'all-crew-week-schedule.ics',
+      scheduleEntries: entries,
+      employees: employeeList,
+      title: 'Ground Crew HQ Crew Schedule',
+    });
+    if (result.ok) toast.success('Calendar export ready', { description: `${result.data?.eventCount ?? 0} shifts exported.` });
+    else toast.error('Export failed', { description: result.error });
+  }
+
+  function exportWeekSummaryCsv() {
+    const rows = scheduleList
+      .filter((entry) => weekDays.some((day) => day.date === entry.date))
+      .map((entry) => {
+        const employee = employeeList.find((item) => item.id === entry.employeeId);
+        const hours = entry.status === 'scheduled' ? shiftHours(entry.shiftStart, entry.shiftEnd).toFixed(1) : '0.0';
+        return [
+          employee ? `${employee.firstName} ${employee.lastName}` : 'Crew Member',
+          entry.date,
+          entry.shiftStart,
+          entry.shiftEnd,
+          entry.status,
+          hours,
+        ];
+      });
+    const csv = [
+      ['Employee', 'Date', 'Shift Start', 'Shift End', 'Status', 'Hours'].join(','),
+      ...rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+    downloadCsv(`week-summary-${weekStart}.csv`, csv);
+    toast.success('Week summary export ready');
+  }
+
   function shiftWeek(direction: -1 | 1) {
     setWeekStart((prev) => {
       const next = new Date(`${prev}T00:00:00`);
@@ -961,9 +1044,18 @@ export default function SchedulerPage() {
             </Button>
           </>
         ) : null}
-        <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5" onClick={exportWeekToCalendar}>
-          <Download className="h-3.5 w-3.5" /> Export
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-11 w-full md:h-8 md:w-auto gap-1.5">
+              <Download className="h-3.5 w-3.5" /> Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={exportMyScheduleIcs}>My Schedule (.ics)</DropdownMenuItem>
+            <DropdownMenuItem onClick={exportAllCrewIcs}>All Crew (.ics)</DropdownMenuItem>
+            <DropdownMenuItem onClick={exportWeekSummaryCsv}>Week Summary (.csv)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* ── Stats strip ── */}
@@ -1153,6 +1245,15 @@ export default function SchedulerPage() {
                             <div className="min-w-0">
                               <div className="font-medium text-xs truncate">{emp.firstName} {emp.lastName}</div>
                               <div className="text-[10px] text-muted-foreground truncate">{emp.group || emp.department}</div>
+                              <button
+                                type="button"
+                                className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
+                                onClick={() => exportEmployeeWeekIcs(emp.id, 'single')}
+                                title="Download weekly .ics"
+                              >
+                                <Download className="h-3 w-3" />
+                                .ics
+                              </button>
                             </div>
                           </div>
                         </td>
