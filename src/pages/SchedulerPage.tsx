@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
@@ -129,6 +129,8 @@ export default function SchedulerPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [loadTimeoutReached, setLoadTimeoutReached] = useState(false);
   const [activeDetailCell, setActiveDetailCell] = useState<string | null>(null);
+  const addShiftFirstFieldRef = useRef<HTMLSelectElement | null>(null);
+  const lastShiftModalTriggerRef = useRef<HTMLElement | null>(null);
 
   const assignmentsWeekQuery = useQuery({
     queryKey: ['scheduler-week-assignments', weekStart, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
@@ -402,6 +404,7 @@ export default function SchedulerPage() {
 
   function openAddShift(employeeId?: string, date?: string) {
     if (isReadOnly) return;
+    lastShiftModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const targetEmp = employeeId ?? activeEmployees[0]?.id ?? '';
     setDraft({
       employeeId: targetEmp,
@@ -418,6 +421,7 @@ export default function SchedulerPage() {
 
   function openEditShift(employeeId: string, day: { date: string }, entry: ScheduleEntry) {
     if (isReadOnly) return;
+    lastShiftModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const ext = entry as ScheduleEntry & { notes?: string | null };
     setDraft({
       employeeId,
@@ -457,6 +461,33 @@ export default function SchedulerPage() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [dialogOpen, isShiftModalDirty]);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const timerId = window.setTimeout(() => {
+      addShiftFirstFieldRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timerId);
+  }, [dialogOpen]);
+
+  useEffect(() => {
+    const handleOpen = () => {
+      if (isReadOnly) return;
+      openAddShift();
+    };
+    const handleCloseModals = () => {
+      if (dialogOpen) handleCloseModal();
+      setCopyWeekDialogOpen(false);
+      setSaveTemplateDialogOpen(false);
+      setApplyTemplateDialogOpen(false);
+    };
+    window.addEventListener('ground-crew-open-add-shift', handleOpen);
+    window.addEventListener('ground-crew-close-modals', handleCloseModals);
+    return () => {
+      window.removeEventListener('ground-crew-open-add-shift', handleOpen);
+      window.removeEventListener('ground-crew-close-modals', handleCloseModals);
+    };
+  }, [dialogOpen, isReadOnly, openAddShift]);
 
   async function handleSaveShift() {
     if (isReadOnly) return;
@@ -995,13 +1026,13 @@ export default function SchedulerPage() {
 
         {/* Week nav */}
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => shiftWeek(-1)}>
+          <Button aria-label="Previous week" variant="outline" size="icon" className="h-8 w-8" onClick={() => shiftWeek(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-sm font-medium px-2 whitespace-nowrap">
             {weekDays[0]?.label} – {weekDays[6]?.label}
           </span>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => shiftWeek(1)}>
+          <Button aria-label="Next week" variant="outline" size="icon" className="h-8 w-8" onClick={() => shiftWeek(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
           {weekStart !== thisWeekStart ? (
@@ -1425,7 +1456,19 @@ export default function SchedulerPage() {
           handleCloseModal();
         }}
       >
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent
+          role="dialog"
+          aria-modal="true"
+          className="sm:max-w-md max-h-[85vh] overflow-y-auto"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            addShiftFirstFieldRef.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            lastShiftModalTriggerRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />
@@ -1438,6 +1481,7 @@ export default function SchedulerPage() {
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Crew member</label>
               <select
+                ref={addShiftFirstFieldRef}
                 value={draft.employeeId}
                 onChange={(e) => {
                   setIsShiftModalDirty(true);
@@ -1601,7 +1645,7 @@ export default function SchedulerPage() {
       </Dialog>
 
       <Dialog open={copyWeekDialogOpen} onOpenChange={setCopyWeekDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-md">
           <DialogHeader>
             <DialogTitle>Copy this week&apos;s schedule to next week?</DialogTitle>
           </DialogHeader>
@@ -1635,7 +1679,7 @@ export default function SchedulerPage() {
       </Dialog>
 
       <Dialog open={saveTemplateDialogOpen} onOpenChange={setSaveTemplateDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-md">
           <DialogHeader>
             <DialogTitle>Save this week as template</DialogTitle>
           </DialogHeader>
@@ -1659,7 +1703,7 @@ export default function SchedulerPage() {
       </Dialog>
 
       <Dialog open={applyTemplateDialogOpen} onOpenChange={setApplyTemplateDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-md">
           <DialogHeader>
             <DialogTitle>Apply saved template</DialogTitle>
           </DialogHeader>

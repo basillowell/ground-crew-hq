@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -114,12 +114,14 @@ type IncomingNotification = Omit<AppNotification, 'read'>;
 
 export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [department, setDepartment] = useState('Maintenance');
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
   const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, orgId } = useAuth();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
+  const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
@@ -282,6 +284,62 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const closeMobileSidebar = () => setMobileSidebarOpen(false);
 
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tagName = target.tagName.toLowerCase();
+      return target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+    };
+
+    const handler = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+
+      if (key === '?') {
+        event.preventDefault();
+        setShortcutsOverlayOpen((current) => !current);
+        return;
+      }
+
+      if (key === 'escape') {
+        if (shortcutsOverlayOpen) {
+          event.preventDefault();
+          setShortcutsOverlayOpen(false);
+        }
+        window.dispatchEvent(new CustomEvent('ground-crew-close-modals'));
+        return;
+      }
+
+      if (!(event.ctrlKey || event.metaKey)) return;
+
+      if (event.shiftKey && key === 'n' && location.pathname === '/app/scheduler') {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('ground-crew-open-add-shift'));
+        return;
+      }
+      if (event.shiftKey && key === 't' && location.pathname === '/app/workboard') {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('ground-crew-open-add-task'));
+        return;
+      }
+      if (event.shiftKey) return;
+
+      if (key === '1') {
+        event.preventDefault();
+        navigate('/app/dashboard');
+      } else if (key === '2') {
+        event.preventDefault();
+        navigate('/app/workboard');
+      } else if (key === '3') {
+        event.preventDefault();
+        navigate('/app/scheduler');
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [location.pathname, navigate, shortcutsOverlayOpen]);
+
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden bg-background">
@@ -315,6 +373,25 @@ export function AppLayout({ children }: AppLayoutProps) {
             className="fixed inset-0 z-30 bg-black/40 md:hidden"
             onClick={closeMobileSidebar}
           />
+        ) : null}
+        {shortcutsOverlayOpen ? (
+          <div className="fixed inset-0 z-[75] bg-black/40" onClick={() => setShortcutsOverlayOpen(false)}>
+            <div
+              className="absolute right-4 top-16 w-[320px] rounded-xl border bg-popover p-4 text-sm shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h3 className="mb-2 text-sm font-semibold">Keyboard Shortcuts</h3>
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                <li><span className="font-medium text-foreground">Ctrl+1</span> Dashboard</li>
+                <li><span className="font-medium text-foreground">Ctrl+2</span> Workboard</li>
+                <li><span className="font-medium text-foreground">Ctrl+3</span> Scheduler</li>
+                <li><span className="font-medium text-foreground">Ctrl+Shift+N</span> Add Shift (Scheduler)</li>
+                <li><span className="font-medium text-foreground">Ctrl+Shift+T</span> Add Task (Workboard)</li>
+                <li><span className="font-medium text-foreground">Esc</span> Close open modal</li>
+                <li><span className="font-medium text-foreground">?</span> Toggle this help</li>
+              </ul>
+            </div>
+          </div>
         ) : null}
         <div
           className={`fixed top-0 left-0 h-screen w-60 overflow-y-auto z-40 bg-sidebar border-r flex flex-col transform transition-transform duration-200 ease-in-out ${

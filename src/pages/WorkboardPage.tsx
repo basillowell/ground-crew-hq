@@ -405,6 +405,8 @@ export default function WorkboardPage() {
   const [workOrdersExpanded, setWorkOrdersExpanded] = useState(false);
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [selectedScheduleRecipientIds, setSelectedScheduleRecipientIds] = useState<string[]>([]);
+  const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
+  const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
   const triggerAssignmentFlash = useCallback((assignmentId: string, tone: 'complete' | 'started') => {
     if (!assignmentId) return;
@@ -1834,6 +1836,7 @@ export default function WorkboardPage() {
   ]);
 
   function openAssignmentDialog(employeeId: string) {
+    lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
     const targetPropertyId =
@@ -1868,6 +1871,7 @@ export default function WorkboardPage() {
   }
 
   function openEditAssignmentDialog(assignment: Assignment) {
+    lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setEditingAssignmentId(assignment.id);
     setSelectedEmployeeId(assignment.employeeId);
     setAssignmentDraft({
@@ -1890,6 +1894,7 @@ export default function WorkboardPage() {
       toast.info('Demo mode is read-only.');
       return;
     }
+    lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setLinkedRequestId(request.id);
     setLinkedRequestTitle(request.title);
     const targetTaskId = request.taskId || taskList[0]?.id || '';
@@ -1937,6 +1942,36 @@ export default function WorkboardPage() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [assignmentDialogOpen, isAssignmentModalDirty]);
+
+  useEffect(() => {
+    if (!assignmentDialogOpen) return;
+    const timerId = window.setTimeout(() => {
+      assignmentFirstFieldRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timerId);
+  }, [assignmentDialogOpen]);
+
+  useEffect(() => {
+    const handleOpenAddTask = () => {
+      if (isReadOnly) return;
+      const targetEmployeeId = selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '';
+      openAssignmentDialog(targetEmployeeId);
+    };
+    const handleCloseModals = () => {
+      if (assignmentDialogOpen) closeAssignmentDialog();
+      setQuickTaskDialogOpen(false);
+      setQuickPlanDialogOpen(false);
+      setTaskTemplateDialogOpen(false);
+      setSendScheduleDialogOpen(false);
+      setNoteDialogOpen(false);
+    };
+    window.addEventListener('ground-crew-open-add-task', handleOpenAddTask);
+    window.addEventListener('ground-crew-close-modals', handleCloseModals);
+    return () => {
+      window.removeEventListener('ground-crew-open-add-task', handleOpenAddTask);
+      window.removeEventListener('ground-crew-close-modals', handleCloseModals);
+    };
+  }, [assignmentDialogOpen, closeAssignmentDialog, fallbackEligibleEmployees, isReadOnly, openAssignmentDialog, selectedEmployeeId]);
 
   async function saveAssignment(ignoreWeatherConflict = false) {
     if (isReadOnly) {
@@ -3379,7 +3414,7 @@ export default function WorkboardPage() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Last {quickPlanDayLabel}&apos;s Plan — Apply to today?</DialogTitle>
           </DialogHeader>
@@ -3456,7 +3491,19 @@ export default function WorkboardPage() {
           closeAssignmentDialog();
         }}
       >
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent
+          role="dialog"
+          aria-modal="true"
+          className="sm:max-w-md max-h-[85vh] overflow-y-auto"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            assignmentFirstFieldRef.current?.focus();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            lastAssignmentModalTriggerRef.current?.focus();
+          }}
+        >
           <div className="flex h-full flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>
@@ -3477,6 +3524,7 @@ export default function WorkboardPage() {
               <div className="col-span-2">
                 <label className="text-xs text-muted-foreground">Crew member</label>
                 <select
+                  ref={assignmentFirstFieldRef}
                   value={assignmentDraft.employeeId}
                   onChange={(e) => {
                     setIsAssignmentModalDirty(true);
@@ -3751,7 +3799,7 @@ export default function WorkboardPage() {
       </Dialog>
 
       <Dialog open={quickTaskDialogOpen} onOpenChange={setQuickTaskDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Task</DialogTitle>
           </DialogHeader>
@@ -3809,7 +3857,7 @@ export default function WorkboardPage() {
       </Dialog>
 
       <Dialog open={sendScheduleDialogOpen} onOpenChange={setSendScheduleDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Send today's schedule to crew</DialogTitle>
           </DialogHeader>
@@ -3844,7 +3892,7 @@ export default function WorkboardPage() {
       </Dialog>
 
       <Dialog open={taskTemplateDialogOpen} onOpenChange={setTaskTemplateDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Apply Daily Task Template</DialogTitle>
           </DialogHeader>
@@ -3978,7 +4026,7 @@ export default function WorkboardPage() {
 
       {/* ─── NOTE DIALOG ─── */}
       <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Board Note</DialogTitle>
           </DialogHeader>
