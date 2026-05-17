@@ -7,6 +7,7 @@ import { toast, Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
+import { SafeRender } from "@/components/SafeRender";
 import { Loader2 } from "lucide-react";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
@@ -91,7 +92,14 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[RouteErrorBoundary] Caught route render error', error, info);
+    console.error("[RouteErrorBoundary]", error, info);
+    // Auto-clear stale cached query state to avoid persistent crash loops after deploys.
+    try {
+      window.localStorage.removeItem("ground-crew-query-cache");
+    } catch {
+      // No-op: recovery continues even if storage is unavailable.
+    }
+
   }
 
   private reportIssue = () => {
@@ -127,6 +135,19 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
               onClick={() => window.location.assign("/app/dashboard")}
             >
               Go to Dashboard
+            </button>
+            <button
+              className="h-10 rounded-md border px-4 text-sm"
+              onClick={() => {
+                try {
+                  window.localStorage.clear();
+                } catch {
+                  // Ignore and continue with reload.
+                }
+                window.location.assign("/app/dashboard");
+              }}
+            >
+              Clear Cache & Reload
             </button>
             <button
               className="h-10 rounded-md bg-primary px-4 text-sm text-primary-foreground"
@@ -384,7 +405,7 @@ export default function App() {
       client={queryClient}
       persistOptions={{
         persister: queryPersister,
-        buster: "v2.5.46",
+        buster: "v2.5.143",
         onError: () => {
           queryPersister?.removeClient?.();
         },
