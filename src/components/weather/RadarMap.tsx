@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { CircleMarker, MapContainer, Marker, Popup, TileLayer, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { Button } from '@/components/ui/button';
-import 'leaflet/dist/leaflet.css';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+if (typeof window !== 'undefined') {
+  void import('leaflet/dist/leaflet.css');
+}
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,

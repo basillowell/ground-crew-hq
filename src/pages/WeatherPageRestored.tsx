@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Suspense, lazy } from 'react';
+import type { ComponentType } from 'react';
 import { AreaChart, Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CloudSun, Crosshair, Droplets, MapPin, MapPinned, MoreHorizontal, PencilLine, Plus, Radar, RefreshCcw, Save, Search, Settings, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -45,9 +45,73 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 type EntryMode = 'rainfall' | 'override';
 
-const RadarMap = lazy(() =>
-  import('@/components/weather/RadarMap').then((module) => ({ default: module.RadarMap })),
-);
+function WeatherRadarSection({ latitude, longitude, propertyName, height, lightningActive, currentTempF, windMph, humidityPct, conditionLabel, feelsLikeF, hasActiveAlerts }: {
+  latitude: number;
+  longitude: number;
+  propertyName: string;
+  height: string;
+  lightningActive: boolean;
+  currentTempF: number | null;
+  windMph: number | null;
+  humidityPct: number | null;
+  conditionLabel: string;
+  feelsLikeF: number | null;
+  hasActiveAlerts: boolean;
+}) {
+  const [RadarMap, setRadarMap] = useState<ComponentType<{
+    latitude: number;
+    longitude: number;
+    propertyName: string;
+    height?: string;
+    lightningActive?: boolean;
+    currentTempF?: number | null;
+    windMph?: number | null;
+    humidityPct?: number | null;
+    conditionLabel?: string;
+    feelsLikeF?: number | null;
+    hasActiveAlerts?: boolean;
+  }> | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    import('@/components/weather/RadarMap')
+      .then((mod) => {
+        if (!isMounted) return;
+        setRadarMap(() => mod.RadarMap);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setRadarMap(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (!RadarMap) {
+    return (
+      <div className="h-96 rounded-xl bg-muted/30 flex items-center justify-center text-sm text-muted-foreground">
+        Loading radar map...
+      </div>
+    );
+  }
+
+  return (
+    <RadarMap
+      latitude={latitude}
+      longitude={longitude}
+      propertyName={propertyName}
+      height={height}
+      lightningActive={lightningActive}
+      currentTempF={currentTempF}
+      windMph={windMph}
+      humidityPct={humidityPct}
+      conditionLabel={conditionLabel}
+      feelsLikeF={feelsLikeF}
+      hasActiveAlerts={hasActiveAlerts}
+    />
+  );
+}
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -2425,21 +2489,19 @@ export default function WeatherPage() {
           <h3 className="text-sm font-semibold">Live Radar</h3>
           <Badge variant="outline" className="ml-auto">RainViewer</Badge>
         </div>
-        <Suspense fallback={<div className="h-96 animate-pulse rounded-xl bg-muted" />}>
-          <RadarMap
-            latitude={radarLatitude}
-            longitude={radarLongitude}
-            propertyName={radarPropertyLabel}
-            height="clamp(250px, 45vh, 400px)"
-            lightningActive={lightningActive}
-            currentTempF={liveCurrentTemperatureF}
-            windMph={liveForecastQuery.data?.current?.windSpeed ?? null}
-            humidityPct={latestLog?.humidity ?? null}
-            conditionLabel={liveConditionMeta.label}
-            feelsLikeF={liveForecastQuery.data?.current?.apparentTemperature ?? null}
-            hasActiveAlerts={nwsAlerts.length > 0}
-          />
-        </Suspense>
+        <WeatherRadarSection
+          latitude={radarLatitude}
+          longitude={radarLongitude}
+          propertyName={radarPropertyLabel}
+          height="clamp(250px, 45vh, 400px)"
+          lightningActive={lightningActive}
+          currentTempF={liveCurrentTemperatureF}
+          windMph={liveForecastQuery.data?.current?.windSpeed ?? null}
+          humidityPct={latestLog?.humidity ?? null}
+          conditionLabel={liveConditionMeta.label}
+          feelsLikeF={liveForecastQuery.data?.current?.apparentTemperature ?? null}
+          hasActiveAlerts={nwsAlerts.length > 0}
+        />
       </Card>
 
       <Card className="rounded-2xl border border-slate-700 bg-slate-800/80 p-4 shadow-sm">
