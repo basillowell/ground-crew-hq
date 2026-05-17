@@ -990,20 +990,13 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
   const [newDepartmentName, setNewDepartmentName] = useState('');
+  const [newRoleName, setNewRoleName] = useState('');
   const [editingDepartmentId, setEditingDepartmentId] = useState<string | null>(null);
   const [editingDepartmentName, setEditingDepartmentName] = useState('');
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editingRoleName, setEditingRoleName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const fallbackRoles = [
-    'Superintendent',
-    'Assistant Superintendent',
-    'Field Manager',
-    'Field Staff',
-    'Crew Leader',
-    'Irrigation Technician',
-    'Equipment Operator',
-  ];
 
   const fetchWorkforceSummary = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -1011,20 +1004,15 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     setError(null);
     const [departmentResult, rolesResult] = await Promise.all([
       supabase.from('departments').select('id, name').eq('org_id', orgId).eq('active', true).order('name', { ascending: true }),
-      supabase.from('workforce_roles').select('id, name').order('name', { ascending: true }),
+      supabase.from('workforce_roles').select('id, name').eq('org_id', orgId).eq('active', true).order('name', { ascending: true }),
     ]);
-    if (departmentResult.error) {
-      setError(departmentResult.error.message);
+    if (departmentResult.error || rolesResult.error) {
+      setError(departmentResult.error?.message ?? rolesResult.error?.message ?? 'Failed to load workforce data');
       setLoading(false);
       return;
     }
     setDepartments((departmentResult.data ?? []) as Array<{ id: string; name: string }>);
-    const roleRows = ((rolesResult.data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim());
-    setRoles(
-      roleRows.length > 0
-        ? roleRows
-        : fallbackRoles.map((name) => ({ id: name.toLowerCase().replace(/\s+/g, '-'), name })),
-    );
+    setRoles(((rolesResult.data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()));
     setLoading(false);
   }, [orgId]);
 
@@ -1087,6 +1075,60 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     await fetchWorkforceSummary();
   }, [fetchWorkforceSummary, orgId]);
 
+  const addRole = useCallback(async () => {
+    if (!supabase || !orgId || !newRoleName.trim()) return;
+    const { error: insertError } = await supabase.from('workforce_roles').insert({
+      id: crypto.randomUUID(),
+      org_id: orgId,
+      name: newRoleName.trim(),
+      active: true,
+    });
+    if (insertError) {
+      setError(insertError.message);
+      toast.error(`Failed to add role: ${insertError.message}`);
+      return;
+    }
+    toast.success(`Role added: ${newRoleName.trim()}`);
+    setNewRoleName('');
+    await fetchWorkforceSummary();
+  }, [fetchWorkforceSummary, newRoleName, orgId]);
+
+  const saveRoleEdit = useCallback(async () => {
+    if (!supabase || !orgId || !editingRoleId || !editingRoleName.trim()) return;
+    const { error: updateError } = await supabase
+      .from('workforce_roles')
+      .update({ name: editingRoleName.trim() })
+      .eq('id', editingRoleId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to update role: ${updateError.message}`);
+      return;
+    }
+    toast.success(`Role updated: ${editingRoleName.trim()}`);
+    setEditingRoleId(null);
+    setEditingRoleName('');
+    await fetchWorkforceSummary();
+  }, [editingRoleId, editingRoleName, fetchWorkforceSummary, orgId]);
+
+  const deactivateRole = useCallback(async (roleId: string, roleName: string) => {
+    if (!supabase || !orgId) return;
+    const confirmed = window.confirm(`Deactivate role "${roleName}"?`);
+    if (!confirmed) return;
+    const { error: updateError } = await supabase
+      .from('workforce_roles')
+      .update({ active: false })
+      .eq('id', roleId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to deactivate role: ${updateError.message}`);
+      return;
+    }
+    toast.success(`Role deactivated: ${roleName}`);
+    await fetchWorkforceSummary();
+  }, [fetchWorkforceSummary, orgId]);
+
   if (!orgId || loading) return <PageSkeleton />;
   if (error) return <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkforceSummary()} />;
 
@@ -1120,14 +1162,28 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Roles</h3>
-        <p style={{ margin: 0, color: '#92400e', fontSize: '12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '8px' }}>
-          CLAUDE_DB_REQUIRED: workforce_roles needs org_id for org-scoped role CRUD. Current roles are shown as read-only to avoid cross-org edits.
-        </p>
+        {roles.length === 0 ? <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No active roles yet.</p> : null}
         {roles.map((role) => (
-          <div key={role.id} style={{ display: 'flex', alignItems: 'center' }}>
-            <span>{role.name}</span>
+          <div key={role.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {editingRoleId === role.id ? (
+              <>
+                <input value={editingRoleName} onChange={(event) => setEditingRoleName(event.target.value)} />
+                <button onClick={() => void saveRoleEdit()} style={{ color: '#166534' }}>Save</button>
+                <button onClick={() => { setEditingRoleId(null); setEditingRoleName(''); }}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <span style={{ flex: 1 }}>{role.name}</span>
+                <button onClick={() => { setEditingRoleId(role.id); setEditingRoleName(role.name); }}>Edit</button>
+                <button onClick={() => void deactivateRole(role.id, role.name)} style={{ color: '#dc2626' }}>Delete</button>
+              </>
+            )}
           </div>
         ))}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input value={newRoleName} onChange={(event) => setNewRoleName(event.target.value)} placeholder="Add role" />
+          <button onClick={() => void addRole()} style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}>Add</button>
+        </div>
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
