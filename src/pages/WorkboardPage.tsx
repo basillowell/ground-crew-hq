@@ -349,6 +349,15 @@ type QuickPlanSuggestion = {
   propertyId: string | null;
 };
 
+type SuggestedTaskItem = {
+  id: string;
+  tone: 'opportunity' | 'warning' | 'urgent';
+  title: string;
+  detail: string;
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
 export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -394,6 +403,8 @@ export default function WorkboardPage() {
   const [quickPlanSuggestions, setQuickPlanSuggestions] = useState<QuickPlanSuggestion[]>([]);
   const [selectedQuickPlanIds, setSelectedQuickPlanIds] = useState<string[]>([]);
   const [quickPlanEmptyMessage, setQuickPlanEmptyMessage] = useState<string | null>(null);
+  const [suggestedTasksCollapsed, setSuggestedTasksCollapsed] = useState(false);
+  const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<string[]>([]);
   const [assignToAllScheduledCrew, setAssignToAllScheduledCrew] = useState(false);
   const [weatherConflictOverride, setWeatherConflictOverride] = useState(false);
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
@@ -663,6 +674,38 @@ export default function WorkboardPage() {
     () => properties.find((property) => property.id === effectivePropertyId) ?? properties[0] ?? null,
     [effectivePropertyId, properties],
   );
+  const previousWeekDateKey = useMemo(() => {
+    const selectedDate = new Date(`${boardDate}T00:00:00`);
+    const previousDate = new Date(selectedDate);
+    previousDate.setDate(previousDate.getDate() - 7);
+    return previousDate.toISOString().slice(0, 10);
+  }, [boardDate]);
+  const previousWeekSummaryQuery = useQuery({
+    queryKey: ['workboard-last-week-summary', previousWeekDateKey, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(supabase && currentUser?.orgId),
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return [] as Array<{ title: string; count: number }>;
+      let query = supabase
+        .from('assignments')
+        .select('title')
+        .eq('org_id', currentUser.orgId)
+        .eq('date', previousWeekDateKey);
+      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
+      const { data, error } = await query;
+      if (error) throw error;
+      const counts = new Map<string, number>();
+      for (const row of data ?? []) {
+        const title = String((row as { title?: string }).title ?? '').trim();
+        if (!title) continue;
+        counts.set(title, (counts.get(title) ?? 0) + 1);
+      }
+      return Array.from(counts.entries())
+        .map(([title, count]) => ({ title, count }))
+        .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title))
+        .slice(0, 5);
+    },
+    staleTime: 1000 * 60,
+  });
   const hourlyWeatherStripQuery = useQuery({
     queryKey: ['workboard-hourly-strip', boardDate, weatherStripProperty?.id ?? 'no-property'],
     enabled: Boolean(weatherStripProperty?.latitude && weatherStripProperty?.longitude),
@@ -702,6 +745,29 @@ export default function WorkboardPage() {
       }).filter((entry) => entry.weatherCode >= 0);
     },
   });
+
+  const suggestionDismissStorageKey = useMemo(
+    () => `workboard-suggested-dismissed:${currentUser?.orgId ?? 'no-org'}:${effectivePropertyId ?? 'all'}:${boardDate}`,
+    [boardDate, currentUser?.orgId, effectivePropertyId],
+  );
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(suggestionDismissStorageKey);
+    if (!stored) {
+      setDismissedSuggestionIds([]);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored) as unknown;
+      setDismissedSuggestionIds(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []);
+    } catch {
+      setDismissedSuggestionIds([]);
+    }
+  }, [suggestionDismissStorageKey]);
+
+  useEffect(() => {
+    sessionStorage.setItem(suggestionDismissStorageKey, JSON.stringify(dismissedSuggestionIds));
+  }, [dismissedSuggestionIds, suggestionDismissStorageKey]);
 
   useEffect(() => {
     if (assignmentsQuery.dataUpdatedAt || taskRequestsQuery.dataUpdatedAt) {
@@ -1705,6 +1771,107 @@ export default function WorkboardPage() {
     const text = buildScheduleShareText();
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   }, [buildScheduleShareText]);
+
+  const suggestedTasks = useMemo(() => {
+    const items: SuggestedTaskItem[] = [];
+    const dayLabel = new Date(`${boardDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' });
+
+    if (weatherSnapshot) {
+      if (weatherSnapshot.precipitationProbability < 20 && weatherSnapshot.windSpeed < 10) {
+        items.push({
+          id: 'weather-good-spraying',
+          tone: 'opportunity',
+          title: 'Good conditions for spraying',
+          detail: `Current wind is ${Math.round(weatherSnapshot.windSpeed)} mph with ${Math.round(weatherSnapshot.precipitationProbability)}% rain chance.`,
+        });
+      }
+
+      const hasRecentRain = weatherLogs.some((log) => Number(log.rainfallTotal ?? 0) > 0) || (hourlyWeatherStripQuery.data ?? []).some((entry) => entry.precip >= 50);
+      if (hasRecentRain) {
+        items.push({
+          id: 'weather-wet-course',
+          tone: 'warning',
+          title: 'Course may be wet',
+          detail: 'Recent rain signals softer turf. Consider delaying mowing for better quality.',
+        });
+      }
+
+      if (weatherSnapshot.temperature > 95) {
+        items.push({
+          id: 'weather-water-breaks',
+          tone: 'urgent',
+          title: 'Heat risk for crew',
+          detail: `Temperature is ${Math.round(weatherSnapshot.temperature)}°F. Schedule water breaks every 90 minutes.`,
+        });
+      }
+
+      if (weatherSnapshot.windSpeed > 15) {
+        items.push({
+          id: 'weather-postpone-spray',
+          tone: 'urgent',
+          title: 'Postpone spray applications',
+          detail: `Wind is ${Math.round(weatherSnapshot.windSpeed)} mph, which is above safe spray conditions.`,
+        });
+      }
+    }
+
+    const historySummary = previousWeekSummaryQuery.data ?? [];
+    if (historySummary.length > 0) {
+      items.push({
+        id: 'history-last-week-plan',
+        tone: 'opportunity',
+        title: `Last ${dayLabel}'s top tasks`,
+        detail: `Your team did: ${historySummary.map((entry) => `${entry.title} (${entry.count}x)`).join(', ')}.`,
+        actionLabel: "Apply Last Week's Plan",
+        onAction: () => { void openQuickPlanDialog(); },
+      });
+    }
+
+    for (const lane of orderedDispatchBoard) {
+      if (lane.employeeAssignments.length === 0 && lane.shiftMinutes > 0) {
+        items.push({
+          id: `coverage-gap-${lane.employee.id}`,
+          tone: 'warning',
+          title: `${lane.employee.firstName} ${lane.employee.lastName} has no tasks assigned`,
+          detail: `${formatMinutesAsHoursAndMinutes(lane.shiftMinutes)} of shift time is currently unplanned.`,
+        });
+      }
+    }
+
+    const now = Date.now();
+    for (const unit of equipmentList as Array<Record<string, unknown>>) {
+      const lastServiceRaw = unit.lastService ?? unit.last_serviced;
+      if (!lastServiceRaw) continue;
+      const lastServiceDate = new Date(String(lastServiceRaw));
+      if (Number.isNaN(lastServiceDate.getTime())) continue;
+      const overdueDays = Math.floor((now - lastServiceDate.getTime()) / (1000 * 60 * 60 * 24)) - escalationThresholds.equipmentServiceOverdueDays;
+      if (overdueDays <= 0) continue;
+      const unitName = String(unit.unit_name ?? unit.name ?? 'Equipment');
+      items.push({
+        id: `equipment-overdue-${String(unit.id ?? unitName)}`,
+        tone: overdueDays >= 30 ? 'urgent' : 'warning',
+        title: `${unitName} is overdue for service`,
+        detail: `Overdue by ${overdueDays} day${overdueDays === 1 ? '' : 's'} — consider scheduling maintenance today.`,
+      });
+    }
+
+    return items.filter((item) => !dismissedSuggestionIds.includes(item.id));
+  }, [
+    boardDate,
+    dismissedSuggestionIds,
+    equipmentList,
+    escalationThresholds.equipmentServiceOverdueDays,
+    hourlyWeatherStripQuery.data,
+    openQuickPlanDialog,
+    orderedDispatchBoard,
+    previousWeekSummaryQuery.data,
+    weatherLogs,
+    weatherSnapshot,
+  ]);
+
+  const dismissSuggestedTask = useCallback((id: string) => {
+    setDismissedSuggestionIds((current) => (current.includes(id) ? current : [...current, id]));
+  }, []);
 
   const handlePrintDailyPlan = useCallback(() => {
     const printWindow = window.open('', '_blank', 'noopener,noreferrer');
@@ -2785,6 +2952,75 @@ export default function WorkboardPage() {
 
         {/* Crew board */}
         <div className="flex-1 overflow-auto p-4">
+          <div className="mb-4 rounded-3xl border bg-card/80 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CloudSun className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Suggested Tasks</h3>
+                <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                  {suggestedTasks.length}
+                </Badge>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => setSuggestedTasksCollapsed((current) => !current)}
+              >
+                {suggestedTasksCollapsed ? (
+                  <>
+                    <ChevronDown className="mr-1 h-3.5 w-3.5" /> Show
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp className="mr-1 h-3.5 w-3.5" /> Hide
+                  </>
+                )}
+              </Button>
+            </div>
+            {suggestedTasksCollapsed ? (
+              <p className="text-xs text-muted-foreground">Collapsed. Click Show to view suggestions.</p>
+            ) : suggestedTasks.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No suggestions right now. Your daily plan looks balanced.</p>
+            ) : (
+              <div className="space-y-2">
+                {suggestedTasks.map((item) => {
+                  const toneClass =
+                    item.tone === 'urgent'
+                      ? 'border-l-red-500 bg-red-50/40'
+                      : item.tone === 'warning'
+                        ? 'border-l-amber-500 bg-amber-50/40'
+                        : 'border-l-emerald-500 bg-emerald-50/40';
+                  return (
+                    <div key={item.id} className={`rounded-xl border border-border border-l-4 p-3 ${toneClass}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{item.title}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                          {item.actionLabel && item.onAction ? (
+                            <Button size="sm" variant="outline" className="mt-2 h-7 text-[11px]" onClick={item.onAction}>
+                              {item.actionLabel}
+                            </Button>
+                          ) : null}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => dismissSuggestedTask(item.id)}
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {pendingTaskRequests.length > 0 && (
             <div className="mb-4 rounded-3xl border bg-card/80 p-4">
               <div className="mb-3 flex items-center justify-between">
