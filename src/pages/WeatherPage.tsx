@@ -1919,6 +1919,9 @@ export default function WeatherPage() {
 
   const liveConditionMeta = getWeatherConditionMeta(liveForecastQuery.data?.current.weatherCode);
   const LiveConditionIcon = liveConditionMeta.icon;
+  const hasThunderstormNow = Number(liveForecastQuery.data?.current.weatherCode ?? 0) >= 95;
+  const hasThunderstormInNext12h = (liveForecastQuery.data?.hourly ?? []).slice(0, 12).some((point) => Number(point.weatherCode ?? 0) >= 95);
+  const lightningActive = hasThunderstormNow || hasThunderstormInNext12h;
   const activeLiveSourceTypeLabel =
     liveWeatherCoordinates?.sourceType === 'primary-station'
       ? 'Primary Station'
@@ -2380,7 +2383,24 @@ export default function WeatherPage() {
           longitude={radarLongitude}
           propertyName={radarPropertyLabel}
           height="clamp(250px, 45vh, 400px)"
+          lightningActive={lightningActive}
         />
+      </Card>
+
+      <Card className="rounded-2xl border p-4 shadow-sm">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-base">⚡</span>
+          <h3 className="text-sm font-semibold">Lightning Activity</h3>
+        </div>
+        {lightningActive ? (
+          <p className="text-sm text-amber-900">
+            Active thunderstorm in area — seek shelter if lightning visible.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No lightning detected near {selectedProperty?.name ?? selectedLocation?.name ?? 'this property'}.
+          </p>
+        )}
       </Card>
 
       <Card className="rounded-2xl border p-4 shadow-sm">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { CircleMarker, MapContainer, Marker, Popup, TileLayer, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { Button } from '@/components/ui/button';
 import 'leaflet/dist/leaflet.css';
@@ -23,6 +23,7 @@ type RadarMapProps = {
   longitude: number;
   propertyName: string;
   height?: string;
+  lightningActive?: boolean;
 };
 
 function formatFrameTime(unixSeconds?: number) {
@@ -33,12 +34,13 @@ function formatFrameTime(unixSeconds?: number) {
   });
 }
 
-export function RadarMap({ latitude, longitude, propertyName, height = '400px' }: RadarMapProps) {
+export function RadarMap({ latitude, longitude, propertyName, height = '400px', lightningActive = false }: RadarMapProps) {
   const [frames, setFrames] = useState<RainViewerFrame[]>([]);
   const [activeFrame, setActiveFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lightningVisible, setLightningVisible] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -102,6 +104,24 @@ export function RadarMap({ latitude, longitude, propertyName, height = '400px' }
           <Marker position={[latitude, longitude]}>
             <Popup>{propertyName}</Popup>
           </Marker>
+          {lightningVisible && lightningActive ? (
+            <>
+              <CircleMarker
+                center={[latitude, longitude]}
+                radius={14}
+                pathOptions={{ color: '#facc15', fillColor: '#facc15', fillOpacity: 0.25, weight: 2 }}
+              />
+              <CircleMarker
+                center={[latitude, longitude]}
+                radius={8}
+                pathOptions={{ color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.7, weight: 2 }}
+              >
+                <Tooltip direction="top" offset={[0, -4]} permanent>
+                  ⚡ Active thunderstorm
+                </Tooltip>
+              </CircleMarker>
+            </>
+          ) : null}
         </MapContainer>
       </div>
 
@@ -114,6 +134,14 @@ export function RadarMap({ latitude, longitude, propertyName, height = '400px' }
           disabled={!canAnimate}
         >
           {playing ? 'Pause' : 'Play'}
+        </Button>
+        <Button
+          size="sm"
+          variant={lightningVisible ? 'default' : 'outline'}
+          className="h-9"
+          onClick={() => setLightningVisible((current) => !current)}
+        >
+          ⚡ Lightning
         </Button>
         <span className="text-xs text-muted-foreground">
           Radar: {formatFrameTime(activeFrameData?.time)}
