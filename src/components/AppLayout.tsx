@@ -16,6 +16,8 @@ import {
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { OperationsProvider } from '@/contexts/OperationsContext';
+import { supabase } from '@/lib/supabase';
+import { isPro } from '@/utils/planGating';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -127,6 +129,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncFlashActive, setSyncFlashActive] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
@@ -261,6 +264,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       read: true,
     }];
   }, [inAppNotifications]);
+  const planTier: 'FREE' | 'PRO' = isPro(subscriptionStatus) ? 'PRO' : 'FREE';
 
   const unreadNotificationCount = useMemo(
     () => inAppNotifications.filter((entry) => !entry.read).length,
@@ -318,6 +322,19 @@ export function AppLayout({ children }: AppLayoutProps) {
       window.removeEventListener('offline', onOffline);
     };
   }, [queryClient]);
+
+  useEffect(() => {
+    const fetchSubscriptionStatus = async () => {
+      if (!supabase || !orgId) return;
+      const { data } = await supabase
+        .from('organizations')
+        .select('subscription_status')
+        .eq('id', orgId)
+        .maybeSingle();
+      setSubscriptionStatus(data?.subscription_status ? String(data.subscription_status) : null);
+    };
+    void fetchSubscriptionStatus();
+  }, [orgId]);
 
   const handleSelectProperty = (propertyId: string) => {
     setCurrentPropertyId(propertyId);
@@ -477,6 +494,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
             onSignOut={handleSignOut}
             programSetting={programSetting ?? undefined}
+            planTier={planTier}
           />
           <OperationsProvider
             value={{

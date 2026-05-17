@@ -36,6 +36,7 @@ interface WorkflowTopBarProps {
   onOpenMobileSidebar: () => void;
   onSignOut: () => void;
   programSetting?: ProgramSettings;
+  planTier?: 'FREE' | 'PRO';
 }
 
 const formatDate = (d: Date) =>
@@ -65,6 +66,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   onOpenMobileSidebar,
   onSignOut,
   programSetting,
+  planTier = 'FREE',
 }: WorkflowTopBarProps) {
   const { currentUser } = useAuth();
   const firstName = (currentUser as { firstName?: string } | null)?.firstName ?? currentUser?.fullName?.split(' ')[0] ?? '';
@@ -202,7 +204,16 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </DropdownMenu>
 
           <div className="hidden text-right md:block">
-            <div className="text-sm font-semibold text-foreground">{displayName}</div>
+            <div className="flex items-center justify-end gap-2">
+              <div className="text-sm font-semibold text-foreground">{displayName}</div>
+              <Badge
+                className={`h-5 px-2 text-[10px] ${
+                  planTier === 'PRO' ? 'bg-green-600 text-white' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {planTier}
+              </Badge>
+            </div>
             <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{displayRole}</div>
           </div>
 

@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { isPro } from '@/utils/planGating';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -1084,6 +1085,7 @@ function AccessTab({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [organizationName, setOrganizationName] = useState<string>('');
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [systemInfo, setSystemInfo] = useState({
     propertyCount: 0,
     employeeCount: 0,
@@ -1122,7 +1124,7 @@ function AccessTab({
     ] = await Promise.all([
       supabase
         .from('organizations')
-        .select('name')
+        .select('name, subscription_status, stripe_customer_id, stripe_subscription_id')
         .eq('id', orgId)
         .single(),
       supabase.from('properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
@@ -1158,6 +1160,7 @@ function AccessTab({
     }
 
     setOrganizationName(String(orgResult.data?.name ?? ''));
+    setSubscriptionStatus(orgResult.data?.subscription_status ? String(orgResult.data.subscription_status) : null);
     setSystemInfo({
       propertyCount: propertiesCountResult.count ?? 0,
       employeeCount: employeesCountResult.count ?? 0,
@@ -1215,6 +1218,12 @@ function AccessTab({
     }
   };
 
+  const handleUpgradeToPro = () => {
+    const placeholderCheckoutUrl = 'https://checkout.stripe.com/pay/placeholder';
+    toast.info("Stripe integration coming soon. You're on the free beta plan.");
+    window.location.href = placeholderCheckoutUrl;
+  };
+
   if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
@@ -1249,6 +1258,22 @@ function AccessTab({
             Clear App Cache
           </button>
         </div>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Upgrade to Pro</h3>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+          <strong>Current plan:</strong> {isPro(subscriptionStatus) ? 'Pro' : 'Free (Beta)'}
+        </p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+          Pro plan: $49/month — Unlimited properties, employees, advanced reports
+        </p>
+        <button
+          onClick={handleUpgradeToPro}
+          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+        >
+          Upgrade to Pro →
+        </button>
       </div>
 
       <div style={{ border: '1px solid #fecaca', borderRadius: '12px', padding: '16px', background: '#fef2f2' }}>
