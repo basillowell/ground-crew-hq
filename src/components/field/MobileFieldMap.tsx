@@ -1,14 +1,4 @@
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
-import { LEAFLET_ATTRIBUTION, OPEN_STREET_MAP_TILE_URL } from '@/lib/integrations';
-
-const propertyMarkerIcon = L.icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+import { MapPin } from "lucide-react";
 
 type CrewMarker = {
   id: string;
@@ -25,23 +15,32 @@ type MobileFieldMapProps = {
 };
 
 export function MobileFieldMap({ center, propertyName, workLocation, crewMarkers }: MobileFieldMapProps) {
+  const [latitude, longitude] = center;
+  const embedSrc = `https://www.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`;
+
   return (
-    <MapContainer center={center} zoom={15} scrollWheelZoom={false} className="h-56 w-full rounded-2xl">
-      <TileLayer attribution={LEAFLET_ATTRIBUTION} url={OPEN_STREET_MAP_TILE_URL} />
-      <Marker position={center} icon={propertyMarkerIcon}>
-        <Popup>
-          <div className="text-sm font-medium">{propertyName}</div>
-          {workLocation ? <div className="text-xs text-muted-foreground">{workLocation}</div> : null}
-        </Popup>
-      </Marker>
-      {crewMarkers.map((marker) => (
-        <Marker key={marker.id} position={[marker.latitude, marker.longitude]} icon={propertyMarkerIcon}>
-          <Popup>
-            <div className="text-sm font-medium">{marker.name}</div>
-            <div className="text-xs text-muted-foreground">Active in field</div>
-          </Popup>
-        </Marker>
-      ))}
-    </MapContainer>
+    <div className="overflow-hidden rounded-2xl border bg-card">
+      <iframe
+        title="Field map"
+        src={embedSrc}
+        className="h-56 w-full"
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+      <div className="space-y-2 border-t p-3">
+        <div className="text-sm font-medium">{propertyName}</div>
+        {workLocation ? <div className="text-xs text-muted-foreground">{workLocation}</div> : null}
+        {crewMarkers.length > 0 ? (
+          <div className="space-y-1">
+            {crewMarkers.map((marker) => (
+              <div key={marker.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <MapPin className="h-3.5 w-3.5" />
+                <span>{marker.name}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
