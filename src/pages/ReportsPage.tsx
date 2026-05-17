@@ -486,6 +486,21 @@ export default function ReportsPage() {
     [trendChartData],
   );
 
+  const monthOverMonthDeltas = useMemo(() => {
+    return trendChartData.map((row, index) => {
+      if (index === 0) {
+        return { ...row, deltaScheduled: 0, deltaActual: 0, deltaCost: 0 };
+      }
+      const previous = trendChartData[index - 1];
+      return {
+        ...row,
+        deltaScheduled: Number((row.scheduledHours - previous.scheduledHours).toFixed(1)),
+        deltaActual: Number((row.actualHours - previous.actualHours).toFixed(1)),
+        deltaCost: Number((row.laborCost - previous.laborCost).toFixed(2)),
+      };
+    });
+  }, [trendChartData]);
+
   const crewUtilizationData = useMemo(() => {
     const last4Start = startOfWeek(new Date());
     last4Start.setDate(last4Start.getDate() - 7 * 3);
@@ -1121,6 +1136,42 @@ export default function ReportsPage() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Month-over-Month Deltas</h3>
+            {loading ? (
+              <TableSkeleton />
+            ) : error ? (
+              <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
+            ) : monthOverMonthDeltas.length === 0 ? (
+              <EmptyState icon={BarChart3} title="No monthly comparison data" description="Track assignments over multiple months to compare deltas." />
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: '620px', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left', color: '#6b7280' }}>
+                      <th style={{ padding: '8px' }}>Month</th>
+                      <th style={{ padding: '8px' }}>Δ Scheduled Hrs</th>
+                      <th style={{ padding: '8px' }}>Δ Actual Hrs</th>
+                      <th style={{ padding: '8px' }}>Δ Cost</th>
+                      <th style={{ padding: '8px' }}>Completion %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthOverMonthDeltas.map((row) => (
+                      <tr key={`delta-${row.month}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px' }}>{row.label}</td>
+                        <td style={{ padding: '8px' }}>{row.deltaScheduled >= 0 ? '+' : ''}{row.deltaScheduled}</td>
+                        <td style={{ padding: '8px' }}>{row.deltaActual >= 0 ? '+' : ''}{row.deltaActual}</td>
+                        <td style={{ padding: '8px' }}>{row.deltaCost >= 0 ? '+' : ''}{formatCurrency(row.deltaCost)}</td>
+                        <td style={{ padding: '8px' }}>{row.completionRate}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
