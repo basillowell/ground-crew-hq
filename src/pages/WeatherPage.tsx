@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
+import { RadarMap } from '@/components/weather/RadarMap';
 import { HourlyForecastChart } from '@/components/weather/HourlyForecastChart';
 import { DailyForecastList } from '@/components/weather/DailyForecastList';
 import { type WeatherWidgetId, type WeatherWidgetLiveData } from '@/components/weather/OperationsView';
@@ -444,6 +445,9 @@ export default function WeatherPage() {
     if (byCurrentProperty && hasValidCoordinates(byCurrentProperty.latitude, byCurrentProperty.longitude)) return byCurrentProperty;
     return activeConfiguredLocations[0] ?? null;
   }, [activeConfiguredLocations, currentProperty, selectedLocationId, weatherLocations]);
+  const radarLatitude = selectedLocation?.latitude ?? selectedProperty?.latitude ?? 27.3364;
+  const radarLongitude = selectedLocation?.longitude ?? selectedProperty?.longitude ?? -82.5307;
+  const radarPropertyLabel = selectedProperty?.name ?? selectedLocation?.name ?? 'Selected Property';
 
   useEffect(() => {
     if (!activeConfiguredLocations.length) {
@@ -2304,6 +2308,20 @@ export default function WeatherPage() {
           <Settings className="h-4 w-4" />
         </Button>
       </PageHeader>
+
+      <Card className="rounded-2xl border p-4 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
+          <Radar className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Live Radar</h3>
+          <Badge variant="outline" className="ml-auto">RainViewer</Badge>
+        </div>
+        <RadarMap
+          latitude={radarLatitude}
+          longitude={radarLongitude}
+          propertyName={radarPropertyLabel}
+          height="clamp(250px, 45vh, 400px)"
+        />
+      </Card>
 
       <div className="hidden space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2">
