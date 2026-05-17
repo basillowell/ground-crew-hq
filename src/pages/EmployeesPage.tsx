@@ -33,6 +33,17 @@ type PropertyRow = {
   name: string | null;
 };
 
+type ScheduleEntryRow = {
+  id: string;
+  employee_id: string;
+  property_id: string;
+  date: string;
+  shift_start: string;
+  shift_end: string;
+  status: string;
+  notes: string | null;
+};
+
 type AddEmployeeDraft = {
   first_name: string;
   last_name: string;
@@ -105,6 +116,25 @@ export default function EmployeesPage() {
   const [editDraft, setEditDraft] = useState<EditEmployeeDraft | null>(null);
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'roster' | 'availability'>('roster');
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [monthEntries, setMonthEntries] = useState<ScheduleEntryRow[]>([]);
+  const [monthEntriesLoading, setMonthEntriesLoading] = useState(false);
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [shiftDraft, setShiftDraft] = useState({
+    employee_id: '',
+    property_id: '',
+    date: '',
+    shift_start: '07:30',
+    shift_end: '16:00',
+    status: 'scheduled',
+    notes: '',
+  });
+  const [shiftSaving, setShiftSaving] = useState(false);
 
   const fetchPageData = useCallback(async () => {
     if (!supabase || !orgId) {
@@ -186,6 +216,33 @@ export default function EmployeesPage() {
     void fetchPageData();
   }, [fetchPageData]);
 
+  const fetchMonthEntries = useCallback(async () => {
+    if (!supabase || !orgId) return;
+    const start = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
+    const end = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0);
+    const startKey = start.toISOString().slice(0, 10);
+    const endKey = end.toISOString().slice(0, 10);
+    setMonthEntriesLoading(true);
+    const { data, error: scheduleError } = await supabase
+      .from('schedule_entries')
+      .select('id, employee_id, property_id, date, shift_start, shift_end, status, notes')
+      .eq('org_id', orgId)
+      .gte('date', startKey)
+      .lte('date', endKey)
+      .order('date', { ascending: true });
+    setMonthEntriesLoading(false);
+    if (scheduleError) {
+      toast.error(`Failed to load monthly availability: ${scheduleError.message}`);
+      return;
+    }
+    setMonthEntries((data ?? []) as ScheduleEntryRow[]);
+  }, [monthCursor, orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    void fetchMonthEntries();
+  }, [fetchMonthEntries, orgId]);
+
   const propertyNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const property of properties) {
@@ -199,6 +256,131 @@ export default function EmployeesPage() {
     setIsAddModalDirty(false);
     setAddOpen(true);
   }, []);
+
+  const monthDays = useMemo(() => {
+    const year = monthCursor.getFullYear();
+    const month = monthCursor.getMonth();
+    const days = new Date(year, month + 1, 0).getDate();
+    return Array.from({ length: days }, (_, index) => {
+      const date = new Date(year, month, index + 1);
+      return {
+        day: index + 1,
+        key: date.toISOString().slice(0, 10),
+      };
+    });
+  }, [monthCursor]);
+
+  const entryByEmployeeDay = useMemo(() => {
+    const map = new Map<string, ScheduleEntryRow>();
+    for (const entry of monthEntries) {
+      map.set(`${entry.employee_id}:${entry.date}`, entry);
+    }
+    return map;
+  }, [monthEntries]);
+
+  const openAvailabilityCell = useCallback((employee: EmployeeRow, dayKey: string) => {
+    const existing = entryByEmployeeDay.get(`${employee.id}:${dayKey}`);
+    if (existing) {
+      setEditingShiftId(existing.id);
+      setShiftDraft({
+        employee_id: employee.id,
+        property_id: existing.property_id || employee.property_id || properties[0]?.id || '',
+        date: existing.date,
+        shift_start: String(existing.shift_start ?? '07:30').slice(0, 5),
+        shift_end: String(existing.shift_end ?? '16:00').slice(0, 5),
+        status: existing.status || 'scheduled',
+        notes: existing.notes ?? '',
+      });
+      setShiftDialogOpen(true);
+      return;
+    }
+    setEditingShiftId(null);
+    setShiftDraft({
+      employee_id: employee.id,
+      property_id: employee.property_id || properties[0]?.id || '',
+      date: dayKey,
+      shift_start: '07:30',
+      shift_end: '16:00',
+      status: 'scheduled',
+      notes: '',
+    });
+    setShiftDialogOpen(true);
+  }, [entryByEmployeeDay, properties]);
+
+  const statusCellClass = (status: string | null) => {
+    const normalized = String(status ?? '').toLowerCase();
+    if (normalized === 'scheduled') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (normalized === 'vacation') return 'bg-amber-100 text-amber-800 border-amber-200';
+    if (normalized === 'sick') return 'bg-red-100 text-red-800 border-red-200';
+    if (normalized === 'off' || normalized === 'day_off') return 'bg-slate-200 text-slate-700 border-slate-300';
+    return 'bg-slate-100 text-slate-600 border-slate-200';
+  };
+
+  const saveAvailabilityEntry = useCallback(async () => {
+    if (isReadOnly) return;
+    if (!supabase || !orgId) return;
+    if (!shiftDraft.employee_id || !shiftDraft.property_id || !shiftDraft.date) {
+      toast.error('Employee, property, and date are required.');
+      return;
+    }
+    setShiftSaving(true);
+    if (editingShiftId) {
+      const { error: updateError } = await supabase
+        .from('schedule_entries')
+        .update({
+          property_id: shiftDraft.property_id,
+          shift_start: shiftDraft.shift_start,
+          shift_end: shiftDraft.shift_end,
+          status: shiftDraft.status,
+          notes: shiftDraft.notes || null,
+        })
+        .eq('id', editingShiftId)
+        .eq('org_id', orgId);
+      setShiftSaving(false);
+      if (updateError) {
+        toast.error(`Failed to update shift: ${updateError.message}`);
+        return;
+      }
+      toast.success('Shift updated');
+    } else {
+      const { error: insertError } = await supabase.from('schedule_entries').insert({
+        org_id: orgId,
+        employee_id: shiftDraft.employee_id,
+        property_id: shiftDraft.property_id,
+        date: shiftDraft.date,
+        shift_start: shiftDraft.shift_start,
+        shift_end: shiftDraft.shift_end,
+        status: shiftDraft.status,
+        notes: shiftDraft.notes || null,
+      });
+      setShiftSaving(false);
+      if (insertError) {
+        toast.error(`Failed to add shift: ${insertError.message}`);
+        return;
+      }
+      toast.success('Shift added');
+    }
+    setShiftDialogOpen(false);
+    setEditingShiftId(null);
+    await fetchMonthEntries();
+  }, [editingShiftId, fetchMonthEntries, isReadOnly, orgId, shiftDraft]);
+
+  const monthlyEmployeeStats = useMemo(() => {
+    const byEmployee = new Map<string, { scheduled: number; off: number; sick: number; vacation: number }>();
+    for (const employee of employees) {
+      byEmployee.set(employee.id, { scheduled: 0, off: 0, sick: 0, vacation: 0 });
+    }
+    for (const entry of monthEntries) {
+      const bucket = byEmployee.get(entry.employee_id);
+      if (!bucket) continue;
+      const status = String(entry.status ?? '').toLowerCase();
+      if (status === 'scheduled') bucket.scheduled += 1;
+      else if (status === 'sick') bucket.sick += 1;
+      else if (status === 'vacation') bucket.vacation += 1;
+      else bucket.off += 1;
+    }
+    return byEmployee;
+  }, [employees, monthEntries]);
 
   const closeAddModal = useCallback((forceDiscard = false) => {
     if (!forceDiscard && isAddModalDirty) {
@@ -356,8 +538,100 @@ export default function EmployeesPage() {
         ) : null}
       </div>
 
+      <div className="flex items-center gap-2">
+        <Button variant={viewMode === 'roster' ? 'default' : 'outline'} size="sm" className="h-9" onClick={() => setViewMode('roster')}>
+          Roster
+        </Button>
+        <Button variant={viewMode === 'availability' ? 'default' : 'outline'} size="sm" className="h-9" onClick={() => setViewMode('availability')}>
+          Availability
+        </Button>
+      </div>
+
       {error ? <ErrorRetry message={error} onRetry={() => void fetchPageData()} /> : null}
 
+      {viewMode === 'availability' ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+            >
+              Previous
+            </Button>
+            <div className="font-medium">
+              {monthCursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+            >
+              Next
+            </Button>
+          </div>
+
+          {monthEntriesLoading ? (
+            <TableSkeleton />
+          ) : (
+            <div className="overflow-x-auto rounded-xl border">
+              <table className="min-w-full text-xs">
+                <thead className="bg-muted/30">
+                  <tr>
+                    <th className="sticky left-0 bg-muted/30 px-2 py-2 text-left font-medium">Employee</th>
+                    {monthDays.map((day) => (
+                      <th key={`head-${day.key}`} className="px-2 py-2 text-center font-medium">{day.day}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((employee) => {
+                    const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed';
+                    return (
+                      <tr key={`cal-${employee.id}`} className="border-t">
+                        <td className="sticky left-0 bg-background px-2 py-2 font-medium">{name}</td>
+                        {monthDays.map((day) => {
+                          const entry = entryByEmployeeDay.get(`${employee.id}:${day.key}`);
+                          return (
+                            <td key={`${employee.id}-${day.key}`} className="px-1 py-1">
+                              <button
+                                type="button"
+                                onClick={() => openAvailabilityCell(employee, day.key)}
+                                className={`h-7 w-9 rounded border text-[11px] ${statusCellClass(entry?.status ?? null)}`}
+                              >
+                                {entry ? (String(entry.status).slice(0, 1).toUpperCase()) : '—'}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="rounded-xl border p-3">
+            <h3 className="mb-2 text-sm font-semibold">Quick stats</h3>
+            <div className="space-y-1 text-sm text-muted-foreground">
+              {employees.map((employee) => {
+                const stats = monthlyEmployeeStats.get(employee.id) ?? { scheduled: 0, off: 0, sick: 0, vacation: 0 };
+                const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed';
+                return (
+                  <p key={`stats-${employee.id}`}>
+                    This month: {name} — {stats.scheduled} days scheduled, {stats.off} days off, {stats.sick} sick, {stats.vacation} vacation
+                  </p>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {viewMode === 'roster' ? (
       <div className="hidden overflow-x-auto rounded-xl border md:block">
         <table className="min-w-full text-sm">
           <thead className="bg-muted/30">
@@ -488,7 +762,9 @@ export default function EmployeesPage() {
           </tbody>
         </table>
       </div>
+      ) : null}
 
+      {viewMode === 'roster' ? (
       <div className="space-y-3 md:hidden">
         {employees.length === 0 ? (
           <div className="rounded-lg border p-4 text-sm text-muted-foreground">No employees yet. Add your first crew member.</div>
@@ -545,6 +821,7 @@ export default function EmployeesPage() {
           })
         )}
       </div>
+      ) : null}
 
       <Dialog
         open={addOpen && !isReadOnly}
@@ -712,6 +989,87 @@ export default function EmployeesPage() {
               }
             >
               {addSaving ? 'Saving...' : 'Save Employee'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shiftDialogOpen && !isReadOnly} onOpenChange={(open) => { if (!open) { setShiftDialogOpen(false); setEditingShiftId(null); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingShiftId ? 'Edit Shift' : 'Add Shift'}</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground">Employee</label>
+              <select
+                value={shiftDraft.employee_id}
+                onChange={(event) => setShiftDraft((current) => ({ ...current, employee_id: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Select employee</option>
+                {employees.map((employee) => (
+                  <option key={`shift-emp-${employee.id}`} value={employee.id}>
+                    {`${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground">Date</label>
+                <Input type="date" className="mt-1" value={shiftDraft.date} onChange={(event) => setShiftDraft((current) => ({ ...current, date: event.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Property</label>
+                <select
+                  value={shiftDraft.property_id}
+                  onChange={(event) => setShiftDraft((current) => ({ ...current, property_id: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Select property</option>
+                  {properties.map((property) => (
+                    <option key={`shift-property-${property.id}`} value={property.id}>
+                      {property.name ?? 'Unnamed Property'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground">Shift Start</label>
+                <Input type="time" className="mt-1" value={shiftDraft.shift_start} onChange={(event) => setShiftDraft((current) => ({ ...current, shift_start: event.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Shift End</label>
+                <Input type="time" className="mt-1" value={shiftDraft.shift_end} onChange={(event) => setShiftDraft((current) => ({ ...current, shift_end: event.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Status</label>
+              <select
+                value={shiftDraft.status}
+                onChange={(event) => setShiftDraft((current) => ({ ...current, status: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="scheduled">Scheduled</option>
+                <option value="off">Day Off</option>
+                <option value="vacation">Vacation</option>
+                <option value="sick">Sick</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Notes</label>
+              <Input className="mt-1" value={shiftDraft.notes} onChange={(event) => setShiftDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional notes" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => { setShiftDialogOpen(false); setEditingShiftId(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={() => void saveAvailabilityEntry()} disabled={shiftSaving}>
+              {shiftSaving ? 'Saving...' : editingShiftId ? 'Save Shift' : 'Add Shift'}
             </Button>
           </div>
         </DialogContent>
