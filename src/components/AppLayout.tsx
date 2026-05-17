@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
+import { FeedbackWidget } from './FeedbackWidget';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import type { ProgramSettings } from '@/data/seedData';
 import {
@@ -357,6 +358,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   };
 
   const closeMobileSidebar = () => setMobileSidebarOpen(false);
+  const shouldShowFeedbackWidget = !(
+    location.pathname === '/' ||
+    location.pathname.startsWith('/app/field')
+  );
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
@@ -518,6 +523,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
               {children}
             </main>
+            {shouldShowFeedbackWidget ? <FeedbackWidget pagePath={location.pathname} /> : null}
           </OperationsProvider>
         </div>
       </div>
