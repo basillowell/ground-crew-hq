@@ -151,7 +151,20 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
             </button>
             <button
               className="h-10 rounded-md bg-primary px-4 text-sm text-primary-foreground"
-              onClick={() => window.location.assign("/")}
+              onClick={async () => {
+                try {
+                  window.localStorage.removeItem("ground-crew-query-cache");
+                  Object.keys(window.localStorage).forEach((key) => {
+                    if (key.startsWith("ground-crew") || key.startsWith("workflow") || key.startsWith("field-cache")) {
+                      window.localStorage.removeItem(key);
+                    }
+                  });
+                  await supabase.auth.signOut();
+                } catch {
+                  // Ignore and continue to hard redirect.
+                }
+                window.location.assign("/");
+              }}
             >
               Return to Login
             </button>

@@ -125,7 +125,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
-  const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, orgId } = useAuth();
+  const { currentUser, currentPropertyId, setCurrentPropertyId, orgId } = useAuth();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
@@ -368,8 +368,20 @@ export function AppLayout({ children }: AppLayoutProps) {
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+    try {
+      queryClient.clear();
+      window.localStorage.removeItem('ground-crew-query-cache');
+      Object.keys(window.localStorage).forEach((key) => {
+        if (key.startsWith('ground-crew') || key.startsWith('workflow') || key.startsWith('field-cache')) {
+          window.localStorage.removeItem(key);
+        }
+      });
+      await supabase.auth.signOut();
+      window.location.assign('/');
+    } catch (err) {
+      console.error('Sign out failed:', err);
+      window.location.assign('/');
+    }
   };
 
   const markAllNotificationsRead = () => {

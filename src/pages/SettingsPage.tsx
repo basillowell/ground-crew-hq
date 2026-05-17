@@ -1652,15 +1652,25 @@ function AccessTab({
   }, [fetchOrganizationName, orgId]);
 
   const handleSignOut = async () => {
-    if (supabase) {
+    try {
+      queryClient.clear();
+      window.localStorage.removeItem('ground-crew-query-cache');
+      Object.keys(window.localStorage).forEach((key) => {
+        if (key.startsWith('ground-crew') || key.startsWith('workflow') || key.startsWith('field-cache')) {
+          window.localStorage.removeItem(key);
+        }
+      });
       await supabase.auth.signOut();
+      window.location.assign('/');
+    } catch (err) {
+      console.error('Sign out failed:', err);
+      window.location.assign('/');
     }
-    navigate('/');
   };
 
   const handleClearAppCache = () => {
-    localStorage.clear();
     queryClient.clear();
+    window.localStorage.removeItem('ground-crew-query-cache');
     window.location.reload();
   };
 
