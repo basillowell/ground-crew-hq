@@ -764,9 +764,36 @@ export default function CommandCenterOperationalPage() {
       }),
     [],
   );
-  const morningPropertyLabel = selectedProperty?.name ?? 'No property selected';
+  const isAllPropertiesView = currentPropertyId === 'all';
+  const morningPropertyLabel = isAllPropertiesView
+    ? `All Properties (${properties.length})`
+    : selectedProperty?.name ?? 'No property selected';
   const openNeedsCount = morningNeedsQuery.data ?? 0;
   const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;
+  const propertyBreakdownRows = useMemo(() => {
+    if (!isAllPropertiesView) return [];
+    return properties.map((property) => {
+      const crewCount = scheduleEntries.filter(
+        (entry) => entry.date === todayKey && entry.status === 'scheduled' && entry.propertyId === property.id,
+      ).length;
+      const taskCount = assignments.filter(
+        (assignment) => assignment.date === todayKey && assignment.propertyId === property.id,
+      ).length;
+      const assignedCrewIds = new Set(
+        assignments
+          .filter((assignment) => assignment.date === todayKey && assignment.propertyId === property.id)
+          .map((assignment) => assignment.employeeId),
+      );
+      const coveragePct = crewCount > 0 ? Math.round((assignedCrewIds.size / crewCount) * 100) : 0;
+      return {
+        propertyId: property.id,
+        propertyName: property.name,
+        crewCount,
+        taskCount,
+        coveragePct,
+      };
+    });
+  }, [assignments, isAllPropertiesView, properties, scheduleEntries, todayKey]);
   const taskStatusSummary = useMemo(() => {
     const todayAssignments = assignments.filter((assignment) => assignment.date === todayKey);
     let planned = 0;
@@ -1299,6 +1326,42 @@ export default function CommandCenterOperationalPage() {
           )}
         </div>
       </Card>
+
+      {isAllPropertiesView ? (
+        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+          <h3 className="text-sm font-semibold">Property Breakdown</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Crew, tasks, and coverage by property for today.</p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 font-medium">Property</th>
+                  <th className="pb-2 font-medium">Crew</th>
+                  <th className="pb-2 font-medium">Tasks</th>
+                  <th className="pb-2 font-medium">Coverage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {propertyBreakdownRows.map((row) => (
+                  <tr
+                    key={`property-breakdown-${row.propertyId}`}
+                    className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
+                    onClick={() => {
+                      setCurrentPropertyId(row.propertyId);
+                      navigate(`/app/workboard?property=${encodeURIComponent(row.propertyId)}`);
+                    }}
+                  >
+                    <td className="py-2 font-medium">{row.propertyName}</td>
+                    <td className="py-2">{row.crewCount} crew</td>
+                    <td className="py-2">{row.taskCount} tasks</td>
+                    <td className="py-2">{row.coveragePct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
         <h3 className="text-sm font-semibold">Labor Cost This Week</h3>
