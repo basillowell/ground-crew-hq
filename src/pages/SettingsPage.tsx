@@ -64,6 +64,7 @@ interface TaskLibraryItem {
 interface OrganizationInfo {
   name: string;
   plan: string | null;
+  subscription_status?: string | null;
 }
 
 interface PropertyItem {
@@ -75,6 +76,13 @@ interface PropertyItem {
   longitude: number | null;
   timezone: string | null;
   created_at: string | null;
+}
+
+interface UsageStats {
+  properties: number;
+  employees: number;
+  tasks: number;
+  scheduleEntriesThisMonth: number;
 }
 
 interface WorkforceSummaryRow {
@@ -216,6 +224,7 @@ function WorkspaceTab({
   userRole: string | null;
   currentPropertyId: string;
 }) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [orgNameDraft, setOrgNameDraft] = useState('');
@@ -229,6 +238,12 @@ function WorkspaceTab({
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [editingPropertyName, setEditingPropertyName] = useState('');
   const [loadingDemoData, setLoadingDemoData] = useState(false);
+  const [usageStats, setUsageStats] = useState<UsageStats>({
+    properties: 0,
+    employees: 0,
+    tasks: 0,
+    scheduleEntriesThisMonth: 0,
+  });
   const timezoneOptions = [
     { label: 'Eastern', value: 'America/New_York' },
     { label: 'Central', value: 'America/Chicago' },
@@ -241,17 +256,47 @@ function WorkspaceTab({
     setLoading(true);
     setError(null);
 
-    const [{ data: orgData, error: orgError }, { data: propertiesData, error: propertiesError }] = await Promise.all([
-      supabase.from('organizations').select('name, plan').eq('id', orgId).single(),
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(monthStart);
+    monthEnd.setMonth(monthEnd.getMonth() + 1);
+    monthEnd.setDate(0);
+    const monthStartKey = monthStart.toISOString().slice(0, 10);
+    const monthEndKey = monthEnd.toISOString().slice(0, 10);
+
+    const [
+      { data: orgData, error: orgError },
+      { data: propertiesData, error: propertiesError },
+      { count: employeesCount, error: employeesError },
+      { count: tasksCount, error: tasksError },
+      { count: scheduleCount, error: scheduleError },
+    ] = await Promise.all([
+      supabase.from('organizations').select('name, plan, subscription_status').eq('id', orgId).single(),
       supabase
         .from('properties')
         .select('id, name, org_id, address, latitude, longitude, timezone, created_at')
         .eq('org_id', orgId)
         .order('name', { ascending: true }),
+      supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase
+        .from('schedule_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .gte('date', monthStartKey)
+        .lte('date', monthEndKey),
     ]);
 
-    if (orgError || propertiesError) {
-      setError(orgError?.message ?? propertiesError?.message ?? 'Unable to load workspace settings');
+    if (orgError || propertiesError || employeesError || tasksError || scheduleError) {
+      setError(
+        orgError?.message ??
+          propertiesError?.message ??
+          employeesError?.message ??
+          tasksError?.message ??
+          scheduleError?.message ??
+          'Unable to load workspace settings',
+      );
       setLoading(false);
       return;
     }
@@ -259,6 +304,12 @@ function WorkspaceTab({
     setOrgInfo((orgData ?? null) as OrganizationInfo | null);
     setOrgNameDraft(String((orgData as OrganizationInfo | null)?.name ?? ''));
     setProperties((propertiesData ?? []) as PropertyItem[]);
+    setUsageStats({
+      properties: (propertiesData ?? []).length,
+      employees: employeesCount ?? 0,
+      tasks: tasksCount ?? 0,
+      scheduleEntriesThisMonth: scheduleCount ?? 0,
+    });
     setLoading(false);
   }, [orgId]);
 
@@ -673,6 +724,29 @@ function WorkspaceTab({
     toast.success('Demo data loaded! Navigate to the Workboard to see it.');
   };
 
+  const isProPlan =
+    String(orgInfo?.subscription_status ?? '').toLowerCase() === 'active' ||
+    String(orgInfo?.plan ?? '').toLowerCase().includes('pro');
+  const usageLimits = {
+    properties: isProPlan ? null : 1,
+    employees: isProPlan ? null : 5,
+    tasks: isProPlan ? null : 20,
+    scheduleEntriesThisMonth: isProPlan ? null : 100,
+  } as const;
+  const usageRows = [
+    { key: 'properties', label: 'Properties', value: usageStats.properties, limit: usageLimits.properties },
+    { key: 'employees', label: 'Employees', value: usageStats.employees, limit: usageLimits.employees },
+    { key: 'tasks', label: 'Tasks', value: usageStats.tasks, limit: usageLimits.tasks },
+    { key: 'scheduleEntriesThisMonth', label: 'Schedule entries (this month)', value: usageStats.scheduleEntriesThisMonth, limit: usageLimits.scheduleEntriesThisMonth },
+  ] as const;
+  const usageAtLimit = usageRows.some((row) => row.limit != null && row.value >= row.limit);
+
+  const usageTone = (ratio: number) => {
+    if (ratio >= 0.9) return '#dc2626';
+    if (ratio >= 0.75) return '#d97706';
+    return '#16a34a';
+  };
+
   if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
@@ -719,6 +793,43 @@ function WorkspaceTab({
             }}
           >
             {loadingDemoData ? 'Loading Demo Data...' : 'Load Demo Data'}
+          </button>
+        ) : null}
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Usage</h3>
+        {usageRows.map((row) => {
+          const ratio = row.limit ? Math.min(1, row.value / row.limit) : 0;
+          const barColor = usageTone(ratio);
+          const limitLabel = row.limit == null ? 'Unlimited' : row.limit;
+          return (
+            <div key={`usage-${row.key}`} style={{ display: 'grid', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span>{row.label}</span>
+                <span style={{ color: '#6b7280' }}>
+                  {row.value} / {limitLabel}
+                </span>
+              </div>
+              <div style={{ height: '8px', width: '100%', borderRadius: '999px', background: '#e5e7eb', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: row.limit == null ? '20%' : `${Math.min(100, Math.max(2, ratio * 100))}%`,
+                    height: '100%',
+                    background: row.limit == null ? '#16a34a' : barColor,
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+        {usageAtLimit && !isProPlan ? (
+          <button
+            type="button"
+            onClick={() => navigate('/app/settings?tab=Access')}
+            style={{ width: 'fit-content', border: 'none', background: 'transparent', color: '#166534', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: '13px' }}
+          >
+            Upgrade to Pro for unlimited access
           </button>
         ) : null}
       </div>
