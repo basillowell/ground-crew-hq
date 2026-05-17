@@ -58,6 +58,34 @@ type ClockEventRecord = {
   timestamp: string;
 };
 
+type FieldCachePayload = {
+  schedule: ShiftEntry | null;
+  assignments: FieldAssignment[];
+  clockEvents: ClockEventRecord[];
+  employee: EmployeeRecord | null;
+  propertyName: string;
+  taskMetaById: Record<string, TaskMeta>;
+};
+
+type FieldSyncQueueItem =
+  | {
+      type: 'assignment_status';
+      assignmentId: string;
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: 'clock_event';
+      payload: {
+        employee_id: string;
+        property_id: string;
+        org_id: string;
+        event_type: 'clock_in' | 'clock_out';
+        timestamp: string;
+        location_lat: null;
+        location_lng: null;
+      };
+    };
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -128,11 +156,97 @@ export default function MobileFieldWorkspacePage() {
   const [needsNotes, setNeedsNotes] = useState('');
   const [needsPhotoBase64, setNeedsPhotoBase64] = useState<string | null>(null);
   const [language, setLanguage] = useState<FieldLanguage>('en');
+  const [isOfflineData, setIsOfflineData] = useState(false);
 
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
   const boardDate = todayKey();
   const t = fieldTranslations[language];
+  const cacheKey = `field-cache-${boardDate}`;
+  const syncQueueKey = 'field-sync-queue';
+
+  const loadSyncQueue = useCallback((): FieldSyncQueueItem[] => {
+    try {
+      const raw = window.localStorage.getItem(syncQueueKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? (parsed as FieldSyncQueueItem[]) : [];
+    } catch {
+      return [];
+    }
+  }, [syncQueueKey]);
+
+  const saveSyncQueue = useCallback((items: FieldSyncQueueItem[]) => {
+    window.localStorage.setItem(syncQueueKey, JSON.stringify(items));
+  }, [syncQueueKey]);
+
+  const enqueueSyncAction = useCallback((item: FieldSyncQueueItem) => {
+    const queue = loadSyncQueue();
+    queue.push(item);
+    saveSyncQueue(queue);
+  }, [loadSyncQueue, saveSyncQueue]);
+
+  const loadFieldCache = useCallback((): FieldCachePayload | null => {
+    try {
+      const raw = window.localStorage.getItem(cacheKey);
+      if (!raw) return null;
+      return JSON.parse(raw) as FieldCachePayload;
+    } catch {
+      return null;
+    }
+  }, [cacheKey]);
+
+  const saveFieldCache = useCallback((payload: FieldCachePayload) => {
+    window.localStorage.setItem(cacheKey, JSON.stringify(payload));
+  }, [cacheKey]);
+
+  const applyFieldCache = useCallback((cache: FieldCachePayload) => {
+    setEmployee(cache.employee);
+    setShift(cache.schedule);
+    setAssignments(cache.assignments);
+    setClockEvents(cache.clockEvents);
+    setTaskMetaById(cache.taskMetaById ?? {});
+    setPropertyName(cache.propertyName || 'Assigned Property');
+
+    const nextActualDraft: Record<string, string> = {};
+    cache.assignments.forEach((assignment) => {
+      nextActualDraft[assignment.id] = String(assignment.actualHours ?? assignment.estimatedHours ?? 0);
+    });
+    setActualHoursDraft(nextActualDraft);
+  }, []);
+
+  const syncQueue = useCallback(async () => {
+    if (!supabase || !navigator.onLine) return;
+    const queue = loadSyncQueue();
+    if (queue.length === 0) return;
+
+    const remaining: FieldSyncQueueItem[] = [];
+    let synced = 0;
+
+    for (const item of queue) {
+      if (item.type === 'assignment_status') {
+        const { error } = await supabase.from('assignments').update(item.payload).eq('id', item.assignmentId);
+        if (error) {
+          remaining.push(item);
+        } else {
+          synced += 1;
+        }
+      } else if (item.type === 'clock_event') {
+        const { error } = await supabase.from('clock_events').insert(item.payload);
+        if (error) {
+          remaining.push(item);
+        } else {
+          synced += 1;
+        }
+      }
+    }
+
+    saveSyncQueue(remaining);
+    if (synced > 0) {
+      toast.success(`Synced ${synced} offline change${synced === 1 ? '' : 's'}`);
+      setIsOfflineData(false);
+    }
+  }, [loadSyncQueue, saveSyncQueue]);
 
   useEffect(() => {
     const timerId = window.setInterval(() => setLiveNow(new Date()), 60_000);
@@ -148,6 +262,18 @@ export default function MobileFieldWorkspacePage() {
 
     setLoading(true);
     setError(null);
+    if (!navigator.onLine) {
+      const cached = loadFieldCache();
+      if (cached) {
+        applyFieldCache(cached);
+        setIsOfflineData(true);
+        setLoading(false);
+        return;
+      }
+      setError('You are offline and no cached field data is available yet.');
+      setLoading(false);
+      return;
+    }
 
     const startOfDayIso = new Date(`${boardDate}T00:00:00`).toISOString();
     const endOfDayIso = new Date(`${boardDate}T23:59:59`).toISOString();
@@ -187,6 +313,13 @@ export default function MobileFieldWorkspacePage() {
     ]);
 
     if (employeeError || shiftError || assignmentsError || tasksError || propertyError || clockError) {
+      const cached = loadFieldCache();
+      if (cached) {
+        applyFieldCache(cached);
+        setIsOfflineData(true);
+        setLoading(false);
+        return;
+      }
       setError(
         employeeError?.message ||
           shiftError?.message ||
@@ -285,12 +418,55 @@ export default function MobileFieldWorkspacePage() {
       setPropertyName('Assigned Property');
     }
 
+    const resolvedPropertyName =
+      shiftRow?.property_id && propertiesById.has(String(shiftRow.property_id))
+        ? propertiesById.get(String(shiftRow.property_id)) ?? 'Assigned Property'
+        : currentUser?.propertyId && propertiesById.has(String(currentUser.propertyId))
+          ? propertiesById.get(String(currentUser.propertyId)) ?? 'Assigned Property'
+          : 'Assigned Property';
+    saveFieldCache({
+      schedule: shiftRow
+        ? {
+            propertyId: shiftRow.property_id ? String(shiftRow.property_id) : null,
+            shiftStart: String(shiftRow.shift_start ?? '').slice(0, 5),
+            shiftEnd: String(shiftRow.shift_end ?? '').slice(0, 5),
+          }
+        : null,
+      assignments: normalizedAssignments,
+      clockEvents: normalizedClockEvents,
+      employee: employeeRow
+        ? {
+            id: String(employeeRow.id),
+            firstName: String(employeeRow.first_name ?? ''),
+            lastName: String(employeeRow.last_name ?? ''),
+            language: employeeRow.language ? String(employeeRow.language) : null,
+          }
+        : null,
+      propertyName: resolvedPropertyName,
+      taskMetaById: taskMap,
+    });
+    setIsOfflineData(false);
     setLoading(false);
-  }, [LANG_STORAGE_KEY, boardDate, currentUser?.propertyId, employeeId, orgId]);
+  }, [LANG_STORAGE_KEY, applyFieldCache, boardDate, currentUser?.propertyId, employeeId, loadFieldCache, orgId, saveFieldCache]);
 
   useEffect(() => {
     void fetchFieldData();
   }, [fetchFieldData]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      void syncQueue();
+      void fetchFieldData();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [fetchFieldData, syncQueue]);
+
+  useEffect(() => {
+    if (navigator.onLine) {
+      void syncQueue();
+    }
+  }, [syncQueue]);
 
   const setSaving = (assignmentId: string, isSaving: boolean) => {
     setSavingIds((current) => ({ ...current, [assignmentId]: isSaving }));
@@ -322,23 +498,27 @@ export default function MobileFieldWorkspacePage() {
       payload.actual_hours = nextActualHours;
     }
 
+    if (!navigator.onLine) {
+      enqueueSyncAction({
+        type: 'assignment_status',
+        assignmentId: assignment.id,
+        payload,
+      });
+      setSaving(assignment.id, false);
+      setIsOfflineData(true);
+      return;
+    }
+
     const { error: updateError } = await supabase.from('assignments').update(payload).eq('id', assignment.id);
     setSaving(assignment.id, false);
 
     if (updateError) {
-      setAssignments((current) =>
-        current.map((item) =>
-          item.id === assignment.id
-            ? {
-                ...item,
-                status: assignment.status,
-                completedAt: assignment.completedAt,
-                actualHours: assignment.actualHours,
-              }
-            : item,
-        ),
-      );
-      toast.error(`Failed to update task status: ${updateError.message}`);
+      enqueueSyncAction({
+        type: 'assignment_status',
+        assignmentId: assignment.id,
+        payload,
+      });
+      setIsOfflineData(true);
       return;
     }
 
@@ -443,6 +623,25 @@ export default function MobileFieldWorkspacePage() {
       };
       setClockEvents((current) => [...current, optimisticEvent]);
 
+      if (!navigator.onLine) {
+        enqueueSyncAction({
+          type: 'clock_event',
+          payload: {
+            employee_id: employeeId,
+            property_id: propertyId,
+            org_id: orgId,
+            event_type: eventType,
+            timestamp: optimisticEvent.timestamp,
+            location_lat: null,
+            location_lng: null,
+          },
+        });
+        setClockActionSaving(false);
+        setIsOfflineData(true);
+        toast.success(eventType === 'clock_in' ? 'Clock in saved offline' : 'Clock out saved offline');
+        return;
+      }
+
       const { data, error: insertError } = await supabase
         .from('clock_events')
         .insert({
@@ -469,8 +668,20 @@ export default function MobileFieldWorkspacePage() {
             timestamp: optimisticEvent.timestamp,
           },
         });
-        setClockEvents((current) => current.filter((event) => event.id !== optimisticEvent.id));
-        toast.error(`Failed to ${eventType === 'clock_in' ? 'clock in' : 'clock out'}: ${insertError.message}`);
+        enqueueSyncAction({
+          type: 'clock_event',
+          payload: {
+            employee_id: employeeId,
+            property_id: propertyId,
+            org_id: orgId,
+            event_type: eventType,
+            timestamp: optimisticEvent.timestamp,
+            location_lat: null,
+            location_lng: null,
+          },
+        });
+        setIsOfflineData(true);
+        toast.success(eventType === 'clock_in' ? 'Clock in queued for sync' : 'Clock out queued for sync');
         return;
       }
 
@@ -489,7 +700,7 @@ export default function MobileFieldWorkspacePage() {
       const successTime = formatTime(String(data?.timestamp ?? optimisticEvent.timestamp).slice(11, 16));
       toast.success(eventType === 'clock_in' ? `Clocked in at ${successTime}` : `Clocked out at ${successTime}`);
     },
-    [currentUser?.propertyId, employeeId, orgId, shift?.propertyId],
+    [currentUser?.propertyId, employeeId, enqueueSyncAction, orgId, shift?.propertyId],
   );
 
   const resetNeedsForm = () => {
@@ -592,6 +803,11 @@ export default function MobileFieldWorkspacePage() {
 
   return (
     <div className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans">
+      {isOfflineData ? (
+        <div className="mb-3 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900">
+          You're offline — showing cached data
+        </div>
+      ) : null}
       <header className="mb-4 rounded-2xl border bg-card p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
