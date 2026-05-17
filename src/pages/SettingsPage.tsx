@@ -231,6 +231,9 @@ function WorkspaceTab({
   const [properties, setProperties] = useState<PropertyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'Manager' | 'Field Staff'>('Manager');
   const [savingOrg, setSavingOrg] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
   const [newPropertyAddress, setNewPropertyAddress] = useState('');
@@ -1347,6 +1350,37 @@ function AccessTab({
     toast.info('Contact support@groundcrewhq.com to cancel');
   };
 
+  const closeInviteModal = () => {
+    setShowInviteModal(false);
+    setInviteEmail('');
+    setInviteRole('Manager');
+  };
+
+  const handleSendInvite = () => {
+    const trimmedEmail = inviteEmail.trim();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      toast.error('Enter a valid email address.');
+      return;
+    }
+    const inviterName = employeeName || userEmail || 'A teammate';
+    const orgName = organizationName || 'your organization';
+    const subject = "You've been invited to Ground Crew HQ";
+    const body = `Hi,
+
+${inviterName} has invited you to join ${orgName} on Ground Crew HQ,
+the operations platform for grounds and facilities teams.
+
+Sign up here: https://ground-crew-hq.vercel.app
+
+Your organization: ${orgName}
+Your role: ${inviteRole}
+
+— Ground Crew HQ`;
+    window.location.href = `mailto:${encodeURIComponent(trimmedEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    toast.success('Invite email opened in your mail app.');
+    closeInviteModal();
+  };
+
   if (!orgId || loading) return <PageSkeleton />;
 
   if (error) {
@@ -1381,6 +1415,19 @@ function AccessTab({
             Clear App Cache
           </button>
         </div>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Team Invitations</h3>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+          Invite managers and crew members by email link.
+        </p>
+        <button
+          onClick={() => setShowInviteModal(true)}
+          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+        >
+          Invite Team
+        </button>
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
@@ -1454,6 +1501,68 @@ function AccessTab({
           Copy System Info
         </button>
       </div>
+
+      {showInviteModal ? (
+        <div
+          onClick={closeInviteModal}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            zIndex: 60,
+            display: 'grid',
+            placeItems: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '420px',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              background: '#fff',
+              padding: '16px',
+              display: 'grid',
+              gap: '12px',
+              zIndex: 70,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Invite a team member</h3>
+            <label style={{ display: 'grid', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: '#6b7280' }}>Email</span>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                placeholder="name@company.com"
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: '#6b7280' }}>Role</span>
+              <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as 'Manager' | 'Field Staff')}>
+                <option value="Manager">Manager</option>
+                <option value="Field Staff">Field Staff</option>
+              </select>
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={closeInviteModal}
+                style={{ border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendInvite}
+                style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+              >
+                Send Invite
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
