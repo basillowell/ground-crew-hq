@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
-import { ArrowRight, Calendar, CheckCircle2, Circle, CloudRain, MapPin, Plus, Users, Wrench } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Calendar, CheckCircle2, Circle, CloudRain, MapPin, Plus, Users, Wrench } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +18,35 @@ import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
 import { LayoutDashboard } from 'lucide-react';
+
+const DAILY_BRIEF_MODEL = 'claude-sonnet-4-20250514';
+const DAILY_BRIEF_STORAGE_PREFIX = 'gchq-daily-brief';
+
+type DailyBriefContext = {
+  date: string;
+  property: string;
+  crew: {
+    count: number;
+    members: Array<{ name: string; shiftStart: string; shiftEnd: string }>;
+  };
+  tasks: {
+    count: number;
+    names: string[];
+    coveragePercent: number;
+  };
+  weather: {
+    temperatureF: number | null;
+    windMph: number | null;
+    rainProbabilityPct: number | null;
+    conditions: string;
+  };
+  equipmentAlerts: {
+    overdueCount: number;
+    items: string[];
+  };
+  openNeedsCount: number;
+  yesterdayCompletionRatePct: number;
+};
 
 function SummaryCard({
   title,
@@ -165,6 +194,9 @@ export default function CommandCenterOperationalPage() {
   const [currentDate] = useState(() => new Date());
   const [queryTimeoutReached, setQueryTimeoutReached] = useState(false);
   const [onboardingDismissedLocally, setOnboardingDismissedLocally] = useState(false);
+  const [dailyBriefText, setDailyBriefText] = useState<string | null>(null);
+  const [dailyBriefLoading, setDailyBriefLoading] = useState(false);
+  const [dailyBriefError, setDailyBriefError] = useState<string | null>(null);
 
   const todayKey = currentDate.toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
@@ -375,6 +407,122 @@ export default function CommandCenterOperationalPage() {
       const { count, error } = await query;
       if (error) throw error;
       return count ?? 0;
+    },
+  });
+  const yesterdayCompletionQuery = useQuery({
+    queryKey: ['dashboard-yesterday-completion-rate', orgId ?? 'no-org', propertyScope ?? 'all', todayKey],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      if (!supabase || !orgId) return 0;
+      const yesterday = new Date(`${todayKey}T00:00:00`);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayKey = yesterday.toISOString().slice(0, 10);
+      let query = supabase
+        .from('assignments')
+        .select('status')
+        .eq('org_id', orgId)
+        .eq('date', yesterdayKey);
+      if (propertyScope && propertyScope !== 'all') {
+        query = query.eq('property_id', propertyScope);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      const rows = data ?? [];
+      if (rows.length === 0) return 0;
+      const doneCount = rows.filter((row) => String(row.status ?? '').toLowerCase() === 'done').length;
+      return Math.round((doneCount / rows.length) * 100);
+    },
+  });
+  const efficiencyInputsQuery = useQuery({
+    queryKey: ['dashboard-efficiency-inputs', orgId ?? 'no-org', propertyScope ?? 'all', todayKey],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      if (!supabase || !orgId) {
+        return {
+          assignments8d: [] as Array<{ date: string; status: string | null; estimated_hours: number | null; actual_hours: number | null }>,
+          scheduleToday: [] as Array<{ shift_start: string | null; shift_end: string | null }>,
+          scheduleYesterday: [] as Array<{ shift_start: string | null; shift_end: string | null }>,
+          openNeedsToday: 0,
+          openNeedsYesterday: 0,
+        };
+      }
+
+      const todayDate = new Date(`${todayKey}T00:00:00`);
+      const start8Date = new Date(todayDate);
+      start8Date.setDate(start8Date.getDate() - 7);
+      const start8Key = start8Date.toISOString().slice(0, 10);
+      const yesterdayDate = new Date(todayDate);
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterdayKey = yesterdayDate.toISOString().slice(0, 10);
+
+      let assignmentsQuery = supabase
+        .from('assignments')
+        .select('date, status, estimated_hours, actual_hours')
+        .eq('org_id', orgId)
+        .gte('date', start8Key)
+        .lte('date', todayKey);
+      let scheduleTodayQuery = supabase
+        .from('schedule_entries')
+        .select('shift_start, shift_end')
+        .eq('org_id', orgId)
+        .eq('date', todayKey)
+        .eq('status', 'scheduled');
+      let scheduleYesterdayQuery = supabase
+        .from('schedule_entries')
+        .select('shift_start, shift_end')
+        .eq('org_id', orgId)
+        .eq('date', yesterdayKey)
+        .eq('status', 'scheduled');
+      let openNeedsTodayQuery = supabase
+        .from('task_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('date', todayKey)
+        .eq('status', 'open');
+      let openNeedsYesterdayQuery = supabase
+        .from('task_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('date', yesterdayKey)
+        .eq('status', 'open');
+
+      if (propertyScope && propertyScope !== 'all') {
+        assignmentsQuery = assignmentsQuery.eq('property_id', propertyScope);
+        scheduleTodayQuery = scheduleTodayQuery.eq('property_id', propertyScope);
+        scheduleYesterdayQuery = scheduleYesterdayQuery.eq('property_id', propertyScope);
+        openNeedsTodayQuery = openNeedsTodayQuery.eq('property_id', propertyScope);
+        openNeedsYesterdayQuery = openNeedsYesterdayQuery.eq('property_id', propertyScope);
+      }
+
+      const [
+        assignmentsResult,
+        scheduleTodayResult,
+        scheduleYesterdayResult,
+        openNeedsTodayResult,
+        openNeedsYesterdayResult,
+      ] = await Promise.all([
+        assignmentsQuery,
+        scheduleTodayQuery,
+        scheduleYesterdayQuery,
+        openNeedsTodayQuery,
+        openNeedsYesterdayQuery,
+      ]);
+
+      if (assignmentsResult.error) throw assignmentsResult.error;
+      if (scheduleTodayResult.error) throw scheduleTodayResult.error;
+      if (scheduleYesterdayResult.error) throw scheduleYesterdayResult.error;
+      if (openNeedsTodayResult.error) throw openNeedsTodayResult.error;
+      if (openNeedsYesterdayResult.error) throw openNeedsYesterdayResult.error;
+
+      return {
+        assignments8d: (assignmentsResult.data ?? []) as Array<{ date: string; status: string | null; estimated_hours: number | null; actual_hours: number | null }>,
+        scheduleToday: (scheduleTodayResult.data ?? []) as Array<{ shift_start: string | null; shift_end: string | null }>,
+        scheduleYesterday: (scheduleYesterdayResult.data ?? []) as Array<{ shift_start: string | null; shift_end: string | null }>,
+        openNeedsToday: openNeedsTodayResult.count ?? 0,
+        openNeedsYesterday: openNeedsYesterdayResult.count ?? 0,
+      };
     },
   });
 
@@ -770,6 +918,120 @@ export default function CommandCenterOperationalPage() {
     : selectedProperty?.name ?? 'No property selected';
   const openNeedsCount = morningNeedsQuery.data ?? 0;
   const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;
+  const efficiencyScoreSummary = useMemo(() => {
+    const parseShiftMinutes = (start: string | null, end: string | null) => {
+      if (!start || !end) return 0;
+      const [startHour = '0', startMinute = '0'] = start.split(':');
+      const [endHour = '0', endMinute = '0'] = end.split(':');
+      const startMinutes = Number(startHour) * 60 + Number(startMinute);
+      const endMinutes = Number(endHour) * 60 + Number(endMinute);
+      const diff = endMinutes - startMinutes;
+      return diff > 0 ? diff : 0;
+    };
+    const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, value));
+    const normalizeStatus = (status: string | null) => String(status ?? '').toLowerCase();
+    const inputs = efficiencyInputsQuery.data;
+
+    if (!inputs) {
+      return {
+        score: 0,
+        label: 'Critical',
+        toneClasses: 'border-red-500 bg-red-50/50 text-red-700',
+        trend: 'flat' as const,
+      };
+    }
+
+    const today = new Date(`${todayKey}T00:00:00`);
+    const yesterdayDate = new Date(today);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayKey = yesterdayDate.toISOString().slice(0, 10);
+    const startCurrentWindow = new Date(today);
+    startCurrentWindow.setDate(startCurrentWindow.getDate() - 6);
+    const startCurrentWindowKey = startCurrentWindow.toISOString().slice(0, 10);
+    const startYesterdayWindow = new Date(yesterdayDate);
+    startYesterdayWindow.setDate(startYesterdayWindow.getDate() - 6);
+    const startYesterdayWindowKey = startYesterdayWindow.toISOString().slice(0, 10);
+
+    const calculateScore = ({
+      windowStart,
+      windowEnd,
+      scheduleRows,
+      openNeeds,
+    }: {
+      windowStart: string;
+      windowEnd: string;
+      scheduleRows: Array<{ shift_start: string | null; shift_end: string | null }>;
+      openNeeds: number;
+    }) => {
+      const inWindowAssignments = inputs.assignments8d.filter(
+        (row) => row.date >= windowStart && row.date <= windowEnd,
+      );
+      const totalTasks = inWindowAssignments.length;
+      const doneTasks = inWindowAssignments.filter((row) => normalizeStatus(row.status) === 'done').length;
+      const completionScore = totalTasks > 0 ? (doneTasks / totalTasks) * 30 : 0;
+
+      const shiftHours = scheduleRows.reduce(
+        (sum, row) => sum + parseShiftMinutes(row.shift_start, row.shift_end) / 60,
+        0,
+      );
+      const dayAssignments = inputs.assignments8d.filter((row) => row.date === windowEnd);
+      const assignedHours = dayAssignments.reduce((sum, row) => sum + Number(row.estimated_hours ?? 0), 0);
+      const coverageScore = shiftHours > 0 ? Math.min(25, (assignedHours / shiftHours) * 25) : 0;
+
+      const scheduledHours = inWindowAssignments.reduce((sum, row) => sum + Number(row.estimated_hours ?? 0), 0);
+      const actualHours = inWindowAssignments.reduce((sum, row) => sum + Number(row.actual_hours ?? 0), 0);
+      const variancePenalty = scheduledHours > 0 ? (Math.abs(actualHours - scheduledHours) / scheduledHours) * 20 : 20;
+      const laborVarianceScore = clamp(20 - variancePenalty, 0, 20);
+
+      let equipmentHealthScore = 0;
+      if (overdueEquipmentCount === 0) equipmentHealthScore = 15;
+      else if (overdueEquipmentCount <= 2) equipmentHealthScore = 10;
+      else if (overdueEquipmentCount <= 4) equipmentHealthScore = 5;
+
+      let openNeedsScore = 0;
+      if (openNeeds === 0) openNeedsScore = 10;
+      else if (openNeeds <= 3) openNeedsScore = 5;
+
+      return clamp(
+        Math.round(completionScore + coverageScore + laborVarianceScore + equipmentHealthScore + openNeedsScore),
+        0,
+        100,
+      );
+    };
+
+    const todayScore = calculateScore({
+      windowStart: startCurrentWindowKey,
+      windowEnd: todayKey,
+      scheduleRows: inputs.scheduleToday,
+      openNeeds: inputs.openNeedsToday,
+    });
+    const yesterdayScore = calculateScore({
+      windowStart: startYesterdayWindowKey,
+      windowEnd: yesterdayKey,
+      scheduleRows: inputs.scheduleYesterday,
+      openNeeds: inputs.openNeedsYesterday,
+    });
+
+    let label = 'Critical';
+    let toneClasses = 'border-red-500 bg-red-50/50 text-red-700';
+    if (todayScore >= 90) {
+      label = 'Excellent';
+      toneClasses = 'border-green-500 bg-emerald-50/60 text-green-700';
+    } else if (todayScore >= 70) {
+      label = 'Good';
+      toneClasses = 'border-blue-500 bg-blue-50/60 text-blue-700';
+    } else if (todayScore >= 50) {
+      label = 'Needs Attention';
+      toneClasses = 'border-yellow-500 bg-amber-50/60 text-amber-700';
+    }
+
+    return {
+      score: todayScore,
+      label,
+      toneClasses,
+      trend: todayScore > yesterdayScore ? 'up' : todayScore < yesterdayScore ? 'down' : 'flat',
+    };
+  }, [efficiencyInputsQuery.data, overdueEquipmentCount, todayKey]);
   const propertyBreakdownRows = useMemo(() => {
     if (!isAllPropertiesView) return [];
     return properties.map((property) => {
@@ -823,6 +1085,83 @@ export default function CommandCenterOperationalPage() {
     const clearUntil = formatTime(`${String(details.clearUntilHour).padStart(2, '0')}:00`);
     return `${details.temperature}°F, ${details.weatherLabel} until ${clearUntil} | Wind: ${details.windSpeed} mph`;
   }, [morningBriefWeatherQuery.data, morningBriefWeatherQuery.error, morningBriefWeatherQuery.isLoading]);
+
+  const fallbackDailyBrief = useMemo(() => {
+    const weatherPart = morningBriefWeatherQuery.data
+      ? `${morningBriefWeatherQuery.data.temperature}F with ${morningBriefWeatherQuery.data.weatherLabel.toLowerCase()}, wind near ${morningBriefWeatherQuery.data.windSpeed} mph`
+      : 'weather data is currently unavailable';
+    const gapPart =
+      unassignedScheduledCount > 0
+        ? `${unassignedScheduledCount} scheduled crew still need assignments`
+        : 'all scheduled crew currently have assignments';
+    const equipmentPart =
+      overdueEquipmentCount > 0
+        ? `${overdueEquipmentCount} equipment item${overdueEquipmentCount === 1 ? '' : 's'} are overdue for service`
+        : 'equipment service status is clear';
+    return `Today you have ${crewScheduledCount} crew scheduled and ${tasksAssignedCount} assigned tasks with ${scheduleCoveragePercent}% coverage. Expect ${weatherPart}, and keep an eye on conditions while dispatching. Right now ${gapPart}, and ${equipmentPart}.`;
+  }, [
+    crewScheduledCount,
+    morningBriefWeatherQuery.data,
+    overdueEquipmentCount,
+    scheduleCoveragePercent,
+    tasksAssignedCount,
+    unassignedScheduledCount,
+  ]);
+
+  const dailyBriefContext = useMemo<DailyBriefContext>(() => {
+    const rainProbability = selectedWeatherQuery.data?.current
+      ? Number((selectedWeatherQuery.data.current as { precipitationProbability?: number }).precipitationProbability ?? 0)
+      : null;
+    return {
+      date: todayKey,
+      property: morningPropertyLabel,
+      crew: {
+        count: crewScheduledCount,
+        members: scheduledRows.map((row) => ({
+          name: row.name,
+          shiftStart: row.shiftStart,
+          shiftEnd: row.shiftEnd,
+        })),
+      },
+      tasks: {
+        count: tasksAssignedCount,
+        names: Array.from(
+          new Set(
+            assignments
+              .filter((assignment) => assignment.date === todayKey)
+              .map((assignment) => assignment.title || 'Task'),
+          ),
+        ),
+        coveragePercent: scheduleCoveragePercent,
+      },
+      weather: {
+        temperatureF: morningBriefWeatherQuery.data?.temperature ?? null,
+        windMph: morningBriefWeatherQuery.data?.windSpeed ?? null,
+        rainProbabilityPct: rainProbability,
+        conditions: morningBriefWeatherQuery.data?.weatherLabel ?? 'Unavailable',
+      },
+      equipmentAlerts: {
+        overdueCount: overdueEquipmentCount,
+        items: (equipmentAlertsQuery.data ?? []).map((item) => item.unit_name || item.name || 'Equipment'),
+      },
+      openNeedsCount: openNeedsCount,
+      yesterdayCompletionRatePct: yesterdayCompletionQuery.data ?? 0,
+    };
+  }, [
+    assignments,
+    crewScheduledCount,
+    equipmentAlertsQuery.data,
+    morningBriefWeatherQuery.data,
+    morningPropertyLabel,
+    openNeedsCount,
+    overdueEquipmentCount,
+    scheduleCoveragePercent,
+    scheduledRows,
+    selectedWeatherQuery.data?.current,
+    tasksAssignedCount,
+    todayKey,
+    yesterdayCompletionQuery.data,
+  ]);
 
   useEffect(() => {
     if (!canLoadDashboard || !isLoading) {
@@ -1276,6 +1615,40 @@ export default function CommandCenterOperationalPage() {
           tone={blockersSummary.tone}
         />
       </div> : null}
+
+      {!isLoading && !queryTimeoutReached ? (
+        <Card className={`mb-6 rounded-xl border-l-4 p-5 shadow-sm ${efficiencyScoreSummary.toneClasses}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Efficiency Score</div>
+              {efficiencyInputsQuery.isLoading ? (
+                <Skeleton className="mt-2 h-10 w-20 rounded-md" />
+              ) : (
+                <div className="mt-2 text-4xl font-semibold tracking-tight">{efficiencyScoreSummary.score}</div>
+              )}
+              <p className="mt-1 text-sm">{efficiencyScoreSummary.label}</p>
+            </div>
+            <div className="flex items-center gap-1 text-xs font-medium">
+              {efficiencyScoreSummary.trend === 'up' ? <ArrowUpRight className="h-4 w-4" /> : null}
+              {efficiencyScoreSummary.trend === 'down' ? <ArrowDownRight className="h-4 w-4" /> : null}
+              <span>
+                {efficiencyScoreSummary.trend === 'up'
+                  ? 'Higher than yesterday'
+                  : efficiencyScoreSummary.trend === 'down'
+                    ? 'Lower than yesterday'
+                    : 'Same as yesterday'}
+              </span>
+            </div>
+          </div>
+          {efficiencyInputsQuery.error ? (
+            <p className="mt-2 text-xs text-muted-foreground">Unable to calculate score right now.</p>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Based on completion, coverage, labor variance, equipment health, and open needs.
+            </p>
+          )}
+        </Card>
+      ) : null}
 
       {!isLoading && crewScheduledCount === 0 && tasksAssignedCount === 0 ? (
         <div className="mb-6">
