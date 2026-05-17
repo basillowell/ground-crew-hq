@@ -182,7 +182,7 @@ export default function LaunchPortalPage() {
             <Button variant="ghost" onClick={() => setLoginOpen(true)}>
               Sign In
             </Button>
-            <Button onClick={() => setLoginOpen(true)}>Start Free Trial</Button>
+            <Button onClick={() => setLoginOpen(true)}>Start Free Beta</Button>
           </div>
         </div>
       </header>
@@ -198,7 +198,7 @@ export default function LaunchPortalPage() {
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button size="lg" onClick={() => setLoginOpen(true)}>
-                Start Free Trial
+                Start Free Beta
               </Button>
               <Button size="lg" variant="outline" onClick={() => void handleDemoLogin()}>
                 Try Demo
@@ -212,6 +212,12 @@ export default function LaunchPortalPage() {
               className="h-full w-full object-cover"
             />
           </Card>
+        </section>
+
+        <section className="mt-6">
+          <div className="rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-medium text-white">
+            🎉 Free during beta — all features included. No credit card required.
+          </div>
         </section>
 
         <section className="mt-16">
@@ -283,6 +289,30 @@ export default function LaunchPortalPage() {
               Get Started
             </Button>
           </Card>
+        </section>
+
+        <section className="mt-10">
+          <h3 className="text-xl font-semibold tracking-tight text-emerald-950">Pricing Snapshot</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <Card className="rounded-xl border-emerald-100 bg-white p-5">
+              <p className="text-sm font-semibold">Starter</p>
+              <p className="mt-1 text-xs text-muted-foreground">$100/mo · Up to 10 crew</p>
+            </Card>
+            <Card className="rounded-xl border-emerald-400 bg-emerald-50/50 p-5">
+              <div className="inline-flex rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">MOST POPULAR</div>
+              <p className="mt-2 text-sm font-semibold">Professional</p>
+              <p className="mt-1 text-xs text-muted-foreground">$175/mo · Up to 30 crew</p>
+            </Card>
+            <Card className="rounded-xl border-emerald-100 bg-white p-5">
+              <p className="text-sm font-semibold">Enterprise</p>
+              <p className="mt-1 text-xs text-muted-foreground">Custom · 30+ crew</p>
+            </Card>
+          </div>
+          <div className="mt-3 text-center">
+            <Link to="/pricing" className="text-sm font-medium text-primary hover:underline">
+              View full pricing
+            </Link>
+          </div>
         </section>
       </main>
 
