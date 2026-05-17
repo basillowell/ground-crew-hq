@@ -63,6 +63,16 @@ interface TaskLibraryItem {
   estimated_hours: number | null;
 }
 
+interface RecurringTaskRule {
+  id: string;
+  org_id: string;
+  property_id: string | null;
+  task_id: string;
+  employee_id: string | null;
+  days_of_week: string[];
+  active: boolean;
+}
+
 interface OrganizationInfo {
   name: string;
   plan: string | null;
@@ -1955,6 +1965,9 @@ function HelpTab() {
 
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
   const [tasks, setTasks] = useState<TaskLibraryItem[]>([]);
+  const [employees, setEmployees] = useState<Array<{ id: string; first_name: string; last_name: string; status: string | null }>>([]);
+  const [recurringRules, setRecurringRules] = useState<RecurringTaskRule[]>([]);
+  const [recurringDrafts, setRecurringDrafts] = useState<Record<string, { enabled: boolean; days: string[]; assignMode: 'all' | 'specific'; employeeId: string }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
@@ -1968,6 +1981,17 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     priority: 2,
     estimated_hours: 0,
   });
+  const [savingRecurringTaskId, setSavingRecurringTaskId] = useState<string | null>(null);
+
+  const dayOptions = [
+    { key: 'mon', label: 'Mon' },
+    { key: 'tue', label: 'Tue' },
+    { key: 'wed', label: 'Wed' },
+    { key: 'thu', label: 'Thu' },
+    { key: 'fri', label: 'Fri' },
+    { key: 'sat', label: 'Sat' },
+    { key: 'sun', label: 'Sun' },
+  ] as const;
 
   const fetchTasks = useCallback(async () => {
     if (!supabase) {
@@ -1978,19 +2002,53 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
 
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await supabase
-      .from('tasks')
-      .select('id, org_id, property_id, name, category, priority, estimated_hours')
-      .eq('org_id', orgId)
-      .order('priority', { ascending: true })
-      .order('name', { ascending: true });
+    const [tasksResult, recurringResult, employeesResult] = await Promise.all([
+      supabase
+        .from('tasks')
+        .select('id, org_id, property_id, name, category, priority, estimated_hours')
+        .eq('org_id', orgId)
+        .order('priority', { ascending: true })
+        .order('name', { ascending: true }),
+      supabase
+        .from('recurring_task_rules')
+        .select('id, org_id, property_id, task_id, employee_id, days_of_week, active')
+        .eq('org_id', orgId)
+        .eq('active', true),
+      supabase
+        .from('employees')
+        .select('id, first_name, last_name, status')
+        .eq('org_id', orgId)
+        .eq('active', true)
+        .order('last_name', { ascending: true }),
+    ]);
 
-    if (fetchError) {
-      setError(fetchError.message);
+    if (tasksResult.error || recurringResult.error || employeesResult.error) {
+      setError(tasksResult.error?.message ?? recurringResult.error?.message ?? employeesResult.error?.message ?? 'Failed to load task settings');
       setLoading(false);
       return;
     }
-    setTasks((data as TaskLibraryItem[]) ?? []);
+    const nextTasks = (tasksResult.data as TaskLibraryItem[]) ?? [];
+    const nextRules = (recurringResult.data as RecurringTaskRule[]) ?? [];
+    const nextEmployees = (employeesResult.data as Array<{ id: string; first_name: string; last_name: string; status: string | null }>) ?? [];
+    setTasks(nextTasks);
+    setRecurringRules(nextRules);
+    setEmployees(nextEmployees);
+    setRecurringDrafts(() => {
+      const byTask = new Map<string, RecurringTaskRule>();
+      for (const rule of nextRules) {
+        if (!byTask.has(rule.task_id)) byTask.set(rule.task_id, rule);
+      }
+      return nextTasks.reduce<Record<string, { enabled: boolean; days: string[]; assignMode: 'all' | 'specific'; employeeId: string }>>((acc, task) => {
+        const rule = byTask.get(task.id);
+        acc[task.id] = {
+          enabled: Boolean(rule),
+          days: rule?.days_of_week?.length ? rule.days_of_week : ['mon', 'tue', 'wed', 'thu', 'fri'],
+          assignMode: rule?.employee_id ? 'specific' : 'all',
+          employeeId: rule?.employee_id ?? '',
+        };
+        return acc;
+      }, {});
+    });
     setLoading(false);
   }, [orgId]);
 
@@ -2095,6 +2153,87 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     cancelEditTask();
   };
 
+  const setRecurringEnabled = (taskId: string, enabled: boolean) => {
+    setRecurringDrafts((current) => ({
+      ...current,
+      [taskId]: {
+        enabled,
+        days: current[taskId]?.days?.length ? current[taskId].days : ['mon', 'tue', 'wed', 'thu', 'fri'],
+        assignMode: current[taskId]?.assignMode ?? 'all',
+        employeeId: current[taskId]?.employeeId ?? '',
+      },
+    }));
+  };
+
+  const toggleRecurringDay = (taskId: string, day: string) => {
+    setRecurringDrafts((current) => {
+      const draft = current[taskId] ?? { enabled: true, days: ['mon', 'tue', 'wed', 'thu', 'fri'], assignMode: 'all' as const, employeeId: '' };
+      const has = draft.days.includes(day);
+      const nextDays = has ? draft.days.filter((entry) => entry !== day) : [...draft.days, day];
+      return {
+        ...current,
+        [taskId]: { ...draft, days: nextDays },
+      };
+    });
+  };
+
+  const saveRecurringRule = async (taskId: string) => {
+    if (!supabase || !orgId) return;
+    const draft = recurringDrafts[taskId];
+    if (!draft) return;
+    setSavingRecurringTaskId(taskId);
+
+    const existingRuleIds = recurringRules.filter((rule) => rule.task_id === taskId && rule.active).map((rule) => rule.id);
+    if (existingRuleIds.length > 0) {
+      const { error: deactivateError } = await supabase
+        .from('recurring_task_rules')
+        .update({ active: false })
+        .in('id', existingRuleIds)
+        .eq('org_id', orgId);
+      if (deactivateError) {
+        setSavingRecurringTaskId(null);
+        toast.error(`Failed to update recurring rule: ${deactivateError.message}`);
+        return;
+      }
+    }
+
+    if (!draft.enabled) {
+      setSavingRecurringTaskId(null);
+      toast.success('Recurring rule disabled');
+      await fetchTasks();
+      return;
+    }
+
+    if (!draft.days.length) {
+      setSavingRecurringTaskId(null);
+      toast.error('Select at least one day for recurring task.');
+      return;
+    }
+
+    if (draft.assignMode === 'specific' && !draft.employeeId) {
+      setSavingRecurringTaskId(null);
+      toast.error('Select an employee for specific recurring assignment.');
+      return;
+    }
+
+    const { error: insertError } = await supabase.from('recurring_task_rules').insert({
+      org_id: orgId,
+      property_id: propertyId,
+      task_id: taskId,
+      employee_id: draft.assignMode === 'specific' ? draft.employeeId : null,
+      days_of_week: draft.days,
+      active: true,
+    });
+
+    setSavingRecurringTaskId(null);
+    if (insertError) {
+      toast.error(`Failed to save recurring rule: ${insertError.message}`);
+      return;
+    }
+    toast.success('Recurring rule saved');
+    await fetchTasks();
+  };
+
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
@@ -2116,6 +2255,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                   <th style={{ padding: '8px' }}>Category</th>
                   <th style={{ padding: '8px' }}>Priority</th>
                   <th style={{ padding: '8px' }}>Est. Hours</th>
+                  <th style={{ padding: '8px' }}>Recurring</th>
                   <th style={{ padding: '8px' }}>Actions</th>
                 </tr>
               </thead>
@@ -2131,6 +2271,85 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                       ) : (
                         task.name
                       )}
+                    </td>
+                    <td style={{ padding: '8px', minWidth: '260px' }}>
+                      <div style={{ display: 'grid', gap: '8px' }}>
+                        <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(recurringDrafts[task.id]?.enabled)}
+                            onChange={(event) => setRecurringEnabled(task.id, event.target.checked)}
+                          />
+                          <span>{recurringDrafts[task.id]?.enabled ? 'Enabled' : 'Off'}</span>
+                        </label>
+                        {recurringDrafts[task.id]?.enabled ? (
+                          <>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {dayOptions.map((day) => (
+                                <label key={`${task.id}-${day.key}`} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '12px' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(recurringDrafts[task.id]?.days.includes(day.key))}
+                                    onChange={() => toggleRecurringDay(task.id, day.key)}
+                                  />
+                                  {day.label}
+                                </label>
+                              ))}
+                            </div>
+                            <select
+                              value={recurringDrafts[task.id]?.assignMode ?? 'all'}
+                              onChange={(event) =>
+                                setRecurringDrafts((current) => ({
+                                  ...current,
+                                  [task.id]: {
+                                    ...(current[task.id] ?? { enabled: true, days: ['mon', 'tue', 'wed', 'thu', 'fri'], employeeId: '' }),
+                                    assignMode: event.target.value as 'all' | 'specific',
+                                  },
+                                }))
+                              }
+                            >
+                              <option value="all">All scheduled crew</option>
+                              <option value="specific">Specific employee</option>
+                            </select>
+                            {recurringDrafts[task.id]?.assignMode === 'specific' ? (
+                              <select
+                                value={recurringDrafts[task.id]?.employeeId ?? ''}
+                                onChange={(event) =>
+                                  setRecurringDrafts((current) => ({
+                                    ...current,
+                                    [task.id]: {
+                                      ...(current[task.id] ?? { enabled: true, days: ['mon', 'tue', 'wed', 'thu', 'fri'], assignMode: 'specific' }),
+                                      employeeId: event.target.value,
+                                    },
+                                  }))
+                                }
+                              >
+                                <option value="">Select employee</option>
+                                {employees.map((employee) => (
+                                  <option key={`${task.id}-${employee.id}`} value={employee.id}>
+                                    {employee.first_name} {employee.last_name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
+                            <button
+                              onClick={() => void saveRecurringRule(task.id)}
+                              style={{ width: 'fit-content', borderRadius: '6px', border: '1px solid #d1d5db', padding: '4px 10px', background: '#fff' }}
+                              disabled={savingRecurringTaskId === task.id}
+                            >
+                              {savingRecurringTaskId === task.id ? 'Saving...' : 'Save recurring'}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => void saveRecurringRule(task.id)}
+                            style={{ width: 'fit-content', borderRadius: '6px', border: '1px solid #d1d5db', padding: '4px 10px', background: '#fff' }}
+                            disabled={savingRecurringTaskId === task.id}
+                          >
+                            {savingRecurringTaskId === task.id ? 'Saving...' : 'Apply'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td style={{ padding: '8px' }}>
                       {editingTaskId === task.id ? (

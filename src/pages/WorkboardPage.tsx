@@ -305,6 +305,15 @@ type AvailableEquipmentItem = {
   org_id: string | null;
 };
 
+type RecurringTaskRuleRow = {
+  id: string;
+  task_id: string;
+  employee_id: string | null;
+  property_id: string | null;
+  days_of_week: string[] | null;
+  active: boolean | null;
+};
+
 type TaskWeatherWarning = {
   level: 'warning' | 'danger';
   message: string;
@@ -771,6 +780,26 @@ export default function WorkboardPage() {
     },
   });
 
+  const recurringRulesQuery = useQuery({
+    queryKey: ['recurring-task-rules', currentUser?.orgId ?? 'all-orgs', effectivePropertyId ?? 'all'],
+    enabled: Boolean(currentUser?.orgId),
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return [] as RecurringTaskRuleRow[];
+      let query = supabase
+        .from('recurring_task_rules')
+        .select('id, task_id, employee_id, property_id, days_of_week, active')
+        .eq('org_id', currentUser.orgId)
+        .eq('active', true);
+      if (effectivePropertyId && effectivePropertyId !== 'all') {
+        query = query.or(`property_id.is.null,property_id.eq.${effectivePropertyId}`);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as RecurringTaskRuleRow[];
+    },
+  });
+
   const suggestionDismissStorageKey = useMemo(
     () => `workboard-suggested-dismissed:${currentUser?.orgId ?? 'no-org'}:${effectivePropertyId ?? 'all'}:${boardDate}`,
     [boardDate, currentUser?.orgId, effectivePropertyId],
@@ -799,6 +828,90 @@ export default function WorkboardPage() {
       setLastRealtimeRefreshAt(Math.max(assignmentsQuery.dataUpdatedAt ?? 0, taskRequestsQuery.dataUpdatedAt ?? 0));
     }
   }, [assignmentsQuery.dataUpdatedAt, taskRequestsQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    if (!supabase || !currentUser?.orgId) return;
+    if (scheduleQuery.isLoading || assignmentsQuery.isLoading || recurringRulesQuery.isLoading) return;
+    if (dayAssignments.length > 0) return;
+    const scheduledToday = scheduleList.filter((entry) => entry.date === boardDate && entry.status === 'scheduled');
+    if (scheduledToday.length === 0) return;
+    const dayCode = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(`${boardDate}T00:00:00`).getDay()];
+    const rules = (recurringRulesQuery.data ?? []).filter((rule) => (rule.days_of_week ?? []).includes(dayCode));
+    if (rules.length === 0) return;
+
+    const sessionKey = `recurring-applied-${currentUser.orgId}-${effectivePropertyId ?? 'all'}-${boardDate}`;
+    if (sessionStorage.getItem(sessionKey) === 'true') return;
+
+    const tasksById = new Map(taskList.map((task) => [task.id, task]));
+    const scheduledByEmployee = new Map(scheduledToday.map((entry) => [entry.employeeId, entry]));
+    const inserts: Array<Record<string, unknown>> = [];
+    let targetCrewCount = 0;
+
+    for (const rule of rules) {
+      const task = tasksById.get(rule.task_id);
+      if (!task) continue;
+      if (rule.employee_id) {
+        const shift = scheduledByEmployee.get(rule.employee_id);
+        if (!shift) continue;
+        inserts.push({
+          org_id: currentUser.orgId,
+          property_id: shift.propertyId,
+          employee_id: rule.employee_id,
+          task_id: task.id,
+          title: task.name,
+          date: boardDate,
+          status: 'planned',
+          estimated_hours: Number(task.estimated_hours ?? 0),
+        });
+        targetCrewCount += 1;
+      } else {
+        for (const shift of scheduledToday) {
+          inserts.push({
+            org_id: currentUser.orgId,
+            property_id: shift.propertyId,
+            employee_id: shift.employeeId,
+            task_id: task.id,
+            title: task.name,
+            date: boardDate,
+            status: 'planned',
+            estimated_hours: Number(task.estimated_hours ?? 0),
+          });
+        }
+        targetCrewCount += scheduledToday.length;
+      }
+    }
+
+    if (inserts.length === 0) {
+      sessionStorage.setItem(sessionKey, 'true');
+      return;
+    }
+
+    const applyRecurring = async () => {
+      const { error } = await supabase.from('assignments').insert(inserts);
+      if (error) {
+        toast.error(`Failed to auto-apply recurring tasks: ${error.message}`);
+        return;
+      }
+      sessionStorage.setItem(sessionKey, 'true');
+      toast.success(`Auto-assigned ${inserts.length} recurring tasks to ${targetCrewCount} crew members`);
+      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    };
+
+    void applyRecurring();
+  }, [
+    assignmentsQuery.isLoading,
+    boardDate,
+    currentUser?.orgId,
+    dayAssignments.length,
+    effectivePropertyId,
+    queryClient,
+    recurringRulesQuery.data,
+    recurringRulesQuery.isLoading,
+    scheduleList,
+    scheduleQuery.isLoading,
+    supabase,
+    taskList,
+  ]);
 
   useEffect(() => {
     const firstScheduled =
