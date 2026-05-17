@@ -214,6 +214,7 @@ function WorkspaceTab({
   userRole: string | null;
   currentPropertyId: string;
 }) {
+  const queryClient = useQueryClient();
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [orgNameDraft, setOrgNameDraft] = useState('');
   const [properties, setProperties] = useState<PropertyItem[]>([]);
@@ -221,9 +222,17 @@ function WorkspaceTab({
   const [error, setError] = useState<string | null>(null);
   const [savingOrg, setSavingOrg] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
+  const [newPropertyAddress, setNewPropertyAddress] = useState('');
+  const [newPropertyTimezone, setNewPropertyTimezone] = useState('America/New_York');
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [editingPropertyName, setEditingPropertyName] = useState('');
   const [loadingDemoData, setLoadingDemoData] = useState(false);
+  const timezoneOptions = [
+    { label: 'Eastern', value: 'America/New_York' },
+    { label: 'Central', value: 'America/Chicago' },
+    { label: 'Mountain', value: 'America/Denver' },
+    { label: 'Pacific', value: 'America/Los_Angeles' },
+  ] as const;
 
   const fetchWorkspaceData = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -276,7 +285,12 @@ function WorkspaceTab({
     setError(null);
     const { data, error: insertError } = await supabase
       .from('properties')
-      .insert({ name: newPropertyName.trim(), org_id: orgId })
+      .insert({
+        name: newPropertyName.trim(),
+        org_id: orgId,
+        address: newPropertyAddress.trim() || null,
+        timezone: newPropertyTimezone || 'America/New_York',
+      })
       .select('id, name, org_id, address, latitude, longitude, timezone, created_at')
       .single();
     if (insertError) {
@@ -287,6 +301,9 @@ function WorkspaceTab({
     setProperties((current) => [...current, data as PropertyItem].sort((a, b) => a.name.localeCompare(b.name)));
     toast.success(`Property added: ${newPropertyName.trim()}`);
     setNewPropertyName('');
+    setNewPropertyAddress('');
+    setNewPropertyTimezone('America/New_York');
+    await queryClient.invalidateQueries({ queryKey: ['properties'] });
   };
 
   const startPropertyEdit = (property: PropertyItem) => {
@@ -748,8 +765,20 @@ function WorkspaceTab({
         )}
         <div style={{ marginTop: '8px', display: 'grid', gap: '8px', maxWidth: '420px' }}>
           <label style={{ color: '#6b7280', fontSize: '12px' }}>Add property</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'grid', gap: '8px' }}>
             <input placeholder="Property name" value={newPropertyName} onChange={(event) => setNewPropertyName(event.target.value)} style={{ flex: 1 }} />
+            <input placeholder="Address (optional)" value={newPropertyAddress} onChange={(event) => setNewPropertyAddress(event.target.value)} style={{ flex: 1 }} />
+            <select
+              value={newPropertyTimezone}
+              onChange={(event) => setNewPropertyTimezone(event.target.value)}
+              style={{ height: '40px' }}
+            >
+              {timezoneOptions.map((timezoneOption) => (
+                <option key={timezoneOption.value} value={timezoneOption.value}>
+                  {timezoneOption.label}
+                </option>
+              ))}
+            </select>
             <button
               onClick={() => void addProperty()}
               style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}

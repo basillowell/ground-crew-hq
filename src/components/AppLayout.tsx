@@ -131,6 +131,22 @@ export function AppLayout({ children }: AppLayoutProps) {
   const equipmentQuery = useEquipmentUnits(currentPropertyId, orgId);
 
   const programSetting = programSettingQuery.data ?? null;
+  const properties = propertiesQuery.data ?? [];
+
+  useEffect(() => {
+    if (!properties.length) return;
+    if (properties.length === 1 && currentPropertyId !== properties[0].id) {
+      setCurrentPropertyId(properties[0].id);
+      return;
+    }
+    if (!currentPropertyId) {
+      if (currentUser?.role === 'admin' || currentUser?.role === 'manager') {
+        setCurrentPropertyId('all');
+      } else {
+        setCurrentPropertyId(properties[0].id);
+      }
+    }
+  }, [currentPropertyId, currentUser?.role, properties, setCurrentPropertyId]);
 
   useEffect(() => {
     applyBranding(programSetting ?? undefined);

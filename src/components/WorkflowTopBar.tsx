@@ -77,6 +77,8 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
     if (icon === 'equipment') return <Wrench className="h-3.5 w-3.5 text-amber-600" />;
     return <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />;
   };
+  const showAllPropertiesOption = allowAllProperties && properties.length > 1;
+  const allPropertiesLabel = `All Properties (${properties.length})`;
 
   return (
     <header className="sticky top-0 z-20 shrink-0 border-b border-border/80 bg-card/92 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/85">
@@ -106,8 +108,8 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
               <SelectValue placeholder="Select property" />
             </SelectTrigger>
             <SelectContent>
-              {allowAllProperties ? (
-                <SelectItem value="all">All Properties</SelectItem>
+              {showAllPropertiesOption ? (
+                <SelectItem value="all">{allPropertiesLabel}</SelectItem>
               ) : null}
               {properties.map((entry) => (
                 <SelectItem key={entry.id} value={entry.id}>

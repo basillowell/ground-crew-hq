@@ -525,7 +525,7 @@ export default function EmployeesPage() {
               <Input className="mt-1" value={addDraft.department} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, department: event.target.value }); }} placeholder="Maintenance" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Property</label>
+              <label className="text-xs text-muted-foreground">Property (all org properties)</label>
               <select value={addDraft.property_id} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, property_id: event.target.value }); }} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">No property</option>
                 {properties.map((property) => (

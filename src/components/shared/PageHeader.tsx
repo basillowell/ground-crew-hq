@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus } from 'lucide-react';
 import { useProgramSettings } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProperties } from '@/lib/supabase-queries';
 
 interface PageHeaderProps {
   title: string;
@@ -18,8 +19,13 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, badge, action, children }: PageHeaderProps) {
-  const { currentUser } = useAuth();
+  const { currentUser, currentPropertyId } = useAuth();
   const programSetting = useProgramSettings(currentUser?.orgId).data ?? undefined;
+  const properties = useProperties(currentUser?.orgId).data ?? [];
+  const selectedPropertyName =
+    currentPropertyId && currentPropertyId !== 'all'
+      ? properties.find((property) => property.id === currentPropertyId)?.name ?? null
+      : null;
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-3">
@@ -49,6 +55,13 @@ export function PageHeader({ title, subtitle, badge, action, children }: PageHea
             <h2 className="text-lg font-semibold">{title}</h2>
             {badge}
           </div>
+          {selectedPropertyName ? (
+            <div className="mt-1">
+              <Badge variant="outline" className="rounded-full text-[11px]">
+                {selectedPropertyName}
+              </Badge>
+            </div>
+          ) : null}
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
       </div>
