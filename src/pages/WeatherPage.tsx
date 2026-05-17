@@ -1923,6 +1923,25 @@ export default function WeatherPage() {
   const hasThunderstormNow = Number(liveForecastQuery.data?.current.weatherCode ?? 0) >= 95;
   const hasThunderstormInNext12h = (liveForecastQuery.data?.hourly ?? []).slice(0, 12).some((point) => Number(point.weatherCode ?? 0) >= 95);
   const lightningActive = hasThunderstormNow || hasThunderstormInNext12h;
+  const sprayWindowData = useMemo(() => {
+    const hours = (liveForecastQuery.data?.hourly ?? []).slice(0, 12);
+    const entries = hours.map((point) => {
+      const isSafe =
+        Number(point.windSpeed ?? 0) < 10 &&
+        Number(point.precipitationProbability ?? 0) < 20 &&
+        Number(point.temperature ?? 0) >= 45 &&
+        Number(point.temperature ?? 0) <= 95;
+      return { ...point, isSafe };
+    });
+    const safeHours = entries.filter((entry) => entry.isSafe);
+    const firstSafe = safeHours[0];
+    const lastSafe = safeHours[safeHours.length - 1];
+    const summary =
+      firstSafe && lastSafe
+        ? `Safe to spray: ${new Date(firstSafe.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${new Date(lastSafe.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+        : 'No safe spray windows in the next 12 hours';
+    return { entries, summary };
+  }, [liveForecastQuery.data?.hourly]);
   const activeLiveSourceTypeLabel =
     liveWeatherCoordinates?.sourceType === 'primary-station'
       ? 'Primary Station'
@@ -2344,7 +2363,7 @@ export default function WeatherPage() {
   }
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-4">
+    <div className="mx-auto max-w-7xl space-y-4 rounded-2xl bg-slate-900 p-4 text-white">
       {locationSetupBlock}
       <PageHeader
         title="Weather"
@@ -2373,7 +2392,7 @@ export default function WeatherPage() {
         </Button>
       </PageHeader>
 
-      <Card className="rounded-2xl border p-4 shadow-sm">
+      <Card className="rounded-2xl border border-slate-700 bg-slate-800/80 p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
           <Radar className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold">Live Radar</h3>
@@ -2385,10 +2404,16 @@ export default function WeatherPage() {
           propertyName={radarPropertyLabel}
           height="clamp(250px, 45vh, 400px)"
           lightningActive={lightningActive}
+          currentTempF={liveCurrentTemperatureF}
+          windMph={liveForecastQuery.data?.current?.windSpeed ?? null}
+          humidityPct={latestLog?.humidity ?? null}
+          conditionLabel={liveConditionMeta.label}
+          feelsLikeF={liveForecastQuery.data?.current?.apparentTemperature ?? null}
+          hasActiveAlerts={nwsAlerts.length > 0}
         />
       </Card>
 
-      <Card className="rounded-2xl border p-4 shadow-sm">
+      <Card className="rounded-2xl border border-slate-700 bg-slate-800/80 p-4 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
           <span className="text-base">⚡</span>
           <h3 className="text-sm font-semibold">Lightning Activity</h3>
@@ -2404,7 +2429,7 @@ export default function WeatherPage() {
         )}
       </Card>
 
-      <Card className="rounded-2xl border p-4 shadow-sm">
+      <Card className="rounded-2xl border border-slate-700 bg-slate-800/80 p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
           <CloudSun className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold">Active Alerts</h3>
@@ -2462,6 +2487,20 @@ export default function WeatherPage() {
       </Card>
 
       <StormTrackTimeline hourly={liveForecastQuery.data?.hourly ?? []} />
+
+      <Card className="rounded-2xl border border-slate-700 bg-slate-800/80 p-4 shadow-sm">
+        <h3 className="text-sm font-semibold">Spray Window</h3>
+        <p className="mt-1 text-xs text-slate-300">{sprayWindowData.summary}</p>
+        <div className="mt-3 flex gap-1">
+          {sprayWindowData.entries.map((entry, index) => (
+            <div
+              key={`${entry.time}-${index}`}
+              className={`h-6 flex-1 rounded-sm ${entry.isSafe ? 'bg-green-500/80' : 'bg-red-500/70'}`}
+              title={`${new Date(entry.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${entry.isSafe ? 'Safe' : 'Unsafe'}`}
+            />
+          ))}
+        </div>
+      </Card>
 
       <div className="hidden space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2">

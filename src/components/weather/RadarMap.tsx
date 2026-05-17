@@ -24,6 +24,12 @@ type RadarMapProps = {
   propertyName: string;
   height?: string;
   lightningActive?: boolean;
+  currentTempF?: number | null;
+  windMph?: number | null;
+  humidityPct?: number | null;
+  conditionLabel?: string;
+  feelsLikeF?: number | null;
+  hasActiveAlerts?: boolean;
 };
 
 function formatFrameTime(unixSeconds?: number) {
@@ -34,13 +40,29 @@ function formatFrameTime(unixSeconds?: number) {
   });
 }
 
-export function RadarMap({ latitude, longitude, propertyName, height = '400px', lightningActive = false }: RadarMapProps) {
+export function RadarMap({
+  latitude,
+  longitude,
+  propertyName,
+  height = '400px',
+  lightningActive = false,
+  currentTempF = null,
+  windMph = null,
+  humidityPct = null,
+  conditionLabel = 'Unknown',
+  feelsLikeF = null,
+  hasActiveAlerts = false,
+}: RadarMapProps) {
   const [frames, setFrames] = useState<RainViewerFrame[]>([]);
   const [activeFrame, setActiveFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lightningVisible, setLightningVisible] = useState(true);
+  const [radarVisible, setRadarVisible] = useState(true);
+  const [lightningVisible, setLightningVisible] = useState(false);
+  const [windVisible, setWindVisible] = useState(false);
+  const [tempVisible, setTempVisible] = useState(false);
+  const [alertsVisible, setAlertsVisible] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -88,7 +110,39 @@ export function RadarMap({ latitude, longitude, propertyName, height = '400px', 
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border">
+      <div className="relative overflow-hidden rounded-xl border border-slate-700">
+        <div className="absolute right-3 top-3 z-[500] flex flex-wrap gap-2">
+          <Button size="sm" variant={radarVisible ? 'default' : 'outline'} className="h-8 text-xs" onClick={() => setRadarVisible((current) => !current)}>Radar</Button>
+          <Button size="sm" variant={lightningVisible ? 'default' : 'outline'} className="h-8 text-xs" onClick={() => setLightningVisible((current) => !current)}>Lightning</Button>
+          <Button size="sm" variant={windVisible ? 'default' : 'outline'} className="h-8 text-xs" onClick={() => setWindVisible((current) => !current)}>Wind</Button>
+          <Button size="sm" variant={tempVisible ? 'default' : 'outline'} className="h-8 text-xs" onClick={() => setTempVisible((current) => !current)}>Temp</Button>
+          <Button size="sm" variant={alertsVisible ? 'default' : 'outline'} className="h-8 text-xs" onClick={() => setAlertsVisible((current) => !current)}>Alerts</Button>
+        </div>
+
+        <div className="absolute bottom-3 left-3 z-[500] rounded-lg bg-black/60 px-3 py-2 text-xs text-white backdrop-blur">
+          <div className="font-semibold">
+            {currentTempF !== null ? `${currentTempF}°F` : '--'} · {conditionLabel} · Wind {windMph !== null ? `${Math.round(windMph)} mph` : '--'} · {humidityPct !== null ? `${Math.round(humidityPct)}%` : '--'} humidity
+          </div>
+          <div className="mt-1">Feels like {feelsLikeF !== null ? `${Math.round(feelsLikeF)}°F` : '--'}</div>
+        </div>
+
+        {alertsVisible && hasActiveAlerts ? (
+          <div className="absolute left-3 top-3 z-[500] rounded-full bg-red-600 px-2 py-1 text-[10px] font-semibold text-white">
+            Active Alert
+          </div>
+        ) : null}
+
+        {windVisible ? (
+          <div className="absolute right-3 bottom-16 z-[500] rounded-md bg-slate-900/80 px-2 py-1 text-[10px] text-white">
+            Wind: {windMph !== null ? `${Math.round(windMph)} mph` : '--'}
+          </div>
+        ) : null}
+        {tempVisible ? (
+          <div className="absolute right-3 bottom-8 z-[500] rounded-md bg-slate-900/80 px-2 py-1 text-[10px] text-white">
+            Temp: {currentTempF !== null ? `${Math.round(currentTempF)}°F` : '--'}
+          </div>
+        ) : null}
+
         <MapContainer
           center={[latitude, longitude]}
           zoom={8}
@@ -100,7 +154,7 @@ export function RadarMap({ latitude, longitude, propertyName, height = '400px', 
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
             attribution="&copy; CARTO"
           />
-          {radarTileUrl ? <TileLayer url={radarTileUrl} opacity={0.6} /> : null}
+          {radarVisible && radarTileUrl ? <TileLayer url={radarTileUrl} opacity={0.6} /> : null}
           <Marker position={[latitude, longitude]}>
             <Popup>{propertyName}</Popup>
           </Marker>
@@ -134,14 +188,6 @@ export function RadarMap({ latitude, longitude, propertyName, height = '400px', 
           disabled={!canAnimate}
         >
           {playing ? 'Pause' : 'Play'}
-        </Button>
-        <Button
-          size="sm"
-          variant={lightningVisible ? 'default' : 'outline'}
-          className="h-9"
-          onClick={() => setLightningVisible((current) => !current)}
-        >
-          ⚡ Lightning
         </Button>
         <span className="text-xs text-muted-foreground">
           Radar: {formatFrameTime(activeFrameData?.time)}
