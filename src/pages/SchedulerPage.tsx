@@ -126,6 +126,7 @@ export default function SchedulerPage() {
   const propertiesQuery = useProperties(currentUser?.orgId);
   const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '07:30', end: '16:00' });
   const [schedulerDefaultsLoading, setSchedulerDefaultsLoading] = useState(true);
+  const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
   const [shiftTemplates, setShiftTemplates] = useState<Array<{ id: string; name: string; start: string; end: string; days: string[]; active: boolean }>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [loadTimeoutReached, setLoadTimeoutReached] = useState(false);
@@ -1018,8 +1019,30 @@ export default function SchedulerPage() {
     [dailyTotals],
   );
 
+  useEffect(() => {
+    const dismissed = window.localStorage.getItem('ground-crew-first-visit-scheduler-dismissed') === 'true';
+    setShowFirstVisitHint(!dismissed);
+  }, []);
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
+      {showFirstVisitHint ? (
+        <div className="mx-3 mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 md:mx-5">
+          <div className="flex items-start justify-between gap-2">
+            <p>This is your weekly schedule. Click '+ Add Shift' to schedule your crew.</p>
+            <button
+              type="button"
+              className="text-xs font-medium text-blue-700 hover:text-blue-900"
+              onClick={() => {
+                window.localStorage.setItem('ground-crew-first-visit-scheduler-dismissed', 'true');
+                setShowFirstVisitHint(false);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Top bar ── */}
       <div className="border-b bg-card px-3 py-3 md:px-5 flex items-center gap-2 md:gap-3 flex-wrap shrink-0">

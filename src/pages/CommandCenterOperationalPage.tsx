@@ -198,6 +198,8 @@ export default function CommandCenterOperationalPage() {
   const [dailyBriefText, setDailyBriefText] = useState<string | null>(null);
   const [dailyBriefLoading, setDailyBriefLoading] = useState(false);
   const [dailyBriefError, setDailyBriefError] = useState<string | null>(null);
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
+  const [forceOnboarding, setForceOnboarding] = useState(false);
 
   const todayKey = currentDate.toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
@@ -258,6 +260,11 @@ export default function CommandCenterOperationalPage() {
       void channel.unsubscribe();
     };
   }, [dashboardDataQuery, queryClient, todayKey]);
+
+  useEffect(() => {
+    const dismissed = window.localStorage.getItem('ground-crew-welcome-dismissed') === 'true';
+    setShowWelcomeBanner(!dismissed);
+  }, []);
 
   const activeEmployees = useMemo(
     () => employees.filter((employee) => employee.status === 'active'),
@@ -1216,6 +1223,7 @@ export default function CommandCenterOperationalPage() {
   const localOnboardingKey = `gcrew-onboarding-complete-${orgId}`;
   const localOnboardingDone = localStorage.getItem(localOnboardingKey) === 'true' || onboardingDismissedLocally;
   const shouldShowOnboarding =
+    (forceOnboarding || (
     !isLoading &&
     !onboardingCheckQuery.isLoading &&
     !localOnboardingDone &&
@@ -1223,7 +1231,8 @@ export default function CommandCenterOperationalPage() {
       (onboardingCheckQuery.data?.propertyCount ?? 0) === 0 ||
       (onboardingCheckQuery.data?.employeeCount ?? 0) === 0 ||
       (onboardingCheckQuery.data?.taskCount ?? 0) === 0
-    );
+    )
+    ));
 
   if (shouldShowOnboarding) {
     return (
@@ -1231,6 +1240,7 @@ export default function CommandCenterOperationalPage() {
         orgId={orgId}
         userId={currentUser?.appUserId}
         onComplete={() => {
+          setForceOnboarding(false);
           setOnboardingDismissedLocally(true);
           void onboardingCheckQuery.refetch();
           void dashboardDataQuery.refetch();
@@ -1409,6 +1419,51 @@ export default function CommandCenterOperationalPage() {
 
   return (
     <div className="h-full overflow-auto bg-background p-3 md:p-6">
+      {showWelcomeBanner ? (
+        <Card className="mb-4 rounded-2xl border-0 bg-gradient-to-r from-green-600 to-emerald-500 p-5 text-white shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-lg font-semibold">Welcome to Ground Crew HQ, {firstName}! 👋</p>
+              <p className="mt-1 text-sm text-white/90">Let's get your operation set up. Start with the setup wizard or explore the dashboard.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  className="h-9 bg-white text-emerald-700 hover:bg-white/90"
+                  onClick={() => {
+                    window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
+                    setShowWelcomeBanner(false);
+                    setForceOnboarding(true);
+                  }}
+                >
+                  Start Setup
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 border-white/60 bg-transparent text-white hover:bg-white/10"
+                  onClick={() => {
+                    window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
+                    setShowWelcomeBanner(false);
+                  }}
+                >
+                  Explore Dashboard
+                </Button>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-white hover:bg-white/10 hover:text-white"
+              onClick={() => {
+                window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
+                setShowWelcomeBanner(false);
+              }}
+            >
+              ×
+            </Button>
+          </div>
+        </Card>
+      ) : null}
       <Card className="mb-6 rounded-2xl border p-6 shadow-sm bg-gradient-to-r from-emerald-50 to-white">
         <h2 className="text-2xl font-semibold tracking-tight">
           {greeting}, {firstName}.

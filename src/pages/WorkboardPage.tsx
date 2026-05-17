@@ -429,6 +429,7 @@ export default function WorkboardPage() {
   const [endOfDayReportSubject, setEndOfDayReportSubject] = useState('');
   const [endOfDayReportGenerating, setEndOfDayReportGenerating] = useState(false);
   const [isGeneratingTaskNotes, setIsGeneratingTaskNotes] = useState(false);
+  const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
   const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -1768,6 +1769,11 @@ export default function WorkboardPage() {
 
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
   const [todayDateKey] = useState(() => new Date().toISOString().slice(0, 10));
+
+  useEffect(() => {
+    const dismissed = window.localStorage.getItem('ground-crew-first-visit-workboard-dismissed') === 'true';
+    setShowFirstVisitHint(!dismissed);
+  }, []);
   const showEndOfDayReportButton = useMemo(() => new Date().getHours() >= 14, []);
 
   const newRequestsCount = propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length;
@@ -3019,7 +3025,24 @@ export default function WorkboardPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="relative flex h-[calc(100vh-3.5rem)] overflow-hidden">
+      {showFirstVisitHint ? (
+        <div className="absolute left-3 right-3 top-3 z-20 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 md:left-5 md:right-5">
+          <div className="flex items-start justify-between gap-2">
+            <p>This is your daily operations board. Assign tasks to scheduled crew and track progress in real-time.</p>
+            <button
+              type="button"
+              className="text-xs font-medium text-blue-700 hover:text-blue-900"
+              onClick={() => {
+                window.localStorage.setItem('ground-crew-first-visit-workboard-dismissed', 'true');
+                setShowFirstVisitHint(false);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* ─── MAIN DISPATCH BOARD ─── */}
       <div className="flex-1 flex flex-col overflow-hidden">

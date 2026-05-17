@@ -364,6 +364,12 @@ export default function WeatherPage() {
   const [widgetPrefsId, setWidgetPrefsId] = useState<string | null>(null);
   const [weatherLoadTimedOut, setWeatherLoadTimedOut] = useState(false);
   const [expandedAlertIds, setExpandedAlertIds] = useState<string[]>([]);
+  const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
+
+  useEffect(() => {
+    const dismissed = window.localStorage.getItem('ground-crew-first-visit-weather-dismissed') === 'true';
+    setShowFirstVisitHint(!dismissed);
+  }, []);
 
   const settingsDefaultWeather = useMemo(() => {
     const locationName = programSetting?.weatherDefaultLocationName?.trim() || 'Sarasota Polo Club';
@@ -2364,6 +2370,23 @@ export default function WeatherPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 rounded-2xl bg-slate-900 p-4 text-white">
+      {showFirstVisitHint ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+          <div className="flex items-start justify-between gap-2">
+            <p>Live weather data for your property. Set up your weather station in Settings → Weather if you haven't already.</p>
+            <button
+              type="button"
+              className="text-xs font-medium text-blue-700 hover:text-blue-900"
+              onClick={() => {
+                window.localStorage.setItem('ground-crew-first-visit-weather-dismissed', 'true');
+                setShowFirstVisitHint(false);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
       {locationSetupBlock}
       <PageHeader
         title="Weather"
