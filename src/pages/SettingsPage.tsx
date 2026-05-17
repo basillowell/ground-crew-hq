@@ -93,6 +93,7 @@ interface WorkforceSummaryRow {
 interface WeatherLocationItem {
   id: string;
   name: string;
+  property?: string | null;
   area?: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -985,6 +986,7 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
 
 function WeatherTab({ orgId }: { orgId: string | null }) {
   const [locations, setLocations] = useState<WeatherLocationItem[]>([]);
+  const [properties, setProperties] = useState<Array<{ id: string; name: string }>>([]);
   const [prefs, setPrefs] = useState<{ show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }>({
     show_hourly: true,
     show_forecast: true,
@@ -994,43 +996,71 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [setupLocationName, setSetupLocationName] = useState('Main Course');
-  const [setupArea, setSetupArea] = useState('General');
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const [stationName, setStationName] = useState('');
+  const [stationArea, setStationArea] = useState('Main Course');
+  const [stationPropertyId, setStationPropertyId] = useState('');
+  const [locationMethod, setLocationMethod] = useState<'zip' | 'coords' | 'geo'>('zip');
+  const [zipCode, setZipCode] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
+  const [zipLookupLoading, setZipLookupLoading] = useState(false);
+
+  const areaOptions = ['Main Course', 'Practice Range', 'Maintenance Yard', 'North Fields', 'South Fields', 'Custom'] as const;
+
+  const resetForm = () => {
+    setEditingLocationId(null);
+    setStationName('');
+    setStationArea('Main Course');
+    setStationPropertyId(properties[0]?.id ?? '');
+    setLocationMethod('zip');
+    setZipCode('');
+    setLatitude('');
+    setLongitude('');
+  };
 
   const fetchWeatherSettings = useCallback(async () => {
     if (!supabase || !orgId) return;
     setLoading(true);
     setError(null);
-    const [{ data: locationData, error: locationError }, { data: prefsData, error: prefsError }] = await Promise.all([
+    const [{ data: locationData, error: locationError }, { data: prefsData, error: prefsError }, { data: propertyData, error: propertyError }] = await Promise.all([
       supabase
         .from('weather_locations')
-        .select('id, name, area, latitude, longitude, is_active')
-        .eq('org_id', orgId),
+        .select('id, name, property, area, latitude, longitude, org_id, is_active')
+        .eq('org_id', orgId)
+        .order('name', { ascending: true }),
       supabase
         .from('weather_display_prefs')
         .select('id, org_id, enabled_widgets')
         .eq('org_id', orgId)
         .maybeSingle(),
+      supabase
+        .from('properties')
+        .select('id, name')
+        .eq('org_id', orgId)
+        .order('name', { ascending: true }),
     ]);
 
-    if (locationError || prefsError) {
-      setError(locationError?.message ?? prefsError?.message ?? 'Unable to load weather settings');
+    if (locationError || prefsError || propertyError) {
+      setError(locationError?.message ?? prefsError?.message ?? propertyError?.message ?? 'Unable to load weather settings');
       setLoading(false);
       return;
     }
 
     setLocations((locationData ?? []) as WeatherLocationItem[]);
-
+    setProperties(((propertyData ?? []) as Array<{ id: string; name: string }>));
     const enabledWidgets = ((prefsData as WeatherDisplayPrefsRow | null)?.enabled_widgets ?? []) as string[];
-    const defaultWidgets = ['hourly-forecast', 'daily-forecast', 'rain', 'precipitation'];
     const hasWidgets = enabledWidgets.length > 0;
     setPrefs({
-      show_hourly: hasWidgets ? enabledWidgets.includes('hourly-forecast') || enabledWidgets.includes('hourly_forecast') : defaultWidgets.includes('hourly-forecast'),
-      show_forecast: hasWidgets ? enabledWidgets.includes('daily-forecast') || enabledWidgets.includes('7day_forecast') : defaultWidgets.includes('daily-forecast'),
+      show_hourly: hasWidgets ? enabledWidgets.includes('hourly-forecast') || enabledWidgets.includes('hourly_forecast') : true,
+      show_forecast: hasWidgets ? enabledWidgets.includes('daily-forecast') || enabledWidgets.includes('7day_forecast') : true,
       show_rainfall: hasWidgets ? enabledWidgets.includes('rain') || enabledWidgets.includes('precipitation') : true,
     });
+    if (!stationPropertyId && propertyData && propertyData.length > 0) {
+      setStationPropertyId(String(propertyData[0].id));
+    }
     setLoading(false);
-  }, [orgId]);
+  }, [orgId, stationPropertyId]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -1070,36 +1100,148 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
     void savePrefs(next);
   };
 
-  const activeLocation = useMemo(
-    () => locations.find((location) => location.is_active) ?? locations[0] ?? null,
-    [locations],
-  );
-
-  const saveWeatherLocationSetup = useCallback(async () => {
-    if (!supabase || !orgId || !setupLocationName.trim()) return;
-    setSavingLocation(true);
-    setError(null);
-    const payload: Record<string, unknown> = {
-      org_id: orgId,
-      name: setupLocationName.trim(),
-      area: setupArea,
-      is_active: true,
-      property: setupArea,
-      latitude: 27.3364,
-      longitude: -82.5307,
-    };
-    const { error: upsertError } = await supabase
+  const toggleActive = async (locationId: string, nextActive: boolean) => {
+    if (!supabase || !orgId) return;
+    const { error: updateError } = await supabase
       .from('weather_locations')
-      .insert(payload);
-    setSavingLocation(false);
-    if (upsertError) {
-      setError(upsertError.message);
-      toast.error(`Failed to save weather location: ${upsertError.message}`);
+      .update({ is_active: nextActive })
+      .eq('id', locationId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to update station status: ${updateError.message}`);
       return;
     }
+    setLocations((current) => current.map((location) => (location.id === locationId ? { ...location, is_active: nextActive } : location)));
+    toast.success(`Station ${nextActive ? 'activated' : 'deactivated'}`);
+  };
+
+  const beginEdit = (location: WeatherLocationItem) => {
+    setEditingLocationId(location.id);
+    setStationName(location.name ?? '');
+    setStationArea(location.area ?? 'Main Course');
+    setStationPropertyId((location as WeatherLocationItem & { property?: string }).property ?? '');
+    setLatitude(location.latitude != null ? String(location.latitude) : '');
+    setLongitude(location.longitude != null ? String(location.longitude) : '');
+    setLocationMethod('coords');
+  };
+
+  const deleteLocation = async (locationId: string) => {
+    if (!supabase || !orgId) return;
+    const confirmed = window.confirm('Delete this weather station?');
+    if (!confirmed) return;
+    const { error: deleteError } = await supabase.from('weather_locations').delete().eq('id', locationId).eq('org_id', orgId);
+    if (deleteError) {
+      setError(deleteError.message);
+      toast.error(`Failed to delete station: ${deleteError.message}`);
+      return;
+    }
+    setLocations((current) => current.filter((location) => location.id !== locationId));
+    toast.success('Weather station deleted');
+  };
+
+  const fillCoordinatesFromZip = async () => {
+    if (!zipCode.trim()) return;
+    setZipLookupLoading(true);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(zipCode.trim())}&country=US&format=json`);
+      const payload = (await response.json()) as Array<{ lat: string; lon: string }>;
+      const first = payload[0];
+      if (!first) {
+        toast.error('No coordinates found for that zip code.');
+        setZipLookupLoading(false);
+        return;
+      }
+      setLatitude(String(Number(first.lat).toFixed(4)));
+      setLongitude(String(Number(first.lon).toFixed(4)));
+      toast.success(`Coordinates loaded for ZIP ${zipCode.trim()}`);
+    } catch (lookupError) {
+      const message = lookupError instanceof Error ? lookupError.message : 'Lookup failed';
+      toast.error(`ZIP lookup failed: ${message}`);
+    } finally {
+      setZipLookupLoading(false);
+    }
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not available on this device.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude.toFixed(4));
+        setLongitude(position.coords.longitude.toFixed(4));
+        toast.success('Current location loaded');
+      },
+      (geoError) => toast.error(`Unable to get location: ${geoError.message}`),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+    );
+  };
+
+  const saveStation = async () => {
+    if (!supabase || !orgId || !stationName.trim()) return;
+    if (!stationPropertyId) {
+      toast.error('Select a property.');
+      return;
+    }
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      toast.error('Enter valid latitude and longitude.');
+      return;
+    }
+
+    setSavingLocation(true);
+    setError(null);
+    if (editingLocationId) {
+      const { error: updateError } = await supabase
+        .from('weather_locations')
+        .update({
+          name: stationName.trim(),
+          area: stationArea,
+          latitude: lat,
+          longitude: lng,
+          property: stationPropertyId,
+        })
+        .eq('id', editingLocationId)
+        .eq('org_id', orgId);
+      setSavingLocation(false);
+      if (updateError) {
+        setError(updateError.message);
+        toast.error(`Failed to update weather station: ${updateError.message}`);
+        return;
+      }
+      toast.success(`Weather station updated: ${stationName.trim()}`);
+      await fetchWeatherSettings();
+      resetForm();
+      return;
+    }
+
+    const newId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const { error: insertError } = await supabase.from('weather_locations').insert({
+      id: newId,
+      name: stationName.trim(),
+      area: stationArea,
+      latitude: lat,
+      longitude: lng,
+      property: stationPropertyId,
+      org_id: orgId,
+      is_active: true,
+    });
+    setSavingLocation(false);
+    if (insertError) {
+      setError(insertError.message);
+      toast.error(`Failed to add weather station: ${insertError.message}`);
+      return;
+    }
+    toast.success(`Weather station added: ${stationName.trim()}`);
     await fetchWeatherSettings();
-    toast.success(`Weather location saved: ${setupLocationName.trim()}`);
-  }, [fetchWeatherSettings, orgId, setupArea, setupLocationName]);
+    resetForm();
+  };
 
   if (!orgId || loading) return <PageSkeleton />;
 
@@ -1112,56 +1254,143 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Active Weather Location</h3>
-        {activeLocation ? (
-          <>
-            <p style={{ margin: 0, fontSize: '13px', color: '#111827' }}>{activeLocation.name}</p>
-            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
-              Area: {activeLocation.area ?? 'General'}
-            </p>
-            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
-              {activeLocation.latitude ?? '—'}, {activeLocation.longitude ?? '—'}
-            </p>
-          </>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Weather Stations</h3>
+        {locations.length === 0 ? (
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No weather stations configured yet.</p>
         ) : (
-          <div style={{ display: 'grid', gap: '8px' }}>
-            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>No weather location configured. Set up your first location below.</p>
-            <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
-              Location name
-              <input
-                value={setupLocationName}
-                onChange={(event) => setSetupLocationName(event.target.value)}
-                style={{ height: '36px', border: '1px solid #d1d5db', borderRadius: '6px', padding: '0 10px' }}
-                placeholder="Sarasota Polo Club"
-              />
-            </label>
-            <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
-              Area
-              <select
-                value={setupArea}
-                onChange={(event) => setSetupArea(event.target.value)}
-                style={{ height: '36px', border: '1px solid #d1d5db', borderRadius: '6px', padding: '0 10px' }}
-              >
-                <option value="General">General</option>
-                <option value="Main Course">Main Course</option>
-                <option value="Practice Range">Practice Range</option>
-                <option value="North Fields">North Fields</option>
-                <option value="South Fields">South Fields</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => void saveWeatherLocationSetup()}
-              disabled={savingLocation || !setupLocationName.trim()}
-              style={{ height: '36px', borderRadius: '6px', border: '1px solid #166534', background: '#166534', color: '#fff', fontSize: '13px', fontWeight: 600 }}
-            >
-              {savingLocation ? 'Saving...' : 'Save Location'}
-            </button>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {locations.map((location) => (
+              <div key={location.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '10px', display: 'grid', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{location.name}</p>
+                    <p style={{ margin: '2px 0 0', color: '#6b7280', fontSize: '12px' }}>
+                      {(location as WeatherLocationItem & { property?: string }).property ?? 'No property'} · {location.area ?? 'General'}
+                    </p>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(location.is_active)}
+                      onChange={(event) => void toggleActive(location.id, event.target.checked)}
+                    />
+                    {location.is_active ? 'Active' : 'Inactive'}
+                  </label>
+                </div>
+                <p style={{ margin: 0, color: '#6b7280', fontSize: '12px' }}>
+                  Coordinates: {location.latitude ?? '—'}, {location.longitude ?? '—'}
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => beginEdit(location)}
+                    style={{ border: '1px solid #d1d5db', borderRadius: '8px', background: '#fff', color: '#374151', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => void deleteLocation(location.id)}
+                    style={{ border: '1px solid #fecaca', borderRadius: '8px', background: '#fff', color: '#b91c1c', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
-          Weather data is sourced from Open-Meteo based on this location.
-        </p>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>{editingLocationId ? 'Edit Station' : 'Add Station'}</h3>
+        <div className="grid gap-[10px] md:grid-cols-2">
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+            Station name
+            <input value={stationName} onChange={(event) => setStationName(event.target.value)} placeholder="Sarasota Polo Club" />
+          </label>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+            Area
+            <select value={stationArea} onChange={(event) => setStationArea(event.target.value)}>
+              {areaOptions.map((area) => (
+                <option key={`area-option-${area}`} value={area}>{area}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+            Property
+            <select value={stationPropertyId} onChange={(event) => setStationPropertyId(event.target.value)}>
+              <option value="">Select property</option>
+              {properties.map((property) => (
+                <option key={`weather-property-${property.id}`} value={property.id}>{property.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '13px', color: '#374151' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <input type="radio" checked={locationMethod === 'zip'} onChange={() => setLocationMethod('zip')} />
+            Enter zip code
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <input type="radio" checked={locationMethod === 'coords'} onChange={() => setLocationMethod('coords')} />
+            Enter coordinates
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <input type="radio" checked={locationMethod === 'geo'} onChange={() => setLocationMethod('geo')} />
+            Use my location
+          </label>
+        </div>
+
+        {locationMethod === 'zip' ? (
+          <div className="grid gap-[10px] md:grid-cols-[1fr_auto]">
+            <input value={zipCode} onChange={(event) => setZipCode(event.target.value)} onBlur={() => void fillCoordinatesFromZip()} placeholder="ZIP code" />
+            <button
+              onClick={() => void fillCoordinatesFromZip()}
+              style={{ border: '1px solid #d1d5db', borderRadius: '8px', background: '#fff', color: '#374151', padding: '8px 12px', cursor: 'pointer' }}
+              disabled={zipLookupLoading}
+            >
+              {zipLookupLoading ? 'Looking up...' : 'Lookup'}
+            </button>
+          </div>
+        ) : null}
+
+        {locationMethod === 'geo' ? (
+          <button
+            onClick={useCurrentLocation}
+            style={{ width: 'fit-content', border: '1px solid #d1d5db', borderRadius: '8px', background: '#fff', color: '#374151', padding: '8px 12px', cursor: 'pointer' }}
+          >
+            Use My Location
+          </button>
+        ) : null}
+
+        <div className="grid gap-[10px] md:grid-cols-2">
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+            Latitude
+            <input type="number" step="0.0001" value={latitude} onChange={(event) => setLatitude(event.target.value)} />
+          </label>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+            Longitude
+            <input type="number" step="0.0001" value={longitude} onChange={(event) => setLongitude(event.target.value)} />
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => void saveStation()}
+            style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+            disabled={savingLocation || !stationName.trim()}
+          >
+            {savingLocation ? 'Saving...' : editingLocationId ? 'Save Changes' : 'Save Station'}
+          </button>
+          {editingLocationId ? (
+            <button
+              onClick={resetForm}
+              style={{ border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+            >
+              Cancel Edit
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>

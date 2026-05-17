@@ -183,6 +183,23 @@ export default function WeatherPage() {
   const workLocationsQuery = useWorkLocations();
   const workLocations = useMemo(() => workLocationsQuery.data ?? [], [workLocationsQuery.data]);
   const weatherLocationsQuery = useWeatherLocations(undefined, currentUser?.orgId, true);
+  const activeLocationDetectionQuery = useQuery({
+    queryKey: ['weather-location-detection', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return null as null | { id: string; latitude: number | null; longitude: number | null };
+      const { data, error } = await supabase
+        .from('weather_locations')
+        .select('*')
+        .eq('org_id', currentUser.orgId)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as null | { id: string; latitude: number | null; longitude: number | null };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
   const weatherStationsQuery = useQuery({
     queryKey: ['weather-stations-full', currentUser?.orgId ?? 'all-orgs'],
     enabled: Boolean(currentUser),
@@ -374,17 +391,7 @@ export default function WeatherPage() {
 
   useEffect(() => {
     if (weatherLocationsQuery.data) {
-      let nextLocations = weatherLocationsQuery.data;
-      if (weatherScopePropertyId && weatherScopePropertyId !== 'all') {
-        const scopedProperty = properties.find((property) => property.id === weatherScopePropertyId);
-        const scopedPropertyName = scopedProperty?.name.trim().toLowerCase() ?? '';
-        nextLocations = nextLocations.filter((location) => {
-          if (location.propertyId === weatherScopePropertyId) return true;
-          if (!scopedPropertyName) return false;
-          return (location.property ?? '').trim().toLowerCase() === scopedPropertyName;
-        });
-      }
-      setWeatherLocations(nextLocations);
+      setWeatherLocations(weatherLocationsQuery.data);
     }
     if (weatherStationsQuery.data) {
       setWeatherStations(weatherStationsQuery.data);
@@ -395,7 +402,7 @@ export default function WeatherPage() {
     if (rainfallEntriesQuery.data) {
       setRainEntries(rainfallEntriesQuery.data);
     }
-  }, [properties, rainfallEntriesQuery.data, weatherLocationsQuery.data, weatherLogsQuery.data, weatherScopePropertyId, weatherStationsQuery.data]);
+  }, [rainfallEntriesQuery.data, weatherLocationsQuery.data, weatherLogsQuery.data, weatherStationsQuery.data]);
 
   const currentProperty = properties.find((property) => property.id === weatherScopePropertyId) ?? null;
   const hasLocation = hasValidCoordinates(currentProperty?.latitude, currentProperty?.longitude);
@@ -406,36 +413,40 @@ export default function WeatherPage() {
   }, [currentProperty?.name, onboardingAreaName]);
   const propertyScopedWeatherLocations = useMemo(() => {
     if (!currentProperty) return [];
-    const propertyName = currentProperty.name.trim().toLowerCase();
     return weatherLocations.filter(
       (location) =>
         location.propertyId === currentProperty.id ||
-        (location.property ?? '').trim().toLowerCase() === propertyName,
+        (location.property ?? '') === currentProperty.id ||
+        (location.property ?? '').trim().toLowerCase() === currentProperty.name.trim().toLowerCase(),
     );
   }, [currentProperty, weatherLocations]);
-  const needsPropertyWeatherOnboarding =
-    Boolean(currentProperty && currentPropertyId && currentPropertyId !== 'all') &&
-    propertyScopedWeatherLocations.length === 0;
+  const needsPropertyWeatherOnboarding = false;
 
   function resolveLocationForProperty(property: Property | null | undefined) {
     if (!property) return null;
     const byPropertyId = weatherLocations.find((location) => location.propertyId === property.id);
     if (byPropertyId) return byPropertyId;
-    const propertyName = property.name.trim().toLowerCase();
-    const byPropertyName = weatherLocations.find((location) => (location.property ?? '').trim().toLowerCase() === propertyName);
+    const byPropertyTextId = weatherLocations.find((location) => (location.property ?? '') === property.id);
+    if (byPropertyTextId) return byPropertyTextId;
+    const byPropertyName = weatherLocations.find((location) => (location.property ?? '').trim().toLowerCase() === property.name.trim().toLowerCase());
     return byPropertyName ?? null;
   }
 
+  const activeConfiguredLocations = useMemo(
+    () => weatherLocations.filter((location) => hasValidCoordinates(location.latitude, location.longitude)),
+    [weatherLocations],
+  );
+
   const selectedLocation = useMemo(() => {
-    const bySelection = weatherLocations.find((location) => location.id === selectedLocationId);
+    const bySelection = activeConfiguredLocations.find((location) => location.id === selectedLocationId);
     if (bySelection) return bySelection;
     const byCurrentProperty = resolveLocationForProperty(currentProperty);
-    if (byCurrentProperty) return byCurrentProperty;
-    return weatherLocations[0] ?? null;
-  }, [currentProperty, selectedLocationId, weatherLocations]);
+    if (byCurrentProperty && hasValidCoordinates(byCurrentProperty.latitude, byCurrentProperty.longitude)) return byCurrentProperty;
+    return activeConfiguredLocations[0] ?? null;
+  }, [activeConfiguredLocations, currentProperty, selectedLocationId, weatherLocations]);
 
   useEffect(() => {
-    if (!weatherLocations.length) {
+    if (!activeConfiguredLocations.length) {
       if (selectedLocationId) setSelectedLocationId('');
       return;
     }
@@ -444,12 +455,13 @@ export default function WeatherPage() {
       return;
     }
     if (!selectedLocationId) {
-      setSelectedLocationId(selectedLocation?.id ?? weatherLocations[0]?.id ?? '');
+      setSelectedLocationId(selectedLocation?.id ?? activeConfiguredLocations[0]?.id ?? '');
     }
-  }, [selectedLocation, selectedLocationId, weatherLocations]);
+  }, [activeConfiguredLocations, selectedLocation, selectedLocationId]);
 
   const selectedProperty = selectedLocation
     ? properties.find((property) => property.id === selectedLocation.propertyId) ??
+      properties.find((property) => property.id === (selectedLocation.property ?? '')) ??
       properties.find((property) => property.name.trim().toLowerCase() === (selectedLocation.property ?? '').trim().toLowerCase()) ??
       currentProperty
     : currentProperty;
@@ -480,20 +492,25 @@ export default function WeatherPage() {
 
   const stationsOnline = locationStations.filter((station) => station.status === 'online').length;
   const manualOverrideCount = locationLogs.filter((log) => log.source === 'manual-override').length;
-  const scopedLocationIds = new Set(weatherLocations.map((location) => location.id));
-  const scopedStationCount = weatherStations.filter((station) => scopedLocationIds.has(station.locationId)).length;
-  const isWeatherSetupIncomplete = weatherLocations.length === 0 || scopedStationCount === 0;
+  const detectedActiveLocation = activeLocationDetectionQuery.data;
+  const hasDetectedConfiguredLocation =
+    Boolean(detectedActiveLocation) &&
+    hasValidCoordinates(detectedActiveLocation?.latitude ?? undefined, detectedActiveLocation?.longitude ?? undefined);
+  const isWeatherSetupIncomplete = !hasDetectedConfiguredLocation && activeConfiguredLocations.length === 0;
   const isInitialWeatherSetupLoading =
+    activeLocationDetectionQuery.isLoading ||
     weatherLocationsQuery.isLoading ||
     weatherStationsQuery.isLoading ||
     weatherLogsQuery.isLoading ||
     rainfallEntriesQuery.isLoading;
   const hasWeatherSetupError =
+    activeLocationDetectionQuery.isError ||
     weatherLocationsQuery.isError ||
     weatherStationsQuery.isError ||
     weatherLogsQuery.isError ||
     rainfallEntriesQuery.isError;
   const weatherSetupErrorMessage =
+    (activeLocationDetectionQuery.error as { message?: string } | null)?.message ||
     (weatherLocationsQuery.error as { message?: string } | null)?.message ||
     (weatherStationsQuery.error as { message?: string } | null)?.message ||
     (weatherLogsQuery.error as { message?: string } | null)?.message ||
@@ -506,8 +523,9 @@ export default function WeatherPage() {
         (weatherStationsQuery.error as { message?: string } | null)?.message,
         (weatherLogsQuery.error as { message?: string } | null)?.message,
         (rainfallEntriesQuery.error as { message?: string } | null)?.message,
+        (activeLocationDetectionQuery.error as { message?: string } | null)?.message,
       ].filter(Boolean) as string[],
-    [rainfallEntriesQuery.error, weatherLocationsQuery.error, weatherLogsQuery.error, weatherStationsQuery.error],
+    [activeLocationDetectionQuery.error, rainfallEntriesQuery.error, weatherLocationsQuery.error, weatherLogsQuery.error, weatherStationsQuery.error],
   );
 
   const selectedLocationPrimary = locationStations.find((station) => station.isPrimary) ?? null;
@@ -2259,6 +2277,19 @@ export default function WeatherPage() {
         }
         badge={<Badge variant="secondary">{weatherLocations.length} locations</Badge>}
       >
+        {activeConfiguredLocations.length > 1 ? (
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+            value={selectedLocationId}
+            onChange={(event) => setSelectedLocationId(event.target.value)}
+          >
+            {activeConfiguredLocations.map((location) => (
+              <option key={`weather-location-selector-${location.id}`} value={location.id}>
+                Viewing weather for: {location.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <Button size="icon" variant="outline" onClick={() => setSettingsDrawerOpen(true)} aria-label="Open weather settings">
           <Settings className="h-4 w-4" />
         </Button>
