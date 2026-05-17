@@ -1,7 +1,13 @@
+import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Shield, FileText, CheckCircle, AlertTriangle, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from '@/components/ui/sonner';
 
 const safetyItems = [
   { title: 'Chemical Handling Training', status: 'completed', assignees: 6, dueDate: '2024-03-01' },
@@ -19,6 +25,40 @@ const incidents = [
 const statusVariant = { completed: 'success', 'in-progress': 'info', upcoming: 'neutral', overdue: 'danger' } as const;
 
 export default function SafetyPage() {
+  const [showLogTalkModal, setShowLogTalkModal] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [talkDraft, setTalkDraft] = useState({
+    topic: '',
+    content: '',
+    presenter: '',
+    date: new Date().toISOString().slice(0, 10),
+  });
+
+  const closeLogTalkModal = (forceDiscard = false) => {
+    if (!forceDiscard && isDirty) {
+      const shouldDiscard = window.confirm('You have unsaved changes. Discard?');
+      if (!shouldDiscard) return;
+    }
+    setShowLogTalkModal(false);
+    setIsDirty(false);
+    setTalkDraft({
+      topic: '',
+      content: '',
+      presenter: '',
+      date: new Date().toISOString().slice(0, 10),
+    });
+  };
+
+  useEffect(() => {
+    if (!showLogTalkModal || !isDirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty, showLogTalkModal]);
+
   if (safetyItems.length === 0) {
     return (
       <div className="p-4 mx-auto max-w-5xl">
@@ -36,8 +76,15 @@ export default function SafetyPage() {
   return (
     <div className="p-4 max-w-5xl mx-auto">
       <div className="mb-4">
-        <h1 className="text-lg font-semibold tracking-tight">Safety</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Toolbox talks and compliance records.</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">Safety</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Toolbox talks and compliance records.</p>
+          </div>
+          <Button size="sm" className="h-9 gap-1.5" onClick={() => setShowLogTalkModal(true)}>
+            Log Safety Talk
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -100,6 +147,83 @@ export default function SafetyPage() {
           </div>
         </Card>
       </div>
+
+      <Dialog
+        open={showLogTalkModal}
+        onOpenChange={(open) => {
+          if (open) {
+            setShowLogTalkModal(true);
+            return;
+          }
+          closeLogTalkModal();
+        }}
+      >
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Log Safety Talk</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-muted-foreground">Topic</label>
+              <Input
+                value={talkDraft.topic}
+                onChange={(event) => {
+                  setIsDirty(true);
+                  setTalkDraft((current) => ({ ...current, topic: event.target.value }));
+                }}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Presented By</label>
+              <Input
+                value={talkDraft.presenter}
+                onChange={(event) => {
+                  setIsDirty(true);
+                  setTalkDraft((current) => ({ ...current, presenter: event.target.value }));
+                }}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Date</label>
+              <Input
+                type="date"
+                value={talkDraft.date}
+                onChange={(event) => {
+                  setIsDirty(true);
+                  setTalkDraft((current) => ({ ...current, date: event.target.value }));
+                }}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Notes</label>
+              <Textarea
+                value={talkDraft.content}
+                onChange={(event) => {
+                  setIsDirty(true);
+                  setTalkDraft((current) => ({ ...current, content: event.target.value }));
+                }}
+                className="mt-1 min-h-24"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => closeLogTalkModal()}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                toast.success('Safety talk logged');
+                closeLogTalkModal(true);
+              }}
+            >
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

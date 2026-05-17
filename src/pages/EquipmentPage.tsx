@@ -147,6 +147,11 @@ export default function EquipmentPage() {
       .eq('org_id', orgId)
       .order('name', { ascending: true });
 
+    if (propertyId) {
+      unitsQuery.eq('property_id', propertyId);
+      typesQuery.eq('property_id', propertyId);
+    }
+
     const [{ data: unitsData, error: unitsError }, { data: typesData, error: typesError }] = await Promise.all([
       unitsQuery,
       typesQuery,
@@ -163,7 +168,7 @@ export default function EquipmentPage() {
     setUnits((unitsData ?? []) as EquipmentUnitRow[]);
     setTypes((typesData ?? []) as EquipmentTypeRow[]);
     setLoading(false);
-  }, [orgId]);
+  }, [orgId, propertyId]);
 
   useEffect(() => {
     void fetchEquipment();

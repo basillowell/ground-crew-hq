@@ -212,11 +212,25 @@ export default function ReportsPage() {
       trendScheduleEntriesQuery = trendScheduleEntriesQuery.eq('property_id', selectedPropertyId);
     }
 
+    let employeesQuery = supabase
+      .from('employees')
+      .select('id, first_name, last_name, hourly_rate')
+      .eq('org_id', orgId);
+    let tasksQuery = supabase
+      .from('tasks')
+      .select('id, category')
+      .eq('org_id', orgId);
+
+    if (selectedPropertyId !== 'all') {
+      employeesQuery = employeesQuery.eq('property_id', selectedPropertyId);
+      tasksQuery = tasksQuery.eq('property_id', selectedPropertyId);
+    }
+
     const [assignmentsResult, employeesResult, propertiesResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] = await Promise.all([
       assignmentsQuery,
-      supabase.from('employees').select('id, first_name, last_name, hourly_rate').eq('org_id', orgId),
+      employeesQuery,
       supabase.from('properties').select('id, name').eq('org_id', orgId).order('name', { ascending: true }),
-      supabase.from('tasks').select('id, category').eq('org_id', orgId),
+      tasksQuery,
       trendAssignmentsQuery,
       trendScheduleEntriesQuery,
     ]);
