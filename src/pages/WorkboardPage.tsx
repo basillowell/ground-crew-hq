@@ -3348,7 +3348,7 @@ export default function WorkboardPage() {
                   <span className="text-right">Status</span>
                 </div>
               </div>
-              {orderedDispatchBoard.map((lane) => {
+              {orderedDispatchBoard.map((lane, index) => {
                 const laneFlashTone = lane.employeeAssignments.reduce<'complete' | 'started' | null>((tone, assignment) => {
                   const assignmentId = assignment.id ?? '';
                   const nextTone = assignmentFlashMap[assignmentId];
