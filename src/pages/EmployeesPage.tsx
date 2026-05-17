@@ -41,6 +41,10 @@ type AddEmployeeDraft = {
   property_id: string;
   status: 'active' | 'inactive';
   hourly_rate: string;
+  role_other: string;
+  department_other: string;
+  employment_type: string;
+  language: string;
 };
 
 type EditEmployeeDraft = {
@@ -51,6 +55,8 @@ type EditEmployeeDraft = {
   property_id: string;
   status: 'active' | 'inactive';
   hourly_rate: string;
+  employment_type: string;
+  language: string;
 };
 
 function emptyAddDraft(): AddEmployeeDraft {
@@ -62,6 +68,10 @@ function emptyAddDraft(): AddEmployeeDraft {
     property_id: '',
     status: 'active',
     hourly_rate: '0',
+    role_other: '',
+    department_other: '',
+    employment_type: 'Full-time',
+    language: 'English',
   };
 }
 
@@ -81,6 +91,8 @@ export default function EmployeesPage() {
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+  const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,9 +127,28 @@ export default function EmployeesPage() {
       .eq('org_id', orgId)
       .order('name', { ascending: true });
 
-    const [{ data: employeeRows, error: employeesError }, { data: propertyRows, error: propertiesError }] = await Promise.all([
+    const departmentsQuery = supabase
+      .from('departments')
+      .select('id, name')
+      .eq('org_id', orgId)
+      .eq('active', true)
+      .order('name', { ascending: true });
+
+    const rolesQuery = supabase
+      .from('workforce_roles')
+      .select('id, name')
+      .order('name', { ascending: true });
+
+    const [
+      { data: employeeRows, error: employeesError },
+      { data: propertyRows, error: propertiesError },
+      { data: departmentRows },
+      { data: roleRows },
+    ] = await Promise.all([
       employeesQuery,
       propertiesQuery,
+      departmentsQuery,
+      rolesQuery,
     ]);
 
     if (employeesError || propertiesError) {
@@ -130,6 +161,24 @@ export default function EmployeesPage() {
 
     setEmployees((employeeRows ?? []) as EmployeeRow[]);
     setProperties((propertyRows ?? []) as PropertyRow[]);
+    setDepartments(
+      ((departmentRows ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()),
+    );
+    const fallbackRoles = [
+      'Superintendent',
+      'Assistant Superintendent',
+      'Field Manager',
+      'Field Staff',
+      'Crew Leader',
+      'Irrigation Technician',
+      'Equipment Operator',
+    ];
+    const roleOptions = ((roleRows ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim());
+    setRoles(
+      roleOptions.length > 0
+        ? roleOptions
+        : fallbackRoles.map((name) => ({ id: name.toLowerCase().replace(/\s+/g, '-'), name })),
+    );
     setLoading(false);
   }, [orgId]);
 
@@ -182,12 +231,14 @@ export default function EmployeesPage() {
       org_id: orgId,
       first_name: addDraft.first_name.trim(),
       last_name: addDraft.last_name.trim(),
-      role: addDraft.role.trim() || null,
-      department: addDraft.department.trim() || null,
+      role: (addDraft.role === '__other__' ? addDraft.role_other : addDraft.role).trim() || null,
+      department: (addDraft.department === '__other__' ? addDraft.department_other : addDraft.department).trim() || null,
       property_id: addDraft.property_id || null,
       status: addDraft.status,
       active: addDraft.status === 'active',
       hourly_rate: Math.max(0, Number(addDraft.hourly_rate || 0)),
+      employment_type: addDraft.employment_type || null,
+      language: addDraft.language || null,
     });
     setAddSaving(false);
 
@@ -212,6 +263,8 @@ export default function EmployeesPage() {
       property_id: employee.property_id ?? '',
       status: String(employee.status).toLowerCase() === 'inactive' ? 'inactive' : 'active',
       hourly_rate: String(Number(employee.hourly_rate ?? 0)),
+      employment_type: employee.employment_type ?? 'Full-time',
+      language: employee.language ?? 'English',
     });
   }, []);
 
@@ -237,6 +290,8 @@ export default function EmployeesPage() {
         status: editDraft.status,
         active: editDraft.status === 'active',
         hourly_rate: Math.max(0, Number(editDraft.hourly_rate || 0)),
+        employment_type: editDraft.employment_type || null,
+        language: editDraft.language || null,
       })
       .eq('id', employeeId)
       .eq('org_id', orgId);
@@ -518,11 +573,61 @@ export default function EmployeesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Role</label>
-              <Input className="mt-1" value={addDraft.role} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, role: event.target.value }); }} placeholder="Field Staff" />
+              <select
+                value={addDraft.role}
+                onChange={(event) => {
+                  setIsAddModalDirty(true);
+                  setAddDraft({ ...addDraft, role: event.target.value, role_other: '' });
+                }}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {roles.map((role) => (
+                  <option key={role.id} value={role.name}>
+                    {role.name}
+                  </option>
+                ))}
+                <option value="__other__">Other...</option>
+              </select>
+              {addDraft.role === '__other__' ? (
+                <Input
+                  className="mt-2"
+                  value={addDraft.role_other}
+                  onChange={(event) => {
+                    setIsAddModalDirty(true);
+                    setAddDraft({ ...addDraft, role_other: event.target.value });
+                  }}
+                  placeholder="Custom role"
+                />
+              ) : null}
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Department</label>
-              <Input className="mt-1" value={addDraft.department} onChange={(event) => { setIsAddModalDirty(true); setAddDraft({ ...addDraft, department: event.target.value }); }} placeholder="Maintenance" />
+              <select
+                value={addDraft.department}
+                onChange={(event) => {
+                  setIsAddModalDirty(true);
+                  setAddDraft({ ...addDraft, department: event.target.value, department_other: '' });
+                }}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {departments.map((department) => (
+                  <option key={department.id} value={department.name}>
+                    {department.name}
+                  </option>
+                ))}
+                <option value="__other__">Other...</option>
+              </select>
+              {addDraft.department === '__other__' ? (
+                <Input
+                  className="mt-2"
+                  value={addDraft.department_other}
+                  onChange={(event) => {
+                    setIsAddModalDirty(true);
+                    setAddDraft({ ...addDraft, department_other: event.target.value });
+                  }}
+                  placeholder="Custom department"
+                />
+              ) : null}
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Property (all org properties)</label>
@@ -547,6 +652,36 @@ export default function EmployeesPage() {
               </select>
             </div>
             <div>
+              <label className="text-xs text-muted-foreground">Employment Type</label>
+              <select
+                value={addDraft.employment_type}
+                onChange={(event) => {
+                  setIsAddModalDirty(true);
+                  setAddDraft({ ...addDraft, employment_type: event.target.value });
+                }}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {['Full-time', 'Part-time', 'Seasonal', 'Contract', 'Intern'].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Language</label>
+              <select
+                value={addDraft.language}
+                onChange={(event) => {
+                  setIsAddModalDirty(true);
+                  setAddDraft({ ...addDraft, language: event.target.value });
+                }}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {['English', 'Spanish', 'Portuguese', 'Creole', 'Other'].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="text-xs text-muted-foreground">Hourly Rate</label>
               <Input
                 className="mt-1"
@@ -566,7 +701,16 @@ export default function EmployeesPage() {
             <Button variant="outline" onClick={() => closeAddModal()}>
               Cancel
             </Button>
-            <Button onClick={() => void saveNewEmployee()} disabled={addSaving || !addDraft.first_name.trim() || !addDraft.last_name.trim()}>
+            <Button
+              onClick={() => void saveNewEmployee()}
+              disabled={
+                addSaving ||
+                !addDraft.first_name.trim() ||
+                !addDraft.last_name.trim() ||
+                (addDraft.role === '__other__' && !addDraft.role_other.trim()) ||
+                (addDraft.department === '__other__' && !addDraft.department_other.trim())
+              }
+            >
               {addSaving ? 'Saving...' : 'Save Employee'}
             </Button>
           </div>

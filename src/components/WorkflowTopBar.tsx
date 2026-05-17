@@ -102,6 +102,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="All Departments">All Departments</SelectItem>
               {departments.map((entry) => (
                 <SelectItem key={entry} value={entry}>
                   {entry}

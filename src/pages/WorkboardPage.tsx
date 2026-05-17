@@ -50,7 +50,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAssignments, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
 import { formatTime } from '@/utils/formatTime';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -371,7 +371,7 @@ export default function WorkboardPage() {
   const { currentPropertyId, setCurrentPropertyId, currentUser, userRole } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const [boardDate, setBoardDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [department, setDepartment] = useState('Maintenance');
+  const [department, setDepartment] = useState('All Departments');
   const [groupFilter, setGroupFilter] = useState('all');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [isAssignmentModalDirty, setIsAssignmentModalDirty] = useState(false);
@@ -495,6 +495,7 @@ export default function WorkboardPage() {
   const tasksQuery = useTasks(effectivePropertyId, currentUser?.orgId);
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, currentUser?.orgId);
   const notesQuery = useNotes(effectivePropertyId);
+  const departmentsQuery = useDepartmentOptions(currentUser?.orgId);
   const tasksLoading = tasksQuery.isLoading || taskLibraryLoading;
 
   const availableEquipmentQuery = useQuery({
@@ -688,6 +689,10 @@ export default function WorkboardPage() {
   const weatherLocations = weatherLocationsQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
   const workOrders = workOrdersQuery.data ?? [];
+  const departmentOptions = useMemo(
+    () => ['All Departments', ...(departmentsQuery.data?.map((entry) => entry.name) ?? [])],
+    [departmentsQuery.data],
+  );
   const weatherStripProperty = useMemo(
     () => properties.find((property) => property.id === effectivePropertyId) ?? properties[0] ?? null,
     [effectivePropertyId, properties],
@@ -3021,7 +3026,7 @@ export default function WorkboardPage() {
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
             data-testid="select-department"
           >
-            {['Maintenance', 'Irrigation', 'Chemicals', 'All Departments'].map((d) => (
+            {departmentOptions.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>

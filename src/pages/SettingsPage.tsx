@@ -83,11 +83,9 @@ interface UsageStats {
   employees: number;
   tasks: number;
   scheduleEntriesThisMonth: number;
-}
-
-interface WorkforceSummaryRow {
-  role: string | null;
-  department: string | null;
+  weatherLocations: number;
+  departments: number;
+  shiftTemplates: number;
 }
 
 interface WeatherLocationItem {
@@ -247,6 +245,9 @@ function WorkspaceTab({
     employees: 0,
     tasks: 0,
     scheduleEntriesThisMonth: 0,
+    weatherLocations: 0,
+    departments: 0,
+    shiftTemplates: 0,
   });
   const timezoneOptions = [
     { label: 'Eastern', value: 'America/New_York' },
@@ -275,6 +276,9 @@ function WorkspaceTab({
       { count: employeesCount, error: employeesError },
       { count: tasksCount, error: tasksError },
       { count: scheduleCount, error: scheduleError },
+      { count: weatherCount, error: weatherError },
+      { count: departmentsCount, error: departmentsError },
+      { count: shiftTemplatesCount, error: shiftTemplatesError },
     ] = await Promise.all([
       supabase.from('organizations').select('name, plan, subscription_status').eq('id', orgId).single(),
       supabase
@@ -290,15 +294,21 @@ function WorkspaceTab({
         .eq('org_id', orgId)
         .gte('date', monthStartKey)
         .lte('date', monthEndKey),
+      supabase.from('weather_locations').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('is_active', true),
+      supabase.from('departments').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('active', true),
+      supabase.from('shift_templates').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('active', true),
     ]);
 
-    if (orgError || propertiesError || employeesError || tasksError || scheduleError) {
+    if (orgError || propertiesError || employeesError || tasksError || scheduleError || weatherError || departmentsError || shiftTemplatesError) {
       setError(
         orgError?.message ??
           propertiesError?.message ??
           employeesError?.message ??
           tasksError?.message ??
           scheduleError?.message ??
+          weatherError?.message ??
+          departmentsError?.message ??
+          shiftTemplatesError?.message ??
           'Unable to load workspace settings',
       );
       setLoading(false);
@@ -313,6 +323,9 @@ function WorkspaceTab({
       employees: employeesCount ?? 0,
       tasks: tasksCount ?? 0,
       scheduleEntriesThisMonth: scheduleCount ?? 0,
+      weatherLocations: weatherCount ?? 0,
+      departments: departmentsCount ?? 0,
+      shiftTemplates: shiftTemplatesCount ?? 0,
     });
     setLoading(false);
   }, [orgId]);
@@ -744,6 +757,20 @@ function WorkspaceTab({
     { key: 'scheduleEntriesThisMonth', label: 'Schedule entries (this month)', value: usageStats.scheduleEntriesThisMonth, limit: usageLimits.scheduleEntriesThisMonth },
   ] as const;
   const usageAtLimit = usageRows.some((row) => row.limit != null && row.value >= row.limit);
+  const setupChecklist = [
+    {
+      label: 'Organization name',
+      done: Boolean(orgNameDraft.trim() && orgNameDraft.trim().toLowerCase() !== 'ground crew hq'),
+      href: '/app/settings?tab=Workspace',
+    },
+    { label: 'Add property', done: usageStats.properties > 0, href: '/app/settings?tab=Workspace' },
+    { label: 'Configure weather', done: usageStats.weatherLocations > 0, href: '/app/settings?tab=Weather' },
+    { label: 'Add departments', done: usageStats.departments > 0, href: '/app/settings?tab=Workforce' },
+    { label: 'Add employees', done: usageStats.employees > 0, href: '/app/employees' },
+    { label: 'Create shift templates', done: usageStats.shiftTemplates > 0, href: '/app/scheduler' },
+    { label: 'Build task library', done: usageStats.tasks > 0, href: '/app/settings?tab=Tasks' },
+  ];
+  const setupComplete = setupChecklist.every((item) => item.done);
 
   const usageTone = (ratio: number) => {
     if (ratio >= 0.9) return '#dc2626';
@@ -761,6 +788,34 @@ function WorkspaceTab({
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Setup Checklist</h3>
+        {setupComplete ? (
+          <p style={{ margin: 0, color: '#166534', fontSize: '13px', fontWeight: 600 }}>Setup complete ✓</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '6px' }}>
+            {setupChecklist.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => navigate(item.href)}
+                style={{
+                  textAlign: 'left',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  background: '#fff',
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                  color: item.done ? '#166534' : '#111827',
+                }}
+              >
+                {item.done ? '☑' : '☐'} {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Organization Info</h3>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -910,24 +965,44 @@ function WorkspaceTab({
 }
 
 function WorkforceTab({ orgId }: { orgId: string | null }) {
-  const [rows, setRows] = useState<WorkforceSummaryRow[]>([]);
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+  const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
+  const [newDepartmentName, setNewDepartmentName] = useState('');
+  const [editingDepartmentId, setEditingDepartmentId] = useState<string | null>(null);
+  const [editingDepartmentName, setEditingDepartmentName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const fallbackRoles = [
+    'Superintendent',
+    'Assistant Superintendent',
+    'Field Manager',
+    'Field Staff',
+    'Crew Leader',
+    'Irrigation Technician',
+    'Equipment Operator',
+  ];
 
   const fetchWorkforceSummary = useCallback(async () => {
     if (!supabase || !orgId) return;
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await supabase
-      .from('employees')
-      .select('role, department')
-      .eq('org_id', orgId);
-    if (fetchError) {
-      setError(fetchError.message);
+    const [departmentResult, rolesResult] = await Promise.all([
+      supabase.from('departments').select('id, name').eq('org_id', orgId).eq('active', true).order('name', { ascending: true }),
+      supabase.from('workforce_roles').select('id, name').order('name', { ascending: true }),
+    ]);
+    if (departmentResult.error) {
+      setError(departmentResult.error.message);
       setLoading(false);
       return;
     }
-    setRows((data ?? []) as WorkforceSummaryRow[]);
+    setDepartments((departmentResult.data ?? []) as Array<{ id: string; name: string }>);
+    const roleRows = ((rolesResult.data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim());
+    setRoles(
+      roleRows.length > 0
+        ? roleRows
+        : fallbackRoles.map((name) => ({ id: name.toLowerCase().replace(/\s+/g, '-'), name })),
+    );
     setLoading(false);
   }, [orgId]);
 
@@ -936,50 +1011,106 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     void fetchWorkforceSummary();
   }, [fetchWorkforceSummary, orgId]);
 
-  const roleCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    rows.forEach((row) => {
-      const key = row.role?.trim() || 'Unassigned';
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+  const addDepartment = useCallback(async () => {
+    if (!supabase || !orgId || !newDepartmentName.trim()) return;
+    const { error: insertError } = await supabase.from('departments').insert({
+      id: crypto.randomUUID(),
+      org_id: orgId,
+      name: newDepartmentName.trim(),
+      active: true,
     });
-    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [rows]);
+    if (insertError) {
+      setError(insertError.message);
+      toast.error(`Failed to add department: ${insertError.message}`);
+      return;
+    }
+    toast.success(`Department added: ${newDepartmentName.trim()}`);
+    setNewDepartmentName('');
+    await fetchWorkforceSummary();
+  }, [fetchWorkforceSummary, newDepartmentName, orgId]);
 
-  const departmentCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    rows.forEach((row) => {
-      const key = row.department?.trim() || 'Unassigned';
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    });
-    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [rows]);
+  const saveDepartmentEdit = useCallback(async () => {
+    if (!supabase || !orgId || !editingDepartmentId || !editingDepartmentName.trim()) return;
+    const { error: updateError } = await supabase
+      .from('departments')
+      .update({ name: editingDepartmentName.trim() })
+      .eq('id', editingDepartmentId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to update department: ${updateError.message}`);
+      return;
+    }
+    toast.success(`Department updated: ${editingDepartmentName.trim()}`);
+    setEditingDepartmentId(null);
+    setEditingDepartmentName('');
+    await fetchWorkforceSummary();
+  }, [editingDepartmentId, editingDepartmentName, fetchWorkforceSummary, orgId]);
+
+  const deactivateDepartment = useCallback(async (departmentId: string, departmentName: string) => {
+    if (!supabase || !orgId) return;
+    const confirmed = window.confirm(`Deactivate department "${departmentName}"?`);
+    if (!confirmed) return;
+    const { error: updateError } = await supabase
+      .from('departments')
+      .update({ active: false })
+      .eq('id', departmentId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to deactivate department: ${updateError.message}`);
+      return;
+    }
+    toast.success(`Department deactivated: ${departmentName}`);
+    await fetchWorkforceSummary();
+  }, [fetchWorkforceSummary, orgId]);
 
   if (!orgId || loading) return <PageSkeleton />;
-
-  if (error) {
-    return (
-      <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkforceSummary()} />
-    );
-  }
+  if (error) return <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkforceSummary()} />;
 
   return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '12px' }}>
-      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Workforce Summary</h3>
-      <div style={{ display: 'grid', gap: '8px' }}>
-        <p style={{ margin: 0, color: '#374151', fontSize: '13px' }}>
-          <strong>Roles:</strong>{' '}
-          {roleCounts.length > 0 ? roleCounts.map(([name, count]) => `${name} (${count})`).join(' · ') : 'No roles available'}
-        </p>
-        <p style={{ margin: 0, color: '#374151', fontSize: '13px' }}>
-          <strong>Departments:</strong>{' '}
-          {departmentCounts.length > 0
-            ? departmentCounts.map(([name, count]) => `${name} (${count})`).join(' · ')
-            : 'No departments available'}
-        </p>
+    <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Departments</h3>
+        {departments.length === 0 ? <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No active departments yet.</p> : null}
+        {departments.map((department) => (
+          <div key={department.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {editingDepartmentId === department.id ? (
+              <>
+                <input value={editingDepartmentName} onChange={(event) => setEditingDepartmentName(event.target.value)} />
+                <button onClick={() => void saveDepartmentEdit()} style={{ color: '#166534' }}>Save</button>
+                <button onClick={() => { setEditingDepartmentId(null); setEditingDepartmentName(''); }}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <span style={{ flex: 1 }}>{department.name}</span>
+                <button onClick={() => { setEditingDepartmentId(department.id); setEditingDepartmentName(department.name); }}>Edit</button>
+                <button onClick={() => void deactivateDepartment(department.id, department.name)} style={{ color: '#dc2626' }}>Delete</button>
+              </>
+            )}
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input value={newDepartmentName} onChange={(event) => setNewDepartmentName(event.target.value)} placeholder="Add department" />
+          <button onClick={() => void addDepartment()} style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}>Add</button>
+        </div>
       </div>
-      <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
-        To change employee roles, go to the Employees page.
-      </p>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Roles</h3>
+        <p style={{ margin: 0, color: '#92400e', fontSize: '12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '8px' }}>
+          CLAUDE_DB_REQUIRED: workforce_roles needs org_id for org-scoped role CRUD. Current roles are shown as read-only to avoid cross-org edits.
+        </p>
+        {roles.map((role) => (
+          <div key={role.id} style={{ display: 'flex', alignItems: 'center' }}>
+            <span>{role.name}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>To change employee roles, go to the Employees page.</p>
+      </div>
     </div>
   );
 }

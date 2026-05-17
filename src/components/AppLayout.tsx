@@ -121,7 +121,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
-  const [department, setDepartment] = useState('Maintenance');
+  const [department, setDepartment] = useState('All Departments');
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
@@ -136,7 +136,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
-  const deptQuery = useDepartmentOptions();
+  const deptQuery = useDepartmentOptions(orgId);
   const todayKey = currentDate.toISOString().slice(0, 10);
   const employeesQuery = useEmployees(currentPropertyId, orgId);
   const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
@@ -171,7 +171,11 @@ export function AppLayout({ children }: AppLayoutProps) {
     const scheduleEntries = scheduleQuery.data ?? [];
     const assignments = assignmentsQuery.data ?? [];
     const equipmentUnits = equipmentQuery.data ?? [];
-    const activeEmployees = employees.filter((employee) => employee.status === 'active' && employee.department === department);
+    const activeEmployees = employees.filter(
+      (employee) =>
+        employee.status === 'active' &&
+        (department === 'All Departments' || employee.department === department),
+    );
     const scheduledToday = scheduleEntries.filter(
       (entry) => entry.date === currentDayKey && entry.status === 'scheduled' && activeEmployees.some((employee) => employee.id === entry.employeeId),
     );
@@ -490,7 +494,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}
-            departments={deptQuery.data?.map((d) => d.name) ?? ['Maintenance']}
+            departments={deptQuery.data?.map((d) => d.name) ?? []}
             currentDate={currentDate}
             setCurrentDate={setCurrentDate}
             properties={propertiesQuery.data ?? []}
