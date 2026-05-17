@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { OnboardingWizardV2 } from '@/components/OnboardingWizardV2';
 import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
@@ -96,6 +96,39 @@ function OpsSignalCard({
       <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{title}</div>
       <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
       <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+    </Card>
+  );
+}
+
+function ScorecardMetricCard({
+  label,
+  value,
+  trend,
+  data,
+  toneClass = 'border-gray-300',
+}: {
+  label: string;
+  value: string;
+  trend: 'up' | 'down' | 'flat';
+  data: number[];
+  toneClass?: string;
+}) {
+  return (
+    <Card className={`rounded-xl border p-4 ${toneClass}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+        <span className="text-xs font-medium">
+          {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'}
+        </span>
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+      <div className="mt-3 h-14">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data.map((point, index) => ({ index, point }))}>
+            <Line type="monotone" dataKey="point" stroke="#16a34a" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </Card>
   );
 }
@@ -531,6 +564,43 @@ export default function CommandCenterOperationalPage() {
         scheduleYesterday: (scheduleYesterdayResult.data ?? []) as Array<{ shift_start: string | null; shift_end: string | null }>,
         openNeedsToday: openNeedsTodayResult.count ?? 0,
         openNeedsYesterday: openNeedsYesterdayResult.count ?? 0,
+      };
+    },
+  });
+
+  const operationsScorecardQuery = useQuery({
+    queryKey: ['dashboard-operations-scorecard', orgId ?? 'no-org', propertyScope ?? 'all', todayKey],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      if (!supabase || !orgId) {
+        return null;
+      }
+      const startDate = new Date(`${todayKey}T00:00:00`);
+      startDate.setDate(startDate.getDate() - 13);
+      const startKey = startDate.toISOString().slice(0, 10);
+      let assignmentsQuery = supabase
+        .from('assignments')
+        .select('date, status, estimated_hours, actual_hours')
+        .eq('org_id', orgId)
+        .gte('date', startKey)
+        .lte('date', todayKey);
+      let scheduleQuery = supabase
+        .from('schedule_entries')
+        .select('date, employee_id, shift_start, shift_end, status')
+        .eq('org_id', orgId)
+        .gte('date', startKey)
+        .lte('date', todayKey);
+      if (propertyScope && propertyScope !== 'all') {
+        assignmentsQuery = assignmentsQuery.eq('property_id', propertyScope);
+        scheduleQuery = scheduleQuery.eq('property_id', propertyScope);
+      }
+      const [assignmentsResult, scheduleResult] = await Promise.all([assignmentsQuery, scheduleQuery]);
+      if (assignmentsResult.error) throw assignmentsResult.error;
+      if (scheduleResult.error) throw scheduleResult.error;
+      return {
+        assignments: assignmentsResult.data ?? [],
+        schedule: scheduleResult.data ?? [],
       };
     },
   });
@@ -1042,6 +1112,91 @@ export default function CommandCenterOperationalPage() {
       trend: todayScore > yesterdayScore ? 'up' : todayScore < yesterdayScore ? 'down' : 'flat',
     };
   }, [efficiencyInputsQuery.data, overdueEquipmentCount, todayKey]);
+
+  const operationsScorecard = useMemo(() => {
+    const payload = operationsScorecardQuery.data;
+    if (!payload) return null;
+    const parseShiftHours = (start: string | null, end: string | null) => {
+      if (!start || !end) return 0;
+      const [sh = '0', sm = '0'] = start.split(':');
+      const [eh = '0', em = '0'] = end.split(':');
+      const startMins = Number(sh) * 60 + Number(sm);
+      const endMins = Number(eh) * 60 + Number(em);
+      return Math.max(0, (endMins - startMins) / 60);
+    };
+    const normalizeStatus = (status: string | null) => String(status ?? '').toLowerCase();
+    const today = new Date(`${todayKey}T00:00:00`);
+    const allDays = Array.from({ length: 14 }, (_, index) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() - (13 - index));
+      return date.toISOString().slice(0, 10);
+    });
+    const last7 = allDays.slice(7);
+    const previous7 = allDays.slice(0, 7);
+    const assignments = payload.assignments as Array<{ date: string; status: string | null; estimated_hours: number | null; actual_hours: number | null }>;
+    const schedule = payload.schedule as Array<{ date: string; employee_id: string | null; shift_start: string | null; shift_end: string | null; status: string | null }>;
+
+    const computeCompletion = (days: string[]) => {
+      const inRange = assignments.filter((row) => days.includes(String(row.date ?? '')));
+      if (inRange.length === 0) return 0;
+      const done = inRange.filter((row) => normalizeStatus(row.status) === 'done').length;
+      return Math.round((done / inRange.length) * 100);
+    };
+    const computeLaborEfficiency = (days: string[]) => {
+      const inRange = assignments.filter((row) => days.includes(String(row.date ?? '')));
+      const scheduledHours = inRange.reduce((sum, row) => sum + Number(row.estimated_hours ?? 0), 0);
+      const actualHours = inRange.reduce((sum, row) => sum + Number(row.actual_hours ?? 0), 0);
+      if (scheduledHours <= 0) return 0;
+      return Math.round((actualHours / scheduledHours) * 100);
+    };
+    const computeCoverage = (days: string[]) => {
+      const ratios = days.map((day) => {
+        const daySchedule = schedule.filter((row) => row.date === day && normalizeStatus(row.status) === 'scheduled');
+        const shiftHours = daySchedule.reduce((sum, row) => sum + parseShiftHours(row.shift_start, row.shift_end), 0);
+        const assigned = assignments.filter((row) => row.date === day).reduce((sum, row) => sum + Number(row.estimated_hours ?? 0), 0);
+        if (shiftHours <= 0) return 0;
+        return Math.min(100, Math.round((assigned / shiftHours) * 100));
+      });
+      if (ratios.length === 0) return 0;
+      return Math.round(ratios.reduce((sum, value) => sum + value, 0) / ratios.length);
+    };
+    const completionDaily = last7.map((day) => computeCompletion([day]));
+    const laborDaily = last7.map((day) => computeLaborEfficiency([day]));
+    const coverageDaily = last7.map((day) => computeCoverage([day]));
+    const equipmentTotal = equipmentUnits.length;
+    const equipmentAvailable = equipmentUnits.filter((unit) => unit.status === 'available').length;
+    const equipmentUptime = equipmentTotal > 0 ? Math.round((equipmentAvailable / equipmentTotal) * 100) : 0;
+    const scheduledPairs = new Set(
+      schedule
+        .filter((row) => last7.includes(String(row.date ?? '')) && normalizeStatus(row.status) === 'scheduled')
+        .map((row) => `${row.employee_id}:${row.date}`),
+    );
+    const possiblePairs = Math.max(1, employees.length * 7);
+    const crewUtilization = Math.round((scheduledPairs.size / possiblePairs) * 100);
+    const completionCurrent = computeCompletion(last7);
+    const completionPrevious = computeCompletion(previous7);
+    const laborCurrent = computeLaborEfficiency(last7);
+    const laborPrevious = computeLaborEfficiency(previous7);
+    const coverageCurrent = computeCoverage(last7);
+    const coveragePrevious = computeCoverage(previous7);
+    return {
+      completionCurrent,
+      completionTrend: completionCurrent > completionPrevious ? 'up' : completionCurrent < completionPrevious ? 'down' : 'flat',
+      completionDaily,
+      laborCurrent,
+      laborTrend: laborCurrent > laborPrevious ? 'up' : laborCurrent < laborPrevious ? 'down' : 'flat',
+      laborDaily,
+      coverageCurrent,
+      coverageTrend: coverageCurrent > coveragePrevious ? 'up' : coverageCurrent < coveragePrevious ? 'down' : 'flat',
+      coverageDaily,
+      equipmentUptime,
+      equipmentTrend: 'flat' as const,
+      equipmentDaily: Array.from({ length: 7 }, () => equipmentUptime),
+      crewUtilization,
+      crewTrend: 'flat' as const,
+      crewDaily: Array.from({ length: 7 }, () => crewUtilization),
+    };
+  }, [employees.length, equipmentUnits, operationsScorecardQuery.data, todayKey]);
   const propertyBreakdownRows = useMemo(() => {
     if (!isAllPropertiesView) return [];
     return properties.map((property) => {
@@ -1546,6 +1701,58 @@ export default function CommandCenterOperationalPage() {
           ) : null}
         </div>
       </Card>
+
+      {operationsScorecard ? (
+        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+          <div className="mb-3">
+            <h3 className="text-base font-semibold">Operations Scorecard</h3>
+            <p className="text-xs text-muted-foreground">Last 7 days of operations with trend against previous week.</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <ScorecardMetricCard
+              label="Task Completion Rate"
+              value={`${operationsScorecard.completionCurrent}%`}
+              trend={operationsScorecard.completionTrend}
+              data={operationsScorecard.completionDaily}
+              toneClass="border-green-200"
+            />
+            <ScorecardMetricCard
+              label="Labor Efficiency"
+              value={`${operationsScorecard.laborCurrent}%`}
+              trend={operationsScorecard.laborTrend}
+              data={operationsScorecard.laborDaily}
+              toneClass={
+                operationsScorecard.laborCurrent >= 90 && operationsScorecard.laborCurrent <= 110
+                  ? 'border-green-200'
+                  : (operationsScorecard.laborCurrent >= 80 && operationsScorecard.laborCurrent < 90) || (operationsScorecard.laborCurrent > 110 && operationsScorecard.laborCurrent <= 120)
+                    ? 'border-yellow-200'
+                    : 'border-red-200'
+              }
+            />
+            <ScorecardMetricCard
+              label="Average Coverage"
+              value={`${operationsScorecard.coverageCurrent}%`}
+              trend={operationsScorecard.coverageTrend}
+              data={operationsScorecard.coverageDaily}
+              toneClass="border-blue-200"
+            />
+            <ScorecardMetricCard
+              label="Equipment Uptime"
+              value={`${operationsScorecard.equipmentUptime}%`}
+              trend={operationsScorecard.equipmentTrend}
+              data={operationsScorecard.equipmentDaily}
+              toneClass="border-emerald-200"
+            />
+            <ScorecardMetricCard
+              label="Crew Utilization"
+              value={`${operationsScorecard.crewUtilization}%`}
+              trend={operationsScorecard.crewTrend}
+              data={operationsScorecard.crewDaily}
+              toneClass="border-indigo-200"
+            />
+          </div>
+        </Card>
+      ) : null}
 
       {showGettingStarted ? (
         <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
