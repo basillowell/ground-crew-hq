@@ -403,6 +403,8 @@ export default function WorkboardPage() {
     escalations: false,
   });
   const [workOrdersExpanded, setWorkOrdersExpanded] = useState(false);
+  const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
+  const [selectedScheduleRecipientIds, setSelectedScheduleRecipientIds] = useState<string[]>([]);
 
   const triggerAssignmentFlash = useCallback((assignmentId: string, tone: 'complete' | 'started') => {
     if (!assignmentId) return;
@@ -454,6 +456,12 @@ export default function WorkboardPage() {
   const workflowParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const focusedPropertyId = workflowParams.get('property') || '';
   const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
+
+  const toggleScheduleRecipient = useCallback((employeeId: string) => {
+    setSelectedScheduleRecipientIds((current) =>
+      current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
+    );
+  }, []);
 
   const propertiesQuery = useProperties(currentUser?.orgId);
   const employeesQuery = useEmployees(effectivePropertyId, currentUser?.orgId);
@@ -1630,6 +1638,72 @@ export default function WorkboardPage() {
 
   const newRequestsCount = propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length;
 
+  const weatherSummaryLabel = weatherSnapshot
+    ? `${Math.round(weatherSnapshot.temperature)}°F, wind ${Math.round(weatherSnapshot.windSpeed)} mph`
+    : latestWeatherLog?.currentConditions || 'Weather unavailable';
+
+  const buildScheduleShareText = useCallback(() => {
+    const propertyLabel = activeProperty?.name || 'All Properties';
+    const selectedEmployees =
+      selectedScheduleRecipientIds.length > 0
+        ? scheduledEmployees.filter((employee) => selectedScheduleRecipientIds.includes(employee.id))
+        : scheduledEmployees;
+    const lines = [
+      `*Ground Crew HQ — ${new Date(`${boardDate}T00:00:00`).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      })}*`,
+      `*${propertyLabel}*`,
+      '',
+    ];
+    if (selectedEmployees.length === 0) {
+      lines.push('No scheduled crew for this date.');
+    } else {
+      selectedEmployees.forEach((employee) => {
+        const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
+        const shiftLabel = shift ? `${formatTime(shift.shiftStart)} - ${formatTime(shift.shiftEnd)}` : 'No shift';
+        const tasks = dayAssignments.filter((assignment) => assignment.employeeId === employee.id);
+        lines.push(`👤 ${employee.firstName} ${employee.lastName}`);
+        lines.push(`⏰ ${shiftLabel}`);
+        lines.push('📋 Tasks:');
+        if (tasks.length === 0) {
+          lines.push('• No tasks assigned');
+        } else {
+          tasks.forEach((task) => {
+            const est = Number(task.estimatedHours ?? 0);
+            lines.push(`• ${task.title || 'Task'} (${est.toFixed(1)}h)`);
+          });
+        }
+        lines.push('');
+      });
+    }
+    lines.push(`🌤️ Weather: ${weatherSummaryLabel}`);
+    return lines.join('\n');
+  }, [activeProperty?.name, boardDate, dayAssignments, scheduleList, scheduledEmployees, selectedScheduleRecipientIds, weatherSummaryLabel]);
+
+  const shareScheduleByEmail = useCallback(() => {
+    const propertyLabel = activeProperty?.name || 'All Properties';
+    const subject = `Ground Crew HQ — Your Schedule for ${new Date(`${boardDate}T00:00:00`).toLocaleDateString('en-US')}`;
+    const body = buildScheduleShareText();
+    window.location.href = `mailto:?subject=${encodeURIComponent(`${subject} — ${propertyLabel}`)}&body=${encodeURIComponent(body)}`;
+  }, [activeProperty?.name, boardDate, buildScheduleShareText]);
+
+  const shareScheduleByCopy = useCallback(async () => {
+    const text = buildScheduleShareText();
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Schedule copied!');
+    } catch {
+      toast.error('Unable to copy schedule.');
+    }
+  }, [buildScheduleShareText]);
+
+  const shareScheduleByWhatsApp = useCallback(() => {
+    const text = buildScheduleShareText();
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  }, [buildScheduleShareText]);
+
   const handlePrintDailyPlan = useCallback(() => {
     const printWindow = window.open('', '_blank', 'noopener,noreferrer');
     if (!printWindow) {
@@ -2600,6 +2674,19 @@ export default function WorkboardPage() {
             >
               Export / Print
             </Button>
+            {!isReadOnly ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0"
+                onClick={() => {
+                  setSelectedScheduleRecipientIds(scheduledEmployees.map((employee) => employee.id));
+                  setSendScheduleDialogOpen(true);
+                }}
+              >
+                Send Schedule
+              </Button>
+            ) : null}
             {!isReadOnly ? (
               <Button
                 size="sm"
@@ -3717,6 +3804,41 @@ export default function WorkboardPage() {
             <Button onClick={saveQuickTaskAssignment} data-testid="button-save-quick-task">
               Save Task
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={sendScheduleDialogOpen} onOpenChange={setSendScheduleDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send today's schedule to crew</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="max-h-64 space-y-2 overflow-auto rounded-md border p-3">
+              {scheduledEmployees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No scheduled crew for this date.</p>
+              ) : (
+                scheduledEmployees.map((employee) => {
+                  const checked = selectedScheduleRecipientIds.includes(employee.id);
+                  return (
+                    <label key={`send-schedule-employee-${employee.id}`} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleScheduleRecipient(employee.id)}
+                      />
+                      <span>{employee.firstName} {employee.lastName}</span>
+                      <span className="text-xs text-muted-foreground">{employee.email || ''}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <Button variant="outline" onClick={shareScheduleByEmail}>Email</Button>
+              <Button variant="outline" onClick={() => void shareScheduleByCopy()}>Copy to clipboard</Button>
+              <Button variant="outline" onClick={shareScheduleByWhatsApp}>WhatsApp</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -1004,6 +1004,47 @@ export default function CommandCenterOperationalPage() {
     todayKey,
   ]);
 
+  const handleWhatsAppDigest = useCallback(() => {
+    const digestDate = new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    });
+    const crewLines =
+      scheduledRows.length > 0
+        ? scheduledRows
+            .map((row) => {
+              const crewTasks = assignments.filter(
+                (assignment) => assignment.date === todayKey && assignment.employeeId === row.employeeId,
+              );
+              const taskLines =
+                crewTasks.length > 0
+                  ? crewTasks
+                      .map((assignment) => `• ${assignment.title || 'Task'} (${Number(assignment.estimatedHours ?? 0).toFixed(1)}h)`)
+                      .join('\n')
+                  : '• No tasks assigned';
+              return `👤 ${row.name}\n⏰ ${formatTime(row.shiftStart)} - ${formatTime(row.shiftEnd)}\n📋 Tasks:\n${taskLines}`;
+            })
+            .join('\n\n')
+        : 'No scheduled crew';
+
+    const weatherDetails = morningBriefWeatherQuery.data;
+    const weatherLine = weatherDetails
+      ? `${weatherDetails.temperature}°F, ${weatherDetails.weatherLabel}`
+      : 'Weather unavailable';
+
+    const text = [
+      `*Ground Crew HQ — ${digestDate}*`,
+      `*${morningPropertyLabel}*`,
+      '',
+      crewLines,
+      '',
+      `🌤️ Weather: ${weatherLine}`,
+    ].join('\n');
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  }, [assignments, morningBriefWeatherQuery.data, morningPropertyLabel, scheduledRows, todayKey]);
+
   const markEquipmentServiced = useCallback(
     async (equipmentId: string) => {
       if (!supabase || !orgId) return;
@@ -1086,6 +1127,13 @@ export default function CommandCenterOperationalPage() {
               onClick={handleEmailDigest}
             >
               Email Digest
+            </button>
+            <button
+              type="button"
+              className="ml-3 text-xs font-medium text-primary underline hover:text-primary/80"
+              onClick={handleWhatsAppDigest}
+            >
+              Send via WhatsApp
             </button>
           </div>
           {overdueEquipmentCount > 0 ? (
