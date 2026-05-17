@@ -1,4 +1,5 @@
 import { Check, Star } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -16,70 +17,77 @@ type Tier = {
 const tiers: Tier[] = [
   {
     name: 'Starter',
-    price: '$0/mo',
-    subtitle: 'Beta',
+    price: '$100/mo',
+    subtitle: 'For small crews getting started',
     features: [
+      'Up to 10 employees',
       '1 property',
-      'Up to 5 employees',
-      'Basic scheduling',
-      'Task dispatch',
-      'Weather dashboard',
-      'Mobile crew access',
+      'Crew scheduling + task dispatch',
+      'Weather dashboard + spray window alerts',
+      'Mobile crew access (Field page)',
+      'Basic labor reports',
     ],
-    ctaLabel: 'Start Free',
+    ctaLabel: 'Start Free Beta',
     ctaHref: '/',
   },
   {
-    name: 'Pro',
-    price: '$49/mo',
-    subtitle: 'Coming soon',
+    name: 'Professional',
+    price: '$175/mo',
+    subtitle: 'For growing operations',
     highlighted: true,
     features: [
+      'Up to 30 employees',
       'Unlimited properties',
-      'Unlimited employees',
+      'Everything in Starter, plus:',
       'Schedule templates + copy week',
-      'Labor reports + CSV export',
-      'Equipment tracking',
-      'Spray window alerts',
+      'Labor reports + CSV export + cost tracking',
+      'Equipment tracking + service alerts',
+      'Spray window + weather-conflict detection',
+      'WhatsApp + email schedule sharing',
       'Priority support',
     ],
-    ctaLabel: 'Join Waitlist',
-    ctaHref: 'mailto:support@groundcrewhq.com?subject=Ground%20Crew%20HQ%20Pro%20Waitlist',
+    ctaLabel: 'Start Free Trial',
+    ctaHref: '/',
   },
   {
     name: 'Enterprise',
-    price: 'Custom',
-    subtitle: 'Built for large operations',
+    price: 'Custom pricing',
+    subtitle: 'For large facilities and multi-site operations',
     features: [
-      'Everything in Pro',
+      '30+ employees (per-user pricing)',
+      'Everything in Professional',
       'Multi-facility management',
-      'Budget & cost tracking',
-      'API access',
-      'Custom integrations',
-      'Dedicated onboarding',
+      'Advanced budget & cost analytics',
+      'API access + custom integrations',
+      'Dedicated onboarding + account manager',
+      'Live radar + severe weather notifications',
+      'Custom reporting',
     ],
     ctaLabel: 'Contact Sales',
-    ctaHref: 'mailto:support@groundcrewhq.com?subject=Ground%20Crew%20HQ%20Enterprise%20Inquiry',
+    ctaHref: 'mailto:sales@groundcrewhq.com?subject=Ground%20Crew%20HQ%20Enterprise%20Inquiry',
   },
 ];
 
 const featureRows = [
   { label: 'Properties', starter: '1', pro: 'Unlimited', enterprise: 'Unlimited' },
-  { label: 'Employees', starter: 'Up to 5', pro: 'Unlimited', enterprise: 'Unlimited' },
-  { label: 'Basic scheduling', starter: true, pro: true, enterprise: true },
+  { label: 'Employees', starter: 'Up to 10', pro: 'Up to 30', enterprise: 'Unlimited' },
+  { label: 'Scheduling', starter: true, pro: true, enterprise: true },
   { label: 'Task dispatch', starter: true, pro: true, enterprise: true },
   { label: 'Weather dashboard', starter: true, pro: true, enterprise: true },
   { label: 'Mobile crew access', starter: true, pro: true, enterprise: true },
   { label: 'Schedule templates + copy week', starter: false, pro: true, enterprise: true },
-  { label: 'Labor reports + CSV export', starter: false, pro: true, enterprise: true },
+  { label: 'Labor reports', starter: 'Basic', pro: 'Advanced + CSV', enterprise: 'Advanced + CSV' },
+  { label: 'Cost tracking', starter: false, pro: true, enterprise: true },
   { label: 'Equipment tracking', starter: false, pro: true, enterprise: true },
   { label: 'Spray window alerts', starter: false, pro: true, enterprise: true },
-  { label: 'Priority support', starter: false, pro: true, enterprise: true },
+  { label: 'Live radar', starter: false, pro: false, enterprise: true },
+  { label: 'Severe weather alerts', starter: false, pro: false, enterprise: true },
+  { label: 'WhatsApp sharing', starter: false, pro: true, enterprise: true },
   { label: 'Multi-facility management', starter: false, pro: false, enterprise: true },
   { label: 'Budget & cost tracking', starter: false, pro: false, enterprise: true },
   { label: 'API access', starter: false, pro: false, enterprise: true },
   { label: 'Custom integrations', starter: false, pro: false, enterprise: true },
-  { label: 'Dedicated onboarding', starter: false, pro: false, enterprise: true },
+  { label: 'Dedicated onboarding + account manager', starter: false, pro: false, enterprise: true },
 ];
 
 function renderFeatureValue(value: boolean | string) {
@@ -90,6 +98,13 @@ function renderFeatureValue(value: boolean | string) {
 }
 
 export default function PricingPage() {
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const effectiveTiers = tiers.map((tier) =>
+    tier.name === 'Professional'
+      ? { ...tier, price: billingCycle === 'annual' ? '$150/mo' : '$175/mo' }
+      : tier,
+  );
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f7fbf8_0%,#eef6f1_100%)]">
       <header className="border-b border-emerald-100/80 bg-white/95">
@@ -105,12 +120,29 @@ export default function PricingPage() {
         <div className="mx-auto max-w-2xl text-center">
           <h1 className="text-4xl font-bold tracking-tight text-emerald-950 md:text-5xl">Simple Pricing for Every Operation</h1>
           <p className="mt-3 text-sm text-muted-foreground md:text-base">
-            Start free in beta, then scale up when your team is ready.
+            All plans include a 14-day free trial. No credit card required.
           </p>
+          <div className="mt-5 inline-flex items-center gap-2 rounded-full border bg-white p-1 text-xs">
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1 ${billingCycle === 'monthly' ? 'bg-emerald-600 text-white' : ''}`}
+              onClick={() => setBillingCycle('monthly')}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1 ${billingCycle === 'annual' ? 'bg-emerald-600 text-white' : ''}`}
+              onClick={() => setBillingCycle('annual')}
+            >
+              Annual
+            </button>
+          </div>
+          {billingCycle === 'annual' ? <p className="mt-2 text-xs text-emerald-700">Professional annual plan: $150/mo (save $300/year).</p> : null}
         </div>
 
         <section className="mt-10 grid gap-4 md:grid-cols-3">
-          {tiers.map((tier) => (
+          {effectiveTiers.map((tier) => (
             <Card
               key={tier.name}
               className={`relative rounded-2xl p-6 ${tier.highlighted ? 'border-emerald-400 bg-emerald-50/70 shadow-md' : 'border-emerald-100 bg-white'}`}
@@ -178,6 +210,9 @@ export default function PricingPage() {
               </table>
             </div>
           </Card>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Questions? Email support@groundcrewhq.com
+          </p>
         </section>
       </main>
     </div>
