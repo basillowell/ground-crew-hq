@@ -52,7 +52,15 @@ type EquipmentRow = {
 
 type TaskRow = {
   id: string;
+  name: string | null;
   category: string | null;
+};
+
+type WeatherDailyLogRow = {
+  date: string;
+  rainfallTotal: number | null;
+  temperature: number | null;
+  wind: number | null;
 };
 
 type LaborSummaryRow = {
@@ -137,12 +145,13 @@ export default function ReportsPage() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'summary' | 'trends'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'trends' | 'gm'>('summary');
   const [trendAssignments, setTrendAssignments] = useState<AssignmentRow[]>([]);
   const [trendScheduleEntries, setTrendScheduleEntries] = useState<ScheduleEntryTrendRow[]>([]);
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
   const [openNeedsCount, setOpenNeedsCount] = useState(0);
   const [organizationName, setOrganizationName] = useState('Ground Crew HQ');
+  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLogRow[]>([]);
 
   const applyPreset = (preset: 'this-week' | 'last-week' | 'this-month' | 'last-month') => {
     const now = new Date();
@@ -185,8 +194,7 @@ export default function ReportsPage() {
     }
 
     const now = new Date();
-    const trendStart = startOfWeek(new Date(now));
-    trendStart.setDate(trendStart.getDate() - 7 * 7);
+    const trendStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     const trendStartDate = toIsoDate(trendStart);
     const scheduleTrendStart = startOfWeek(new Date(now));
     scheduleTrendStart.setDate(scheduleTrendStart.getDate() - 7 * 3);
@@ -218,7 +226,7 @@ export default function ReportsPage() {
       .eq('org_id', orgId);
     let tasksQuery = supabase
       .from('tasks')
-      .select('id, category')
+      .select('id, name, category')
       .eq('org_id', orgId);
 
     if (selectedPropertyId !== 'all') {
@@ -257,6 +265,11 @@ export default function ReportsPage() {
       openNeedsQuery,
       supabase.from('organizations').select('name').eq('id', orgId).maybeSingle(),
     ]);
+    const weatherLogsResult = await supabase
+      .from('weather_daily_logs')
+      .select('date, rainfallTotal, temperature, wind')
+      .gte('date', startDate)
+      .lte('date', endDate);
 
     if (
       assignmentsResult.error ||
@@ -267,7 +280,8 @@ export default function ReportsPage() {
       trendScheduleEntriesResult.error ||
       equipmentResult.error ||
       openNeedsResult.error ||
-      organizationResult.error
+      organizationResult.error ||
+      weatherLogsResult.error
     ) {
       setError(
         assignmentsResult.error?.message ??
@@ -279,6 +293,7 @@ export default function ReportsPage() {
           equipmentResult.error?.message ??
           openNeedsResult.error?.message ??
           organizationResult.error?.message ??
+          weatherLogsResult.error?.message ??
           'Unable to load report data',
       );
       setLoading(false);
@@ -294,6 +309,7 @@ export default function ReportsPage() {
     setEquipmentRows((equipmentResult.data ?? []) as EquipmentRow[]);
     setOpenNeedsCount(openNeedsResult.count ?? 0);
     setOrganizationName(organizationResult.data?.name ?? 'Ground Crew HQ');
+    setWeatherLogs((weatherLogsResult.data ?? []) as WeatherDailyLogRow[]);
     setLoading(false);
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
@@ -422,52 +438,53 @@ export default function ReportsPage() {
   }, [costByTaskRows]);
 
   const trendChartData = useMemo(() => {
-    const start = startOfWeek(new Date());
-    start.setDate(start.getDate() - 7 * 7);
-    const weekKeys = Array.from({ length: 8 }, (_, index) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + index * 7);
-      return toIsoDate(date);
+    const now = new Date();
+    const monthKeys = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      return toIsoDate(date).slice(0, 7);
     });
-
-    const byWeek = new Map(
-      weekKeys.map((week) => [
-        week,
+    const byMonth = new Map(
+      monthKeys.map((monthKey) => [
+        monthKey,
         {
-          week,
-          label: new Date(`${week}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          month: monthKey,
+          label: new Date(`${monthKey}-01T00:00:00`).toLocaleDateString('en-US', { month: 'short' }),
           totalTasks: 0,
           doneTasks: 0,
           completionRate: 0,
           scheduledHours: 0,
           actualHours: 0,
+          laborCost: 0,
         },
       ]),
     );
-
-    const weekForDate = (dateText: string) => {
-      const date = new Date(`${dateText}T00:00:00`);
-      const weekStart = startOfWeek(date);
-      return toIsoDate(weekStart);
-    };
-
+    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
     trendAssignments.forEach((assignment) => {
-      const week = weekForDate(assignment.date);
-      const bucket = byWeek.get(week);
+      const month = String(assignment.date).slice(0, 7);
+      const bucket = byMonth.get(month);
       if (!bucket) return;
+      const estimated = Number(assignment.estimated_hours ?? 0);
+      const actual = Number(assignment.actual_hours ?? 0);
       bucket.totalTasks += 1;
       if ((assignment.status ?? '').toLowerCase() === 'done') bucket.doneTasks += 1;
-      bucket.scheduledHours += Number(assignment.estimated_hours ?? 0);
-      bucket.actualHours += Number(assignment.actual_hours ?? 0);
+      bucket.scheduledHours += estimated;
+      bucket.actualHours += actual;
+      const rate = Number(employeeById.get(assignment.employee_id)?.hourly_rate ?? 0);
+      bucket.laborCost += actual * rate;
     });
-
-    return Array.from(byWeek.values()).map((row) => ({
+    return Array.from(byMonth.values()).map((row) => ({
       ...row,
       completionRate: row.totalTasks > 0 ? Number(((row.doneTasks / row.totalTasks) * 100).toFixed(1)) : 0,
       scheduledHours: Number(row.scheduledHours.toFixed(1)),
       actualHours: Number(row.actualHours.toFixed(1)),
+      laborCost: Number(row.laborCost.toFixed(2)),
     }));
-  }, [trendAssignments]);
+  }, [employees, trendAssignments]);
+
+  const ytdCost = useMemo(
+    () => trendChartData.reduce((sum, row) => sum + Number(row.laborCost ?? 0), 0),
+    [trendChartData],
+  );
 
   const crewUtilizationData = useMemo(() => {
     const last4Start = startOfWeek(new Date());
@@ -667,6 +684,67 @@ export default function ReportsPage() {
     return `/app/reports?${params.toString()}`;
   }, [endDate, selectedPropertyId, startDate]);
 
+  const gmSummary = useMemo(() => {
+    const totalLaborHours = `${formatHours(totals.scheduledHours)} scheduled / ${formatHours(totals.actualHours)} actual`;
+    const totalLaborCost = formatCurrency(totals.actualCost);
+    const avgCrewCoverage = totals.scheduledHours > 0 ? Math.round((totals.actualHours / totals.scheduledHours) * 100) : 0;
+    const equipmentUptime = equipmentRows.length > 0 ? Math.round((equipmentRows.filter((row) => row.status === 'available').length / equipmentRows.length) * 100) : 0;
+    const categoryByTaskId = new Map(tasks.map((task) => [task.id, task]));
+    const topTasks = new Map<string, number>();
+    assignments.forEach((assignment) => {
+      const task = categoryByTaskId.get(assignment.task_id ?? '');
+      const taskName = task?.name?.trim() || 'Uncategorized Task';
+      topTasks.set(taskName, (topTasks.get(taskName) ?? 0) + Number(assignment.actual_hours ?? assignment.estimated_hours ?? 0));
+    });
+    const topFive = Array.from(topTasks.entries())
+      .map(([name, hours]) => ({ name, hours }))
+      .sort((a, b) => b.hours - a.hours)
+      .slice(0, 5);
+    const sprayRestrictionDays = weatherLogs.filter((row) => Number(row.wind ?? 0) > 10).length;
+    const heatAdvisoryDays = weatherLogs.filter((row) => Number(row.temperature ?? 0) > 95).length;
+    const rainfallTotal = weatherLogs.reduce((sum, row) => sum + Number(row.rainfallTotal ?? 0), 0);
+    const laborVariancePct =
+      totals.scheduledHours > 0 ? Math.round((Math.abs(totals.actualHours - totals.scheduledHours) / totals.scheduledHours) * 100) : 0;
+    const recommendations: string[] = [];
+    if (completionRate < 80) recommendations.push('Consider adjusting task estimates or adding crew.');
+    if (laborVariancePct > 15) recommendations.push('Review actual hours tracking for accuracy.');
+    if (equipmentUptime < 90) recommendations.push('Schedule preventive maintenance.');
+    if (recommendations.length === 0) recommendations.push('Current operations are within healthy ranges. Maintain this cadence.');
+    return {
+      totalLaborHours,
+      totalLaborCost,
+      completionRate,
+      avgCrewCoverage,
+      equipmentUptime,
+      topFive,
+      sprayRestrictionDays,
+      heatAdvisoryDays,
+      rainfallTotal,
+      recommendations,
+    };
+  }, [assignments, completionRate, equipmentRows, tasks, totals, weatherLogs]);
+
+  const exportTrendsCsv = useCallback(() => {
+    const headers = ['Month', 'Scheduled Hours', 'Actual Hours', 'Completion Rate (%)', 'Labor Cost'];
+    const rows = trendChartData.map((row) => [
+      row.label,
+      row.scheduledHours,
+      row.actualHours,
+      row.completionRate,
+      row.laborCost,
+    ]);
+    const csv = [headers, ...rows].map((cells) => cells.map((cell) => quoteCsv(cell)).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `trends-report-${toIsoDate(new Date())}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, [trendChartData]);
+
   useEffect(() => {
     if (!isFullReportView || loading || error) return;
     const timeoutId = window.setTimeout(() => window.print(), 300);
@@ -730,6 +808,9 @@ export default function ReportsPage() {
         </button>
         <button onClick={() => setActiveTab('trends')} aria-pressed={activeTab === 'trends'}>
           Trends
+        </button>
+        <button onClick={() => setActiveTab('gm')} aria-pressed={activeTab === 'gm'}>
+          GM Summary
         </button>
         <button
           onClick={() => {
@@ -905,10 +986,59 @@ export default function ReportsPage() {
         )}
       </div>
       </>
+      ) : activeTab === 'gm' ? (
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '14px' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>GROUND CREW HQ — EXECUTIVE SUMMARY</h3>
+            <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: '13px' }}>{selectedPropertyName} · {startDate} to {endDate}</p>
+          </div>
+          <div className="grid gap-[8px] md:grid-cols-2">
+            <div>Total Labor Hours: <strong>{gmSummary.totalLaborHours}</strong></div>
+            <div>Total Labor Cost: <strong>{gmSummary.totalLaborCost}</strong></div>
+            <div>Task Completion Rate: <strong>{gmSummary.completionRate}%</strong></div>
+            <div>Average Crew Coverage: <strong>{gmSummary.avgCrewCoverage}%</strong></div>
+            <div>Equipment Health: <strong>{gmSummary.equipmentUptime}% uptime</strong></div>
+          </div>
+          <div>
+            <h4 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600 }}>Top 5 Tasks by Hours</h4>
+            <ol style={{ margin: 0, paddingLeft: '20px' }}>
+              {gmSummary.topFive.map((row) => (
+                <li key={`top-task-${row.name}`} style={{ marginBottom: '4px' }}>
+                  {row.name} — {formatHours(row.hours)}h total
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div>
+            <h4 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600 }}>Weather Impact</h4>
+            <p style={{ margin: 0, fontSize: '13px' }}>{gmSummary.sprayRestrictionDays} days with spray restrictions</p>
+            <p style={{ margin: 0, fontSize: '13px' }}>{gmSummary.heatAdvisoryDays} days with heat advisories</p>
+            <p style={{ margin: 0, fontSize: '13px' }}>Total rainfall: {gmSummary.rainfallTotal.toFixed(1)} inches</p>
+          </div>
+          <div>
+            <h4 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600 }}>Recommendations</h4>
+            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+              {gmSummary.recommendations.map((recommendation) => (
+                <li key={recommendation} style={{ marginBottom: '4px' }}>{recommendation}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="no-print">
+            <button onClick={() => window.print()}>Print GM Summary</button>
+          </div>
+        </div>
       ) : (
         <div style={{ display: 'grid', gap: '16px' }}>
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Task Completion Rate (Last 8 Weeks)</h3>
+            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Monthly Comparison (Last 6 Months)</h3>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', color: '#6b7280' }}>YTD Cost: <strong>{formatCurrency(ytdCost)}</strong></span>
+                <button onClick={exportTrendsCsv} disabled={loading || Boolean(error) || trendChartData.length === 0}>
+                  Export Trends
+                </button>
+              </div>
+            </div>
             {loading ? (
               <TableSkeleton />
             ) : error ? (
@@ -917,56 +1047,48 @@ export default function ReportsPage() {
               <EmptyState
                 icon={BarChart3}
                 title="No trend data available"
-                description="Complete tasks over multiple weeks to view completion trends."
+                description="Complete tasks over multiple months to view comparison trends."
               />
             ) : (
-              <div style={{ width: '100%', height: '280px' }}>
+              <div style={{ width: '100%', height: '320px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <BarChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="label" />
-                    <YAxis domain={[0, 100]} />
-                    <Tooltip formatter={(value: number) => `${value}%`} />
-                    <Line type="monotone" dataKey="completionRate" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3 }} />
-                  </LineChart>
+                    <YAxis yAxisId="hours" />
+                    <YAxis yAxisId="rate" orientation="right" domain={[0, 100]} />
+                    <Tooltip />
+                    <Bar yAxisId="hours" dataKey="scheduledHours" fill="#3b82f6" name="Scheduled Hours" />
+                    <Bar yAxisId="hours" dataKey="actualHours" fill="#16a34a" name="Actual Hours" />
+                    <Line yAxisId="rate" type="monotone" dataKey="completionRate" stroke="#0f172a" strokeWidth={2} name="Completion %" />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
           </div>
 
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Labor Hours Trend (Last 8 Weeks)</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Monthly Labor Cost Trend</h3>
             {loading ? (
               <TableSkeleton />
             ) : error ? (
               <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
-            ) : trendChartData.every((row) => row.scheduledHours === 0 && row.actualHours === 0) ? (
+            ) : trendChartData.every((row) => row.laborCost === 0) ? (
               <EmptyState
                 icon={BarChart3}
-                title="No labor trend data"
-                description="Assign tasks with estimated and actual hours to populate labor trends."
+                title="No cost trend data"
+                description="Set hourly rates and track actual hours to populate labor cost trends."
               />
             ) : (
               <div style={{ width: '100%', height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="scheduledFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05} />
-                      </linearGradient>
-                      <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.5} />
-                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
+                  <LineChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="label" />
                     <YAxis />
-                    <Tooltip formatter={(value: number) => `${value}h`} />
-                    <Area type="monotone" dataKey="scheduledHours" stroke="#3b82f6" fill="url(#scheduledFill)" />
-                    <Area type="monotone" dataKey="actualHours" stroke="#16a34a" fill="url(#actualFill)" />
-                  </AreaChart>
+                    <Tooltip formatter={(value: number) => formatCurrency(Number(value))} />
+                    <Line type="monotone" dataKey="laborCost" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             )}
