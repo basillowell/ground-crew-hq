@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
+import { APP_VERSION } from '@/constants/version';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
@@ -1083,6 +1084,14 @@ function AccessTab({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [organizationName, setOrganizationName] = useState<string>('');
+  const [systemInfo, setSystemInfo] = useState({
+    propertyCount: 0,
+    employeeCount: 0,
+    taskCount: 0,
+    scheduleEntriesThisWeek: 0,
+    assignmentsToday: 0,
+    equipmentUnits: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1090,17 +1099,73 @@ function AccessTab({
     if (!supabase || !orgId) return;
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await supabase
-      .from('organizations')
-      .select('name')
-      .eq('id', orgId)
-      .single();
+    const now = new Date();
+    const todayKey = now.toISOString().slice(0, 10);
+    const monday = new Date(now);
+    const dayOfWeek = monday.getDay();
+    const offsetToMonday = (dayOfWeek + 6) % 7;
+    monday.setDate(monday.getDate() - offsetToMonday);
+    monday.setHours(0, 0, 0, 0);
+    const weekStartKey = monday.toISOString().slice(0, 10);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const weekEndKey = sunday.toISOString().slice(0, 10);
+
+    const [
+      orgResult,
+      propertiesCountResult,
+      employeesCountResult,
+      tasksCountResult,
+      scheduleCountResult,
+      assignmentsCountResult,
+      equipmentCountResult,
+    ] = await Promise.all([
+      supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', orgId)
+        .single(),
+      supabase.from('properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase
+        .from('schedule_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .gte('date', weekStartKey)
+        .lte('date', weekEndKey),
+      supabase
+        .from('assignments')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('date', todayKey),
+      supabase.from('equipment_units').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+    ]);
+
+    const fetchError =
+      orgResult.error ??
+      propertiesCountResult.error ??
+      employeesCountResult.error ??
+      tasksCountResult.error ??
+      scheduleCountResult.error ??
+      assignmentsCountResult.error ??
+      equipmentCountResult.error;
+
     if (fetchError) {
       setError(fetchError.message);
       setLoading(false);
       return;
     }
-    setOrganizationName(String(data?.name ?? ''));
+
+    setOrganizationName(String(orgResult.data?.name ?? ''));
+    setSystemInfo({
+      propertyCount: propertiesCountResult.count ?? 0,
+      employeeCount: employeesCountResult.count ?? 0,
+      taskCount: tasksCountResult.count ?? 0,
+      scheduleEntriesThisWeek: scheduleCountResult.count ?? 0,
+      assignmentsToday: assignmentsCountResult.count ?? 0,
+      equipmentUnits: equipmentCountResult.count ?? 0,
+    });
     setLoading(false);
   }, [orgId]);
 
@@ -1120,6 +1185,34 @@ function AccessTab({
     localStorage.clear();
     queryClient.clear();
     window.location.reload();
+  };
+
+  const maskedOrgId = orgId ? `${orgId.slice(0, 8)}...` : 'Not available';
+  const browserInfo = typeof navigator !== 'undefined'
+    ? `${navigator.userAgent.slice(0, 50)}${navigator.userAgent.length > 50 ? '...' : ''}`
+    : 'Not available';
+
+  const handleCopySystemInfo = async () => {
+    const lines = [
+      'Ground Crew HQ — System Info',
+      `App Version: ${APP_VERSION}`,
+      `Org ID: ${maskedOrgId}`,
+      `Property Count: ${systemInfo.propertyCount}`,
+      `Employee Count: ${systemInfo.employeeCount}`,
+      `Task Count: ${systemInfo.taskCount}`,
+      `Schedule Entries (this week): ${systemInfo.scheduleEntriesThisWeek}`,
+      `Assignments (today): ${systemInfo.assignmentsToday}`,
+      `Equipment Units: ${systemInfo.equipmentUnits}`,
+      `Browser: ${browserInfo}`,
+      'Supabase Project: fjqeekwisnbpxgebrnpl',
+    ];
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      toast.success('System info copied to clipboard');
+    } catch (copyError) {
+      const message = copyError instanceof Error ? copyError.message : 'Clipboard unavailable';
+      toast.error(`Failed to copy system info: ${message}`);
+    }
   };
 
   if (!orgId || loading) return <PageSkeleton />;
@@ -1163,6 +1256,26 @@ function AccessTab({
         <p style={{ margin: 0, color: '#7f1d1d', fontSize: '13px' }}>
           To delete your account or change your email, contact support at support@groundcrewhq.com.
         </p>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '8px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>System</h3>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>App Version:</strong> {APP_VERSION}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Org ID:</strong> {maskedOrgId}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Property Count:</strong> {systemInfo.propertyCount}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Employee Count:</strong> {systemInfo.employeeCount}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Task Count:</strong> {systemInfo.taskCount}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Schedule Entries (this week):</strong> {systemInfo.scheduleEntriesThisWeek}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Assignments (today):</strong> {systemInfo.assignmentsToday}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Equipment Units:</strong> {systemInfo.equipmentUnits}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Browser:</strong> {browserInfo}</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Supabase Project:</strong> fjqeekwisnbpxgebrnpl</p>
+        <button
+          onClick={() => void handleCopySystemInfo()}
+          style={{ width: 'fit-content', border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+        >
+          Copy System Info
+        </button>
       </div>
     </div>
   );
