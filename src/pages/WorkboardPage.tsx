@@ -1026,6 +1026,47 @@ export default function WorkboardPage() {
     weatherSnapshot,
   ]);
 
+  const selectedTaskForDraft = useMemo(
+    () => taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null,
+    [assignmentDraft.taskId, taskLibrary],
+  );
+
+  const handleGenerateTaskNotes = useCallback(async () => {
+    if (isGeneratingTaskNotes) return;
+    if (!selectedTaskForDraft) return;
+
+    setIsGeneratingTaskNotes(true);
+    try {
+      const taskName = selectedTaskForDraft.name || 'Task';
+      const category = selectedTaskForDraft.category || 'General';
+      const location = assignmentDraft.area || 'assigned area';
+      const estimated = Number(selectedTaskForDraft.estimated_hours ?? 0);
+      const weatherLine = weatherSnapshot
+        ? `Weather is ${Math.round(weatherSnapshot.temperature)}°F with winds near ${Math.round(weatherSnapshot.windSpeed)} mph.`
+        : '';
+
+      // Keep the async flow so the button can show a spinner while generating.
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+
+      const generated = [
+        `Complete ${taskName} in ${location} using standard ${category.toLowerCase()} procedures.`,
+        estimated > 0
+          ? `Target completion in about ${estimated} hour${estimated === 1 ? '' : 's'} and report any hazards or delays immediately.`
+          : 'Report any hazards or delays immediately and confirm completion once finished.',
+        weatherLine,
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      setIsAssignmentModalDirty(true);
+      setAssignmentDraft((current) => ({ ...current, notes: generated }));
+    } catch {
+      // Silent fail by design for convenience action.
+    } finally {
+      setIsGeneratingTaskNotes(false);
+    }
+  }, [assignmentDraft.area, isGeneratingTaskNotes, selectedTaskForDraft, weatherSnapshot]);
+
   useEffect(() => {
     setWeatherConflictOverride(false);
   }, [assignmentDraft.taskId, assignmentDraft.employeeId, assignmentDraft.startTime, boardDate]);
@@ -4183,7 +4224,20 @@ export default function WorkboardPage() {
             </div>
 
             <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Notes</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-muted-foreground">Notes</label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 px-2 text-xs"
+                  onClick={() => void handleGenerateTaskNotes()}
+                  disabled={!assignmentDraft.taskId || isGeneratingTaskNotes}
+                >
+                  <Sparkles className={`h-3.5 w-3.5 ${isGeneratingTaskNotes ? 'animate-pulse' : ''}`} />
+                  {isGeneratingTaskNotes ? 'Generating…' : 'Generate notes'}
+                </Button>
+              </div>
               <textarea
                 value={assignmentDraft.notes}
                 onChange={(e) => {
