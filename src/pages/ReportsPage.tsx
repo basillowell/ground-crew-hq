@@ -6,6 +6,7 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 type PropertyRow = {
   id: string;
@@ -28,6 +29,16 @@ type AssignmentRow = {
   status: string | null;
   estimated_hours: number | null;
   actual_hours: number | null;
+};
+
+type ScheduleEntryTrendRow = {
+  id: string;
+  employee_id: string;
+  property_id: string | null;
+  date: string;
+  shift_start: string | null;
+  shift_end: string | null;
+  status: string | null;
 };
 
 type TaskRow = {
@@ -112,6 +123,9 @@ export default function ReportsPage() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'summary' | 'trends'>('summary');
+  const [trendAssignments, setTrendAssignments] = useState<AssignmentRow[]>([]);
+  const [trendScheduleEntries, setTrendScheduleEntries] = useState<ScheduleEntryTrendRow[]>([]);
 
   const applyPreset = (preset: 'this-week' | 'last-week' | 'this-month' | 'last-month') => {
     const now = new Date();
@@ -153,19 +167,51 @@ export default function ReportsPage() {
       assignmentsQuery = assignmentsQuery.eq('property_id', selectedPropertyId);
     }
 
-    const [assignmentsResult, employeesResult, propertiesResult, tasksResult] = await Promise.all([
+    const now = new Date();
+    const trendStart = startOfWeek(new Date(now));
+    trendStart.setDate(trendStart.getDate() - 7 * 7);
+    const trendStartDate = toIsoDate(trendStart);
+    const scheduleTrendStart = startOfWeek(new Date(now));
+    scheduleTrendStart.setDate(scheduleTrendStart.getDate() - 7 * 3);
+    const scheduleTrendStartDate = toIsoDate(scheduleTrendStart);
+
+    let trendAssignmentsQuery = supabase
+      .from('assignments')
+      .select('id, employee_id, task_id, property_id, date, status, estimated_hours, actual_hours')
+      .eq('org_id', orgId)
+      .gte('date', trendStartDate)
+      .lte('date', toIsoDate(endOfWeek(now)));
+
+    let trendScheduleEntriesQuery = supabase
+      .from('schedule_entries')
+      .select('id, employee_id, property_id, date, shift_start, shift_end, status')
+      .eq('org_id', orgId)
+      .gte('date', scheduleTrendStartDate)
+      .lte('date', toIsoDate(endOfWeek(now)))
+      .eq('status', 'scheduled');
+
+    if (selectedPropertyId !== 'all') {
+      trendAssignmentsQuery = trendAssignmentsQuery.eq('property_id', selectedPropertyId);
+      trendScheduleEntriesQuery = trendScheduleEntriesQuery.eq('property_id', selectedPropertyId);
+    }
+
+    const [assignmentsResult, employeesResult, propertiesResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] = await Promise.all([
       assignmentsQuery,
       supabase.from('employees').select('id, first_name, last_name, hourly_rate').eq('org_id', orgId),
       supabase.from('properties').select('id, name').eq('org_id', orgId).order('name', { ascending: true }),
       supabase.from('tasks').select('id, category').eq('org_id', orgId),
+      trendAssignmentsQuery,
+      trendScheduleEntriesQuery,
     ]);
 
-    if (assignmentsResult.error || employeesResult.error || propertiesResult.error || tasksResult.error) {
+    if (assignmentsResult.error || employeesResult.error || propertiesResult.error || tasksResult.error || trendAssignmentsResult.error || trendScheduleEntriesResult.error) {
       setError(
         assignmentsResult.error?.message ??
           employeesResult.error?.message ??
           propertiesResult.error?.message ??
           tasksResult.error?.message ??
+          trendAssignmentsResult.error?.message ??
+          trendScheduleEntriesResult.error?.message ??
           'Unable to load report data',
       );
       setLoading(false);
@@ -176,6 +222,8 @@ export default function ReportsPage() {
     setEmployees((employeesResult.data ?? []) as EmployeeRow[]);
     setProperties((propertiesResult.data ?? []) as PropertyRow[]);
     setTasks((tasksResult.data ?? []) as TaskRow[]);
+    setTrendAssignments((trendAssignmentsResult.data ?? []) as AssignmentRow[]);
+    setTrendScheduleEntries((trendScheduleEntriesResult.data ?? []) as ScheduleEntryTrendRow[]);
     setLoading(false);
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
@@ -303,6 +351,114 @@ export default function ReportsPage() {
     );
   }, [costByTaskRows]);
 
+  const trendChartData = useMemo(() => {
+    const start = startOfWeek(new Date());
+    start.setDate(start.getDate() - 7 * 7);
+    const weekKeys = Array.from({ length: 8 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index * 7);
+      return toIsoDate(date);
+    });
+
+    const byWeek = new Map(
+      weekKeys.map((week) => [
+        week,
+        {
+          week,
+          label: new Date(`${week}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          totalTasks: 0,
+          doneTasks: 0,
+          completionRate: 0,
+          scheduledHours: 0,
+          actualHours: 0,
+        },
+      ]),
+    );
+
+    const weekForDate = (dateText: string) => {
+      const date = new Date(`${dateText}T00:00:00`);
+      const weekStart = startOfWeek(date);
+      return toIsoDate(weekStart);
+    };
+
+    trendAssignments.forEach((assignment) => {
+      const week = weekForDate(assignment.date);
+      const bucket = byWeek.get(week);
+      if (!bucket) return;
+      bucket.totalTasks += 1;
+      if ((assignment.status ?? '').toLowerCase() === 'done') bucket.doneTasks += 1;
+      bucket.scheduledHours += Number(assignment.estimated_hours ?? 0);
+      bucket.actualHours += Number(assignment.actual_hours ?? 0);
+    });
+
+    return Array.from(byWeek.values()).map((row) => ({
+      ...row,
+      completionRate: row.totalTasks > 0 ? Number(((row.doneTasks / row.totalTasks) * 100).toFixed(1)) : 0,
+      scheduledHours: Number(row.scheduledHours.toFixed(1)),
+      actualHours: Number(row.actualHours.toFixed(1)),
+    }));
+  }, [trendAssignments]);
+
+  const crewUtilizationData = useMemo(() => {
+    const last4Start = startOfWeek(new Date());
+    last4Start.setDate(last4Start.getDate() - 7 * 3);
+    const last4StartKey = toIsoDate(last4Start);
+    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    const byEmployee = new Map<string, { name: string; actualHours: number; shiftHours: number }>();
+
+    const shiftHoursForEntry = (entry: ScheduleEntryTrendRow) => {
+      const startValue = entry.shift_start?.slice(0, 5);
+      const endValue = entry.shift_end?.slice(0, 5);
+      if (!startValue || !endValue) return 0;
+      const [startHour, startMinute] = startValue.split(':').map((value) => Number(value));
+      const [endHour, endMinute] = endValue.split(':').map((value) => Number(value));
+      const startMinutes = startHour * 60 + startMinute;
+      const endMinutes = endHour * 60 + endMinute;
+      const durationMinutes = endMinutes - startMinutes;
+      return durationMinutes > 0 ? durationMinutes / 60 : 0;
+    };
+
+    trendScheduleEntries
+      .filter((entry) => entry.date >= last4StartKey)
+      .forEach((entry) => {
+        const employee = employeeById.get(entry.employee_id);
+        const name = employee ? `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee' : 'Unknown Employee';
+        const existing = byEmployee.get(entry.employee_id) ?? { name, actualHours: 0, shiftHours: 0 };
+        existing.shiftHours += shiftHoursForEntry(entry);
+        byEmployee.set(entry.employee_id, existing);
+      });
+
+    trendAssignments
+      .filter((assignment) => assignment.date >= last4StartKey)
+      .forEach((assignment) => {
+        const employee = employeeById.get(assignment.employee_id);
+        const name = employee ? `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee' : 'Unknown Employee';
+        const existing = byEmployee.get(assignment.employee_id) ?? { name, actualHours: 0, shiftHours: 0 };
+        existing.actualHours += Number(assignment.actual_hours ?? assignment.estimated_hours ?? 0);
+        byEmployee.set(assignment.employee_id, existing);
+      });
+
+    return Array.from(byEmployee.values())
+      .map((row) => {
+        const averageActual = row.actualHours / 4;
+        const averageShift = row.shiftHours / 4;
+        const utilizationPercent = averageShift > 0 ? Math.min(100, Math.round((averageActual / averageShift) * 100)) : 0;
+        return {
+          name: row.name,
+          averageHours: Number(averageActual.toFixed(1)),
+          utilizationPercent,
+          fill:
+            utilizationPercent >= 80
+              ? '#16a34a'
+              : utilizationPercent >= 50
+                ? '#f59e0b'
+                : '#ef4444',
+        };
+      })
+      .sort((a, b) => b.averageHours - a.averageHours)
+      .slice(0, 12);
+  }, [employees, trendAssignments, trendScheduleEntries]);
+
   const exportCsv = useCallback(() => {
     const headers = ['Employee', 'Days Worked', 'Scheduled Hours', 'Actual Hours', 'Tasks Completed', 'Variance', 'Scheduled Cost', 'Actual Cost', 'Variance ($)'];
     const dataRows = laborRows.map((row) => [
@@ -424,6 +580,17 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
+        <button onClick={() => setActiveTab('summary')} aria-pressed={activeTab === 'summary'}>
+          Summary
+        </button>
+        <button onClick={() => setActiveTab('trends')} aria-pressed={activeTab === 'trends'}>
+          Trends
+        </button>
+      </div>
+
+      {activeTab === 'summary' ? (
+      <>
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Labor Summary</h3>
@@ -554,6 +721,106 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
+      </>
+      ) : (
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Task Completion Rate (Last 8 Weeks)</h3>
+            {loading ? (
+              <TableSkeleton />
+            ) : error ? (
+              <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
+            ) : trendChartData.every((row) => row.totalTasks === 0) ? (
+              <EmptyState
+                icon={BarChart3}
+                title="No trend data available"
+                description="Complete tasks over multiple weeks to view completion trends."
+              />
+            ) : (
+              <div style={{ width: '100%', height: '280px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis domain={[0, 100]} />
+                    <Tooltip formatter={(value: number) => `${value}%`} />
+                    <Line type="monotone" dataKey="completionRate" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Labor Hours Trend (Last 8 Weeks)</h3>
+            {loading ? (
+              <TableSkeleton />
+            ) : error ? (
+              <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
+            ) : trendChartData.every((row) => row.scheduledHours === 0 && row.actualHours === 0) ? (
+              <EmptyState
+                icon={BarChart3}
+                title="No labor trend data"
+                description="Assign tasks with estimated and actual hours to populate labor trends."
+              />
+            ) : (
+              <div style={{ width: '100%', height: '300px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="scheduledFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05} />
+                      </linearGradient>
+                      <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#16a34a" stopOpacity={0.5} />
+                        <stop offset="95%" stopColor="#16a34a" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => `${value}h`} />
+                    <Area type="monotone" dataKey="scheduledHours" stroke="#3b82f6" fill="url(#scheduledFill)" />
+                    <Area type="monotone" dataKey="actualHours" stroke="#16a34a" fill="url(#actualFill)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Crew Utilization (Avg Weekly Hours - Last 4 Weeks)</h3>
+            {loading ? (
+              <TableSkeleton />
+            ) : error ? (
+              <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
+            ) : crewUtilizationData.length === 0 ? (
+              <EmptyState
+                icon={BarChart3}
+                title="No utilization data available"
+                description="Schedule shifts and record task hours to visualize crew utilization."
+              />
+            ) : (
+              <div style={{ width: '100%', height: '320px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={crewUtilizationData} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" interval={0} angle={-28} textAnchor="end" height={70} />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => `${value}h`} />
+                    <Bar dataKey="averageHours">
+                      {crewUtilizationData.map((row) => (
+                        <Cell key={`util-${row.name}`} fill={row.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="print-footer hidden print:block">
         Ground Crew HQ - ground-crew-hq.vercel.app - Confidential
