@@ -168,8 +168,8 @@ export default function SchedulerPage() {
   }, [propertiesQuery.data, propertyScope]);
 
   const weekWeatherQuery = useQuery({
-    queryKey: ['scheduler-week-weather', weekStart, selectedProperty?.id ?? 'none'],
-    enabled: Boolean(selectedProperty?.latitude && selectedProperty?.longitude),
+    queryKey: ['scheduler-week-weather', weekStart, selectedProperty?.id ?? 'none', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId && selectedProperty?.latitude && selectedProperty?.longitude),
     staleTime: 1000 * 60 * 10,
     queryFn: async () => {
       if (!selectedProperty?.latitude || !selectedProperty?.longitude) return {} as Record<string, DayWeather>;

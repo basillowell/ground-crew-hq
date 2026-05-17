@@ -355,8 +355,9 @@ export default function CommandCenterOperationalPage() {
     },
   });
   const sprayWindowQuery = useQuery({
-    queryKey: ['dashboard-spray-window', selectedProperty?.id ?? 'none'],
+    queryKey: ['dashboard-spray-window', orgId ?? 'no-org', selectedProperty?.id ?? 'none'],
     enabled:
+      Boolean(orgId) &&
       Boolean(selectedProperty) &&
       typeof selectedProperty?.latitude === 'number' &&
       typeof selectedProperty?.longitude === 'number',
@@ -527,8 +528,9 @@ export default function CommandCenterOperationalPage() {
   });
 
   const morningBriefWeatherQuery = useQuery({
-    queryKey: ['dashboard-morning-brief-weather', selectedProperty?.id ?? 'none', todayKey],
+    queryKey: ['dashboard-morning-brief-weather', orgId ?? 'no-org', selectedProperty?.id ?? 'none', todayKey],
     enabled:
+      Boolean(orgId) &&
       Boolean(selectedProperty) &&
       typeof selectedProperty?.latitude === 'number' &&
       typeof selectedProperty?.longitude === 'number',

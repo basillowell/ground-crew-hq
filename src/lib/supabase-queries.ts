@@ -609,15 +609,28 @@ function toWorkLocation(row: DbWorkLocation): WorkLocation {
 }
 
 function toWeatherLocation(row: DbWeatherLocation): WeatherLocation {
+  const latitude =
+    typeof row.latitude === 'number'
+      ? row.latitude
+      : row.latitude == null
+        ? undefined
+        : Number(row.latitude);
+  const longitude =
+    typeof row.longitude === 'number'
+      ? row.longitude
+      : row.longitude == null
+        ? undefined
+        : Number(row.longitude);
+  const propertyValue = String(row.property ?? '').trim();
   return {
     id: row.id,
     name: row.name,
     property: row.property,
-    propertyId: row.property_id ?? row.propertyId ?? undefined,
+    propertyId: row.property_id ?? row.propertyId ?? (propertyValue || undefined),
     area: row.area,
     address: row.address ?? undefined,
-    latitude: row.latitude ?? undefined,
-    longitude: row.longitude ?? undefined,
+    latitude: Number.isFinite(latitude) ? latitude : undefined,
+    longitude: Number.isFinite(longitude) ? longitude : undefined,
   };
 }
 

@@ -44,6 +44,7 @@ import {
   MonitorSmartphone,
   Printer,
   Radio,
+  Sparkles,
   StickyNote,
   Users,
 } from 'lucide-react';
@@ -426,6 +427,7 @@ export default function WorkboardPage() {
   const [endOfDayReportCondensed, setEndOfDayReportCondensed] = useState('');
   const [endOfDayReportSubject, setEndOfDayReportSubject] = useState('');
   const [endOfDayReportGenerating, setEndOfDayReportGenerating] = useState(false);
+  const [isGeneratingTaskNotes, setIsGeneratingTaskNotes] = useState(false);
   const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -532,7 +534,8 @@ export default function WorkboardPage() {
   });
 
   const taskRequestsQuery = useQuery({
-    queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all'],
+    queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       if (!supabase) return [] as NeedsQueueRequest[];
       let query = supabase.from('task_requests').select('*').order('priority', { ascending: true }).order('created_at', { ascending: false });
@@ -567,6 +570,7 @@ export default function WorkboardPage() {
 
   const pendingTaskRequestsQuery = useQuery({
     queryKey: ['task-requests-pending', new Date().toISOString().slice(0, 10), effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       if (!supabase) return [] as PendingTaskRequest[];
       const today = new Date().toISOString().slice(0, 10);
@@ -587,7 +591,8 @@ export default function WorkboardPage() {
   });
 
   const weatherLogsQuery = useQuery({
-    queryKey: ['weather-daily-logs', boardDate],
+    queryKey: ['weather-daily-logs', boardDate, currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       if (!supabase) return [] as WeatherDailyLog[];
       let query = supabase.from('weather_daily_logs').select('*').eq('date', boardDate);
@@ -600,7 +605,8 @@ export default function WorkboardPage() {
   });
 
   const weatherLocationsQuery = useQuery({
-    queryKey: ['weather-locations', effectivePropertyId ?? 'all'],
+    queryKey: ['weather-locations', effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       if (!supabase) return [] as WeatherLocation[];
       let query = supabase.from('weather_locations').select('*');
@@ -613,6 +619,7 @@ export default function WorkboardPage() {
   });
   const workOrdersQuery = useQuery({
     queryKey: ['work-orders', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       if (!supabase) return [] as Array<Record<string, unknown>>;
       let query = supabase.from('work_orders').select('*').order('created_at', { ascending: false });
@@ -626,7 +633,8 @@ export default function WorkboardPage() {
   });
 
   const workLocationsQuery = useQuery({
-    queryKey: ['work-locations', effectivePropertyId ?? 'all'],
+    queryKey: ['work-locations', effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       if (!supabase) return [] as WorkLocation[];
       let query = supabase.from('work_locations').select('*');

@@ -90,8 +90,8 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
     return { hasError: true, message: error.message || "An unexpected page error occurred." };
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
-    // Intentionally swallow here and render a recoverable UI instead of crashing the session.
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[RouteErrorBoundary] Caught route render error', error, info);
   }
 
   private reportIssue = () => {

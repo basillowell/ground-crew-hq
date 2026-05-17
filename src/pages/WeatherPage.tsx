@@ -202,7 +202,7 @@ export default function WeatherPage() {
   });
   const weatherStationsQuery = useQuery({
     queryKey: ['weather-stations-full', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser),
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       const filteredQuery = currentUser?.orgId
         ? supabase.from('weather_stations').select('*').eq('org_id', currentUser.orgId).order('name')
@@ -225,7 +225,7 @@ export default function WeatherPage() {
   });
   const weatherLogsQuery = useQuery({
     queryKey: ['weather-daily-logs-page', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser),
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       const filteredQuery = currentUser?.orgId
         ? supabase
@@ -253,7 +253,7 @@ export default function WeatherPage() {
   });
   const rainfallEntriesQuery = useQuery({
     queryKey: ['manual-rainfall-entries-page', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser),
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       const filteredQuery = currentUser?.orgId
         ? supabase
@@ -639,10 +639,11 @@ export default function WeatherPage() {
   const widgetLiveDataQuery = useQuery({
     queryKey: [
       'weather-widget-live-data',
+      currentUser?.orgId ?? 'all-orgs',
       liveWeatherCoordinates?.latitude ?? SARASOTA_WIDGET_FALLBACK.latitude,
       liveWeatherCoordinates?.longitude ?? SARASOTA_WIDGET_FALLBACK.longitude,
     ],
-    enabled: true,
+    enabled: Boolean(currentUser?.orgId),
     queryFn: async (): Promise<WeatherWidgetLiveData> => {
       const latitude = liveWeatherCoordinates?.latitude ?? SARASOTA_WIDGET_FALLBACK.latitude;
       const longitude = liveWeatherCoordinates?.longitude ?? SARASOTA_WIDGET_FALLBACK.longitude;
@@ -2180,6 +2181,15 @@ export default function WeatherPage() {
       return;
     }
     await queryClient.invalidateQueries({ queryKey: ['weather-display-prefs'] });
+  }
+
+  if (!currentUser?.orgId) {
+    return (
+      <div className="p-4 max-w-7xl mx-auto space-y-3">
+        <Skeleton className="h-24 rounded-2xl" />
+        <Skeleton className="h-48 rounded-2xl" />
+      </div>
+    );
   }
 
   if (needsPropertyWeatherOnboarding && !isInitialWeatherSetupLoading && !hasWeatherSetupError) {
