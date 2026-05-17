@@ -29,6 +29,8 @@ interface WorkflowTopBarProps {
   allowAllProperties?: boolean;
   notifications: AppNotification[];
   unreadNotificationCount: number;
+  pendingSyncCount?: number;
+  syncFlashActive?: boolean;
   onMarkAllNotificationsRead: () => void;
   onOpenNotification: (route: string, id: string) => void;
   onOpenMobileSidebar: () => void;
@@ -56,6 +58,8 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   allowAllProperties = false,
   notifications,
   unreadNotificationCount,
+  pendingSyncCount = 0,
+  syncFlashActive = false,
   onMarkAllNotificationsRead,
   onOpenNotification,
   onOpenMobileSidebar,
@@ -79,6 +83,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   };
   const showAllPropertiesOption = allowAllProperties && properties.length > 1;
   const allPropertiesLabel = `All Properties (${properties.length})`;
+  const bellBadgeLabel = pendingSyncCount > 0 ? `${pendingSyncCount} pending syncs` : String(unreadNotificationCount);
 
   return (
     <header className="sticky top-0 z-20 shrink-0 border-b border-border/80 bg-card/92 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/85">
@@ -155,8 +160,12 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent hover:border-border/70 hover:bg-muted/50">
                 <Bell className="h-4 w-4" />
-                <Badge className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]">
-                  {unreadNotificationCount}
+                <Badge
+                  className={`absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px] ${
+                    syncFlashActive ? 'bg-green-600 text-white' : ''
+                  }`}
+                >
+                  {bellBadgeLabel}
                 </Badge>
               </Button>
             </DropdownMenuTrigger>

@@ -217,6 +217,7 @@ export default function MobileFieldWorkspacePage() {
 
   const saveSyncQueue = useCallback((items: FieldSyncQueueItem[]) => {
     window.localStorage.setItem(syncQueueKey, JSON.stringify(items));
+    window.dispatchEvent(new CustomEvent('ground-crew-sync-queue-changed', { detail: { count: items.length } }));
   }, [syncQueueKey]);
 
   const enqueueSyncAction = useCallback((item: FieldSyncQueueItem) => {
@@ -282,6 +283,7 @@ export default function MobileFieldWorkspacePage() {
 
     saveSyncQueue(remaining);
     if (synced > 0) {
+      window.dispatchEvent(new CustomEvent('ground-crew-sync-complete', { detail: { synced } }));
       toast.success(`Synced ${synced} offline change${synced === 1 ? '' : 's'}`);
       setIsOfflineData(false);
     }

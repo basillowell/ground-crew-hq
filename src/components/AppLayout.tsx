@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -113,6 +114,7 @@ const inAppNotificationEventName = 'ground-crew-in-app-notification';
 type IncomingNotification = Omit<AppNotification, 'read'>;
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const [department, setDepartment] = useState('Maintenance');
@@ -122,6 +124,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { currentUser, currentPropertyId, setCurrentPropertyId, signOut, orgId } = useAuth();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
+  const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [syncFlashActive, setSyncFlashActive] = useState(false);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
@@ -261,6 +266,58 @@ export function AppLayout({ children }: AppLayoutProps) {
     () => inAppNotifications.filter((entry) => !entry.read).length,
     [inAppNotifications],
   );
+
+  useEffect(() => {
+    const readPendingSyncCount = () => {
+      try {
+        const raw = window.localStorage.getItem('field-sync-queue');
+        if (!raw) return 0;
+        const parsed = JSON.parse(raw) as unknown;
+        return Array.isArray(parsed) ? parsed.length : 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    const updatePendingCount = () => setPendingSyncCount(readPendingSyncCount());
+    updatePendingCount();
+
+    const onQueueChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ count?: number }>).detail;
+      if (typeof detail?.count === 'number') {
+        setPendingSyncCount(detail.count);
+      } else {
+        updatePendingCount();
+      }
+    };
+    const onSyncComplete = () => {
+      setPendingSyncCount(0);
+      setSyncFlashActive(true);
+      window.setTimeout(() => setSyncFlashActive(false), 1200);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'field-sync-queue') updatePendingCount();
+    };
+    const onOnline = () => {
+      setIsOffline(false);
+      void queryClient.invalidateQueries();
+    };
+    const onOffline = () => setIsOffline(true);
+
+    window.addEventListener('ground-crew-sync-queue-changed', onQueueChanged as EventListener);
+    window.addEventListener('ground-crew-sync-complete', onSyncComplete as EventListener);
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    return () => {
+      window.removeEventListener('ground-crew-sync-queue-changed', onQueueChanged as EventListener);
+      window.removeEventListener('ground-crew-sync-complete', onSyncComplete as EventListener);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [queryClient]);
 
   const handleSelectProperty = (propertyId: string) => {
     setCurrentPropertyId(propertyId);
@@ -413,6 +470,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             allowAllProperties={currentUser?.role === 'admin' || currentUser?.role === 'manager'}
             notifications={notificationsForDisplay}
             unreadNotificationCount={unreadNotificationCount}
+            pendingSyncCount={pendingSyncCount}
+            syncFlashActive={syncFlashActive}
             onMarkAllNotificationsRead={markAllNotificationsRead}
             onOpenNotification={handleNotificationOpen}
             onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
@@ -428,6 +487,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             }}
           >
             <main className="flex-1 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,248,246,1))]">
+              {isOffline ? (
+                <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-900">
+                  ⚡ You're offline — changes will sync when connected
+                </div>
+              ) : null}
               <div className="md:hidden border-b bg-background/85 px-4 py-2">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Workflow Date</div>
                 <div className="text-sm font-medium text-foreground">
