@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { RadarMap } from '@/components/weather/RadarMap';
+import { StormTrackTimeline } from '@/components/weather/StormTrackTimeline';
 import { HourlyForecastChart } from '@/components/weather/HourlyForecastChart';
 import { DailyForecastList } from '@/components/weather/DailyForecastList';
 import { type WeatherWidgetId, type WeatherWidgetLiveData } from '@/components/weather/OperationsView';
@@ -2459,6 +2460,8 @@ export default function WeatherPage() {
           </div>
         )}
       </Card>
+
+      <StormTrackTimeline hourly={liveForecastQuery.data?.hourly ?? []} />
 
       <div className="hidden space-y-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-2">
