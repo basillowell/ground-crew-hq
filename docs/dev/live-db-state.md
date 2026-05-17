@@ -389,6 +389,17 @@ If you need a column that is NOT in this file:
 
 ---
 
+## workforce_roles
+| Column | Type | Nullable | Default |
+|--------|------|----------|---------|
+| id | uuid | NO | gen_random_uuid() |
+| org_id | uuid | YES | |
+| name | text | NO | |
+| description | text | YES | |
+| active | boolean | YES | true |
+| created_at | timestamptz | YES | now() |
+
+---
 ## messages
 (schema not fully documented — check information_schema if needed)
 
@@ -436,3 +447,4 @@ If you need a column that is NOT in this file:
 *Codex MUST read this file before writing ANY Supabase query.*
 *If a column is not listed here, it does not exist.*
 *Last verified: May 17, 2026 via information_schema query.*
+
