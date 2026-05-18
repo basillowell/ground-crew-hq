@@ -553,7 +553,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               setDepartment,
             }}
           >
-            <main className="flex-1 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,248,246,1))]">
+            <main className="flex-1 bg-background">
               {isOffline ? (
                 <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-900">
                   ⚡ You're offline — changes will sync when connected

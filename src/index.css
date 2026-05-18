@@ -20,13 +20,13 @@ All colors MUST be HSL.
     --hq-border: #E2E8F0;
     --hq-bg: #F6F8F6;
     --hq-card: #FFFFFF;
-    --status-ready: #16A34A;
+    --status-safe: #22c55e;
     --status-warning: #F59E0B;
-    --status-danger: #DC2626;
-    --status-info: #2563EB;
-    --status-paused: #94A3B8;
+    --status-danger: #ef4444;
+    --status-info: #3b82f6;
+    --status-muted: #94a3b8;
 
-    --background: 0 0% 98%;
+    --background: 210 33% 98%;
     --foreground: 220 20% 14%;
 
     --card: 0 0% 100%;
@@ -35,7 +35,7 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 14%;
 
-    --primary: 147 56% 42%;
+    --primary: 138 64% 25%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 20% 96%;
@@ -50,21 +50,21 @@ All colors MUST be HSL.
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
+    --border: 214 22% 86%;
+    --input: 214 22% 86%;
     --ring: 147 56% 42%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 150 36% 12%;
-    --sidebar-foreground: 147 16% 78%;
-    --sidebar-primary: 147 56% 52%;
+    --sidebar-background: 210 18% 12%;
+    --sidebar-foreground: 214 18% 82%;
+    --sidebar-primary: 138 64% 25%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 150 28% 18%;
-    --sidebar-accent-foreground: 148 21% 92%;
-    --sidebar-border: 151 22% 24%;
-    --sidebar-ring: 147 56% 52%;
-    --sidebar-muted: 150 18% 28%;
+    --sidebar-accent: 212 16% 18%;
+    --sidebar-accent-foreground: 214 16% 92%;
+    --sidebar-border: 214 16% 24%;
+    --sidebar-ring: 138 64% 25%;
+    --sidebar-muted: 214 14% 40%;
 
     --success: 152 55% 38%;
     --success-foreground: 0 0% 100%;
@@ -124,9 +124,7 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
     font-family: var(--brand-body-font);
-    background-image:
-      radial-gradient(circle at top, rgba(34, 122, 77, 0.08), transparent 30%),
-      linear-gradient(180deg, rgba(255,255,255,0.98), rgba(246,248,246,1));
+    background-image: none;
   }
 
   h1, h2, h3, h4, .brand-heading {

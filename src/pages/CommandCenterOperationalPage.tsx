@@ -85,15 +85,15 @@ function OpsSignalCard({
 }) {
   const toneClass =
     tone === 'good'
-      ? 'border-green-500 bg-emerald-50/60'
+      ? 'border-green-500'
       : tone === 'warning'
-        ? 'border-yellow-500 bg-amber-50/60'
+        ? 'border-yellow-500'
         : tone === 'critical'
-          ? 'border-red-500 bg-red-50/50'
-          : 'border-gray-400 bg-card';
+          ? 'border-red-500'
+          : 'border-slate-400';
   return (
-    <Card className={`rounded-xl border-l-4 p-5 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${toneClass}`}>
-      <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{title}</div>
+    <Card className={`rounded-xl border border-l-4 bg-card p-4 shadow-sm transition-all duration-150 hover:bg-muted/30 ${toneClass}`}>
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
       <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
       <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
     </Card>
@@ -1093,16 +1093,16 @@ export default function CommandCenterOperationalPage() {
     });
 
     let label = 'Critical';
-    let toneClasses = 'border-red-500 bg-red-50/50 text-red-700';
+    let toneClasses = 'border-red-500 text-red-700';
     if (todayScore >= 90) {
       label = 'Excellent';
-      toneClasses = 'border-green-500 bg-emerald-50/60 text-green-700';
+      toneClasses = 'border-green-500 text-green-700';
     } else if (todayScore >= 70) {
       label = 'Good';
-      toneClasses = 'border-blue-500 bg-blue-50/60 text-blue-700';
+      toneClasses = 'border-blue-500 text-blue-700';
     } else if (todayScore >= 50) {
       label = 'Needs Attention';
-      toneClasses = 'border-yellow-500 bg-amber-50/60 text-amber-700';
+      toneClasses = 'border-yellow-500 text-amber-700';
     }
 
     return {
@@ -1573,9 +1573,9 @@ export default function CommandCenterOperationalPage() {
   );
 
   return (
-    <div className="h-full overflow-auto bg-background p-3 md:p-6">
+    <div className="h-full overflow-auto bg-background p-4 md:p-6">
       {showWelcomeBanner ? (
-        <Card className="mb-4 rounded-2xl border-0 bg-gradient-to-r from-green-600 to-emerald-500 p-5 text-white shadow-sm">
+        <Card className="mb-4 rounded-xl border border-green-500 bg-card p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-semibold">Welcome to Ground Crew HQ, {firstName}! 👋</p>
@@ -1583,7 +1583,7 @@ export default function CommandCenterOperationalPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   size="sm"
-                  className="h-9 bg-white text-emerald-700 hover:bg-white/90"
+                  className="h-9 gap-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={() => {
                     window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
                     setShowWelcomeBanner(false);
@@ -1595,7 +1595,7 @@ export default function CommandCenterOperationalPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 border-white/60 bg-transparent text-white hover:bg-white/10"
+                  className="h-9 rounded-lg"
                   onClick={() => {
                     window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
                     setShowWelcomeBanner(false);
@@ -1608,7 +1608,7 @@ export default function CommandCenterOperationalPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-white hover:bg-white/10 hover:text-white"
+              className="h-8 rounded-lg"
               onClick={() => {
                 window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
                 setShowWelcomeBanner(false);
@@ -1619,7 +1619,7 @@ export default function CommandCenterOperationalPage() {
           </div>
         </Card>
       ) : null}
-      <Card className="mb-6 rounded-2xl border p-6 shadow-sm bg-gradient-to-r from-emerald-50 to-white">
+      <Card className="mb-6 rounded-xl border bg-card p-4 shadow-sm">
         <h2 className="text-2xl font-semibold tracking-tight">
           {greeting}, {firstName}.
         </h2>
@@ -2182,17 +2182,17 @@ export default function CommandCenterOperationalPage() {
         </Card>
       ) : null}
 
-      <Card className="mb-6 rounded-2xl border p-4 shadow-sm">
+      <Card className="mb-6 rounded-xl border bg-card p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Button className="h-12 rounded-full text-sm font-semibold" onClick={() => navigate('/app/workboard')}>
+          <Button size="sm" className="h-9 gap-1.5 rounded-lg text-sm font-semibold" onClick={() => navigate('/app/workboard')}>
             <ArrowRight className="mr-2 h-4 w-4" />
             Build Today's Plan
           </Button>
-          <Button className="h-12 rounded-full text-sm font-semibold" variant="secondary" onClick={() => navigate('/app/scheduler')}>
+          <Button size="sm" className="h-9 gap-1.5 rounded-lg text-sm font-semibold" variant="secondary" onClick={() => navigate('/app/scheduler')}>
             <Calendar className="mr-2 h-4 w-4" />
             Add Shift
           </Button>
-          <Button className="h-12 rounded-full text-sm font-semibold" variant="outline" onClick={() => navigate('/app/employees')}>
+          <Button size="sm" className="h-9 gap-1.5 rounded-lg text-sm font-semibold" variant="outline" onClick={() => navigate('/app/employees')}>
             <Plus className="mr-2 h-4 w-4" />
             Add Employee
           </Button>

@@ -135,7 +135,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate, h
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarHeader className="border-b border-sidebar-border/80 bg-[linear-gradient(180deg,rgba(10,32,22,0.85),rgba(10,32,22,0.35))] p-4">
+      <SidebarHeader className="border-b border-sidebar-border/80 bg-sidebar p-4">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary shadow-[0_0_0_1px_rgba(255,255,255,0.1)]">
             {logoUrl ? (
@@ -159,7 +159,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate, h
         {visibleSections.map((section) => (
           <SidebarGroup key={section.title}>
             {!collapsed ? (
-              <div className="px-3 pb-2 pt-1 text-[10px] uppercase tracking-[0.18em] text-sidebar-foreground/55">
+              <div className="px-3 pb-2 pt-1 text-[10px] uppercase tracking-widest text-sidebar-foreground/55">
                 {section.title}
               </div>
             ) : null}
@@ -172,8 +172,8 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate, h
                         to={item.url}
                         end
                         onClick={onNavigate}
-                        className="relative rounded-lg border border-transparent px-2.5 py-2 text-sidebar-foreground transition-colors duration-150 hover:border-sidebar-border/60 hover:bg-sidebar-accent"
-                        activeClassName="border-sidebar-primary/40 bg-sidebar-accent text-sidebar-primary font-semibold shadow-[inset_0_0_0_1px_rgba(47,168,102,0.16)]"
+                        className="relative rounded-lg border border-transparent px-2.5 py-2 text-sidebar-foreground transition-colors duration-150 hover:bg-muted/30 hover:text-sidebar-accent-foreground"
+                        activeClassName="border-l-2 border-primary bg-primary/10 text-primary font-medium"
                       >
                         <item.icon className="h-4 w-4" />
                         {!collapsed ? (
@@ -197,7 +197,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate, h
         ))}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border/80 bg-[linear-gradient(180deg,rgba(10,32,22,0),rgba(10,32,22,0.55))] p-4">
+      <SidebarFooter className="border-t border-sidebar-border/80 bg-sidebar p-4">
         <div className="text-[11px] text-sidebar-foreground/85">
           {collapsed ? `v${APP_VERSION}` : `Ground Crew HQ · v${APP_VERSION}`}
         </div>
