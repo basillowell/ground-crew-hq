@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -9,9 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
 import { EmployeeRow } from '@/components/workboard/EmployeeRow';
-import { GanttTimeline } from '@/components/workboard/GanttTimeline';
 import { NotesPanel } from '@/components/workboard/NotesPanel';
-import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import { toast } from '@/components/ui/sonner';
 import {
   type ApplicationArea,
@@ -58,6 +56,13 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
+
+const GanttTimeline = lazy(() =>
+  import('@/components/workboard/GanttTimeline').then((module) => ({ default: module.GanttTimeline })),
+);
+const WeatherSnapshotCard = lazy(() =>
+  import('@/components/weather/WeatherSnapshotCard').then((module) => ({ default: module.WeatherSnapshotCard })),
+);
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
@@ -3573,16 +3578,18 @@ export default function WorkboardPage() {
               onAction={() => navigate('/app/scheduler')}
             />
           ) : viewMode === 'timeline' ? (
-            <GanttTimeline
-              employees={orderedDispatchBoard.map((l) => l.employee)}
-              assignments={dayAssignments}
-              tasks={taskList}
-              equipment={equipmentList}
-              scheduleEntries={scheduleList}
-              date={boardDate}
-              onAssignmentClick={(a) => openEditAssignmentDialog(a)}
-              onDropTask={(employeeId) => openAssignmentDialog(employeeId)}
-            />
+            <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted" />}>
+              <GanttTimeline
+                employees={orderedDispatchBoard.map((l) => l.employee)}
+                assignments={dayAssignments}
+                tasks={taskList}
+                equipment={equipmentList}
+                scheduleEntries={scheduleList}
+                date={boardDate}
+                onAssignmentClick={(a) => openEditAssignmentDialog(a)}
+                onDropTask={(employeeId) => openAssignmentDialog(employeeId)}
+              />
+            </Suspense>
           ) : (
             <>
             <div className="hidden space-y-2 md:block">
@@ -4012,7 +4019,9 @@ export default function WorkboardPage() {
           ) : hourlyWeatherStripQuery.data && hourlyWeatherStripQuery.data.length > 0 ? (
             <div className="space-y-2">
               {planningWeatherLocation && latestWeatherLog ? (
-                <WeatherSnapshotCard location={planningWeatherLocation} log={latestWeatherLog} compact title="Daily Weather" />
+                <Suspense fallback={<div className="h-28 animate-pulse rounded-xl bg-muted" />}>
+                  <WeatherSnapshotCard location={planningWeatherLocation} log={latestWeatherLog} compact title="Daily Weather" />
+                </Suspense>
               ) : null}
               <div className="overflow-x-auto">
                 <div className="flex min-w-max gap-1 pr-1">
