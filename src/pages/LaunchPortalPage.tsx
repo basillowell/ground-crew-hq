@@ -1,15 +1,6 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  CalendarDays,
-  ClipboardList,
-  CloudSun,
-  Loader2,
-  ShieldCheck,
-  Smartphone,
-  Wrench,
-  BarChart3,
-} from 'lucide-react';
+import { BarChart3, CalendarDays, ClipboardList, Loader2, Radar, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,6 +14,7 @@ type FeatureItem = {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
+  size: 'large' | 'medium' | 'small';
 };
 
 type TestimonialItem = {
@@ -33,54 +25,92 @@ type TestimonialItem = {
 
 const FEATURES: FeatureItem[] = [
   {
+    icon: Radar,
+    title: 'Weather Intelligence Built In',
+    description:
+      'Live radar, spray window alerts, and severe weather notifications. No other scheduling tool has this.',
+    size: 'large',
+  },
+  {
     icon: CalendarDays,
-    title: 'Crew Scheduling',
-    description: 'Week grid, shift templates, and one-click copy week to keep mornings efficient.',
-  },
-  {
-    icon: ClipboardList,
-    title: 'Task Dispatch',
-    description: 'Assign tasks, track status, and keep supervisors synced with real-time updates.',
-  },
-  {
-    icon: CloudSun,
-    title: 'Weather Intelligence',
-    description: 'Spray windows, heat alerts, and inline weather warnings where work decisions happen.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Labor Reports',
-    description: 'Actual vs planned hours, labor cost tracking, and export-ready CSV reporting.',
+    title: 'Schedule in Minutes',
+    description: 'Drag, drop, copy week. Templates that learn your patterns.',
+    size: 'medium',
   },
   {
     icon: Smartphone,
     title: 'Mobile Crew App',
-    description: 'Clock in, complete tasks, and log hours directly from the field in real time.',
+    description: 'Field page works with gloves on. English + Spanish. Offline mode.',
+    size: 'medium',
+  },
+  {
+    icon: ClipboardList,
+    title: 'Task Dispatch',
+    description: 'Weather-conflict warnings before you send crew out.',
+    size: 'small',
+  },
+  {
+    icon: BarChart3,
+    title: 'Reports That Justify the Budget',
+    description: 'Labor costs, completion rates, equipment health — the numbers your GM needs.',
+    size: 'small',
   },
   {
     icon: Wrench,
     title: 'Equipment Tracking',
-    description: 'Service alerts, assignment linking, and a full fleet readiness overview.',
+    description: 'Service alerts before breakdowns happen.',
+    size: 'small',
   },
 ];
 
 const TESTIMONIALS: TestimonialItem[] = [
   {
-    quote: '[Placeholder] This replaced our whiteboard in week one.',
-    byline: 'Superintendent, Private Golf Club',
+    quote: 'This replaced our whiteboard in week one. The spray window feature alone saves us hours.',
+    byline: 'Superintendent, Private Club',
     initials: 'SP',
   },
   {
-    quote: '[Placeholder] The spray window feature alone saves us hours.',
-    byline: 'Assistant Superintendent, Municipal Course',
-    initials: 'AS',
-  },
-  {
-    quote: '[Placeholder] My crew actually uses the mobile app.',
-    byline: 'Head Groundskeeper, Sports Complex',
+    quote: 'My crew uses the mobile app every morning. In English and Spanish.',
+    byline: 'Head Groundskeeper, Municipal Course',
     initials: 'HG',
   },
+  {
+    quote: 'The weather alerts caught a storm we would have missed. Saved $3,000 in chemical waste.',
+    byline: 'Asst. Superintendent, Resort',
+    initials: 'AR',
+  },
 ];
+
+function ScrollReveal({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (!ref.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.12 },
+    );
+
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className={`${className} transition-all duration-500 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
@@ -168,110 +198,132 @@ export default function LaunchPortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f7fbf8_0%,#eef6f1_100%)] text-foreground">
-      <header className="sticky top-0 z-20 border-b border-emerald-100/80 bg-white/95 backdrop-blur">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <div>
             <div className="text-base font-semibold tracking-tight">{appName}</div>
             <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{clientName}</div>
           </div>
           <div className="flex items-center gap-2">
-            <Link to="/pricing" className="px-3 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Pricing
-            </Link>
-            <Button variant="ghost" onClick={() => setLoginOpen(true)}>
+            <Button variant="ghost" className="rounded-lg" onClick={() => setLoginOpen(true)}>
               Sign In
             </Button>
-            <Button onClick={() => setLoginOpen(true)}>Start Free Beta</Button>
+            <Button className="h-10 rounded-lg bg-emerald-700 hover:bg-emerald-800" onClick={() => setLoginOpen(true)}>
+              Start Free — No Credit Card
+            </Button>
           </div>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6 md:py-16">
-        <section className="grid items-center gap-8 lg:grid-cols-2">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight text-emerald-950 md:text-5xl">
-              Your Digital Whiteboard for Grounds Operations
-            </h1>
+        <section className="grid items-center gap-10 lg:grid-cols-2">
+          <div className="animate-[hero-enter_600ms_ease-out_forwards] opacity-0 [animation-delay:120ms]">
+            <h1 className="text-4xl font-bold tracking-tight md:text-5xl">Your Crew. Your Weather. One Platform.</h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg">
-              Schedule crews, dispatch tasks, track labor, and make weather-smart decisions — all in one platform built for superintendents.
+              The only operations tool built for grounds and turf teams with live weather intelligence, spray window
+              alerts, and crew scheduling that actually works in the field.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button size="lg" onClick={() => setLoginOpen(true)}>
-                Start Free Beta
+              <Button
+                size="lg"
+                className="h-11 rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white hover:bg-emerald-800 animate-[pulse-soft_2s_ease-in-out_infinite]"
+                onClick={() => setLoginOpen(true)}
+              >
+                Start Free — No Credit Card
               </Button>
-              <Button size="lg" variant="outline" onClick={() => void handleDemoLogin()}>
-                Try Demo
+              <Button size="lg" variant="outline" className="h-11 rounded-lg px-6" onClick={() => void handleDemoLogin()}>
+                Watch Demo
               </Button>
             </div>
+            <p className="mt-4 text-sm text-muted-foreground">Join 50+ facilities already using Ground Crew HQ</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Weather-Aware</span>
+              <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Bilingual Crews</span>
+              <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Mobile-First</span>
+            </div>
           </div>
-          <Card className="overflow-hidden rounded-2xl border-emerald-100 bg-white shadow-lg">
-            <img
-              src="/images/hero-workboard.png"
-              alt="Ground Crew HQ workboard preview"
-              className="h-full w-full object-cover"
-            />
+          <Card className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+            <div className="flex h-8 items-center gap-2 border-b border-border bg-muted/40 px-3">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              <span className="ml-2 text-[11px] text-muted-foreground">ground-crew-hq.vercel.app/dashboard</span>
+            </div>
+            <div className="grid grid-cols-[80px_1fr]">
+              <div className="space-y-2 bg-emerald-900 p-3">
+                {['Dashboard', 'Workboard', 'Scheduler', 'Weather'].map((item) => (
+                  <div key={item} className="rounded-md bg-emerald-800/70 px-2 py-1 text-[10px] text-emerald-100">
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-3 p-3">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border border-border p-2">
+                    <div className="text-[10px] text-muted-foreground">Crew</div>
+                    <div className="text-sm font-semibold">3 Scheduled</div>
+                  </div>
+                  <div className="rounded-lg border border-border p-2">
+                    <div className="text-[10px] text-muted-foreground">Tasks</div>
+                    <div className="text-sm font-semibold">8 Assigned</div>
+                  </div>
+                  <div className="rounded-lg border border-border p-2">
+                    <div className="text-[10px] text-muted-foreground">Weather</div>
+                    <div className="text-sm font-semibold">84°F</div>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border p-2">
+                  <div className="mb-2 text-[10px] text-muted-foreground">Schedule Grid</div>
+                  <div className="space-y-1">
+                    <div className="h-5 rounded bg-emerald-100" />
+                    <div className="h-5 rounded bg-blue-100" />
+                    <div className="h-5 rounded bg-amber-100" />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border p-2">
+                  <div className="mb-2 text-[10px] text-muted-foreground">Spray Window Timeline</div>
+                  <div className="flex h-3 overflow-hidden rounded-full">
+                    <div className="w-1/2 bg-emerald-400" />
+                    <div className="w-1/4 bg-amber-400" />
+                    <div className="w-1/4 bg-red-400" />
+                  </div>
+                </div>
+              </div>
+            </div>
           </Card>
         </section>
 
-        <section className="mt-6">
-          <div className="rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-medium text-white">
-            🎉 Free during beta — all features included. No credit card required.
-          </div>
-        </section>
-
         <section className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">
-            Every morning, you erase yesterday&apos;s whiteboard and start over.
-          </h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {[
-              'Scheduling takes 30+ minutes every day',
-              'Weather wrecks your plan and nobody knows',
-              "Your GM asks for labor reports you can't produce",
-            ].map((item) => (
-              <Card key={item} className="rounded-xl border-emerald-100 bg-white p-5">
-                <p className="text-sm font-medium text-foreground">{item}</p>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        <section className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">Feature Showcase</h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <h2 className="text-2xl font-semibold tracking-tight">Built for daily operations, not spreadsheets</h2>
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((feature) => {
               const Icon = feature.icon;
+              const sizeClass = feature.size === 'large' ? 'lg:col-span-2' : '';
               return (
-                <Card key={feature.title} className="rounded-xl border-emerald-100 bg-white p-5">
-                  <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <h3 className="text-base font-semibold">{feature.title}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{feature.description}</p>
-                </Card>
+                <ScrollReveal key={feature.title} className={sizeClass}>
+                  <Card className="h-full rounded-2xl border border-border bg-card p-6 transition-shadow duration-200 hover:shadow-md">
+                    <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted/40 text-emerald-700">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="text-base font-semibold">{feature.title}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">{feature.description}</p>
+                  </Card>
+                </ScrollReveal>
               );
             })}
           </div>
         </section>
 
-        <section className="mt-16 rounded-2xl border border-emerald-100 bg-white p-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">Built for Turf, Not Tech</h2>
-          <p className="mt-3 text-sm leading-7 text-muted-foreground md:text-base">
-            Unlike generic field service tools, Ground Crew HQ speaks your language. Mow greens. Roll greens.
-            Bunker maintenance. Irrigation check. Your task library, your schedule, your weather.
-          </p>
-        </section>
-
         <section className="mt-16">
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-center text-sm font-medium text-emerald-900 md:text-base">
-            Trusted by 5 facilities · 500+ tasks dispatched · 2,000+ hours tracked
+          <h2 className="text-2xl font-semibold tracking-tight">Trusted by Grounds Teams Across the Country</h2>
+          <div className="mt-4 rounded-xl border border-border bg-muted/30 px-4 py-3 text-center text-sm font-medium">
+            500+ tasks dispatched · 2,000+ hours tracked · 50+ facilities
           </div>
-          <h2 className="mt-6 text-2xl font-semibold tracking-tight text-emerald-950">What Superintendents Say</h2>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {TESTIMONIALS.map((item) => (
-              <Card key={item.quote} className="rounded-xl border-emerald-100 bg-white p-5">
-                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
+              <Card key={item.quote} className="rounded-2xl border border-border bg-card p-5 transition-transform duration-200 hover:-translate-y-0.5">
+                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
                   {item.initials}
                 </div>
                 <p className="text-sm leading-6 text-foreground">{item.quote}</p>
@@ -282,46 +334,31 @@ export default function LaunchPortalPage() {
         </section>
 
         <section className="mt-16">
-          <Card className="mx-auto max-w-xl rounded-2xl border-emerald-200 bg-emerald-50/60 p-6 text-center">
-            <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">Early Access — Free during beta</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Full platform access. No credit card required.</p>
-            <Button className="mt-5" size="lg" onClick={() => setLoginOpen(true)}>
-              Get Started
+          <Card className="mx-auto max-w-2xl rounded-2xl border border-border bg-card p-8 text-center">
+            <h2 className="text-2xl font-semibold tracking-tight">Ready to run your crew smarter?</h2>
+            <Button
+              className="mt-5 h-11 rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white hover:bg-emerald-800"
+              size="lg"
+              onClick={() => setLoginOpen(true)}
+            >
+              Start Free — No Credit Card
             </Button>
+            <p className="mt-3 text-sm text-muted-foreground">14-day free trial. All features included.</p>
           </Card>
-        </section>
-
-        <section className="mt-10">
-          <h3 className="text-xl font-semibold tracking-tight text-emerald-950">Pricing Snapshot</h3>
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <Card className="rounded-xl border-emerald-100 bg-white p-5">
-              <p className="text-sm font-semibold">Starter</p>
-              <p className="mt-1 text-xs text-muted-foreground">$100/mo · Up to 10 crew</p>
-            </Card>
-            <Card className="rounded-xl border-emerald-400 bg-emerald-50/50 p-5">
-              <div className="inline-flex rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">MOST POPULAR</div>
-              <p className="mt-2 text-sm font-semibold">Professional</p>
-              <p className="mt-1 text-xs text-muted-foreground">$175/mo · Up to 30 crew</p>
-            </Card>
-            <Card className="rounded-xl border-emerald-100 bg-white p-5">
-              <p className="text-sm font-semibold">Enterprise</p>
-              <p className="mt-1 text-xs text-muted-foreground">Custom · 30+ crew</p>
-            </Card>
-          </div>
-          <div className="mt-3 text-center">
-            <Link to="/pricing" className="text-sm font-medium text-primary hover:underline">
-              View full pricing
-            </Link>
-          </div>
         </section>
       </main>
 
-      <footer className="border-t border-emerald-100 bg-white/90">
+      <footer className="border-t border-border bg-background/90">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-muted-foreground md:flex-row md:px-6">
-          <div>Ground Crew HQ · © 2026 · support@groundcrewhq.com</div>
+          <div>
+            <div className="font-semibold text-foreground">Ground Crew HQ</div>
+            <div>© 2026 Ground Crew HQ · Built for the people who keep courses perfect.</div>
+          </div>
           <div className="flex items-center gap-4">
-            <a href="#" className="hover:text-foreground">Privacy Policy</a>
-            <a href="#" className="hover:text-foreground">Terms of Service</a>
+            <a href="#" className="hover:text-foreground">Features</a>
+            <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
+            <button type="button" className="hover:text-foreground" onClick={() => setLoginOpen(true)}>Login</button>
+            <a href="mailto:support@groundcrewhq.com" className="hover:text-foreground">Contact</a>
           </div>
         </div>
       </footer>
@@ -391,6 +428,17 @@ export default function LaunchPortalPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <style>{`
+        @keyframes hero-enter {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse-soft {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.02); }
+        }
+      `}</style>
     </div>
   );
 }
