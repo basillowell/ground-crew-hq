@@ -1536,7 +1536,7 @@ export default function SchedulerPage() {
                 {activeEmployees.length === 0 && <option value="">No active crew</option>}
                 {activeEmployees.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.firstName} {e.lastName} — {e.group || e.department}
+                    {e.firstName} {e.lastName} — {e.role || 'Crew'}
                   </option>
                 ))}
               </select>

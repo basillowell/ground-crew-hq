@@ -12,6 +12,7 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { toast } from '@/components/ui/sonner';
+import { Link } from 'react-router-dom';
 
 type EquipmentUnitRow = {
   id: string;
@@ -149,7 +150,6 @@ export default function EquipmentPage() {
 
     if (propertyId) {
       unitsQuery.eq('property_id', propertyId);
-      typesQuery.eq('property_id', propertyId);
     }
 
     const [{ data: unitsData, error: unitsError }, { data: typesData, error: typesError }] = await Promise.all([
@@ -181,6 +181,10 @@ export default function EquipmentPage() {
     }
     return map;
   }, [types]);
+  const activeEquipmentTypes = useMemo(
+    () => types.filter((type) => type.active !== false),
+    [types],
+  );
 
   const rows = useMemo(() => {
     return units.map((unit) => {
@@ -383,9 +387,7 @@ export default function EquipmentPage() {
                           className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                         >
                           <option value="">Select type</option>
-                          {types
-                            .filter((type) => type.active !== false)
-                            .map((type) => (
+                          {activeEquipmentTypes.map((type) => (
                               <option key={type.id} value={type.id}>
                                 {type.name ?? 'Unnamed Type'}
                               </option>
@@ -508,6 +510,18 @@ export default function EquipmentPage() {
                 {isEditing ? (
                   <div className="space-y-2">
                     <Input value={editDraft.name} onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })} />
+                    <select
+                      value={editDraft.equipmentTypeId}
+                      onChange={(event) => setEditDraft({ ...editDraft, equipmentTypeId: event.target.value })}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="">Select type</option>
+                      {activeEquipmentTypes.map((type) => (
+                        <option key={`mobile-type-${type.id}`} value={type.id}>
+                          {type.name ?? 'Unnamed Type'}
+                        </option>
+                      ))}
+                    </select>
                     <Input value={editDraft.location} onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value })} placeholder="Location" />
                     <Input type="date" value={editDraft.lastServiced} onChange={(event) => setEditDraft({ ...editDraft, lastServiced: event.target.value })} />
                     <Textarea value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })} className="min-h-16" />
@@ -553,6 +567,14 @@ export default function EquipmentPage() {
             <DialogTitle>Add Equipment</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3">
+            {activeEquipmentTypes.length === 0 ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                No equipment types defined. Add types in Settings → Equipment first.{" "}
+                <Link to="/app/settings?tab=Workspace" className="font-medium underline">
+                  Open Settings
+                </Link>
+              </div>
+            ) : null}
             <div>
               <label className="text-xs text-muted-foreground">Name</label>
               <Input
@@ -569,9 +591,7 @@ export default function EquipmentPage() {
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="">Select type</option>
-                {types
-                  .filter((type) => type.active !== false)
-                  .map((type) => (
+                {activeEquipmentTypes.map((type) => (
                     <option key={type.id} value={type.id}>
                       {type.name ?? 'Unnamed Type'}
                     </option>
@@ -622,7 +642,7 @@ export default function EquipmentPage() {
             <Button variant="outline" onClick={cancelAdd}>
               Cancel
             </Button>
-            <Button onClick={() => void saveAdd()} disabled={addSaving || !addDraft.name.trim()}>
+            <Button onClick={() => void saveAdd()} disabled={addSaving || !addDraft.name.trim() || activeEquipmentTypes.length === 0}>
               {addSaving ? 'Saving...' : 'Save Equipment'}
             </Button>
           </div>

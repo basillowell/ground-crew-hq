@@ -4245,7 +4245,7 @@ export default function WorkboardPage() {
                     const shiftStr = shift ? ` (${formatTime(shift.shiftStart)}–${formatTime(shift.shiftEnd)})` : '';
                     return (
                       <option key={e.id} value={e.id}>
-                        {e.firstName} {e.lastName}{shiftStr} · {e.group}
+                        {e.firstName} {e.lastName}{shiftStr} · {e.department || e.group || 'General'}
                       </option>
                     );
                   })}

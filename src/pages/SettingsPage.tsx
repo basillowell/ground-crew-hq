@@ -251,6 +251,11 @@ function WorkspaceTab({
   const [newPropertyTimezone, setNewPropertyTimezone] = useState('America/New_York');
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [editingPropertyName, setEditingPropertyName] = useState('');
+  const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string; category: string | null }>>([]);
+  const [newEquipmentTypeName, setNewEquipmentTypeName] = useState('');
+  const [newEquipmentTypeCategory, setNewEquipmentTypeCategory] = useState('General');
+  const [editingEquipmentTypeId, setEditingEquipmentTypeId] = useState<string | null>(null);
+  const [editingEquipmentTypeName, setEditingEquipmentTypeName] = useState('');
   const [loadingDemoData, setLoadingDemoData] = useState(false);
   const [usageStats, setUsageStats] = useState<UsageStats>({
     properties: 0,
@@ -267,6 +272,7 @@ function WorkspaceTab({
     { label: 'Mountain', value: 'America/Denver' },
     { label: 'Pacific', value: 'America/Los_Angeles' },
   ] as const;
+  const equipmentTypeCategoryOptions = ['Mowing', 'Transport', 'Chemical', 'Trimming', 'Maintenance', 'General'] as const;
 
   const fetchWorkspaceData = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -291,6 +297,7 @@ function WorkspaceTab({
       { count: weatherCount, error: weatherError },
       { count: departmentsCount, error: departmentsError },
       { count: shiftTemplatesCount, error: shiftTemplatesError },
+      { data: equipmentTypesData, error: equipmentTypesError },
     ] = await Promise.all([
       supabase.from('organizations').select('name, plan, subscription_status').eq('id', orgId).single(),
       supabase
@@ -309,9 +316,10 @@ function WorkspaceTab({
       supabase.from('weather_locations').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('is_active', true),
       supabase.from('departments').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('active', true),
       supabase.from('shift_templates').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('active', true),
+      supabase.from('equipment_types').select('id, name, category').eq('org_id', orgId).eq('active', true).order('name', { ascending: true }),
     ]);
 
-    if (orgError || propertiesError || employeesError || tasksError || scheduleError || weatherError || departmentsError || shiftTemplatesError) {
+    if (orgError || propertiesError || employeesError || tasksError || scheduleError || weatherError || departmentsError || shiftTemplatesError || equipmentTypesError) {
       setError(
         orgError?.message ??
           propertiesError?.message ??
@@ -321,6 +329,7 @@ function WorkspaceTab({
           weatherError?.message ??
           departmentsError?.message ??
           shiftTemplatesError?.message ??
+          equipmentTypesError?.message ??
           'Unable to load workspace settings',
       );
       setLoading(false);
@@ -330,6 +339,7 @@ function WorkspaceTab({
     setOrgInfo((orgData ?? null) as OrganizationInfo | null);
     setOrgNameDraft(String((orgData as OrganizationInfo | null)?.name ?? ''));
     setProperties((propertiesData ?? []) as PropertyItem[]);
+    setEquipmentTypes((equipmentTypesData ?? []) as Array<{ id: string; name: string; category: string | null }>);
     setUsageStats({
       properties: (propertiesData ?? []).length,
       employees: employeesCount ?? 0,
@@ -434,6 +444,63 @@ function WorkspaceTab({
     }
     setProperties((current) => current.filter((property) => property.id !== propertyId));
     toast.success('Property deleted');
+  };
+
+  const addEquipmentType = async () => {
+    if (!supabase || !orgId || !newEquipmentTypeName.trim()) return;
+    const { error: insertError } = await supabase.from('equipment_types').insert({
+      id: crypto.randomUUID(),
+      org_id: orgId,
+      property_id: currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null,
+      name: newEquipmentTypeName.trim(),
+      category: newEquipmentTypeCategory,
+      active: true,
+    });
+    if (insertError) {
+      setError(insertError.message);
+      toast.error(`Failed to add equipment type: ${insertError.message}`);
+      return;
+    }
+    toast.success(`Equipment type added: ${newEquipmentTypeName.trim()}`);
+    setNewEquipmentTypeName('');
+    setNewEquipmentTypeCategory('General');
+    await fetchWorkspaceData();
+  };
+
+  const saveEquipmentTypeEdit = async (equipmentTypeId: string) => {
+    if (!supabase || !orgId || !editingEquipmentTypeName.trim()) return;
+    const { error: updateError } = await supabase
+      .from('equipment_types')
+      .update({ name: editingEquipmentTypeName.trim() })
+      .eq('id', equipmentTypeId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to update equipment type: ${updateError.message}`);
+      return;
+    }
+    toast.success(`Equipment type updated: ${editingEquipmentTypeName.trim()}`);
+    setEditingEquipmentTypeId(null);
+    setEditingEquipmentTypeName('');
+    await fetchWorkspaceData();
+  };
+
+  const deactivateEquipmentType = async (equipmentTypeId: string, name: string) => {
+    if (!supabase || !orgId) return;
+    const confirmed = window.confirm(`Delete equipment type "${name}"?`);
+    if (!confirmed) return;
+    const { error: updateError } = await supabase
+      .from('equipment_types')
+      .update({ active: false })
+      .eq('id', equipmentTypeId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to delete equipment type: ${updateError.message}`);
+      return;
+    }
+    toast.success(`Equipment type deleted: ${name}`);
+    await fetchWorkspaceData();
   };
 
   const loadDemoData = async () => {
@@ -980,6 +1047,50 @@ function WorkspaceTab({
               Add
             </button>
           </div>
+        </div>
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Equipment Types</h3>
+        {equipmentTypes.length === 0 ? (
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No equipment types yet.</p>
+        ) : null}
+        {equipmentTypes.map((type) => (
+          <div key={type.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {editingEquipmentTypeId === type.id ? (
+              <>
+                <input value={editingEquipmentTypeName} onChange={(event) => setEditingEquipmentTypeName(event.target.value)} />
+                <button onClick={() => void saveEquipmentTypeEdit(type.id)} style={{ color: '#166534' }}>Save</button>
+                <button onClick={() => { setEditingEquipmentTypeId(null); setEditingEquipmentTypeName(''); }}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <span style={{ flex: 1 }}>{type.name} <span style={{ color: '#6b7280' }}>({type.category ?? 'General'})</span></span>
+                <button onClick={() => { setEditingEquipmentTypeId(type.id); setEditingEquipmentTypeName(type.name); }}>Edit</button>
+                <button onClick={() => void deactivateEquipmentType(type.id, type.name)} style={{ color: '#dc2626' }}>Delete</button>
+              </>
+            )}
+          </div>
+        ))}
+        <div style={{ display: 'grid', gap: '8px', maxWidth: '420px' }}>
+          <input
+            value={newEquipmentTypeName}
+            onChange={(event) => setNewEquipmentTypeName(event.target.value)}
+            placeholder="Type name"
+          />
+          <select value={newEquipmentTypeCategory} onChange={(event) => setNewEquipmentTypeCategory(event.target.value)} style={{ height: '40px' }}>
+            {equipmentTypeCategoryOptions.map((category) => (
+              <option key={`equipment-type-category-${category}`} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => void addEquipmentType()}
+            style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
+          >
+            Add
+          </button>
         </div>
       </div>
     </div>
@@ -2020,6 +2131,18 @@ function HelpTab() {
 }
 
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
+  const taskCategoryOptions = [
+    'Mowing',
+    'Irrigation',
+    'Chemical Application',
+    'Trimming',
+    'Bunker Maintenance',
+    'Aeration',
+    'Fertilization',
+    'General Maintenance',
+    'Equipment Maintenance',
+    'Other',
+  ] as const;
   const [tasks, setTasks] = useState<TaskLibraryItem[]>([]);
   const [employees, setEmployees] = useState<Array<{ id: string; first_name: string; last_name: string; status: string | null }>>([]);
   const [recurringRules, setRecurringRules] = useState<RecurringTaskRule[]>([]);
@@ -2027,7 +2150,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
-  const [newCategory, setNewCategory] = useState('General');
+  const [newCategory, setNewCategory] = useState('General Maintenance');
   const [newPriority, setNewPriority] = useState<'1' | '2' | '3'>('2');
   const [newEstimatedHours, setNewEstimatedHours] = useState('1');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -2120,7 +2243,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
         org_id: orgId,
         property_id: propertyId,
         name: newName.trim(),
-        category: newCategory.trim() || 'General',
+        category: newCategory.trim() || 'General Maintenance',
         priority: Number(newPriority),
         estimated_hours: Number(newEstimatedHours || '0'),
         status: 'active',
@@ -2139,7 +2262,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       ),
     );
     setNewName('');
-    setNewCategory('General');
+    setNewCategory('General Maintenance');
     setNewPriority('2');
     setNewEstimatedHours('1');
     toast.success(`Task added: ${newName.trim()}`);
@@ -2164,7 +2287,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     setEditingTaskId(task.id);
     setEditDraft({
       name: task.name,
-      category: task.category ?? 'General',
+      category: task.category ?? 'General Maintenance',
       priority: task.priority ?? 2,
       estimated_hours: Number(task.estimated_hours ?? 0),
     });
@@ -2181,7 +2304,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       .from('tasks')
       .update({
         name: editDraft.name.trim(),
-        category: editDraft.category.trim() || 'General',
+        category: editDraft.category.trim() || 'General Maintenance',
         priority: editDraft.priority,
         estimated_hours: editDraft.estimated_hours,
       })
@@ -2198,7 +2321,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
           ? {
               ...task,
               name: editDraft.name.trim(),
-              category: editDraft.category.trim() || 'General',
+              category: editDraft.category.trim() || 'General Maintenance',
               priority: editDraft.priority,
               estimated_hours: editDraft.estimated_hours,
             }
@@ -2409,12 +2532,18 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                     </td>
                     <td style={{ padding: '8px' }}>
                       {editingTaskId === task.id ? (
-                        <input
+                        <select
                           value={editDraft.category}
                           onChange={(event) => setEditDraft((cur) => ({ ...cur, category: event.target.value }))}
-                        />
+                        >
+                          {taskCategoryOptions.map((category) => (
+                            <option key={`edit-task-category-${category}`} value={category}>
+                              {category}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
-                        task.category ?? 'General'
+                        task.category ?? 'General Maintenance'
                       )}
                     </td>
                     <td style={{ padding: '8px' }}>
@@ -2468,7 +2597,13 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
         <strong>Add task</strong>
         <input placeholder="Task name" value={newName} onChange={(event) => setNewName(event.target.value)} />
         <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr 1fr' }}>
-          <input placeholder="Category" value={newCategory} onChange={(event) => setNewCategory(event.target.value)} />
+          <select value={newCategory} onChange={(event) => setNewCategory(event.target.value)}>
+            {taskCategoryOptions.map((category) => (
+              <option key={`new-task-category-${category}`} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
           <select value={newPriority} onChange={(event) => setNewPriority(event.target.value as '1' | '2' | '3')}>
             <option value="1">1 (High)</option>
             <option value="2">2 (Med)</option>

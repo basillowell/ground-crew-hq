@@ -670,14 +670,40 @@ export default function EmployeesPage() {
                     </td>
                     <td className="px-3 py-2">
                       {isEditing ? (
-                        <Input value={editDraft.role} onChange={(event) => setEditDraft({ ...editDraft, role: event.target.value })} placeholder="Role" />
+                        <select
+                          value={editDraft.role}
+                          onChange={(event) => setEditDraft({ ...editDraft, role: event.target.value })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {editDraft.role && !roles.some((role) => role.name === editDraft.role) ? (
+                            <option value={editDraft.role}>{editDraft.role}</option>
+                          ) : null}
+                          {roles.map((role) => (
+                            <option key={`edit-role-${role.id}`} value={role.name}>
+                              {role.name}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
                         employee.role || '-'
                       )}
                     </td>
                     <td className="px-3 py-2">
                       {isEditing ? (
-                        <Input value={editDraft.department} onChange={(event) => setEditDraft({ ...editDraft, department: event.target.value })} placeholder="Department" />
+                        <select
+                          value={editDraft.department}
+                          onChange={(event) => setEditDraft({ ...editDraft, department: event.target.value })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {editDraft.department && !departments.some((department) => department.name === editDraft.department) ? (
+                            <option value={editDraft.department}>{editDraft.department}</option>
+                          ) : null}
+                          {departments.map((department) => (
+                            <option key={`edit-dept-${department.id}`} value={department.name}>
+                              {department.name}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
                         employee.department || '-'
                       )}
@@ -782,8 +808,34 @@ export default function EmployeesPage() {
                   <div className="space-y-2">
                     <Input value={editDraft.first_name} onChange={(event) => setEditDraft({ ...editDraft, first_name: event.target.value })} placeholder="First name" />
                     <Input value={editDraft.last_name} onChange={(event) => setEditDraft({ ...editDraft, last_name: event.target.value })} placeholder="Last name" />
-                    <Input value={editDraft.role} onChange={(event) => setEditDraft({ ...editDraft, role: event.target.value })} placeholder="Role" />
-                    <Input value={editDraft.department} onChange={(event) => setEditDraft({ ...editDraft, department: event.target.value })} placeholder="Department" />
+                    <select
+                      value={editDraft.role}
+                      onChange={(event) => setEditDraft({ ...editDraft, role: event.target.value })}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {editDraft.role && !roles.some((role) => role.name === editDraft.role) ? (
+                        <option value={editDraft.role}>{editDraft.role}</option>
+                      ) : null}
+                      {roles.map((role) => (
+                        <option key={`mobile-edit-role-${role.id}`} value={role.name}>
+                          {role.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={editDraft.department}
+                      onChange={(event) => setEditDraft({ ...editDraft, department: event.target.value })}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      {editDraft.department && !departments.some((department) => department.name === editDraft.department) ? (
+                        <option value={editDraft.department}>{editDraft.department}</option>
+                      ) : null}
+                      {departments.map((department) => (
+                        <option key={`mobile-edit-dept-${department.id}`} value={department.name}>
+                          {department.name}
+                        </option>
+                      ))}
+                    </select>
                     <Input type="number" min="0" step="0.01" value={editDraft.hourly_rate} onChange={(event) => setEditDraft({ ...editDraft, hourly_rate: event.target.value })} placeholder="Hourly rate" />
                   </div>
                 ) : (
