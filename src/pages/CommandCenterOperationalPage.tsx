@@ -997,6 +997,30 @@ export default function CommandCenterOperationalPage() {
     ? `All Properties (${properties.length})`
     : selectedProperty?.name ?? 'No property selected';
   const openNeedsCount = morningNeedsQuery.data ?? 0;
+  const openNeedsPreviewQuery = useQuery({
+    queryKey: ['dashboard-open-needs-preview', orgId ?? 'no-org', propertyScope ?? 'all', todayKey],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 30,
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as Array<{ id: string; title: string }>;
+      let query = supabase
+        .from('task_requests')
+        .select('id,title')
+        .eq('org_id', orgId)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(2);
+      if (propertyScope && propertyScope !== 'all') {
+        query = query.eq('property_id', propertyScope);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: String(row.id),
+        title: String(row.title ?? 'Untitled need'),
+      }));
+    },
+  });
   const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;
   const efficiencyScoreSummary = useMemo(() => {
     const parseShiftMinutes = (start: string | null, end: string | null) => {
@@ -1804,6 +1828,148 @@ export default function CommandCenterOperationalPage() {
         <h1 className="text-lg font-semibold tracking-tight">Operations Summary</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Review readiness, risks, and blockers.</p>
       </div>
+
+      {!isLoading && !queryTimeoutReached ? (
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Card className="rounded-xl border bg-card p-4 lg:col-span-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Morning Briefing</div>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight">
+              {greeting}, {firstName}.
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Today: {morningDateLabel} · {morningPropertyLabel}
+            </p>
+            <p className="mt-3 text-sm">
+              {dailyBriefText ?? `${crewScheduledCount} crew scheduled, ${tasksAssignedCount} tasks assigned, ${weatherRiskSummary.value}.`}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" className="h-9 gap-1.5 rounded-lg" onClick={() => navigate('/app/workboard')}>
+                Open Workboard
+              </Button>
+              <Button size="sm" variant="outline" className="h-9 rounded-lg" onClick={() => navigate('/app/scheduler')}>
+                Open Scheduler
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="rounded-xl border bg-card p-4">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Weather</div>
+            <div className="mt-2 text-3xl font-semibold tracking-tight">
+              {selectedWeatherQuery.data ? `${Math.round(selectedWeatherQuery.data.current.temperature)}°F` : '--'}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {selectedWeatherQuery.data
+                ? `${getWeatherConditionMeta(selectedWeatherQuery.data.current.weatherCode).label} · Wind ${Math.round(selectedWeatherQuery.data.current.windSpeed)} mph`
+                : 'No weather data available'}
+            </p>
+            <button
+              type="button"
+              className="mt-3 text-xs font-medium text-primary underline"
+              onClick={() => navigate('/app/weather')}
+            >
+              View Full Weather →
+            </button>
+          </Card>
+
+          <OpsSignalCard title="Crew Count" value={`${crewScheduledCount}`} subtitle="Crew Scheduled" tone={crewScheduledCount > 0 ? 'good' : 'critical'} />
+          <OpsSignalCard
+            title="Tasks Count"
+            value={`${tasksAssignedCount}`}
+            subtitle={`${assignments.filter((item) => item.status === 'done').length}/${tasksAssignedCount || 0} done`}
+            tone={tasksAssignedCount > 0 ? 'good' : crewScheduledCount > 0 ? 'warning' : 'neutral'}
+          />
+
+          <Card className="rounded-xl border bg-card p-4 lg:col-span-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Spray Window</div>
+            <div className="mt-3">
+              {sprayWindowQuery.isLoading ? (
+                <Skeleton className="h-6 w-full rounded-full" />
+              ) : (
+                <div className="grid min-w-[520px] grid-cols-12 gap-1 overflow-x-auto">
+                  {(sprayWindowQuery.data ?? []).map((block) => (
+                    <div key={`spray-bento-${block.hour}`} className={`h-5 rounded ${block.safe ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">{sprayWindowSummary}</p>
+          </Card>
+
+          <Card className={`rounded-xl border border-l-4 bg-card p-4 ${efficiencyScoreSummary.toneClasses}`}>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Efficiency Score</div>
+            <div className="mt-2 text-4xl font-semibold tracking-tight">{efficiencyScoreSummary.score}</div>
+            <p className="mt-1 text-sm">{efficiencyScoreSummary.label}</p>
+            <p className="mt-2 text-xs">
+              {efficiencyScoreSummary.trend === 'up' ? '↑' : efficiencyScoreSummary.trend === 'down' ? '↓' : '→'} vs yesterday
+            </p>
+          </Card>
+
+          <OpsSignalCard title="Schedule Coverage" value={coverageSummary.value} subtitle={coverageSummary.subtitle} tone={coverageSummary.tone} />
+          <OpsSignalCard
+            title="Equipment Health"
+            value={equipmentUnits.length === 0 ? 'No data' : `${equipmentActiveCount}/${equipmentUnits.length} Ready`}
+            subtitle={overdueEquipmentCount > 0 ? `${overdueEquipmentCount} overdue` : 'All clear'}
+            tone={overdueEquipmentCount === 0 ? 'good' : overdueEquipmentCount <= 2 ? 'warning' : 'critical'}
+          />
+
+          <Card className="rounded-xl border bg-card p-4">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open Needs</div>
+            <div className="mt-2 text-2xl font-semibold">{openNeedsCount}</div>
+            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+              {(openNeedsPreviewQuery.data ?? []).map((need) => (
+                <div key={need.id}>• {need.title}</div>
+              ))}
+              {(openNeedsPreviewQuery.data ?? []).length === 0 ? <div>No open needs</div> : null}
+            </div>
+            <button type="button" className="mt-3 text-xs font-medium text-primary underline" onClick={() => navigate('/app/workboard')}>
+              View All →
+            </button>
+          </Card>
+
+          {operationsScorecard ? (
+            <Card className="rounded-xl border bg-card p-4 lg:col-span-3">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Operations Scorecard</div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <ScorecardMetricCard
+                  label="Task Completion"
+                  value={`${operationsScorecard.completionCurrent}%`}
+                  trend={operationsScorecard.completionTrend}
+                  data={operationsScorecard.completionDaily}
+                  toneClass="border-green-200"
+                />
+                <ScorecardMetricCard
+                  label="Labor Efficiency"
+                  value={`${operationsScorecard.laborCurrent}%`}
+                  trend={operationsScorecard.laborTrend}
+                  data={operationsScorecard.laborDaily}
+                  toneClass="border-blue-200"
+                />
+                <ScorecardMetricCard
+                  label="Coverage"
+                  value={`${operationsScorecard.coverageCurrent}%`}
+                  trend={operationsScorecard.coverageTrend}
+                  data={operationsScorecard.coverageDaily}
+                  toneClass="border-indigo-200"
+                />
+                <ScorecardMetricCard
+                  label="Equipment"
+                  value={`${operationsScorecard.equipmentUptime}%`}
+                  trend={operationsScorecard.equipmentTrend}
+                  data={operationsScorecard.equipmentDaily}
+                  toneClass="border-emerald-200"
+                />
+                <ScorecardMetricCard
+                  label="Crew Utilization"
+                  value={`${operationsScorecard.crewUtilization}%`}
+                  trend={operationsScorecard.crewTrend}
+                  data={operationsScorecard.crewDaily}
+                  toneClass="border-amber-200"
+                />
+              </div>
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
 
       {isLoading && !queryTimeoutReached ? <div className="mb-6"><CardSkeleton /></div> : null}
 
