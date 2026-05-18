@@ -90,11 +90,27 @@ function weatherIconForCode(code: number) {
   return Sun;
 }
 
-const STATUS_STYLES: Record<string, { cell: string; label: string }> = {
-  scheduled: { cell: 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/35 dark:border-emerald-800 dark:text-emerald-200 dark:hover:bg-emerald-950/50', label: 'Scheduled' },
-  'day-off': { cell: 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/35 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950/50', label: 'Day Off' },
-  vacation: { cell: 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950/50', label: 'Vacation' },
-  sick: { cell: 'bg-red-50 border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/50', label: 'Sick' },
+const STATUS_STYLES: Record<string, { cell: string; label: string; badge: string }> = {
+  scheduled: {
+    cell: 'bg-card border border-l-4 border-l-emerald-400 text-foreground hover:bg-muted/30',
+    label: 'Scheduled',
+    badge: 'border-emerald-200 text-emerald-700',
+  },
+  'day-off': {
+    cell: 'bg-card border border-l-4 border-l-amber-400 text-foreground hover:bg-muted/30',
+    label: 'Day Off',
+    badge: 'border-amber-200 text-amber-700',
+  },
+  vacation: {
+    cell: 'bg-card border border-l-4 border-l-blue-400 text-foreground hover:bg-muted/30',
+    label: 'Vacation',
+    badge: 'border-blue-200 text-blue-700',
+  },
+  sick: {
+    cell: 'bg-card border border-l-4 border-l-red-400 text-foreground hover:bg-muted/30',
+    label: 'Sick',
+    badge: 'border-red-200 text-red-700',
+  },
 };
 
 export default function SchedulerPage() {
@@ -378,28 +394,28 @@ export default function SchedulerPage() {
     const department = String(employee.department ?? '').toLowerCase();
     if (role.includes('field staff') || department.includes('field staff')) {
       return {
-        cell: 'border-amber-500 bg-amber-100 text-amber-900 hover:bg-amber-200',
-        badge: 'border-amber-400 bg-amber-200 text-amber-900',
+        cell: 'bg-card border border-l-4 border-l-amber-500 text-foreground hover:bg-muted/30',
+        badge: 'border-amber-200 text-amber-700',
         label: 'Field Staff',
       };
     }
     if (department.includes('maintenance')) {
       return {
-        cell: 'border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-200',
-        badge: 'border-emerald-400 bg-emerald-200 text-emerald-900',
+        cell: 'bg-card border border-l-4 border-l-emerald-500 text-foreground hover:bg-muted/30',
+        badge: 'border-emerald-200 text-emerald-700',
         label: 'Maintenance',
       };
     }
     if (department.includes('irrigation')) {
       return {
-        cell: 'border-blue-500 bg-blue-100 text-blue-900 hover:bg-blue-200',
-        badge: 'border-blue-400 bg-blue-200 text-blue-900',
+        cell: 'bg-card border border-l-4 border-l-blue-500 text-foreground hover:bg-muted/30',
+        badge: 'border-blue-200 text-blue-700',
         label: 'Irrigation',
       };
     }
     return {
-      cell: 'border-gray-400 bg-gray-100 text-gray-900 hover:bg-gray-200',
-      badge: 'border-gray-300 bg-gray-200 text-gray-800',
+      cell: 'bg-card border border-l-4 border-l-slate-400 text-foreground hover:bg-muted/30',
+      badge: 'border-slate-200 text-slate-700',
       label: employee.department?.trim() || 'General',
     };
   };
@@ -1244,7 +1260,7 @@ export default function SchedulerPage() {
                       ) : (
                         <button
                           type="button"
-                          className="min-h-11 w-full rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground"
+                          className="min-h-11 w-full rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                           onClick={() => selectedMobileDay && openAddShift(emp.id, selectedMobileDay.date)}
                         >
                           + Add Shift
@@ -1273,7 +1289,7 @@ export default function SchedulerPage() {
                         className={`text-center px-2 py-3 font-medium text-xs min-w-[110px] ${isToday ? 'bg-primary/10 ring-1 ring-primary/40 text-primary' : 'text-muted-foreground'}`}
                       >
                         <div className={`text-[10px] uppercase tracking-wider ${isToday ? 'text-primary' : ''}`}>{day.short}</div>
-                        <div className={`text-base font-bold mt-0.5 ${isToday ? 'text-primary' : 'text-foreground'}`}>{day.dayNum}</div>
+                        <div className={`mt-0.5 text-lg font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{day.dayNum}</div>
                         {dayWeather && WeatherIcon ? (
                           <div className="mt-1 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
                             <WeatherIcon className="h-3 w-3" />
@@ -1349,7 +1365,7 @@ export default function SchedulerPage() {
                                 <button
                                   type="button"
                                   disabled={isReadOnly}
-                                  className="h-11 w-full rounded-lg border border-dashed border-border text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-colors"
+                                  className="h-11 w-full rounded-lg border border-dashed border-slate-200 text-[10px] text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                                   onClick={() => openAddShift(emp.id, day.date)}
                                   data-testid={`button-add-shift-${emp.id}-${day.date}`}
                                 >
@@ -1377,7 +1393,7 @@ export default function SchedulerPage() {
                               <button
                                 type="button"
                                 disabled={isReadOnly}
-                                className={`w-full rounded-lg border px-2 py-1.5 text-center text-xs transition-colors ${entry.status === 'scheduled' ? departmentStyle.cell : style.cell}`}
+                                className={`w-full rounded-lg px-2 py-1.5 text-center text-xs transition-colors ${entry.status === 'scheduled' ? departmentStyle.cell : style.cell}`}
                                 onClick={() => {
                                   if (window.matchMedia('(max-width: 767px)').matches && activeDetailCell !== cellKey) {
                                     setActiveDetailCell(cellKey);
@@ -1389,7 +1405,7 @@ export default function SchedulerPage() {
                               >
                                 {entry.status === 'scheduled' ? (
                                   <>
-                                    <div className="font-semibold text-[11px]">
+                                    <div className="font-mono text-[11px] font-semibold">
                                       {formatTime(entry.shiftStart)} - {formatTime(entry.shiftEnd)}
                                     </div>
                                     <Badge
@@ -1402,10 +1418,10 @@ export default function SchedulerPage() {
                                   </>
                                 ) : entry.status === 'day-off' ? (
                                   <>
-                                    <div className="font-semibold text-[11px] text-amber-700 dark:text-amber-300">DAY OFF</div>
+                                    <div className="text-[11px] font-semibold">DAY OFF</div>
                                     <Badge
                                       variant="outline"
-                                      className="mt-1 h-5 border-amber-300 bg-amber-100 px-1.5 text-[9px] uppercase tracking-wide text-amber-700"
+                                      className={`mt-1 h-5 px-1.5 text-[9px] uppercase tracking-wide ${style.badge}`}
                                     >
                                       Day Off
                                     </Badge>
@@ -1413,7 +1429,7 @@ export default function SchedulerPage() {
                                 ) : (
                                   <>
                                     <div className="font-medium capitalize">{style.label}</div>
-                                    <Badge variant="outline" className="mt-1 h-5 px-1.5 text-[9px] uppercase tracking-wide">
+                                    <Badge variant="outline" className={`mt-1 h-5 px-1.5 text-[9px] uppercase tracking-wide ${style.badge}`}>
                                       {style.label}
                                     </Badge>
                                   </>
@@ -1678,8 +1694,8 @@ export default function SchedulerPage() {
               <span />
             )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => handleCloseModal()}>Cancel</Button>
-              <Button onClick={() => void handleSaveShift()} disabled={isSaving} data-testid="button-save-shift">
+              <Button variant="outline" className="h-10 rounded-lg" onClick={() => handleCloseModal()}>Cancel</Button>
+              <Button className="h-10 rounded-lg" onClick={() => void handleSaveShift()} disabled={isSaving} data-testid="button-save-shift">
                 {isSaving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Shift'}
               </Button>
             </div>
