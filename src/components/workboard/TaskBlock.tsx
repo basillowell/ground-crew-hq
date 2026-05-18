@@ -27,8 +27,8 @@ function normalizeStatus(status?: string) {
 }
 
 function statusContainerClass(status: string) {
-  if (status === 'in-progress') return 'border-l-[3px] border-l-blue-500 bg-blue-50';
-  if (status === 'done') return 'border-l-[3px] border-l-green-500 bg-green-50';
+  if (status === 'in-progress') return 'border-l-[3px] border-l-blue-500 bg-card';
+  if (status === 'done') return 'border-l-[3px] border-l-green-500 bg-card';
   return 'border-l-[3px] border-l-gray-400 bg-card';
 }
 
@@ -67,13 +67,13 @@ export function TaskBlock({
           <Badge variant="outline" className="text-[10px]">{task.category}</Badge>
           {typeof priorityIndex === 'number' ? <Badge variant="secondary" className="text-[10px]">#{priorityIndex + 1}</Badge> : null}
           <Badge
-            variant={status === 'planned' ? 'outline' : 'default'}
+            variant="outline"
             className={
               status === 'in-progress'
-                ? 'bg-blue-500 text-white hover:bg-blue-500'
+                ? 'border-blue-200 text-blue-700'
                 : status === 'done'
-                  ? 'bg-green-600 text-white hover:bg-green-600'
-                  : ''
+                  ? 'border-green-200 text-green-700'
+                  : 'border-slate-200 text-slate-700'
             }
           >
             {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done ✓' : 'Planned'}

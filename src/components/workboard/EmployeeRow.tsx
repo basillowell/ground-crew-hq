@@ -62,7 +62,7 @@ export function EmployeeRow({
 
   return (
     <Card
-      className={`rounded-3xl border bg-card/95 p-4 shadow-sm transition-shadow hover:shadow-md ${
+      className={`rounded-xl border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30 ${
         isDropTarget ? 'border-primary shadow-md ring-2 ring-primary/20' : ''
       } ${isDragging ? 'opacity-60' : ''}`}
       onDragOver={(event) => event.preventDefault()}
@@ -91,7 +91,7 @@ export function EmployeeRow({
             <Badge variant="outline" className={`rounded-full ${coverageBadgeClass(coveragePercent)}`}>
               {typeof coveragePercent === 'number' ? `${Math.round(coveragePercent)}%` : '—'}
             </Badge>
-            <Badge variant="outline" className="ml-auto">{sortedAssignments.length} task{sortedAssignments.length === 1 ? '' : 's'}</Badge>
+            <Badge variant="outline" className="ml-auto rounded-full">{sortedAssignments.length} task{sortedAssignments.length === 1 ? '' : 's'}</Badge>
           </div>
 
           {laneWarning ? (
@@ -104,7 +104,7 @@ export function EmployeeRow({
             {sortedAssignments.length === 0 ? (
               <div className="rounded-xl border border-dashed px-3 py-5 text-center">
                 <p className="text-sm text-muted-foreground">No tasks assigned</p>
-                <Button variant="outline" size="sm" className="mt-3 h-8" onClick={() => onAddTask?.(employee.id)}>
+                <Button variant="outline" size="sm" className="mt-3 h-9 rounded-lg" onClick={() => onAddTask?.(employee.id)}>
                   + Assign Task
                 </Button>
               </div>

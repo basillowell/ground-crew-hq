@@ -3306,17 +3306,44 @@ export default function WorkboardPage() {
                 Add Task
               </Button>
             ) : null}
-            {!isReadOnly ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 shrink-0"
-                onClick={() => void openQuickPlanDialog()}
-                data-testid="button-open-quick-plan"
-              >
-                Quick Plan
-              </Button>
-            ) : null}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-9 shrink-0 rounded-lg">
+                  More <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                {!isReadOnly ? (
+                  <DropdownMenuItem onClick={() => void openQuickPlanDialog()} data-testid="button-open-quick-plan">
+                    Quick Plan
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onClick={handlePrintDailyPlan} data-testid="button-export-workboard-plan">
+                  Export / Print
+                </DropdownMenuItem>
+                {!isReadOnly ? (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedScheduleRecipientIds(scheduledEmployees.map((employee) => employee.id));
+                      setSendScheduleDialogOpen(true);
+                    }}
+                  >
+                    Send Schedule
+                  </DropdownMenuItem>
+                ) : null}
+                {!isReadOnly ? (
+                  <DropdownMenuItem onClick={openTaskTemplateDialog} data-testid="button-open-task-template">
+                    Apply Task Template
+                  </DropdownMenuItem>
+                ) : null}
+                {showEndOfDayReportButton ? (
+                  <DropdownMenuItem onClick={openEndOfDayReportDialog}>
+                    End of Day Report
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <button type="button" aria-label="Quick plan help" className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground">
@@ -3325,60 +3352,17 @@ export default function WorkboardPage() {
               </TooltipTrigger>
               <TooltipContent>Auto-suggests today&apos;s tasks based on what you did last week.</TooltipContent>
             </Tooltip>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 shrink-0"
-              onClick={handlePrintDailyPlan}
-              data-testid="button-export-workboard-plan"
-            >
-              Export / Print
-            </Button>
-            {!isReadOnly ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 shrink-0"
-                onClick={() => {
-                  setSelectedScheduleRecipientIds(scheduledEmployees.map((employee) => employee.id));
-                  setSendScheduleDialogOpen(true);
-                }}
-              >
-                Send Schedule
-              </Button>
-            ) : null}
-            {!isReadOnly ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 shrink-0"
-                onClick={openTaskTemplateDialog}
-                data-testid="button-open-task-template"
-              >
-                Apply Task Template
-              </Button>
-            ) : null}
-            {showEndOfDayReportButton ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 shrink-0"
-                onClick={openEndOfDayReportDialog}
-              >
-                End of Day Report
-              </Button>
-            ) : null}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 md:h-9 md:w-9" aria-label="Breakroom display info">
-                <MonitorSmartphone className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
-              Build the day here, then open Breakroom on a cast TV to display the live crew order and task sequence.
-            </TooltipContent>
-          </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-lg md:h-9 md:w-9" aria-label="Breakroom display info">
+                  <MonitorSmartphone className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent align="end" className="max-w-xs text-xs leading-relaxed">
+                Build the day here, then open Breakroom on a cast TV to display the live crew order and task sequence.
+              </TooltipContent>
+            </Tooltip>
             </div>
           </div>
         </div>
@@ -3417,7 +3401,7 @@ export default function WorkboardPage() {
 
         {/* Crew board */}
         <div className="flex-1 overflow-auto p-4">
-          <div className="mb-4 rounded-3xl border bg-card/80 p-4">
+          <div className="mb-4 rounded-xl border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CloudSun className="h-4 w-4 text-primary" />
@@ -3453,10 +3437,10 @@ export default function WorkboardPage() {
                 {suggestedTasks.map((item) => {
                   const toneClass =
                     item.tone === 'urgent'
-                      ? 'border-l-red-500 bg-red-50/40'
+                      ? 'border-l-red-500 bg-card'
                       : item.tone === 'warning'
-                        ? 'border-l-amber-500 bg-amber-50/40'
-                        : 'border-l-emerald-500 bg-emerald-50/40';
+                        ? 'border-l-amber-500 bg-card'
+                        : 'border-l-emerald-500 bg-card';
                   return (
                     <div key={item.id} className={`rounded-xl border border-border border-l-4 p-3 ${toneClass}`}>
                       <div className="flex items-start justify-between gap-3">
