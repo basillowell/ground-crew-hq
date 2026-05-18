@@ -88,9 +88,9 @@ function emptyAddDraft(): AddEmployeeDraft {
 
 function statusBadge(status: string | null) {
   if (String(status).toLowerCase() === 'active') {
-    return <Badge className="bg-emerald-100 text-emerald-700">Active</Badge>;
+    return <Badge className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Active</Badge>;
   }
-  return <Badge className="bg-slate-100 text-slate-700">Inactive</Badge>;
+  return <Badge className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-700">Inactive</Badge>;
 }
 
 function formatHourlyRate(value: number | null) {
@@ -524,7 +524,7 @@ export default function EmployeesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-6 space-y-4">
+    <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Team</h1>
@@ -539,10 +539,10 @@ export default function EmployeesPage() {
       </div>
 
       <div className="flex items-center gap-2">
-        <Button variant={viewMode === 'roster' ? 'default' : 'outline'} size="sm" className="h-9" onClick={() => setViewMode('roster')}>
+        <Button variant={viewMode === 'roster' ? 'default' : 'outline'} size="sm" className="h-9 rounded-lg" onClick={() => setViewMode('roster')}>
           Roster
         </Button>
-        <Button variant={viewMode === 'availability' ? 'default' : 'outline'} size="sm" className="h-9" onClick={() => setViewMode('availability')}>
+        <Button variant={viewMode === 'availability' ? 'default' : 'outline'} size="sm" className="h-9 rounded-lg" onClick={() => setViewMode('availability')}>
           Availability
         </Button>
       </div>
@@ -551,7 +551,7 @@ export default function EmployeesPage() {
 
       {viewMode === 'availability' ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-lg border p-3">
+          <div className="flex items-center justify-between rounded-xl border bg-card p-3">
             <Button
               variant="outline"
               size="sm"
@@ -793,13 +793,13 @@ export default function EmployeesPage() {
       {viewMode === 'roster' ? (
       <div className="space-y-3 md:hidden">
         {employees.length === 0 ? (
-          <div className="rounded-lg border p-4 text-sm text-muted-foreground">No employees yet. Add your first crew member.</div>
+          <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">No employees yet. Add your first crew member.</div>
         ) : (
           employees.map((employee) => {
             const fullName = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee';
             const isEditing = editingId === employee.id && editDraft;
             return (
-              <div key={`mobile-${employee.id}`} className="rounded-lg border p-3">
+              <div key={`mobile-${employee.id}`} className="rounded-xl border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="font-medium">{fullName}</div>
                   {isEditing ? null : statusBadge(employee.status)}

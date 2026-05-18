@@ -771,7 +771,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="main-content" style={{ padding: '1rem', display: 'grid', gap: '16px' }}>
+    <div className="main-content p-4 md:p-6 space-y-6">
       <div className="print-header hidden print:block" style={{ marginBottom: '12px' }}>
         <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700 }}>Ground Crew HQ - Labor Report</h1>
         <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#4b5563' }}>
@@ -787,7 +787,7 @@ export default function ReportsPage() {
         <p className="text-sm text-muted-foreground mt-0.5">Labor summaries and cost analysis.</p>
       </div>
 
-      <div className="no-print" style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '12px' }}>
+      <div className="no-print rounded-xl border bg-card p-4 space-y-3">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button onClick={() => applyPreset('this-week')}>This Week</button>
           <button onClick={() => applyPreset('last-week')}>Last Week</button>
@@ -817,17 +817,18 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
-        <button onClick={() => setActiveTab('summary')} aria-pressed={activeTab === 'summary'}>
+      <div className="no-print flex flex-wrap gap-2 border-b pb-1">
+        <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'summary' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('summary')} aria-pressed={activeTab === 'summary'}>
           Summary
         </button>
-        <button onClick={() => setActiveTab('trends')} aria-pressed={activeTab === 'trends'}>
+        <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'trends' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('trends')} aria-pressed={activeTab === 'trends'}>
           Trends
         </button>
-        <button onClick={() => setActiveTab('gm')} aria-pressed={activeTab === 'gm'}>
+        <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'gm' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('gm')} aria-pressed={activeTab === 'gm'}>
           GM Summary
         </button>
         <button
+          className="ml-auto h-9 rounded-lg border px-3 text-sm"
           onClick={() => {
             const printWindow = window.open(fullReportUrl, '_blank', 'noopener,noreferrer');
             if (!printWindow) {

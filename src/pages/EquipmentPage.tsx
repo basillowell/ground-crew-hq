@@ -70,10 +70,17 @@ function normalizeStatus(raw: string | null | undefined): EquipmentStatus {
 }
 
 function statusBadgeClass(status: EquipmentStatus) {
-  if (status === 'available') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (status === 'in_use') return 'bg-blue-50 text-blue-700 border-blue-200';
-  if (status === 'maintenance') return 'bg-amber-50 text-amber-700 border-amber-200';
-  return 'bg-slate-100 text-slate-700 border-slate-300';
+  if (status === 'available') return 'border-emerald-200 text-emerald-700';
+  if (status === 'in_use') return 'border-blue-200 text-blue-700';
+  if (status === 'maintenance') return 'border-amber-200 text-amber-700';
+  return 'border-slate-300 text-slate-700';
+}
+
+function statusLaneClass(status: EquipmentStatus) {
+  if (status === 'available') return 'border-l-emerald-400';
+  if (status === 'in_use') return 'border-l-blue-400';
+  if (status === 'maintenance') return 'border-l-amber-400';
+  return 'border-l-slate-400';
 }
 
 function statusLabel(status: EquipmentStatus) {
@@ -322,7 +329,7 @@ export default function EquipmentPage() {
   }
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Equipment</h1>
@@ -500,7 +507,7 @@ export default function EquipmentPage() {
             const isEditing = editingId === row.id && editDraft;
             const overdue = isServiceOverdue(row.last_serviced);
             return (
-              <div key={`mobile-eq-${row.id}`} className="rounded-lg border p-3">
+              <div key={`mobile-eq-${row.id}`} className={`rounded-xl border border-l-4 bg-card p-3 ${statusLaneClass(row.normalizedStatus)}`}>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="font-medium">{row.displayName}</p>
                   {isEditing ? null : (
@@ -562,7 +569,7 @@ export default function EquipmentPage() {
       </div>
 
       <Dialog open={addOpen && !isReadOnly} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Equipment</DialogTitle>
           </DialogHeader>

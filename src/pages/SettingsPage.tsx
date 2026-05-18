@@ -143,16 +143,18 @@ export default function SettingsPage() {
   }, [location.search]);
 
   return (
-    <div style={{ padding: '1.5rem', maxWidth: '900px' }}>
-      <h1 style={{ fontSize: '22px', fontWeight: 600, margin: '0 0 4px' }}>Operations Control Center</h1>
-      <p style={{ color: '#6b7280', fontSize: '13px', margin: '0 0 1.5rem' }}>{user?.email}</p>
+    <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Operations Control Center</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">{user?.email}</p>
+      </div>
 
       <div className="mb-4 md:hidden">
         <label className="mb-1 block text-xs text-muted-foreground">Section</label>
         <select
           value={tab}
           onChange={(event) => setTab(event.target.value as Tab)}
-          className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+          className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
         >
           {TABS.map((t) => (
             <option key={`mobile-tab-${t}`} value={t}>
@@ -162,30 +164,12 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      <div
-        className="hidden md:flex"
-        style={{
-          gap: '8px',
-          marginBottom: '1.5rem',
-          borderBottom: '1px solid #e5e7eb',
-          paddingBottom: '0',
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="hidden md:flex flex-wrap items-center gap-2 border-b pb-1">
         {TABS.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            style={{
-              padding: '8px 16px',
-              border: 'none',
-              cursor: 'pointer',
-              background: 'transparent',
-              fontWeight: tab === t ? 600 : 400,
-              color: tab === t ? '#166534' : '#6b7280',
-              borderBottom: tab === t ? '2px solid #166534' : '2px solid transparent',
-              fontSize: '14px',
-            }}
+            className={`h-9 rounded-lg px-3 text-sm ${tab === t ? 'border-b-2 border-primary font-medium text-primary' : 'text-muted-foreground hover:text-foreground'}`}
           >
             {t}
           </button>

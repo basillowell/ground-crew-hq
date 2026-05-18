@@ -74,8 +74,8 @@ export default function SafetyPage() {
   }
 
   return (
-    <div className="p-4 max-w-5xl mx-auto">
-      <div className="mb-4">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
+      <div>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Safety</h1>
@@ -87,23 +87,23 @@ export default function SafetyPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card className="p-4 text-center">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="rounded-xl border bg-card p-4 text-center">
           <CheckCircle className="h-8 w-8 text-primary mx-auto mb-2" />
           <div className="text-2xl font-bold">12</div>
           <div className="text-xs text-muted-foreground">Trainings Completed</div>
         </Card>
-        <Card className="p-4 text-center">
+        <Card className="rounded-xl border bg-card p-4 text-center">
           <AlertTriangle className="h-8 w-8 text-warning mx-auto mb-2" />
           <div className="text-2xl font-bold">1</div>
           <div className="text-xs text-muted-foreground">Overdue Items</div>
         </Card>
-        <Card className="p-4 text-center">
+        <Card className="rounded-xl border bg-card p-4 text-center">
           <FileText className="h-8 w-8 text-info mx-auto mb-2" />
           <div className="text-2xl font-bold">2</div>
           <div className="text-xs text-muted-foreground">Incidents (90 days)</div>
         </Card>
-        <Card className="p-4 text-center">
+        <Card className="rounded-xl border bg-card p-4 text-center">
           <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
           <div className="text-2xl font-bold">95%</div>
           <div className="text-xs text-muted-foreground">Compliance Rate</div>
@@ -111,11 +111,11 @@ export default function SafetyPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold mb-3">Training Programs</h3>
+        <Card className="rounded-xl border bg-card p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Training Programs</h3>
           <div className="space-y-2">
             {safetyItems.map((item, i) => (
-              <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
+              <div key={i} className="flex items-center gap-3 rounded-xl border bg-card p-3">
                 <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{item.title}</div>
@@ -129,11 +129,11 @@ export default function SafetyPage() {
           </div>
         </Card>
 
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold mb-3">Recent Incidents</h3>
+        <Card className="rounded-xl border bg-card p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Recent Incidents</h3>
           <div className="space-y-2">
             {incidents.map((inc, i) => (
-              <div key={i} className="p-3 rounded-lg border">
+              <div key={i} className="rounded-xl border bg-card p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-medium">{inc.description}</span>
                   <Badge variant="outline" className="text-xs capitalize">{inc.severity}</Badge>
@@ -210,10 +210,12 @@ export default function SafetyPage() {
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => closeLogTalkModal()}>
+            <Button variant="outline" size="sm" className="h-9 rounded-lg" onClick={() => closeLogTalkModal()}>
               Cancel
             </Button>
             <Button
+              size="sm"
+              className="h-9 gap-1.5 rounded-lg"
               onClick={() => {
                 toast.success('Safety talk logged');
                 closeLogTalkModal(true);
