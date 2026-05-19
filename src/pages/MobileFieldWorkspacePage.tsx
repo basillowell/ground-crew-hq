@@ -165,6 +165,7 @@ export default function MobileFieldWorkspacePage() {
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
 
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
@@ -173,6 +174,12 @@ export default function MobileFieldWorkspacePage() {
   const cacheKey = `field-cache-${boardDate}`;
   const syncQueueKey = 'field-sync-queue';
   const installDismissKey = 'ground-crew-install-dismissed-at';
+  const onboardedKey = 'ground-crew-field-onboarded';
+
+  useEffect(() => {
+    const onboarded = window.localStorage.getItem(onboardedKey) === 'true';
+    setShowWelcomeBanner(!onboarded);
+  }, [onboardedKey]);
 
   useEffect(() => {
     const media = window.matchMedia('(display-mode: standalone)');
@@ -862,6 +869,25 @@ export default function MobileFieldWorkspacePage() {
 
   return (
     <div className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans">
+      {showWelcomeBanner ? (
+        <div className="mb-3 rounded-xl border border-primary/20 bg-primary/10 p-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-foreground">Welcome to Ground Crew HQ — your tasks for today are below.</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8"
+              onClick={() => {
+                window.localStorage.setItem(onboardedKey, 'true');
+                setShowWelcomeBanner(false);
+              }}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {isStandalone ? (
         <div className="mb-3 -mx-4 bg-emerald-600 px-4 py-2 text-sm font-medium text-white">
           <div className="mx-auto flex w-full max-w-[520px] items-center justify-between">
