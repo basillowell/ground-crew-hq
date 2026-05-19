@@ -1420,7 +1420,6 @@ export default function WorkboardContent() {
     async (assignment: Assignment, hours: number) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
       const nextHours = Math.max(0, Number(hours));
-      const completedAtIso = new Date().toISOString();
       const previousActualHours = Number(assignment.actualHours ?? 0);
 
       queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
@@ -1436,7 +1435,7 @@ export default function WorkboardContent() {
 
       const { error } = await supabase
         .from('assignments')
-        .update({ actual_hours: nextHours, completed_at: completedAtIso })
+        .update({ actual_hours: nextHours })
         .eq('id', assignment.id)
         .eq('org_id', currentUser.orgId);
 
@@ -3973,9 +3972,11 @@ export default function WorkboardContent() {
                                       <p className="text-xs text-muted-foreground">
                                         {formatMinutesAsHoursAndMinutes(assignment.duration)} · {assignment.status}
                                       </p>
-                                      <p className={`text-xs ${actualHoursTone}`}>
-                                        Est: {estimatedHours.toFixed(1)}h | Actual: {actualHours.toFixed(1)}h
-                                      </p>
+                                      {actualHours > 0 ? (
+                                        <p className={`text-xs ${actualHoursTone}`}>
+                                          Est: {estimatedHours.toFixed(1)}h | Actual: {actualHours.toFixed(1)}h
+                                        </p>
+                                      ) : null}
                                     </div>
                                     <div className="flex items-center gap-1">
                                       <button
