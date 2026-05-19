@@ -447,6 +447,10 @@ export default function WorkboardPage() {
   const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    document.title = 'Task Board — Ground Crew HQ';
+  }, []);
+
   const triggerAssignmentFlash = useCallback((assignmentId: string, tone: 'complete' | 'started') => {
     if (!assignmentId) return;
     setAssignmentFlashMap((current) => ({ ...current, [assignmentId]: tone }));

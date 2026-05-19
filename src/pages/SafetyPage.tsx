@@ -34,6 +34,10 @@ export default function SafetyPage() {
     date: new Date().toISOString().slice(0, 10),
   });
 
+  useEffect(() => {
+    document.title = 'Safety — Ground Crew HQ';
+  }, []);
+
   const closeLogTalkModal = (forceDiscard = false) => {
     if (!forceDiscard && isDirty) {
       const shouldDiscard = window.confirm('You have unsaved changes. Discard?');

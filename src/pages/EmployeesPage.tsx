@@ -136,6 +136,10 @@ export default function EmployeesPage() {
   });
   const [shiftSaving, setShiftSaving] = useState(false);
 
+  useEffect(() => {
+    document.title = 'Team — Ground Crew HQ';
+  }, []);
+
   const fetchPageData = useCallback(async () => {
     if (!supabase || !orgId) {
       setLoading(true);

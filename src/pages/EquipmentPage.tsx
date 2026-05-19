@@ -134,6 +134,10 @@ export default function EquipmentPage() {
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  useEffect(() => {
+    document.title = 'Equipment — Ground Crew HQ';
+  }, []);
+
   const fetchEquipment = useCallback(async () => {
     if (!supabase || !orgId) {
       setLoading(true);

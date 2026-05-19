@@ -1,5 +1,5 @@
 import { Check, Star } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -99,6 +99,10 @@ function renderFeatureValue(value: boolean | string) {
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+
+  useEffect(() => {
+    document.title = 'Pricing — Ground Crew HQ';
+  }, []);
   const effectiveTiers = tiers.map((tier) =>
     tier.name === 'Professional'
       ? { ...tier, price: billingCycle === 'annual' ? '$150/mo' : '$175/mo' }

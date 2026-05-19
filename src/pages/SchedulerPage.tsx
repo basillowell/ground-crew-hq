@@ -150,6 +150,10 @@ export default function SchedulerPage() {
   const addShiftFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastShiftModalTriggerRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    document.title = 'Schedule — Ground Crew HQ';
+  }, []);
+
   const assignmentsWeekQuery = useQuery({
     queryKey: ['scheduler-week-assignments', weekStart, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
     enabled: Boolean(currentUser?.orgId),

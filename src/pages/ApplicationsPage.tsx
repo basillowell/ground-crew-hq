@@ -183,6 +183,10 @@ export default function ApplicationsPage() {
   const [draftMixItems, setDraftMixItems] = useState<DraftMixItem[]>([{ ...emptyMixItem }]);
 
   useEffect(() => {
+    document.title = 'Chemical Logs — Ground Crew HQ';
+  }, []);
+
+  useEffect(() => {
     if (!applicationAreas.length && !employees.length && !equipmentUnits.length && !weatherLogs.length && !chemicalProducts.length) {
       return;
     }

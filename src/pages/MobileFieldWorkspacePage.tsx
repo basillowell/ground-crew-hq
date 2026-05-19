@@ -167,6 +167,10 @@ export default function MobileFieldWorkspacePage() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
 
+  useEffect(() => {
+    document.title = 'Field — Ground Crew HQ';
+  }, []);
+
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
   const boardDate = todayKey();

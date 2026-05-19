@@ -189,6 +189,10 @@ export default function WeatherPage() {
   const [activeOverlays, setActiveOverlays] = useState<Set<OverlayKey>>(new Set(["temp", "rain"]));
   const [rainRange, setRainRange] = useState<RainRange>("week");
 
+  useEffect(() => {
+    document.title = 'Weather — Ground Crew HQ';
+  }, []);
+
   const [manualLogs, setManualLogs] = useState<WeatherDailyLogRow[]>([]);
   const [isEditingRain, setIsEditingRain] = useState(false);
   const [rainEditDate, setRainEditDate] = useState(todayKey);

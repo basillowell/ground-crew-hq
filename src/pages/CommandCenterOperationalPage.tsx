@@ -267,6 +267,10 @@ export default function CommandCenterOperationalPage() {
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   useEffect(() => {
+    document.title = 'Dashboard — Ground Crew HQ';
+  }, []);
+
+  useEffect(() => {
     if (isAdmin || isManager) {
       if (!currentPropertyId) setCurrentPropertyId('all');
       return;

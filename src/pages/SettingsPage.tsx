@@ -135,6 +135,10 @@ export default function SettingsPage() {
     null;
 
   useEffect(() => {
+    document.title = 'Settings — Ground Crew HQ';
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const requestedTab = params.get('tab');
     if (requestedTab && TABS.includes(requestedTab as Tab)) {

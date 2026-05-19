@@ -153,6 +153,10 @@ export default function ReportsPage() {
   const [organizationName, setOrganizationName] = useState('Ground Crew HQ');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLogRow[]>([]);
 
+  useEffect(() => {
+    document.title = 'Reports — Ground Crew HQ';
+  }, []);
+
   const applyPreset = (preset: 'this-week' | 'last-week' | 'this-month' | 'last-month') => {
     const now = new Date();
     if (preset === 'this-week') {
