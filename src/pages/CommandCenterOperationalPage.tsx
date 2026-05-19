@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Calendar, CheckCircle2, Circle, CloudRain, HelpCircle, MapPin, Plus, Users, Wrench } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Calendar, CheckCircle2, Circle, CloudRain, HelpCircle, MapPin, Plus, Users, Wrench, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
@@ -83,6 +83,14 @@ type DailyBriefContext = {
   };
   openNeedsCount: number;
   yesterdayCompletionRatePct: number;
+};
+
+type NextStepItem = {
+  id: string;
+  message: string;
+  actionLabel?: string;
+  actionPath?: string;
+  icon: typeof Calendar;
 };
 
 function SummaryCard({
@@ -1064,6 +1072,158 @@ export default function CommandCenterOperationalPage() {
     },
   });
   const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;
+  const [dismissedNextStepIds, setDismissedNextStepIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const storageKey = `gchq-next-steps-dismissed-${todayKey}`;
+    try {
+      const raw = window.sessionStorage.getItem(storageKey);
+      if (!raw) {
+        setDismissedNextStepIds([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setDismissedNextStepIds(Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : []);
+    } catch {
+      setDismissedNextStepIds([]);
+    }
+  }, [todayKey]);
+
+  const dismissNextStep = useCallback(
+    (id: string) => {
+      const storageKey = `gchq-next-steps-dismissed-${todayKey}`;
+      setDismissedNextStepIds((previous) => {
+        if (previous.includes(id)) return previous;
+        const next = [...previous, id];
+        try {
+          window.sessionStorage.setItem(storageKey, JSON.stringify(next));
+        } catch {
+          // no-op if storage is unavailable
+        }
+        return next;
+      });
+    },
+    [todayKey],
+  );
+
+  const nextSteps = useMemo<NextStepItem[]>(() => {
+    const steps: NextStepItem[] = [];
+    const weather = morningBriefWeatherQuery.data;
+    const temperature = weather?.temperature ?? null;
+    const wind = weather?.windSpeed ?? null;
+    const rainProbability = weather?.rainProbability ?? null;
+
+    if (crewScheduledCount === 0) {
+      steps.push({
+        id: 'rule-1-no-crew',
+        icon: Calendar,
+        message: 'Schedule your crew for today.',
+        actionLabel: 'Open Scheduler',
+        actionPath: '/app/scheduler',
+      });
+    }
+
+    if (crewScheduledCount > 0 && tasksAssignedCount === 0) {
+      steps.push({
+        id: 'rule-2-no-tasks',
+        icon: ArrowRight,
+        message: 'Your crew is scheduled but has no tasks. Use Quick Plan or assign tasks.',
+        actionLabel: 'Open Workflow',
+        actionPath: '/app/workboard',
+      });
+    }
+
+    const overdueEquipment = (equipmentAlertsQuery.data ?? [])
+      .map((unit) => {
+        const servicedDate = unit.last_serviced ? new Date(unit.last_serviced) : null;
+        if (!servicedDate) return null;
+        const daysSinceService = Math.floor((Date.now() - servicedDate.getTime()) / (1000 * 60 * 60 * 24));
+        const overdueDays = Math.max(0, daysSinceService - 90);
+        return {
+          id: unit.id,
+          name: unit.unit_name || unit.name || 'Equipment unit',
+          overdueDays,
+        };
+      })
+      .filter((unit): unit is { id: string; name: string; overdueDays: number } => Boolean(unit && unit.overdueDays > 0))
+      .sort((a, b) => b.overdueDays - a.overdueDays);
+
+    if (overdueEquipment.length > 0) {
+      const topUnit = overdueEquipment[0];
+      steps.push({
+        id: `rule-3-overdue-${topUnit.id}`,
+        icon: Wrench,
+        message: `${topUnit.name} is overdue for service by ${topUnit.overdueDays} day${topUnit.overdueDays === 1 ? '' : 's'}.`,
+        actionLabel: 'Open Equipment',
+        actionPath: '/app/equipment',
+      });
+    }
+
+    if (wind !== null && rainProbability !== null && (wind > 10 || rainProbability > 40)) {
+      steps.push({
+        id: 'rule-4-spray-unsafe',
+        icon: CloudRain,
+        message: `Spray conditions are unsafe. Wind ${Math.round(wind)} mph, Rain ${Math.round(rainProbability)}%. Postpone applications.`,
+        actionLabel: 'Open Weather',
+        actionPath: '/app/weather',
+      });
+    }
+
+    if (temperature !== null && temperature > 95) {
+      steps.push({
+        id: 'rule-5-heat',
+        icon: Circle,
+        message: `Heat advisory: ${Math.round(temperature)}F. Schedule water breaks for outdoor crew.`,
+        actionLabel: 'Open Workflow',
+        actionPath: '/app/workboard',
+      });
+    }
+
+    const firstUnassignedCrew = scheduledRows.find((row) => !row.assigned);
+    if (firstUnassignedCrew) {
+      steps.push({
+        id: `rule-6-unassigned-${firstUnassignedCrew.id}`,
+        icon: Users,
+        message: `${firstUnassignedCrew.name} is scheduled but has no tasks assigned.`,
+        actionLabel: 'Assign Work',
+        actionPath: '/app/workboard',
+      });
+    }
+
+    const yesterdayCompletionRate = yesterdayCompletionQuery.data ?? 0;
+    if (yesterdayCompletionRate < 70) {
+      steps.push({
+        id: 'rule-7-yesterday-completion',
+        icon: CheckCircle2,
+        message: `Yesterday's completion was ${yesterdayCompletionRate}%. Review workboard for carryover tasks.`,
+        actionLabel: 'Open Workflow',
+        actionPath: '/app/workboard',
+      });
+    }
+
+    if (steps.length === 0) {
+      steps.push({
+        id: 'rule-8-all-clear',
+        icon: CheckCircle2,
+        message: 'Operations look good. All crew assigned, weather clear, equipment ready. ✅',
+      });
+    }
+
+    return steps;
+  }, [
+    crewScheduledCount,
+    equipmentAlertsQuery.data,
+    morningBriefWeatherQuery.data,
+    scheduledRows,
+    tasksAssignedCount,
+    yesterdayCompletionQuery.data,
+  ]);
+
+  const visibleNextSteps = useMemo(
+    () => nextSteps.filter((step) => !dismissedNextStepIds.includes(step.id)).slice(0, 3),
+    [dismissedNextStepIds, nextSteps],
+  );
+
   const efficiencyScoreSummary = useMemo(() => {
     const parseShiftMinutes = (start: string | null, end: string | null) => {
       if (!start || !end) return 0;
@@ -2088,6 +2248,53 @@ export default function CommandCenterOperationalPage() {
           tone={blockersSummary.tone}
         />
       </div> : null}
+
+      {!isLoading && !queryTimeoutReached ? (
+        <Card className="mb-6 rounded-xl border bg-card p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">📋 Next Steps</h3>
+            <span className="text-xs text-muted-foreground">Top priorities</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {visibleNextSteps.length > 0 ? (
+              visibleNextSteps.map((step) => {
+                const Icon = step.icon;
+                return (
+                  <div key={step.id} className="flex items-start justify-between gap-3 rounded-lg border p-3">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <Icon className="mt-0.5 h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-sm">{step.message}</p>
+                        {step.actionPath && step.actionLabel ? (
+                          <button
+                            type="button"
+                            onClick={() => navigate(step.actionPath as string)}
+                            className="mt-1 text-xs font-medium text-primary hover:text-primary/80"
+                          >
+                            {step.actionLabel} →
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => dismissNextStep(step.id)}
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      aria-label="Dismiss next step"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                All current next-step items dismissed for this session.
+              </div>
+            )}
+          </div>
+        </Card>
+      ) : null}
 
       {!isLoading && !queryTimeoutReached ? (
         <Card className={`mb-6 rounded-xl border-l-4 p-5 shadow-sm ${efficiencyScoreSummary.toneClasses}`}>
