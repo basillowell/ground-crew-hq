@@ -907,40 +907,52 @@ export async function fetchWeatherLocations(propertyId?: string, orgId?: string,
 
 /** Full table fetch for hooks that need unbounded history (e.g. Breakroom, Scheduler). */
 async function fetchAllWeatherDailyLogs(): Promise<WeatherDailyLog[]> {
-  const rows = await fetchOptionalRows<DbWeatherDailyLog>('weather_daily_logs', 'date');
-  return rows.map(toWeatherDailyLog);
+  try {
+    const rows = await fetchOptionalRows<DbWeatherDailyLog>('weather_daily_logs', 'date');
+    return rows.map(toWeatherDailyLog);
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchWeatherDailyLogs(startDate: string, endDate: string, propertyId?: string): Promise<WeatherDailyLog[]> {
-  const client = ensureSupabase();
-  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let locationIds: string[] | undefined;
-  if (scopedPropertyId) {
-    const locations = await fetchWeatherLocations(scopedPropertyId);
-    locationIds = locations.map((l) => l.id);
-    if (locationIds.length === 0) return [];
+  try {
+    const client = ensureSupabase();
+    const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
+    let locationIds: string[] | undefined;
+    if (scopedPropertyId) {
+      const locations = await fetchWeatherLocations(scopedPropertyId);
+      locationIds = locations.map((l) => l.id);
+      if (locationIds.length === 0) return [];
+    }
+    let query = client
+      .from('weather_daily_logs')
+      .select('*')
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date');
+    if (locationIds && locationIds.length > 0) {
+      query = query.in('locationId', locationIds);
+    }
+    const { data, error } = await query;
+    if (error) return [];
+    return ((data as DbWeatherDailyLog[]) ?? []).map(toWeatherDailyLog);
+  } catch {
+    return [];
   }
-  let query = client
-    .from('weather_daily_logs')
-    .select('*')
-    .gte('date', startDate)
-    .lte('date', endDate)
-    .order('date');
-  if (locationIds && locationIds.length > 0) {
-    query = query.in('locationId', locationIds);
-  }
-  const { data, error } = await query;
-  if (error) throw error;
-  return ((data as DbWeatherDailyLog[]) ?? []).map(toWeatherDailyLog);
 }
 
 async function fetchWeatherDailyLogsByIds(ids: string[]): Promise<WeatherDailyLog[]> {
-  const unique = [...new Set(ids.filter(Boolean))];
-  if (unique.length === 0) return [];
-  const client = ensureSupabase();
-  const { data, error } = await client.from('weather_daily_logs').select('*').in('id', unique);
-  if (error) throw error;
-  return ((data as DbWeatherDailyLog[]) ?? []).map(toWeatherDailyLog);
+  try {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (unique.length === 0) return [];
+    const client = ensureSupabase();
+    const { data, error } = await client.from('weather_daily_logs').select('*').in('id', unique);
+    if (error) return [];
+    return ((data as DbWeatherDailyLog[]) ?? []).map(toWeatherDailyLog);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchDepartmentOptions(orgId?: string): Promise<DepartmentOption[]> {

@@ -292,17 +292,21 @@ export default function WeatherPage() {
   }, []);
 
   const loadManualRainLogs = useCallback(async (station: WeatherStation) => {
-    const { data, error } = await supabase
-      .from("weather_daily_logs")
-      .select("id, locationId, date, rainfallTotal, source")
-      .eq("locationId", station.id)
-      .eq("source", "manual")
-      .order("date", { ascending: false });
-    if (error) {
+    try {
+      const { data, error } = await supabase
+        .from("weather_daily_logs")
+        .select("id, locationId, date, rainfallTotal, source")
+        .eq("locationId", station.id)
+        .eq("source", "manual")
+        .order("date", { ascending: false });
+      if (error) {
+        setManualLogs([]);
+        return;
+      }
+      setManualLogs((data ?? []) as WeatherDailyLogRow[]);
+    } catch {
       setManualLogs([]);
-      return;
     }
-    setManualLogs((data ?? []) as WeatherDailyLogRow[]);
   }, []);
 
   useEffect(() => {

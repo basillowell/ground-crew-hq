@@ -687,12 +687,32 @@ export default function WorkboardContent() {
     queryKey: ['weather-daily-logs', boardDate, currentUser?.orgId ?? 'all-orgs'],
     enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
-      if (!supabase) return [] as WeatherDailyLog[];
-      let query = supabase.from('weather_daily_logs').select('*').eq('date', boardDate);
-      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
-      const { data, error } = await query;
-      if (error) return [] as WeatherDailyLog[];
-      return (data ?? []).map((row) => normalizeWeatherLog(row as Record<string, unknown>));
+      try {
+        if (!supabase) return [] as WeatherDailyLog[];
+        let locationQuery = supabase
+          .from('weather_locations')
+          .select('id, property')
+          .eq('org_id', currentUser?.orgId ?? '');
+        if (effectivePropertyId && effectivePropertyId !== 'all') {
+          locationQuery = locationQuery.eq('property', effectivePropertyId);
+        }
+        const { data: locationRows, error: locationError } = await locationQuery;
+        if (locationError) return [] as WeatherDailyLog[];
+        const locationIds = (locationRows ?? [])
+          .map((row) => String((row as { id?: unknown }).id ?? ''))
+          .filter(Boolean);
+        if (locationIds.length === 0) return [] as WeatherDailyLog[];
+        const query = supabase
+          .from('weather_daily_logs')
+          .select('*')
+          .eq('date', boardDate)
+          .in('locationId', locationIds);
+        const { data, error } = await query;
+        if (error) return [] as WeatherDailyLog[];
+        return (data ?? []).map((row) => normalizeWeatherLog(row as Record<string, unknown>));
+      } catch {
+        return [] as WeatherDailyLog[];
+      }
     },
     staleTime: 1000 * 60 * 5,
   });
@@ -2717,13 +2737,13 @@ export default function WorkboardContent() {
           status: 'planned',
           estimated_hours: estimatedHours,
           order_index: nextOrder,
+          equipment_unit_id: assignmentDraft.equipmentId || null,
         };
         if (assignmentDraft.startTime) row.start_time = assignmentDraft.startTime;
         if (assignmentDraft.area.trim()) row.location = assignmentDraft.area.trim();
         if (assignmentDraft.notes.trim()) row.notes = assignmentDraft.notes.trim();
         if (assignmentDraft.equipmentId) {
           row.equipment_unit_id = assignmentDraft.equipmentId;
-          row.equipment_id = assignmentDraft.equipmentId;
         }
         const validationError = validateAssignmentWritePayload({
           employee_id: String(row.employee_id ?? ''),
@@ -2802,13 +2822,13 @@ export default function WorkboardContent() {
         status: assignmentDraft.status ?? 'planned',
         estimated_hours: estimatedHours,
         order_index: existingEmployeeAssignments.length,
+        equipment_unit_id: assignmentDraft.equipmentId || null,
       };
       if (assignmentDraft.startTime) basePayload.start_time = assignmentDraft.startTime;
       if (assignmentDraft.area.trim()) basePayload.location = assignmentDraft.area.trim();
       if (assignmentDraft.notes.trim()) basePayload.notes = assignmentDraft.notes.trim();
       if (assignmentDraft.equipmentId) {
         basePayload.equipment_unit_id = assignmentDraft.equipmentId;
-        basePayload.equipment_id = assignmentDraft.equipmentId;
       }
       const validationError = validateAssignmentWritePayload({
         employee_id: String(basePayload.employee_id ?? ''),
