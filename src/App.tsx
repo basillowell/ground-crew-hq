@@ -18,7 +18,7 @@ import { formatTime } from "@/utils/formatTime";
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
 const PricingPage = lazy(() => import("./pages/PricingPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
-const WorkboardPage = lazy(() => import("./pages/WorkboardPage"));
+const WorkboardPage = lazy(() => import("./pages/WorkboardShell"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
 const SchedulerPage = lazy(() => import("./pages/SchedulerPage"));
 const EquipmentPage = lazy(() => import("./pages/EquipmentPage"));
