@@ -518,6 +518,8 @@ function toAssignment(row: DbAssignment): Assignment {
 
 const ASSIGNMENTS_SELECT_COLUMNS =
   'id, employee_id, property_id, task_id, date, location, status, created_at, org_id, notes, order_index, estimated_hours, actual_hours, completed_at, start_time, title, equipment_unit_id';
+const SCHEDULE_ENTRIES_SELECT_COLUMNS =
+  'id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes';
 
 function toTask(row: DbTask): Task {
   return {
@@ -767,7 +769,7 @@ async function fetchEmployees(propertyId?: string, orgId?: string): Promise<Empl
 async function fetchScheduleEntries(date: string, propertyId?: string, orgId?: string): Promise<ScheduleEntry[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let query = client.from('schedule_entries').select('*').eq('date', date).order('shift_start');
+  let query = client.from('schedule_entries').select(SCHEDULE_ENTRIES_SELECT_COLUMNS).eq('date', date).order('shift_start');
   if (orgId) query = query.eq('org_id', orgId);
   if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
   const { data, error } = await query;
@@ -780,7 +782,7 @@ async function fetchScheduleEntriesRange(startDate: string, endDate: string, pro
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
   let query = client
     .from('schedule_entries')
-    .select('*')
+    .select(SCHEDULE_ENTRIES_SELECT_COLUMNS)
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date')
@@ -1227,6 +1229,7 @@ export function useScheduleEntries(date: string, propertyId?: string, orgId?: st
     queryFn: () => fetchScheduleEntries(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 
@@ -1236,6 +1239,7 @@ export function useScheduleEntriesRange(startDate: string, endDate: string, prop
     queryFn: () => fetchScheduleEntriesRange(startDate, endDate, propertyId, orgId),
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 
@@ -1245,6 +1249,7 @@ export function useAssignments(date: string, propertyId?: string, orgId?: string
     queryFn: () => fetchAssignments(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 
@@ -1254,6 +1259,7 @@ export function useAssignmentsRange(startDate: string, endDate: string, property
     queryFn: () => fetchAssignmentsRange(startDate, endDate, propertyId, orgId),
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 

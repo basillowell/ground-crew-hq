@@ -145,7 +145,6 @@ export default function SchedulerPage() {
   const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
   const [shiftTemplates, setShiftTemplates] = useState<Array<{ id: string; name: string; start: string; end: string; days: string[]; active: boolean }>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [loadTimeoutReached, setLoadTimeoutReached] = useState(false);
   const [activeDetailCell, setActiveDetailCell] = useState<string | null>(null);
   const addShiftFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastShiftModalTriggerRef = useRef<HTMLElement | null>(null);
@@ -158,6 +157,7 @@ export default function SchedulerPage() {
     queryKey: ['scheduler-week-assignments', weekStart, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
     enabled: Boolean(currentUser?.orgId),
     staleTime: 1000 * 60,
+    retry: false,
     queryFn: async () => {
       if (!supabase || !currentUser?.orgId) return [] as AssignmentSummary[];
       const weekStartDate = weekDays[0]?.date;
@@ -216,9 +216,14 @@ export default function SchedulerPage() {
     queries: weekDays.map((day) => ({
       queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
       enabled: Boolean(currentUser?.orgId),
+      retry: false,
       queryFn: async () => {
         if (!supabase) return [] as ScheduleEntry[];
-        let query = supabase.from('schedule_entries').select('*').eq('date', day.date).order('shift_start');
+        let query = supabase
+          .from('schedule_entries')
+          .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
+          .eq('date', day.date)
+          .order('shift_start');
         if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
         if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
         const { data, error } = await query;
@@ -250,17 +255,6 @@ export default function SchedulerPage() {
       ? (weekScheduleQueries.find((query) => query.error)?.error as { message?: string } | null)?.message
       : '') ||
     '';
-
-  useEffect(() => {
-    if (!isLoading) {
-      setLoadTimeoutReached(false);
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setLoadTimeoutReached(true);
-    }, 8000);
-    return () => window.clearTimeout(timeoutId);
-  }, [isLoading]);
 
   useEffect(() => {
     setMobileDayIndex(0);
@@ -1183,23 +1177,22 @@ export default function SchedulerPage() {
 
       {/* ── Weekly schedule grid ── */}
       <div className="flex-1 overflow-auto">
-        {isLoading && !loadTimeoutReached ? (
+        {isLoading ? (
           <div className="p-4">
             <TableSkeleton />
           </div>
-        ) : queryErrorMessage || loadTimeoutReached ? (
+        ) : queryErrorMessage ? (
           <div className="p-4">
             <div className="mx-auto max-w-xl rounded-xl border border-dashed p-5 text-center">
               <p className="text-sm font-medium text-foreground">Scheduler data is temporarily unavailable.</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {loadTimeoutReached ? 'Loading took longer than expected. Try refreshing the schedule.' : queryErrorMessage}
+                {queryErrorMessage}
               </p>
               <Button
                 size="sm"
                 variant="outline"
                 className="mt-3"
                 onClick={() => {
-                  setLoadTimeoutReached(false);
                   void employeesQuery.refetch();
                   weekScheduleQueries.forEach((query) => {
                     void query.refetch();
