@@ -1,17 +1,17 @@
 import {
   LayoutDashboard,
-  Clock,
+  Calendar,
+  ClipboardList,
   Users,
   Wrench,
   Shield,
+  ShieldCheck,
   BarChart3,
   Settings,
-  MessageSquare,
+  MessageCircle,
+  Mail,
   CloudSun,
-  FlaskConical,
-  MonitorSmartphone,
-  Building2,
-  Smartphone,
+  MapPin,
 } from 'lucide-react';
 import { memo } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -35,6 +35,8 @@ import { APP_VERSION } from '@/constants/version';
 interface AppSidebarRefinedProps {
   onNavigate?: () => void;
   hasSevereWeatherAlert?: boolean;
+  taskBoardBadgeCount?: number;
+  chemicalLogsBadgeCount?: number;
 }
 
 type NavRole = 'employee' | 'admin';
@@ -44,42 +46,52 @@ type NavSection = {
   items: {
     title: string;
     url: string;
-    icon: typeof LayoutDashboard;
+    icon: typeof Calendar;
     moduleId: string;
   }[];
 };
 
 const adminNavSections: NavSection[] = [
   {
-    title: 'Operations',
+    title: 'Command Center',
     items: [
-      { title: 'Dashboard', url: '/app/dashboard', icon: Building2, moduleId: 'command-center' },
-      { title: 'Workflow', url: '/app/workboard', icon: LayoutDashboard, moduleId: 'workflow' },
-      { title: 'Scheduler', url: '/app/scheduler', icon: Clock, moduleId: 'workflow' },
-      { title: 'Field', url: '/app/field', icon: Smartphone, moduleId: 'field' },
+      { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
     ],
   },
   {
-    title: 'Management',
+    title: 'Field Ops',
     items: [
-      { title: 'Employees', url: '/app/employees', icon: Users, moduleId: 'workflow' },
+      { title: 'Scheduler', url: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
+      { title: 'Task Board', url: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
+      { title: 'Field View', url: '/app/field', icon: MapPin, moduleId: 'field' },
+    ],
+  },
+  {
+    title: 'Crew & Assets',
+    items: [
+      { title: 'Team', url: '/app/employees', icon: Users, moduleId: 'workflow' },
       { title: 'Equipment', url: '/app/equipment', icon: Wrench, moduleId: 'equipment' },
-      { title: 'Reports', url: '/app/reports', icon: BarChart3, moduleId: 'reports' },
-      { title: 'Safety', url: '/app/safety', icon: Shield, moduleId: 'workflow' },
     ],
   },
   {
-    title: 'Operations Data',
+    title: 'Compliance',
+    items: [
+      { title: 'Chemical Logs', url: '/app/applications', icon: ShieldCheck, moduleId: 'applications' },
+      { title: 'Safety', url: '/app/safety', icon: Shield, moduleId: 'workflow' },
+      { title: 'Reports', url: '/app/reports', icon: BarChart3, moduleId: 'reports' },
+    ],
+  },
+  {
+    title: 'Weather',
     items: [
       { title: 'Weather', url: '/app/weather', icon: CloudSun, moduleId: 'weather' },
-      { title: 'Applications', url: '/app/applications', icon: FlaskConical, moduleId: 'applications' },
-      { title: 'Breakroom', url: '/app/breakroom', icon: MonitorSmartphone, moduleId: 'breakroom' },
     ],
   },
   {
     title: 'Communication',
     items: [
-      { title: 'Messaging', url: '/app/messaging', icon: MessageSquare, moduleId: 'workflow' },
+      { title: 'Team Chat', url: '/app/breakroom', icon: MessageCircle, moduleId: 'breakroom' },
+      { title: 'Messaging', url: '/app/messaging', icon: Mail, moduleId: 'workflow' },
     ],
   },
   {
@@ -94,20 +106,27 @@ const employeeNavSections: NavSection[] = [
   {
     title: 'My Work',
     items: [
-      { title: 'Dashboard', url: '/app/dashboard', icon: Building2, moduleId: 'command-center' },
-      { title: 'My Schedule', url: '/app/scheduler', icon: Clock, moduleId: 'workflow' },
-      { title: 'Field', url: '/app/field', icon: Smartphone, moduleId: 'field' },
+      { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
+      { title: 'Scheduler', url: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
+      { title: 'Task Board', url: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
+      { title: 'Field View', url: '/app/field', icon: MapPin, moduleId: 'field' },
     ],
   },
   {
     title: 'Connect',
     items: [
-      { title: 'Messages', url: '/app/messaging', icon: MessageSquare, moduleId: 'workflow' },
+      { title: 'Team Chat', url: '/app/breakroom', icon: MessageCircle, moduleId: 'breakroom' },
+      { title: 'Messaging', url: '/app/messaging', icon: Mail, moduleId: 'workflow' },
     ],
   },
 ];
 
-export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate, hasSevereWeatherAlert = false }: AppSidebarRefinedProps) {
+export const AppSidebarRefined = memo(function AppSidebarRefined({
+  onNavigate,
+  hasSevereWeatherAlert = false,
+  taskBoardBadgeCount = 0,
+  chemicalLogsBadgeCount = 0,
+}: AppSidebarRefinedProps) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
@@ -159,7 +178,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate, h
         {visibleSections.map((section) => (
           <SidebarGroup key={section.title}>
             {!collapsed ? (
-              <div className="px-3 pb-2 pt-1 text-[10px] uppercase tracking-widest text-sidebar-foreground/55">
+              <div className="mt-4 mb-1 px-3 text-[10px] uppercase tracking-widest text-muted-foreground">
                 {section.title}
               </div>
             ) : null}
@@ -179,6 +198,16 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({ onNavigate, h
                         {!collapsed ? (
                           <span className="inline-flex items-center gap-2">
                             <span>{item.title}</span>
+                            {item.title === 'Task Board' && taskBoardBadgeCount > 0 ? (
+                              <span className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                                {taskBoardBadgeCount}
+                              </span>
+                            ) : null}
+                            {item.title === 'Chemical Logs' && chemicalLogsBadgeCount > 0 ? (
+                              <span className="rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                {chemicalLogsBadgeCount}
+                              </span>
+                            ) : null}
                             {item.title === 'Weather' && hasSevereWeatherAlert ? (
                               <span className="h-2 w-2 rounded-full bg-red-500" aria-label="Severe weather alert active" />
                             ) : null}

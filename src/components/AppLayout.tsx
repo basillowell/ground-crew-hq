@@ -1,11 +1,13 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { Calendar, ClipboardList, CloudSun, Mail, MapPin, Menu, Settings, Shield, ShieldCheck, BarChart3, Wrench, Users, LayoutDashboard, MessageCircle } from 'lucide-react';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { FeedbackWidget } from './FeedbackWidget';
 import { CommandBar } from './CommandBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { ProgramSettings } from '@/data/seedData';
 import {
   useAssignments,
@@ -134,6 +136,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [syncFlashActive, setSyncFlashActive] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [hasSevereWeatherAlert, setHasSevereWeatherAlert] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
   const propertiesQuery = useProperties(orgId);
@@ -278,6 +281,14 @@ export function AppLayout({ children }: AppLayoutProps) {
     () => inAppNotifications.filter((entry) => !entry.read).length,
     [inAppNotifications],
   );
+  const openTaskBoardCount = useMemo(() => {
+    const assignments = assignmentsQuery.data ?? [];
+    return assignments.filter((assignment) => {
+      const status = String(assignment.status ?? '').toLowerCase();
+      return status === 'planned' || status === 'in_progress';
+    }).length;
+  }, [assignmentsQuery.data]);
+  const chemicalLogsPendingCount = 0;
 
   useEffect(() => {
     const readPendingSyncCount = () => {
@@ -400,6 +411,23 @@ export function AppLayout({ children }: AppLayoutProps) {
     location.pathname === '/' ||
     location.pathname.startsWith('/app/field')
   );
+  const mobilePrimaryTabs = [
+    { label: 'Field View', route: '/app/field', icon: MapPin },
+    { label: 'Task Board', route: '/app/workboard', icon: ClipboardList },
+    { label: 'Team', route: '/app/employees', icon: Users },
+    { label: 'Weather', route: '/app/weather', icon: CloudSun },
+  ];
+  const mobileMoreItems = [
+    { label: 'Dashboard', route: '/app/dashboard', icon: LayoutDashboard },
+    { label: 'Scheduler', route: '/app/scheduler', icon: Calendar },
+    { label: 'Equipment', route: '/app/equipment', icon: Wrench },
+    { label: 'Chemical Logs', route: '/app/applications', icon: ShieldCheck },
+    { label: 'Safety', route: '/app/safety', icon: Shield },
+    { label: 'Reports', route: '/app/reports', icon: BarChart3 },
+    { label: 'Team Chat', route: '/app/breakroom', icon: MessageCircle },
+    { label: 'Messaging', route: '/app/messaging', icon: Mail },
+    { label: 'Settings', route: '/app/settings', icon: Settings },
+  ];
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
@@ -520,7 +548,12 @@ export function AppLayout({ children }: AppLayoutProps) {
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           }`}
         >
-          <AppSidebarRefined onNavigate={closeMobileSidebar} hasSevereWeatherAlert={hasSevereWeatherAlert} />
+          <AppSidebarRefined
+            onNavigate={closeMobileSidebar}
+            hasSevereWeatherAlert={hasSevereWeatherAlert}
+            taskBoardBadgeCount={openTaskBoardCount}
+            chemicalLogsBadgeCount={chemicalLogsPendingCount}
+          />
         </div>
         <div className={`ml-0 md:ml-60 min-h-screen overflow-y-auto flex min-w-0 flex-1 flex-col ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
           <WorkflowTopBar
@@ -553,7 +586,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               setDepartment,
             }}
           >
-            <main className="flex-1 bg-background">
+            <main className="flex-1 bg-background pb-20 md:pb-0">
               {isOffline ? (
                 <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-900">
                   ⚡ You're offline — changes will sync when connected
@@ -574,6 +607,64 @@ export function AppLayout({ children }: AppLayoutProps) {
               currentDate={currentDate}
               currentPropertyId={currentPropertyId}
             />
+            <nav className="fixed inset-x-0 bottom-0 z-50 h-16 border-t bg-card md:hidden">
+              <div className="grid h-full grid-cols-5">
+                {mobilePrimaryTabs.map((tab) => {
+                  const isActive = location.pathname === tab.route;
+                  return (
+                    <button
+                      key={tab.route}
+                      type="button"
+                      onClick={() => navigate(tab.route)}
+                      className={`flex flex-col items-center justify-center gap-0.5 text-[10px] ${
+                        isActive ? 'text-primary' : 'text-muted-foreground'
+                      }`}
+                    >
+                      <tab.icon className="h-4 w-4" />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setMobileMoreOpen(true)}
+                  className="flex flex-col items-center justify-center gap-0.5 text-[10px] text-muted-foreground"
+                >
+                  <Menu className="h-4 w-4" />
+                  <span>More</span>
+                </button>
+              </div>
+            </nav>
+            <Sheet open={mobileMoreOpen} onOpenChange={setMobileMoreOpen}>
+              <SheetContent side="bottom" className="max-h-[75vh] rounded-t-2xl">
+                <SheetHeader>
+                  <SheetTitle>More</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 grid gap-2 pb-4">
+                  {mobileMoreItems.map((item) => (
+                    <button
+                      key={item.route}
+                      type="button"
+                      onClick={() => {
+                        navigate(item.route);
+                        setMobileMoreOpen(false);
+                      }}
+                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm ${
+                        location.pathname === item.route ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-foreground'
+                      }`}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                      {item.label === 'Task Board' && openTaskBoardCount > 0 ? (
+                        <span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                          {openTaskBoardCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </SheetContent>
+            </Sheet>
           </OperationsProvider>
         </div>
       </div>
