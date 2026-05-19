@@ -292,19 +292,25 @@ export function AppLayout({ children }: AppLayoutProps) {
     queryKey: ['chemical-logs-pending', orgId ?? 'no-org'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 30,
+    retry: false,
     queryFn: async () => {
-      if (!supabase || !orgId) return 0;
-      const nowIso = new Date().toISOString();
-      const { count, error } = await supabase
-        .from('chemical_application_logs')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId)
-        .or(`supervisor_license_number.is.null,supervisor_license_number.eq.,restricted_entry_until.gt.${nowIso}`);
-      if (error) {
+      try {
+        if (!supabase || !orgId) return 0;
+        const nowIso = new Date().toISOString();
+        const { count, error } = await supabase
+          .from('chemical_application_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId)
+          .or(`supervisor_license_number.is.null,supervisor_license_number.eq.,restricted_entry_until.gt.${nowIso}`);
+        if (error) {
+          console.error('[CHEMICAL COMPLIANCE COUNT ERROR]', error);
+          return 0;
+        }
+        return count ?? 0;
+      } catch (error) {
         console.error('[CHEMICAL COMPLIANCE COUNT ERROR]', error);
         return 0;
       }
-      return count ?? 0;
     },
   });
   const chemicalLogsPendingCount = chemicalComplianceQuery.data ?? 0;

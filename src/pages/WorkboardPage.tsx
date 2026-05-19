@@ -65,9 +65,6 @@ const EmployeeRow = lazy(() =>
 const NotesPanel = lazy(() =>
   import('@/components/workboard/NotesPanel').then((module) => ({ default: module.NotesPanel })),
 );
-const WeatherSnapshotCard = lazy(() =>
-  import('@/components/weather/WeatherSnapshotCard').then((module) => ({ default: module.WeatherSnapshotCard })),
-);
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
@@ -4164,11 +4161,6 @@ export default function WorkboardPage() {
             </div>
           ) : hourlyWeatherStripQuery.data && hourlyWeatherStripQuery.data.length > 0 ? (
             <div className="space-y-2">
-              {planningWeatherLocation && latestWeatherLog ? (
-                <Suspense fallback={<div className="h-28 animate-pulse rounded-xl bg-muted" />}>
-                  <WeatherSnapshotCard location={planningWeatherLocation} log={latestWeatherLog} compact title="Daily Weather" />
-                </Suspense>
-              ) : null}
               <div className="overflow-x-auto">
                 <div className="flex min-w-max gap-1 pr-1">
                   {hourlyWeatherStripQuery.data.map((entry) => {
