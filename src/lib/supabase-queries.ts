@@ -927,23 +927,9 @@ export async function fetchWeatherDailyLogs(startDate: string, endDate: string, 
     .lte('date', endDate)
     .order('date');
   if (locationIds && locationIds.length > 0) {
-    query = query.in('location_id', locationIds);
+    query = query.in('locationId', locationIds);
   }
-  let { data, error } = await query;
-  if (error) {
-    let retry = client
-      .from('weather_daily_logs')
-      .select('*')
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date');
-    if (locationIds && locationIds.length > 0) {
-      retry = retry.in('locationId', locationIds);
-    }
-    const second = await retry;
-    data = second.data;
-    error = second.error;
-  }
+  const { data, error } = await query;
   if (error) throw error;
   return ((data as DbWeatherDailyLog[]) ?? []).map(toWeatherDailyLog);
 }
@@ -1071,51 +1057,49 @@ async function fetchFrameworkOptions(table: 'job_descriptions' | 'employment_sta
 
 async function fetchChemicalApplicationLogFieldsForDate(
   date: string,
+  orgId?: string,
 ): Promise<Array<{ weatherLogId?: string | null; applicatorLicenseNumber?: string | null; supervisorLicenseNumber?: string | null }>> {
-  const client = ensureSupabase();
-  const { data, error } = await client
-    .from('chemical_application_logs')
-    .select('weatherLogId, applicatorLicenseNumber, supervisorLicenseNumber, applicationDate')
-    .eq('applicationDate', date);
-  if (error) return [];
-  return data ?? [];
+  try {
+    const client = ensureSupabase();
+    let query = client
+      .from('chemical_application_logs')
+      .select('weatherLogId, applicatorLicenseNumber, supervisorLicenseNumber, applicationDate')
+      .eq('applicationDate', date);
+    if (orgId) query = query.eq('org_id', orgId);
+    const { data, error } = await query;
+    if (error) return [];
+    return data ?? [];
+  } catch {
+    return [];
+  }
 }
 
-export async function fetchChemicalApplicationLogs(startDate: string, endDate: string, propertyId?: string): Promise<ChemicalApplicationLog[]> {
-  const client = ensureSupabase();
-  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let applicatorIds: string[] | undefined;
-  if (scopedPropertyId) {
-    const employees = await fetchEmployees(scopedPropertyId);
-    applicatorIds = employees.map((e) => e.id);
-    if (applicatorIds.length === 0) return [];
-  }
-  let query = client
-    .from('chemical_application_logs')
-    .select('*')
-    .gte('applicationDate', startDate)
-    .lte('applicationDate', endDate)
-    .order('applicationDate');
-  if (applicatorIds) {
-    query = query.in('applicatorId', applicatorIds);
-  }
-  let { data, error } = await query;
-  if (error) {
-    let retry = client
+export async function fetchChemicalApplicationLogs(startDate: string, endDate: string, propertyId?: string, orgId?: string): Promise<ChemicalApplicationLog[]> {
+  try {
+    const client = ensureSupabase();
+    const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
+    let applicatorIds: string[] | undefined;
+    if (scopedPropertyId) {
+      const employees = await fetchEmployees(scopedPropertyId, orgId);
+      applicatorIds = employees.map((e) => e.id);
+      if (applicatorIds.length === 0) return [];
+    }
+    let query = client
       .from('chemical_application_logs')
       .select('*')
-      .gte('application_date', startDate)
-      .lte('application_date', endDate)
-      .order('application_date');
+      .gte('applicationDate', startDate)
+      .lte('applicationDate', endDate)
+      .order('applicationDate');
+    if (orgId) query = query.eq('org_id', orgId);
     if (applicatorIds) {
-      retry = retry.in('applicator_id', applicatorIds);
+      query = query.in('applicatorId', applicatorIds);
     }
-    const second = await retry;
-    data = second.data;
-    error = second.error;
+    const { data, error } = await query;
+    if (error) return [];
+    return ((data as DbChemicalApplicationLog[]) ?? []).map(toChemicalApplicationLog);
+  } catch {
+    return [];
   }
-  if (error) throw error;
-  return ((data as DbChemicalApplicationLog[]) ?? []).map(toChemicalApplicationLog);
 }
 
 export async function fetchApplicationAreas(propertyId?: string): Promise<ApplicationArea[]> {
@@ -1140,9 +1124,20 @@ async function fetchChemicalProducts(): Promise<ChemicalProduct[]> {
   return rows.map(toChemicalProduct);
 }
 
-async function fetchChemicalApplicationLogsAll(): Promise<ChemicalApplicationLog[]> {
-  const rows = await fetchOptionalRows<DbChemicalApplicationLog>('chemical_application_logs', 'application_date');
-  return rows.map(toChemicalApplicationLog);
+async function fetchChemicalApplicationLogsAll(orgId?: string): Promise<ChemicalApplicationLog[]> {
+  try {
+    const client = ensureSupabase();
+    let query = client
+      .from('chemical_application_logs')
+      .select('*')
+      .order('applicationDate', { ascending: false });
+    if (orgId) query = query.eq('org_id', orgId);
+    const { data, error } = await query;
+    if (error) return [];
+    return ((data as DbChemicalApplicationLog[]) ?? []).map(toChemicalApplicationLog);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchChemicalApplicationTankMixItems(): Promise<ChemicalApplicationTankMixItem[]> {
@@ -1445,18 +1440,20 @@ export function useOvertimeRules(orgId?: string) {
 export function useChemicalApplicationLogs(date: string, orgId?: string) {
   return useQuery({
     queryKey: ['chemical-application-logs', date, orgId ?? 'all-orgs'],
-    queryFn: () => fetchChemicalApplicationLogFieldsForDate(date),
+    queryFn: () => fetchChemicalApplicationLogFieldsForDate(date, orgId),
     enabled: Boolean(orgId && date),
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 
 export function useChemicalApplicationLogsRange(startDate: string, endDate: string, propertyId?: string, orgId?: string) {
   return useQuery({
     queryKey: ['chemical-application-logs-range', startDate, endDate, propertyId ?? 'all', orgId ?? 'all-orgs'],
-    queryFn: () => fetchChemicalApplicationLogs(startDate, endDate, propertyId),
+    queryFn: () => fetchChemicalApplicationLogs(startDate, endDate, propertyId, orgId),
     enabled: Boolean(orgId && startDate && endDate),
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 
@@ -1476,11 +1473,13 @@ export function useChemicalProducts() {
   });
 }
 
-export function useChemicalApplicationLogsAll() {
+export function useChemicalApplicationLogsAll(orgId?: string) {
   return useQuery({
-    queryKey: ['chemical-application-logs-all'],
-    queryFn: fetchChemicalApplicationLogsAll,
+    queryKey: ['chemical-application-logs-all', orgId ?? 'all-orgs'],
+    queryFn: () => fetchChemicalApplicationLogsAll(orgId),
+    enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 

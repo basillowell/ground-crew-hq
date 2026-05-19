@@ -162,7 +162,7 @@ export default function ApplicationsPage() {
   const employeesQuery = useEmployees(propertyScope, orgScope);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgScope);
   const weatherLogsQuery = useWeatherDailyLogs();
-  const logsQuery = useChemicalApplicationLogsAll();
+  const logsQuery = useChemicalApplicationLogsAll(orgScope);
   const productsQuery = useChemicalProducts();
   const mixItemsQuery = useChemicalApplicationTankMixItems();
 
@@ -346,10 +346,14 @@ export default function ApplicationsPage() {
       mixOrder: index + 1,
     }));
 
-    await supabase.from('chemical_application_logs').upsert({
-      ...nextLog,
-      org_id: currentUser?.orgId,
-    });
+    try {
+      await supabase.from('chemical_application_logs').upsert({
+        ...nextLog,
+        org_id: currentUser?.orgId,
+      });
+    } catch {
+      return;
+    }
     for (const mix of nextMix) {
       await supabase.from('chemical_application_tank_mix_items').upsert(mix);
     }
