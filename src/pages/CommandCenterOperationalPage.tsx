@@ -1075,29 +1075,34 @@ export default function CommandCenterOperationalPage() {
     queryKey: ['dashboard-compliance-status', orgId ?? 'no-org'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60,
+    retry: false,
     queryFn: async () => {
-      if (!supabase || !orgId) {
+      try {
+        if (!supabase || !orgId) {
+          return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
+        }
+        const nowIso = new Date().toISOString();
+        const [activeReiResult, missingSupervisorResult] = await Promise.all([
+          supabase
+            .from('chemical_application_logs')
+            .select('id', { count: 'exact', head: true })
+            .eq('org_id', orgId)
+            .gt('restricted_entry_until', nowIso),
+          supabase
+            .from('chemical_application_logs')
+            .select('id', { count: 'exact', head: true })
+            .eq('org_id', orgId)
+            .or('supervisor_license_number.is.null,supervisor_license_number.eq.'),
+        ]);
+        if (activeReiResult.error) return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
+        if (missingSupervisorResult.error) return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
+        return {
+          activeReiCount: activeReiResult.count ?? 0,
+          missingSupervisorLicenseCount: missingSupervisorResult.count ?? 0,
+        };
+      } catch {
         return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
       }
-      const nowIso = new Date().toISOString();
-      const [activeReiResult, missingSupervisorResult] = await Promise.all([
-        supabase
-          .from('chemical_application_logs')
-          .select('id', { count: 'exact', head: true })
-          .eq('org_id', orgId)
-          .gt('restricted_entry_until', nowIso),
-        supabase
-          .from('chemical_application_logs')
-          .select('id', { count: 'exact', head: true })
-          .eq('org_id', orgId)
-          .or('supervisor_license_number.is.null,supervisor_license_number.eq.'),
-      ]);
-      if (activeReiResult.error) throw activeReiResult.error;
-      if (missingSupervisorResult.error) throw missingSupervisorResult.error;
-      return {
-        activeReiCount: activeReiResult.count ?? 0,
-        missingSupervisorLicenseCount: missingSupervisorResult.count ?? 0,
-      };
     },
   });
   const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;

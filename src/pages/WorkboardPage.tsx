@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +65,14 @@ const EmployeeRow = lazy(() =>
 const NotesPanel = lazy(() =>
   import('@/components/workboard/NotesPanel').then((module) => ({ default: module.NotesPanel })),
 );
+
+function SafeSection({ children, fallback = null }: { children: ReactNode; fallback?: ReactNode }) {
+  try {
+    return <>{children}</>;
+  } catch {
+    return <>{fallback}</>;
+  }
+}
 
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
@@ -3717,18 +3725,20 @@ export default function WorkboardPage() {
               onAction={() => navigate('/app/scheduler')}
             />
           ) : viewMode === 'timeline' ? (
-            <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted" />}>
-              <GanttTimeline
-                employees={orderedDispatchBoard.map((l) => l.employee)}
-                assignments={dayAssignments}
-                tasks={taskList}
-                equipment={equipmentList}
-                scheduleEntries={scheduleList}
-                date={boardDate}
-                onAssignmentClick={(a) => openEditAssignmentDialog(a)}
-                onDropTask={(employeeId) => openAssignmentDialog(employeeId)}
-              />
-            </Suspense>
+            <SafeSection fallback={<div className="h-64 rounded-xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">Timeline view is temporarily unavailable.</div>}>
+              <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted" />}>
+                <GanttTimeline
+                  employees={orderedDispatchBoard.map((l) => l.employee)}
+                  assignments={dayAssignments}
+                  tasks={taskList}
+                  equipment={equipmentList}
+                  scheduleEntries={scheduleList}
+                  date={boardDate}
+                  onAssignmentClick={(a) => openEditAssignmentDialog(a)}
+                  onDropTask={(employeeId) => openAssignmentDialog(employeeId)}
+                />
+              </Suspense>
+            </SafeSection>
           ) : (
             <>
             <div className="hidden space-y-2 md:block">
@@ -3758,49 +3768,51 @@ export default function WorkboardPage() {
                           : ''
                     }`}
                   >
-                <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-muted/40" />}>
-                <EmployeeRow
-                  employee={lane.employee}
-                  assignments={lane.employeeAssignments}
-                  tasks={taskList}
-                  orderIndex={index}
-                  isDragging={draggingEmployeeId === lane.employee.id}
-                  isDropTarget={dropTargetEmployeeId === lane.employee.id}
-                  shiftLabel={lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : undefined}
-                  laneSummary={
-                    lane.shift
-                      ? `${lane.assignedMinutes} min assigned · ${lane.openMinutes} min open`
-                      : `${lane.employeeAssignments.length} tasks assigned`
-                  }
-                  laneWarning={
-                    lane.shiftMinutes > 0 && lane.assignedMinutes > lane.shiftMinutes
-                      ? `Assigned hours exceed scheduled shift by ${Math.ceil((lane.assignedMinutes - lane.shiftMinutes) / 60)}h ${(lane.assignedMinutes - lane.shiftMinutes) % 60}m`
-                      : undefined
-                  }
-                  coveragePercent={lane.coveragePercent}
-                  onDragStart={setDraggingEmployeeId}
-                  onDragEnter={setDropTargetEmployeeId}
-                  onDragEnd={() => { setDraggingEmployeeId(null); setDropTargetEmployeeId(null); }}
-                  onDropRow={(targetEmployeeId) => {
-                    if (draggingTask) {
-                      void moveTaskToEmployeeLane(draggingTask.employeeId, targetEmployeeId, draggingTask.assignmentId);
-                      setDraggingTask(null);
-                      return;
-                    }
-                    moveEmployeeLane(targetEmployeeId);
-                  }}
-                  onTaskDragStart={(employeeId, assignmentId) => setDraggingTask({ employeeId, assignmentId })}
-                  onTaskDropOnTask={(employeeId, targetAssignmentId) => {
-                    if (!draggingTask) return;
-                    void reorderEmployeeAssignments(draggingTask.employeeId, employeeId, draggingTask.assignmentId, targetAssignmentId);
-                    setDraggingTask(null);
-                  }}
-                  onAddTask={openAssignmentDialog}
-                  onEditAssignment={openEditAssignmentDialog}
-                  onRemoveAssignment={removeAssignment}
-                  weatherWarningsByAssignment={assignmentWeatherWarnings}
-                />
-                </Suspense>
+                <SafeSection fallback={<div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">This crew lane could not be rendered.</div>}>
+                  <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-muted/40" />}>
+                    <EmployeeRow
+                      employee={lane.employee}
+                      assignments={lane.employeeAssignments}
+                      tasks={taskList}
+                      orderIndex={index}
+                      isDragging={draggingEmployeeId === lane.employee.id}
+                      isDropTarget={dropTargetEmployeeId === lane.employee.id}
+                      shiftLabel={lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : undefined}
+                      laneSummary={
+                        lane.shift
+                          ? `${lane.assignedMinutes} min assigned · ${lane.openMinutes} min open`
+                          : `${lane.employeeAssignments.length} tasks assigned`
+                      }
+                      laneWarning={
+                        lane.shiftMinutes > 0 && lane.assignedMinutes > lane.shiftMinutes
+                          ? `Assigned hours exceed scheduled shift by ${Math.ceil((lane.assignedMinutes - lane.shiftMinutes) / 60)}h ${(lane.assignedMinutes - lane.shiftMinutes) % 60}m`
+                          : undefined
+                      }
+                      coveragePercent={lane.coveragePercent}
+                      onDragStart={setDraggingEmployeeId}
+                      onDragEnter={setDropTargetEmployeeId}
+                      onDragEnd={() => { setDraggingEmployeeId(null); setDropTargetEmployeeId(null); }}
+                      onDropRow={(targetEmployeeId) => {
+                        if (draggingTask) {
+                          void moveTaskToEmployeeLane(draggingTask.employeeId, targetEmployeeId, draggingTask.assignmentId);
+                          setDraggingTask(null);
+                          return;
+                        }
+                        moveEmployeeLane(targetEmployeeId);
+                      }}
+                      onTaskDragStart={(employeeId, assignmentId) => setDraggingTask({ employeeId, assignmentId })}
+                      onTaskDropOnTask={(employeeId, targetAssignmentId) => {
+                        if (!draggingTask) return;
+                        void reorderEmployeeAssignments(draggingTask.employeeId, employeeId, draggingTask.assignmentId, targetAssignmentId);
+                        setDraggingTask(null);
+                      }}
+                      onAddTask={openAssignmentDialog}
+                      onEditAssignment={openEditAssignmentDialog}
+                      onRemoveAssignment={removeAssignment}
+                      weatherWarningsByAssignment={assignmentWeatherWarnings}
+                    />
+                  </Suspense>
+                </SafeSection>
                   </div>
                 );
               })}
@@ -3966,12 +3978,14 @@ export default function WorkboardPage() {
             </button>
             {mobileSectionsOpen.notes ? (
               <div className="border-t px-3 py-2">
-                <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
-                  <NotesPanel
-                    notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-                    onAddNote={() => setNoteDialogOpen(true)}
-                  />
-                </Suspense>
+                <SafeSection fallback={<div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">Notes are temporarily unavailable.</div>}>
+                  <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
+                    <NotesPanel
+                      notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
+                      onAddNote={() => setNoteDialogOpen(true)}
+                    />
+                  </Suspense>
+                </SafeSection>
               </div>
             ) : null}
           </div>
@@ -4246,12 +4260,14 @@ export default function WorkboardPage() {
             <StickyNote className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Notes</h3>
           </div>
-          <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
-            <NotesPanel
-              notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-              onAddNote={() => setNoteDialogOpen(true)}
-            />
-          </Suspense>
+          <SafeSection fallback={<div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">Notes are temporarily unavailable.</div>}>
+            <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
+              <NotesPanel
+                notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
+                onAddNote={() => setNoteDialogOpen(true)}
+              />
+            </Suspense>
+          </SafeSection>
         </div>
       </div>
 
