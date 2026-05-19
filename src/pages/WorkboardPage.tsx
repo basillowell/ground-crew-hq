@@ -383,6 +383,65 @@ type SuggestedTaskItem = {
   onAction?: () => void;
 };
 
+type SopItem = {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  checklist: string[];
+};
+
+const SOP_ITEMS: SopItem[] = [
+  {
+    id: 'mowing-greens',
+    title: 'Mowing Greens',
+    icon: <Wrench className="h-4 w-4 text-emerald-600" />,
+    checklist: [
+      'Verify mower height setting',
+      'Check fuel',
+      'Mow in alternating direction',
+      'Clean mower after use',
+      'Report any damage',
+    ],
+  },
+  {
+    id: 'spray-application',
+    title: 'Spray Application',
+    icon: <CloudSun className="h-4 w-4 text-amber-600" />,
+    checklist: [
+      'Check wind speed (<10mph)',
+      'Verify product label',
+      'Calibrate sprayer',
+      'Wear required PPE',
+      'Log application in Chemical Logs',
+      'Record weather conditions',
+    ],
+  },
+  {
+    id: 'irrigation-check',
+    title: 'Irrigation Check',
+    icon: <Radio className="h-4 w-4 text-blue-600" />,
+    checklist: [
+      'Walk all zones',
+      'Check for leaks/broken heads',
+      'Verify run times',
+      'Adjust for recent rainfall',
+      'Report issues',
+    ],
+  },
+  {
+    id: 'bunker-maintenance',
+    title: 'Bunker Maintenance',
+    icon: <ListChecks className="h-4 w-4 text-slate-600" />,
+    checklist: [
+      'Rake all bunkers',
+      'Check drainage',
+      'Repair washouts',
+      'Edge lips',
+      'Report sand levels',
+    ],
+  },
+];
+
 export default function WorkboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -429,6 +488,8 @@ export default function WorkboardPage() {
   const [selectedQuickPlanIds, setSelectedQuickPlanIds] = useState<string[]>([]);
   const [quickPlanEmptyMessage, setQuickPlanEmptyMessage] = useState<string | null>(null);
   const [suggestedTasksCollapsed, setSuggestedTasksCollapsed] = useState(false);
+  const [sopCollapsed, setSopCollapsed] = useState(true);
+  const [expandedSopIds, setExpandedSopIds] = useState<string[]>([]);
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<string[]>([]);
   const [assignToAllScheduledCrew, setAssignToAllScheduledCrew] = useState(false);
   const [weatherConflictOverride, setWeatherConflictOverride] = useState(false);
@@ -817,6 +878,10 @@ export default function WorkboardPage() {
     () => `workboard-suggested-dismissed:${currentUser?.orgId ?? 'no-org'}:${effectivePropertyId ?? 'all'}:${boardDate}`,
     [boardDate, currentUser?.orgId, effectivePropertyId],
   );
+  const sopExpandedStorageKey = useMemo(
+    () => `workboard-sop-expanded:${currentUser?.orgId ?? 'no-org'}`,
+    [currentUser?.orgId],
+  );
 
   useEffect(() => {
     const stored = sessionStorage.getItem(suggestionDismissStorageKey);
@@ -835,6 +900,30 @@ export default function WorkboardPage() {
   useEffect(() => {
     sessionStorage.setItem(suggestionDismissStorageKey, JSON.stringify(dismissedSuggestionIds));
   }, [dismissedSuggestionIds, suggestionDismissStorageKey]);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(sopExpandedStorageKey);
+    if (!stored) {
+      setExpandedSopIds([]);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored);
+      setExpandedSopIds(Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []);
+    } catch {
+      setExpandedSopIds([]);
+    }
+  }, [sopExpandedStorageKey]);
+
+  useEffect(() => {
+    sessionStorage.setItem(sopExpandedStorageKey, JSON.stringify(expandedSopIds));
+  }, [expandedSopIds, sopExpandedStorageKey]);
+
+  const toggleSopCard = useCallback((sopId: string) => {
+    setExpandedSopIds((current) =>
+      current.includes(sopId) ? current.filter((id) => id !== sopId) : [...current, sopId],
+    );
+  }, []);
 
   useEffect(() => {
     if (assignmentsQuery.dataUpdatedAt || taskRequestsQuery.dataUpdatedAt) {
@@ -3471,6 +3560,66 @@ export default function WorkboardPage() {
                           Dismiss
                         </Button>
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="mb-4 rounded-xl border bg-card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Standard Operating Procedures</h3>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => setSopCollapsed((current) => !current)}
+              >
+                {sopCollapsed ? (
+                  <>
+                    <ChevronDown className="mr-1 h-3.5 w-3.5" /> Show
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp className="mr-1 h-3.5 w-3.5" /> Hide
+                  </>
+                )}
+              </Button>
+            </div>
+            {sopCollapsed ? (
+              <p className="text-xs text-muted-foreground">Collapsed. Click Show to view SOP checklists.</p>
+            ) : (
+              <div className="space-y-2">
+                {SOP_ITEMS.map((sop) => {
+                  const isExpanded = expandedSopIds.includes(sop.id);
+                  return (
+                    <div key={sop.id} className="rounded-xl border p-3">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 text-left"
+                        onClick={() => toggleSopCard(sop.id)}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          {sop.icon}
+                          {sop.title}
+                        </span>
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </button>
+                      {isExpanded ? (
+                        <ul className="mt-2 space-y-1">
+                          {sop.checklist.map((item) => (
+                            <li key={`${sop.id}-${item}`} className="flex items-start gap-2 text-xs text-muted-foreground">
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
                   );
                 })}

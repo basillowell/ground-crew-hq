@@ -133,6 +133,7 @@ export default function EquipmentPage() {
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'readiness'>('list');
 
   useEffect(() => {
     document.title = 'Equipment — Ground Crew HQ';
@@ -216,6 +217,51 @@ export default function EquipmentPage() {
     if (!propertyId) return rows;
     return rows.filter((row) => row.property_id === propertyId);
   }, [propertyId, rows]);
+
+  const readinessRows = useMemo(() => {
+    const now = Date.now();
+    const dueSoonWindowDays = 14;
+    const serviceThresholdDays = 90;
+    const msPerDay = 24 * 60 * 60 * 1000;
+
+    return scopedRows
+      .map((row) => {
+        const servicedAt = row.last_serviced ? new Date(row.last_serviced) : null;
+        const servicedTime = servicedAt && !Number.isNaN(servicedAt.getTime()) ? servicedAt.getTime() : null;
+        const dueAtTime = servicedTime !== null ? servicedTime + serviceThresholdDays * msPerDay : null;
+        const daysUntilDue = dueAtTime !== null ? Math.ceil((dueAtTime - now) / msPerDay) : null;
+        const daysOverdue = dueAtTime !== null ? Math.max(0, Math.floor((now - dueAtTime) / msPerDay)) : null;
+
+        let readinessLevel: 'green' | 'yellow' | 'red' = 'green';
+        let readinessLabel = 'Ready';
+        let sortWeight = 2;
+        let dueText = `Due in ${daysUntilDue ?? 0} day${Math.abs(daysUntilDue ?? 0) === 1 ? '' : 's'}`;
+
+        if (dueAtTime === null || (daysOverdue !== null && daysOverdue > 0)) {
+          readinessLevel = 'red';
+          sortWeight = 0;
+          readinessLabel = dueAtTime === null ? 'Overdue' : `Overdue ${daysOverdue} day${daysOverdue === 1 ? '' : 's'}`;
+          dueText = dueAtTime === null ? 'Service date missing' : `${daysOverdue} day${daysOverdue === 1 ? '' : 's'} overdue`;
+        } else if (daysUntilDue !== null && daysUntilDue <= dueSoonWindowDays) {
+          readinessLevel = 'yellow';
+          sortWeight = 1;
+          readinessLabel = 'Service Due Soon';
+          dueText = `Due in ${daysUntilDue} day${daysUntilDue === 1 ? '' : 's'}`;
+        }
+
+        return {
+          ...row,
+          readinessLevel,
+          readinessLabel,
+          dueText,
+          sortWeight,
+        };
+      })
+      .sort((a, b) => {
+        if (a.sortWeight !== b.sortWeight) return a.sortWeight - b.sortWeight;
+        return a.displayName.localeCompare(b.displayName);
+      });
+  }, [scopedRows]);
 
   const startAdd = useCallback(() => {
     setAddDraft(emptyAddDraft());
@@ -339,16 +385,40 @@ export default function EquipmentPage() {
           <h1 className="text-lg font-semibold tracking-tight">Equipment</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Track maintenance and availability.</p>
         </div>
-        {!isReadOnly ? (
-        <Button size="sm" className="h-9 gap-1.5" onClick={startAdd}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Equipment
-        </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-lg border p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              className="h-8 px-3"
+              onClick={() => setViewMode('list')}
+            >
+              List
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === 'readiness' ? 'default' : 'ghost'}
+              className="h-8 px-3"
+              onClick={() => setViewMode('readiness')}
+            >
+              Readiness
+            </Button>
+          </div>
+          {!isReadOnly ? (
+            <Button size="sm" className="h-9 gap-1.5" onClick={startAdd}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Equipment
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {error ? <ErrorRetry message={error} onRetry={() => void fetchEquipment()} /> : null}
 
+      {viewMode === 'list' ? (
+      <>
       <div className="hidden overflow-x-auto rounded-xl border md:block">
         <table className="min-w-full text-sm">
           <thead className="bg-muted/40">
@@ -571,6 +641,55 @@ export default function EquipmentPage() {
           })
         )}
       </div>
+      </>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {readinessRows.length === 0 ? (
+            <div className="md:col-span-2 xl:col-span-3">
+              <EmptyState
+                icon={Wrench}
+                title="No equipment tracked yet"
+                description="Add your first piece of equipment to start tracking maintenance."
+                actionLabel="Add Equipment"
+                onAction={!isReadOnly ? startAdd : undefined}
+              />
+            </div>
+          ) : (
+            readinessRows.map((row) => {
+              const toneClasses =
+                row.readinessLevel === 'green'
+                  ? 'border-l-4 border-l-emerald-500'
+                  : row.readinessLevel === 'yellow'
+                    ? 'border-l-4 border-l-amber-500'
+                    : 'border-l-4 border-l-red-500';
+              const badgeClasses =
+                row.readinessLevel === 'green'
+                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                  : row.readinessLevel === 'yellow'
+                    ? 'bg-amber-100 text-amber-700 border-amber-200'
+                    : 'bg-red-100 text-red-700 border-red-200';
+              return (
+                <div key={`readiness-${row.id}`} className={`rounded-xl border bg-card p-4 ${toneClasses}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{row.displayName}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{row.displayType}</p>
+                    </div>
+                    <Badge variant="outline" className={badgeClasses}>
+                      {row.readinessLabel}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                    <p>Last serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}</p>
+                    <p>{row.dueText}</p>
+                    <p>Status: {statusLabel(row.normalizedStatus)}</p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       <Dialog open={addOpen && !isReadOnly} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
