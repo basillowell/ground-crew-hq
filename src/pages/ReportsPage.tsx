@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useSearchParams } from 'react-router-dom';
+import { toast } from '@/components/ui/sonner';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
@@ -99,6 +100,15 @@ type WeatherDailyLogRow = {
   wind: number | null;
 };
 
+type TimesheetScheduleRow = {
+  id: string;
+  employee_id: string;
+  property_id: string | null;
+  date: string;
+  shift_start: string | null;
+  shift_end: string | null;
+};
+
 type LaborSummaryRow = {
   employeeId: string;
   employeeName: string;
@@ -139,6 +149,12 @@ function endOfWeek(date: Date) {
   return copy;
 }
 
+function addDays(date: Date, days: number) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
 function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
@@ -163,6 +179,20 @@ function quoteCsv(value: string | number) {
   return text;
 }
 
+function calculateShiftHours(shiftStart?: string | null, shiftEnd?: string | null) {
+  const start = String(shiftStart ?? '').slice(0, 5);
+  const end = String(shiftEnd ?? '').slice(0, 5);
+  if (!start || !end || !start.includes(':') || !end.includes(':')) return 0;
+  const [startHour, startMinute] = start.split(':').map((part) => Number(part));
+  const [endHour, endMinute] = end.split(':').map((part) => Number(part));
+  if ([startHour, startMinute, endHour, endMinute].some((value) => Number.isNaN(value))) return 0;
+  const startMinutes = startHour * 60 + startMinute;
+  const endMinutes = endHour * 60 + endMinute;
+  const raw = endMinutes - startMinutes;
+  if (raw <= 0) return 0;
+  return raw / 60;
+}
+
 export default function ReportsPage() {
   const [searchParams] = useSearchParams();
   const isFullReportView = searchParams.get('fullReport') === '1';
@@ -181,13 +211,18 @@ export default function ReportsPage() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'summary' | 'trends' | 'gm'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'trends' | 'gm' | 'timesheets'>('summary');
   const [trendAssignments, setTrendAssignments] = useState<AssignmentRow[]>([]);
   const [trendScheduleEntries, setTrendScheduleEntries] = useState<ScheduleEntryTrendRow[]>([]);
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
   const [openNeedsCount, setOpenNeedsCount] = useState(0);
   const [organizationName, setOrganizationName] = useState('Ground Crew HQ');
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLogRow[]>([]);
+  const [timesheetWeekStart, setTimesheetWeekStart] = useState<string>(() => toIsoDate(startOfWeek(new Date())));
+  const [timesheetSchedules, setTimesheetSchedules] = useState<TimesheetScheduleRow[]>([]);
+  const [timesheetAssignments, setTimesheetAssignments] = useState<AssignmentRow[]>([]);
+  const [timesheetLoading, setTimesheetLoading] = useState(false);
+  const [timesheetError, setTimesheetError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = 'Reports — Ground Crew HQ';
@@ -357,6 +392,51 @@ export default function ReportsPage() {
     if (!orgId) return;
     void fetchReportData();
   }, [fetchReportData, orgId]);
+
+  const fetchTimesheetData = useCallback(async () => {
+    if (!supabase || !orgId) return;
+    setTimesheetLoading(true);
+    setTimesheetError(null);
+
+    const weekStartDate = new Date(`${timesheetWeekStart}T00:00:00`);
+    const weekEndDate = addDays(weekStartDate, 6);
+    const weekEnd = toIsoDate(weekEndDate);
+
+    let schedulesQuery = supabase
+      .from('schedule_entries')
+      .select('id, employee_id, property_id, date, shift_start, shift_end')
+      .eq('org_id', orgId)
+      .gte('date', timesheetWeekStart)
+      .lte('date', weekEnd);
+
+    let assignmentsQuery = supabase
+      .from('assignments')
+      .select('id, employee_id, property_id, date, actual_hours')
+      .eq('org_id', orgId)
+      .gte('date', timesheetWeekStart)
+      .lte('date', weekEnd);
+
+    if (selectedPropertyId !== 'all') {
+      schedulesQuery = schedulesQuery.eq('property_id', selectedPropertyId);
+      assignmentsQuery = assignmentsQuery.eq('property_id', selectedPropertyId);
+    }
+
+    const [schedulesResult, assignmentsResult] = await Promise.all([schedulesQuery, assignmentsQuery]);
+    if (schedulesResult.error || assignmentsResult.error) {
+      setTimesheetError(schedulesResult.error?.message ?? assignmentsResult.error?.message ?? 'Failed to load timesheet data');
+      setTimesheetLoading(false);
+      return;
+    }
+
+    setTimesheetSchedules((schedulesResult.data ?? []) as TimesheetScheduleRow[]);
+    setTimesheetAssignments((assignmentsResult.data ?? []) as AssignmentRow[]);
+    setTimesheetLoading(false);
+  }, [orgId, selectedPropertyId, timesheetWeekStart]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    void fetchTimesheetData();
+  }, [fetchTimesheetData, orgId]);
 
   const laborRows = useMemo<LaborSummaryRow[]>(() => {
     const byEmployee = new Map<string, LaborSummaryRow>();
@@ -806,6 +886,111 @@ export default function ReportsPage() {
     return () => window.clearTimeout(timeoutId);
   }, [error, isFullReportView, loading]);
 
+  const timesheetWeekDays = useMemo(() => {
+    const start = new Date(`${timesheetWeekStart}T00:00:00`);
+    return Array.from({ length: 7 }, (_, index) => {
+      const value = addDays(start, index);
+      return {
+        key: toIsoDate(value),
+        label: value.toLocaleDateString('en-US', { weekday: 'short' }),
+      };
+    });
+  }, [timesheetWeekStart]);
+
+  const timesheetRows = useMemo(() => {
+    const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
+    const scheduledByEmployeeDay = new Map<string, number>();
+    const actualByEmployeeDay = new Map<string, number>();
+
+    timesheetSchedules.forEach((entry) => {
+      const key = `${entry.employee_id}|${entry.date}`;
+      const hours = calculateShiftHours(entry.shift_start, entry.shift_end);
+      scheduledByEmployeeDay.set(key, (scheduledByEmployeeDay.get(key) ?? 0) + hours);
+    });
+
+    timesheetAssignments.forEach((entry) => {
+      const key = `${entry.employee_id}|${entry.date}`;
+      const hours = Number(entry.actual_hours ?? 0);
+      actualByEmployeeDay.set(key, (actualByEmployeeDay.get(key) ?? 0) + (Number.isFinite(hours) ? hours : 0));
+    });
+
+    const employeeIds = new Set<string>([
+      ...timesheetSchedules.map((entry) => entry.employee_id),
+      ...timesheetAssignments.map((entry) => entry.employee_id),
+    ]);
+
+    return Array.from(employeeIds)
+      .map((employeeId) => {
+        const employee = employeeMap.get(employeeId);
+        const employeeName = employee
+          ? `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee'
+          : 'Unknown Employee';
+        const hourlyRate = Number(employee?.hourly_rate ?? 0);
+
+        const days = timesheetWeekDays.map((day) => {
+          const key = `${employeeId}|${day.key}`;
+          const scheduled = Number((scheduledByEmployeeDay.get(key) ?? 0).toFixed(2));
+          const actual = Number((actualByEmployeeDay.get(key) ?? 0).toFixed(2));
+          return { date: day.key, scheduled, actual };
+        });
+
+        const totalScheduled = Number(days.reduce((sum, day) => sum + day.scheduled, 0).toFixed(2));
+        const rawTotalActual = Number(days.reduce((sum, day) => sum + day.actual, 0).toFixed(2));
+        const totalActual = rawTotalActual > 0 ? rawTotalActual : totalScheduled;
+        const cost = Number((totalActual * hourlyRate).toFixed(2));
+
+        return { employeeId, employeeName, hourlyRate, days, totalScheduled, totalActual, cost };
+      })
+      .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+  }, [employees, timesheetAssignments, timesheetSchedules, timesheetWeekDays]);
+
+  const timesheetTotals = useMemo(() => {
+    return timesheetRows.reduce(
+      (sum, row) => {
+        sum.totalScheduled += row.totalScheduled;
+        sum.totalActual += row.totalActual;
+        sum.totalCost += row.cost;
+        return sum;
+      },
+      { totalScheduled: 0, totalActual: 0, totalCost: 0 },
+    );
+  }, [timesheetRows]);
+
+  const exportPayrollCsv = useCallback(() => {
+    if (timesheetRows.length === 0) return;
+    const headers = ['Employee Name', 'Date', 'Scheduled Hours', 'Actual Hours', 'Hourly Rate', 'Daily Cost'];
+    const lines = [headers.map(quoteCsv).join(',')];
+    timesheetRows.forEach((row) => {
+      row.days.forEach((day) => {
+        const actualHours = day.actual > 0 ? day.actual : day.scheduled;
+        const dailyCost = actualHours * row.hourlyRate;
+        lines.push(
+          [
+            quoteCsv(row.employeeName),
+            quoteCsv(day.date),
+            quoteCsv(day.scheduled.toFixed(2)),
+            quoteCsv(actualHours.toFixed(2)),
+            quoteCsv(row.hourlyRate.toFixed(2)),
+            quoteCsv(dailyCost.toFixed(2)),
+          ].join(','),
+        );
+      });
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payroll-timesheets-${timesheetWeekStart}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [timesheetRows, timesheetWeekStart]);
+
+  const handleApproveAndLock = useCallback(() => {
+    toast.success('Timesheet approval coming soon');
+  }, []);
+
   if (!orgId) {
     return <PageSkeleton />;
   }
@@ -867,6 +1052,9 @@ export default function ReportsPage() {
         <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'gm' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('gm')} aria-pressed={activeTab === 'gm'}>
           GM Summary
         </button>
+        <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'timesheets' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('timesheets')} aria-pressed={activeTab === 'timesheets'}>
+          Timesheets
+        </button>
         <button
           className="ml-auto h-9 rounded-lg border px-3 text-sm"
           onClick={() => {
@@ -880,7 +1068,107 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      {(activeTab === 'summary' || isFullReportView) ? (
+      {activeTab === 'timesheets' ? (
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Weekly Timesheet Review</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => {
+                    const next = addDays(new Date(`${timesheetWeekStart}T00:00:00`), -7);
+                    setTimesheetWeekStart(toIsoDate(startOfWeek(next)));
+                  }}
+                >
+                  Previous Week
+                </button>
+                <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                  {timesheetWeekDays[0]?.key} to {timesheetWeekDays[6]?.key}
+                </span>
+                <button
+                  onClick={() => {
+                    const next = addDays(new Date(`${timesheetWeekStart}T00:00:00`), 7);
+                    setTimesheetWeekStart(toIsoDate(startOfWeek(next)));
+                  }}
+                >
+                  Next Week
+                </button>
+              </div>
+            </div>
+
+            {timesheetLoading ? (
+              <TableSkeleton />
+            ) : timesheetError ? (
+              <ErrorRetry message={timesheetError} onRetry={() => void fetchTimesheetData()} />
+            ) : timesheetRows.length === 0 ? (
+              <EmptyState icon={BarChart3} title="No timesheet data for this week" description="Schedule crew and track actual hours to review payroll." />
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: '1180px', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left', color: '#6b7280' }}>
+                      <th style={{ padding: '8px' }}>Employee</th>
+                      {timesheetWeekDays.map((day) => (
+                        <th key={`timesheet-day-${day.key}`} style={{ padding: '8px' }}>{day.label}</th>
+                      ))}
+                      <th style={{ padding: '8px' }}>Total Scheduled</th>
+                      <th style={{ padding: '8px' }}>Total Actual</th>
+                      <th style={{ padding: '8px' }}>Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {timesheetRows.map((row) => (
+                      <tr key={`timesheet-row-${row.employeeId}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px' }}>{row.employeeName}</td>
+                        {row.days.map((day) => {
+                          const hasActual = day.actual > 0;
+                          const value = hasActual ? day.actual : day.scheduled;
+                          return (
+                            <td key={`timesheet-cell-${row.employeeId}-${day.date}`} style={{ padding: '8px' }}>
+                              <div style={{ display: 'grid', gap: '2px' }}>
+                                <span>{value.toFixed(1)}h</span>
+                                {!hasActual && day.scheduled > 0 ? (
+                                  <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>est.</span>
+                                ) : null}
+                              </div>
+                            </td>
+                          );
+                        })}
+                        <td style={{ padding: '8px' }}>{row.totalScheduled.toFixed(1)}h</td>
+                        <td style={{ padding: '8px' }}>{row.totalActual.toFixed(1)}h</td>
+                        <td style={{ padding: '8px' }}>{formatCurrency(row.cost)}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ borderTop: '2px solid #e5e7eb', fontWeight: 700 }}>
+                      <td style={{ padding: '8px' }}>Totals</td>
+                      {timesheetWeekDays.map((day) => {
+                        const dayTotal = timesheetRows.reduce((sum, row) => {
+                          const cell = row.days.find((entry) => entry.date === day.key);
+                          if (!cell) return sum;
+                          return sum + (cell.actual > 0 ? cell.actual : cell.scheduled);
+                        }, 0);
+                        return (
+                          <td key={`timesheet-total-${day.key}`} style={{ padding: '8px' }}>{dayTotal.toFixed(1)}h</td>
+                        );
+                      })}
+                      <td style={{ padding: '8px' }}>{timesheetTotals.totalScheduled.toFixed(1)}h</td>
+                      <td style={{ padding: '8px' }}>{timesheetTotals.totalActual.toFixed(1)}h</td>
+                      <td style={{ padding: '8px' }}>{formatCurrency(timesheetTotals.totalCost)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="no-print" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button onClick={exportPayrollCsv} disabled={timesheetLoading || Boolean(timesheetError) || timesheetRows.length === 0}>
+              Export for Payroll
+            </button>
+            <button onClick={handleApproveAndLock}>Approve &amp; Lock</button>
+          </div>
+        </div>
+      ) : (activeTab === 'summary' || isFullReportView) ? (
       <>
       {isFullReportView ? (
         <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
