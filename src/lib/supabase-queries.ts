@@ -103,20 +103,19 @@ type DbAssignment = {
   id: string;
   org_id?: string | null;
   employee_id: string;
-  employeeId?: string;
   property_id: string;
-  propertyId?: string;
   task_id: string | null;
-  taskId?: string | null;
   date: string;
   location: string | null;
-  area?: string | null;
-  start_time?: string | null;
-  startTime?: string | null;
-  duration?: number | null;
-  equipment_id?: string | null;
-  equipmentId?: string | null;
   status: string;
+  notes?: string | null;
+  order_index?: number | null;
+  estimated_hours?: number | null;
+  actual_hours?: number | null;
+  completed_at?: string | null;
+  start_time?: string | null;
+  title?: string | null;
+  equipment_unit_id?: string | null;
   created_at: string;
 };
 
@@ -496,18 +495,29 @@ function toScheduleEntry(row: DbScheduleEntry): ScheduleEntry {
 }
 
 function toAssignment(row: DbAssignment): Assignment {
+  const estimatedHours = Number(row.estimated_hours ?? 1);
+  const safeEstimatedHours = Number.isFinite(estimatedHours) ? Math.max(estimatedHours, 0) : 0;
   return {
     id: row.id,
-    employeeId: row.employeeId ?? row.employee_id,
-    taskId: row.taskId ?? row.task_id ?? '',
+    employeeId: row.employee_id,
+    propertyId: row.property_id ?? undefined,
+    taskId: row.task_id ?? '',
     date: row.date,
-    startTime: String(row.startTime ?? row.start_time ?? '06:00').slice(0, 5),
-    duration: Number(row.duration ?? 60),
-    area: row.area ?? row.location ?? 'Unassigned area',
-    equipmentId: row.equipmentId ?? row.equipment_id ?? undefined,
+    startTime: String(row.start_time ?? '06:00').slice(0, 5),
+    duration: Math.round(safeEstimatedHours * 60),
+    estimatedHours: safeEstimatedHours,
+    actualHours: Number(row.actual_hours ?? 0),
+    title: row.title ?? undefined,
+    notes: row.notes ?? undefined,
+    area: row.location ?? 'Unassigned area',
+    equipmentId: row.equipment_unit_id ?? undefined,
+    order: row.order_index ?? undefined,
     status: (row.status as Assignment['status']) ?? 'planned',
   };
 }
+
+const ASSIGNMENTS_SELECT_COLUMNS =
+  'id, employee_id, property_id, task_id, date, location, status, created_at, org_id, notes, order_index, estimated_hours, actual_hours, completed_at, start_time, title, equipment_unit_id';
 
 function toTask(row: DbTask): Task {
   return {
@@ -785,7 +795,7 @@ async function fetchScheduleEntriesRange(startDate: string, endDate: string, pro
 async function fetchAssignments(date: string, propertyId?: string, orgId?: string): Promise<Assignment[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let query = client.from('assignments').select('*').eq('date', date).order('created_at');
+  let query = client.from('assignments').select(ASSIGNMENTS_SELECT_COLUMNS).eq('date', date).order('created_at');
   if (orgId) query = query.eq('org_id', orgId);
   if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
   const { data, error } = await query;
@@ -798,7 +808,7 @@ async function fetchAssignmentsRange(startDate: string, endDate: string, propert
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
   let query = client
     .from('assignments')
-    .select('*')
+    .select(ASSIGNMENTS_SELECT_COLUMNS)
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date')
