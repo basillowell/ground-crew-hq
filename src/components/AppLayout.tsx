@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Calendar, ClipboardList, CloudSun, Mail, MapPin, Menu, Settings, Shield, ShieldCheck, BarChart3, Wrench, Users, LayoutDashboard, MessageCircle } from 'lucide-react';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
@@ -288,7 +288,26 @@ export function AppLayout({ children }: AppLayoutProps) {
       return status === 'planned' || status === 'in_progress';
     }).length;
   }, [assignmentsQuery.data]);
-  const chemicalLogsPendingCount = 0;
+  const chemicalComplianceQuery = useQuery({
+    queryKey: ['chemical-logs-pending', orgId ?? 'no-org'],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 30,
+    queryFn: async () => {
+      if (!supabase || !orgId) return 0;
+      const nowIso = new Date().toISOString();
+      const { count, error } = await supabase
+        .from('chemical_application_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .or(`supervisor_license_number.is.null,supervisor_license_number.eq.,restricted_entry_until.gt.${nowIso}`);
+      if (error) {
+        console.error('[CHEMICAL COMPLIANCE COUNT ERROR]', error);
+        return 0;
+      }
+      return count ?? 0;
+    },
+  });
+  const chemicalLogsPendingCount = chemicalComplianceQuery.data ?? 0;
 
   useEffect(() => {
     const readPendingSyncCount = () => {

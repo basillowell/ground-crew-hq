@@ -428,12 +428,68 @@ export default function ApplicationsPage() {
     downloadCsv('licensed-application-log.csv', [header.join(','), ...rows]);
   }
 
+  function exportForAudit() {
+    const header = [
+      'date',
+      'product_name',
+      'epa_registration_number',
+      'applicator_name',
+      'area_treated',
+      'application_rate',
+      'weather_conditions',
+      'supervisor_license_number',
+      'rei_hours',
+      'phi_days',
+    ];
+
+    const rows = filteredLogs.map((log) => {
+      const applicator = employees.find((employee) => employee.id === log.applicatorId);
+      const logMixItems = mixItems
+        .filter((item) => item.applicationLogId === log.id)
+        .sort((left, right) => (left.mixOrder ?? 0) - (right.mixOrder ?? 0));
+      const primaryMixItem = logMixItems[0];
+      const product = chemicalProducts.find((entry) => entry.id === primaryMixItem?.productId);
+      const productNames = logMixItems
+        .map((item) => chemicalProducts.find((entry) => entry.id === item.productId)?.name)
+        .filter(Boolean)
+        .join(' | ');
+      const rateText = logMixItems
+        .map((item) => `${item.rateApplied ?? 0} ${item.rateUnit ?? ''}`.trim())
+        .join(' | ');
+      const weatherText = [
+        log.weatherConditionsSummary ?? '',
+        `Wind ${log.windSpeedAtApplication ?? 0} mph`,
+        `Temp ${log.temperatureAtApplication ?? 0}F`,
+      ].filter(Boolean).join(' · ');
+
+      return [
+        quoteCsv(log.applicationDate),
+        quoteCsv(productNames || 'Not recorded'),
+        quoteCsv(product?.epaRegistrationNumber ?? 'Not recorded'),
+        quoteCsv(applicator ? `${applicator.firstName} ${applicator.lastName}` : 'Not recorded'),
+        quoteCsv(`${log.areaTreated ?? 0} ${log.areaUnit ?? ''}`.trim()),
+        quoteCsv(rateText || 'Not recorded'),
+        quoteCsv(weatherText || 'Not recorded'),
+        quoteCsv(log.supervisorLicenseNumber ?? 'Not recorded'),
+        quoteCsv(product?.reentryIntervalHours ?? 0),
+        quoteCsv(product?.preHarvestIntervalHours ?? 0),
+      ].join(',');
+    });
+
+    downloadCsv('chemical-audit-export.csv', [header.join(','), ...rows]);
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4">
       <PageHeader
         title="Applications"
         subtitle="Licensed applicator-ready chemical logging with tank mix detail, timestamped weather snapshots, and exportable records."
-        badge={<Badge variant="secondary">{totalApplications} logs</Badge>}
+        badge={
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">{totalApplications} logs</Badge>
+            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">EPA-Compliant Record Keeping</Badge>
+          </div>
+        }
         action={{
           label: 'New Application',
           onClick: () => {
@@ -442,6 +498,9 @@ export default function ApplicationsPage() {
           icon: <FlaskConical className="h-3.5 w-3.5" />,
         }}
       >
+        <Button variant="outline" size="sm" className="gap-1" onClick={exportForAudit}>
+          <Download className="h-3.5 w-3.5" /> Export for Audit
+        </Button>
         <Button variant="outline" size="sm" className="gap-1" onClick={exportLogs}>
           <Download className="h-3.5 w-3.5" /> Export CSV
         </Button>

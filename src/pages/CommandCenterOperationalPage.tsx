@@ -1071,7 +1071,67 @@ export default function CommandCenterOperationalPage() {
       }));
     },
   });
+  const complianceStatusQuery = useQuery({
+    queryKey: ['dashboard-compliance-status', orgId ?? 'no-org'],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60,
+    queryFn: async () => {
+      if (!supabase || !orgId) {
+        return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
+      }
+      const nowIso = new Date().toISOString();
+      const [activeReiResult, missingSupervisorResult] = await Promise.all([
+        supabase
+          .from('chemical_application_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId)
+          .gt('restricted_entry_until', nowIso),
+        supabase
+          .from('chemical_application_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId)
+          .or('supervisor_license_number.is.null,supervisor_license_number.eq.'),
+      ]);
+      if (activeReiResult.error) throw activeReiResult.error;
+      if (missingSupervisorResult.error) throw missingSupervisorResult.error;
+      return {
+        activeReiCount: activeReiResult.count ?? 0,
+        missingSupervisorLicenseCount: missingSupervisorResult.count ?? 0,
+      };
+    },
+  });
   const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;
+  const complianceSummary = useMemo(() => {
+    const activeReiCount = complianceStatusQuery.data?.activeReiCount ?? 0;
+    const missingSupervisorLicenseCount = complianceStatusQuery.data?.missingSupervisorLicenseCount ?? 0;
+    const issueCount = activeReiCount + missingSupervisorLicenseCount;
+    if (complianceStatusQuery.isLoading) {
+      return {
+        value: 'Checking...',
+        subtitle: 'Verifying chemical records',
+        tone: 'neutral' as const,
+      };
+    }
+    if (complianceStatusQuery.error) {
+      return {
+        value: 'Unavailable',
+        subtitle: 'Compliance data could not be loaded',
+        tone: 'warning' as const,
+      };
+    }
+    if (issueCount === 0) {
+      return {
+        value: 'All Clear',
+        subtitle: 'No active REI or incomplete records',
+        tone: 'good' as const,
+      };
+    }
+    return {
+      value: `${issueCount} issue${issueCount === 1 ? '' : 's'}`,
+      subtitle: `${activeReiCount} active REI · ${missingSupervisorLicenseCount} missing license`,
+      tone: issueCount > 2 ? ('critical' as const) : ('warning' as const),
+    };
+  }, [complianceStatusQuery.data, complianceStatusQuery.error, complianceStatusQuery.isLoading]);
   const [dismissedNextStepIds, setDismissedNextStepIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -2246,6 +2306,12 @@ export default function CommandCenterOperationalPage() {
           value={blockersSummary.value}
           subtitle={blockersSummary.subtitle}
           tone={blockersSummary.tone}
+        />
+        <OpsSignalCard
+          title="Compliance Status"
+          value={complianceSummary.value}
+          subtitle={complianceSummary.subtitle}
+          tone={complianceSummary.tone}
         />
       </div> : null}
 
