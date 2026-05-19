@@ -1079,7 +1079,7 @@ export default function CommandCenterOperationalPage() {
     queryFn: async () => {
       try {
         if (!supabase || !orgId) {
-          return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
+          return { pending: 0, incomplete: 0 };
         }
         const nowIso = new Date().toISOString();
         const [activeReiResult, missingSupervisorResult] = await Promise.all([
@@ -1094,21 +1094,21 @@ export default function CommandCenterOperationalPage() {
             .eq('org_id', orgId)
             .or('supervisorLicenseNumber.is.null,supervisorLicenseNumber.eq.'),
         ]);
-        if (activeReiResult.error) return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
-        if (missingSupervisorResult.error) return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
+        if (activeReiResult.error) return { pending: 0, incomplete: 0 };
+        if (missingSupervisorResult.error) return { pending: 0, incomplete: 0 };
         return {
-          activeReiCount: activeReiResult.count ?? 0,
-          missingSupervisorLicenseCount: missingSupervisorResult.count ?? 0,
+          pending: activeReiResult.count ?? 0,
+          incomplete: missingSupervisorResult.count ?? 0,
         };
       } catch {
-        return { activeReiCount: 0, missingSupervisorLicenseCount: 0 };
+        return { pending: 0, incomplete: 0 };
       }
     },
   });
   const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;
   const complianceSummary = useMemo(() => {
-    const activeReiCount = complianceStatusQuery.data?.activeReiCount ?? 0;
-    const missingSupervisorLicenseCount = complianceStatusQuery.data?.missingSupervisorLicenseCount ?? 0;
+    const activeReiCount = complianceStatusQuery.data?.pending ?? 0;
+    const missingSupervisorLicenseCount = complianceStatusQuery.data?.incomplete ?? 0;
     const issueCount = activeReiCount + missingSupervisorLicenseCount;
     if (complianceStatusQuery.isLoading) {
       return {
