@@ -219,10 +219,10 @@ export default function LaunchPortalPage() {
       <main className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6 md:py-16">
         <section className="grid items-center gap-10 lg:grid-cols-2">
           <div className="animate-[hero-enter_600ms_ease-out_forwards] opacity-0 [animation-delay:120ms]">
-            <h1 className="text-4xl font-bold tracking-tight md:text-5xl">Your Crew. Your Weather. One Platform.</h1>
+            <h1 className="text-4xl font-bold tracking-tight md:text-5xl">Your Crew. Your Course. One Command Center.</h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg">
-              The only operations tool built for grounds and turf teams with live weather intelligence, spray window
-              alerts, and crew scheduling that actually works in the field.
+              Built for golf course superintendents, grounds managers, and turf professionals who need weather-aware
+              scheduling, EPA-compliant chemical logging, and a mobile crew app that works with gloves on.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button
@@ -241,6 +241,13 @@ export default function LaunchPortalPage() {
               <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Weather-Aware</span>
               <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Bilingual Crews</span>
               <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Mobile-First</span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Golf Course Operations</span>
+              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Turf Management</span>
+              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Grounds Crew Scheduling</span>
+              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Chemical Application Tracking</span>
+              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Weather Intelligence</span>
             </div>
           </div>
           <Card className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
@@ -295,6 +302,24 @@ export default function LaunchPortalPage() {
         </section>
 
         <section className="mt-16">
+          <h2 className="text-2xl font-semibold tracking-tight">Why Ground Crew HQ?</h2>
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Card className="rounded-2xl border border-border bg-card p-5">
+              <h3 className="text-sm font-semibold">vs. Spreadsheets</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Real-time crew tracking, weather alerts, mobile access.</p>
+            </Card>
+            <Card className="rounded-2xl border border-border bg-card p-5">
+              <h3 className="text-sm font-semibold">vs. Generic FSM</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Turf-specific workflows, spray windows, EPA compliance.</p>
+            </Card>
+            <Card className="rounded-2xl border border-border bg-card p-5">
+              <h3 className="text-sm font-semibold">vs. Enterprise Tools</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Starts at $100/mo. No implementation fee. No contract.</p>
+            </Card>
+          </div>
+        </section>
+
+        <section className="mt-16">
           <h2 className="text-2xl font-semibold tracking-tight">Built for daily operations, not spreadsheets</h2>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((feature) => {
@@ -331,6 +356,16 @@ export default function LaunchPortalPage() {
               </Card>
             ))}
           </div>
+        </section>
+
+        <section className="mt-16">
+          <Card className="rounded-2xl border border-border bg-card p-6 md:p-8">
+            <h2 className="text-2xl font-semibold tracking-tight">Built by People Who Know the Course</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Ground Crew HQ was designed by turf professionals who&apos;ve walked the course at 5 AM, managed crews in
+              95° heat, and dealt with weather cancellations. We built the tool we wished we had.
+            </p>
+          </Card>
         </section>
 
         <section className="mt-16">
