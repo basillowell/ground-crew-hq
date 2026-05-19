@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -13,12 +13,48 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
 import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { OnboardingWizardV2 } from '@/components/OnboardingWizardV2';
 import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
 import { LayoutDashboard } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+
+const RechartsResponsiveContainer = lazy(() =>
+  import('recharts').then((m) => ({ default: m.ResponsiveContainer })),
+);
+const RechartsLineChart = lazy(() =>
+  import('recharts').then((m) => ({ default: m.LineChart })),
+);
+const RechartsLine = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Line })),
+);
+const RechartsBarChart = lazy(() =>
+  import('recharts').then((m) => ({ default: m.BarChart })),
+);
+const RechartsBar = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Bar })),
+);
+const RechartsCartesianGrid = lazy(() =>
+  import('recharts').then((m) => ({ default: m.CartesianGrid })),
+);
+const RechartsCell = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Cell })),
+);
+const RechartsLabelList = lazy(() =>
+  import('recharts').then((m) => ({ default: m.LabelList })),
+);
+const RechartsLegend = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Legend })),
+);
+const RechartsTooltip = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Tooltip })),
+);
+const RechartsXAxis = lazy(() =>
+  import('recharts').then((m) => ({ default: m.XAxis })),
+);
+const RechartsYAxis = lazy(() =>
+  import('recharts').then((m) => ({ default: m.YAxis })),
+);
 
 const DAILY_BRIEF_MODEL = 'claude-sonnet-4-20250514';
 const DAILY_BRIEF_STORAGE_PREFIX = 'gchq-daily-brief';
@@ -123,11 +159,13 @@ function ScorecardMetricCard({
       </div>
       <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
       <div className="mt-3 h-14">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data.map((point, index) => ({ index, point }))}>
-            <Line type="monotone" dataKey="point" stroke="#16a34a" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        <Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-muted/40" />}>
+          <RechartsResponsiveContainer width="100%" height="100%">
+            <RechartsLineChart data={data.map((point, index) => ({ index, point }))}>
+              <RechartsLine type="monotone" dataKey="point" stroke="#16a34a" strokeWidth={2} dot={false} />
+            </RechartsLineChart>
+          </RechartsResponsiveContainer>
+        </Suspense>
       </div>
     </Card>
   );
@@ -2164,39 +2202,41 @@ export default function CommandCenterOperationalPage() {
           ) : laborTrendQuery.error ? (
             <div className="text-xs text-muted-foreground">Unable to load labor chart.</div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={laborTrendData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="scheduled" name="Scheduled" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                  <LabelList
-                    dataKey="scheduled"
-                    position="top"
-                    fontSize={10}
-                    fill="#2563eb"
-                    formatter={(value: number) => value.toFixed(1)}
-                  />
-                </Bar>
-                <Bar dataKey="actual" name="Actual" radius={[4, 4, 0, 0]}>
-                  {laborTrendData.map((entry) => (
-                    <Cell
-                      key={`actual-cell-${entry.date}`}
-                      fill={entry.actual > entry.scheduled ? '#f97316' : '#16a34a'}
+            <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+              <RechartsResponsiveContainer width="100%" height="100%">
+                <RechartsBarChart data={laborTrendData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                  <RechartsCartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <RechartsXAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} />
+                  <RechartsYAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
+                  <RechartsTooltip />
+                  <RechartsLegend />
+                  <RechartsBar dataKey="scheduled" name="Scheduled" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                    <RechartsLabelList
+                      dataKey="scheduled"
+                      position="top"
+                      fontSize={10}
+                      fill="#2563eb"
+                      formatter={(value: number) => value.toFixed(1)}
                     />
-                  ))}
-                  <LabelList
-                    dataKey="actual"
-                    position="top"
-                    fontSize={10}
-                    fill="#166534"
-                    formatter={(value: number) => value.toFixed(1)}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                  </RechartsBar>
+                  <RechartsBar dataKey="actual" name="Actual" radius={[4, 4, 0, 0]}>
+                    {laborTrendData.map((entry) => (
+                      <RechartsCell
+                        key={`actual-cell-${entry.date}`}
+                        fill={entry.actual > entry.scheduled ? '#f97316' : '#16a34a'}
+                      />
+                    ))}
+                    <RechartsLabelList
+                      dataKey="actual"
+                      position="top"
+                      fontSize={10}
+                      fill="#166534"
+                      formatter={(value: number) => value.toFixed(1)}
+                    />
+                  </RechartsBar>
+                </RechartsBarChart>
+              </RechartsResponsiveContainer>
+            </Suspense>
           )}
         </div>
       </Card>
@@ -2251,15 +2291,17 @@ export default function CommandCenterOperationalPage() {
           ) : weeklyLaborCostQuery.error ? (
             <div className="text-xs text-muted-foreground">Unable to load weekly labor costs.</div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyLaborCostQuery.data?.daily ?? []} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
-                <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
-                <Bar dataKey="cost" name="Cost" fill="#166534" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+              <RechartsResponsiveContainer width="100%" height="100%">
+                <RechartsBarChart data={weeklyLaborCostQuery.data?.daily ?? []} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <RechartsCartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <RechartsXAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} />
+                  <RechartsYAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
+                  <RechartsTooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                  <RechartsBar dataKey="cost" name="Cost" fill="#166534" radius={[4, 4, 0, 0]} />
+                </RechartsBarChart>
+              </RechartsResponsiveContainer>
+            </Suspense>
           )}
         </div>
       </Card>

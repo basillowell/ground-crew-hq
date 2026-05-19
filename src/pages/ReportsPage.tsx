@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useSearchParams } from 'react-router-dom';
@@ -7,7 +7,43 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+
+const RechartsResponsiveContainer = lazy(() =>
+  import('recharts').then((m) => ({ default: m.ResponsiveContainer })),
+);
+const RechartsBarChart = lazy(() =>
+  import('recharts').then((m) => ({ default: m.BarChart })),
+);
+const RechartsLineChart = lazy(() =>
+  import('recharts').then((m) => ({ default: m.LineChart })),
+);
+const RechartsAreaChart = lazy(() =>
+  import('recharts').then((m) => ({ default: m.AreaChart })),
+);
+const RechartsBar = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Bar })),
+);
+const RechartsLine = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Line })),
+);
+const RechartsArea = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Area })),
+);
+const RechartsCartesianGrid = lazy(() =>
+  import('recharts').then((m) => ({ default: m.CartesianGrid })),
+);
+const RechartsCell = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Cell })),
+);
+const RechartsTooltip = lazy(() =>
+  import('recharts').then((m) => ({ default: m.Tooltip })),
+);
+const RechartsXAxis = lazy(() =>
+  import('recharts').then((m) => ({ default: m.XAxis })),
+);
+const RechartsYAxis = lazy(() =>
+  import('recharts').then((m) => ({ default: m.YAxis })),
+);
 
 type PropertyRow = {
   id: string;
@@ -1071,18 +1107,20 @@ export default function ReportsPage() {
               />
             ) : (
               <div style={{ width: '100%', height: '320px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" />
-                    <YAxis yAxisId="hours" />
-                    <YAxis yAxisId="rate" orientation="right" domain={[0, 100]} />
-                    <Tooltip />
-                    <Bar yAxisId="hours" dataKey="scheduledHours" fill="#3b82f6" name="Scheduled Hours" />
-                    <Bar yAxisId="hours" dataKey="actualHours" fill="#16a34a" name="Actual Hours" />
-                    <Line yAxisId="rate" type="monotone" dataKey="completionRate" stroke="#0f172a" strokeWidth={2} name="Completion %" />
-                  </BarChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<TableSkeleton />}>
+                  <RechartsResponsiveContainer width="100%" height="100%">
+                    <RechartsBarChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                      <RechartsCartesianGrid strokeDasharray="3 3" />
+                      <RechartsXAxis dataKey="label" />
+                      <RechartsYAxis yAxisId="hours" />
+                      <RechartsYAxis yAxisId="rate" orientation="right" domain={[0, 100]} />
+                      <RechartsTooltip />
+                      <RechartsBar yAxisId="hours" dataKey="scheduledHours" fill="#3b82f6" name="Scheduled Hours" />
+                      <RechartsBar yAxisId="hours" dataKey="actualHours" fill="#16a34a" name="Actual Hours" />
+                      <RechartsLine yAxisId="rate" type="monotone" dataKey="completionRate" stroke="#0f172a" strokeWidth={2} name="Completion %" />
+                    </RechartsBarChart>
+                  </RechartsResponsiveContainer>
+                </Suspense>
               </div>
             )}
           </div>
@@ -1101,15 +1139,17 @@ export default function ReportsPage() {
               />
             ) : (
               <div style={{ width: '100%', height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => formatCurrency(Number(value))} />
-                    <Line type="monotone" dataKey="laborCost" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<TableSkeleton />}>
+                  <RechartsResponsiveContainer width="100%" height="100%">
+                    <RechartsLineChart data={trendChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                      <RechartsCartesianGrid strokeDasharray="3 3" />
+                      <RechartsXAxis dataKey="label" />
+                      <RechartsYAxis />
+                      <RechartsTooltip formatter={(value: number) => formatCurrency(Number(value))} />
+                      <RechartsLine type="monotone" dataKey="laborCost" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} />
+                    </RechartsLineChart>
+                  </RechartsResponsiveContainer>
+                </Suspense>
               </div>
             )}
           </div>
@@ -1128,19 +1168,21 @@ export default function ReportsPage() {
               />
             ) : (
               <div style={{ width: '100%', height: '320px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={crewUtilizationData} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" interval={0} angle={-28} textAnchor="end" height={70} />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => `${value}h`} />
-                    <Bar dataKey="averageHours">
-                      {crewUtilizationData.map((row) => (
-                        <Cell key={`util-${row.name}`} fill={row.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<TableSkeleton />}>
+                  <RechartsResponsiveContainer width="100%" height="100%">
+                    <RechartsBarChart data={crewUtilizationData} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
+                      <RechartsCartesianGrid strokeDasharray="3 3" />
+                      <RechartsXAxis dataKey="name" interval={0} angle={-28} textAnchor="end" height={70} />
+                      <RechartsYAxis />
+                      <RechartsTooltip formatter={(value: number) => `${value}h`} />
+                      <RechartsBar dataKey="averageHours">
+                        {crewUtilizationData.map((row) => (
+                          <RechartsCell key={`util-${row.name}`} fill={row.fill} />
+                        ))}
+                      </RechartsBar>
+                    </RechartsBarChart>
+                  </RechartsResponsiveContainer>
+                </Suspense>
               </div>
             )}
           </div>
@@ -1194,42 +1236,48 @@ export default function ReportsPage() {
             ) : (
               <div style={{ display: 'grid', gap: '18px' }}>
                 <div style={{ width: '100%', height: '250px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" />
-                      <YAxis domain={[0, 100]} />
-                      <Tooltip formatter={(value: number) => `${value}%`} />
-                      <Line type="monotone" dataKey="completionRate" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <Suspense fallback={<TableSkeleton />}>
+                    <RechartsResponsiveContainer width="100%" height="100%">
+                      <RechartsLineChart data={trendChartData}>
+                        <RechartsCartesianGrid strokeDasharray="3 3" />
+                        <RechartsXAxis dataKey="label" />
+                        <RechartsYAxis domain={[0, 100]} />
+                        <RechartsTooltip formatter={(value: number) => `${value}%`} />
+                        <RechartsLine type="monotone" dataKey="completionRate" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3 }} />
+                      </RechartsLineChart>
+                    </RechartsResponsiveContainer>
+                  </Suspense>
                 </div>
                 <div style={{ width: '100%', height: '250px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trendChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" />
-                      <YAxis />
-                      <Tooltip formatter={(value: number) => `${value}h`} />
-                      <Area type="monotone" dataKey="scheduledHours" stroke="#3b82f6" fill="#bfdbfe" />
-                      <Area type="monotone" dataKey="actualHours" stroke="#16a34a" fill="#bbf7d0" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <Suspense fallback={<TableSkeleton />}>
+                    <RechartsResponsiveContainer width="100%" height="100%">
+                      <RechartsAreaChart data={trendChartData}>
+                        <RechartsCartesianGrid strokeDasharray="3 3" />
+                        <RechartsXAxis dataKey="label" />
+                        <RechartsYAxis />
+                        <RechartsTooltip formatter={(value: number) => `${value}h`} />
+                        <RechartsArea type="monotone" dataKey="scheduledHours" stroke="#3b82f6" fill="#bfdbfe" />
+                        <RechartsArea type="monotone" dataKey="actualHours" stroke="#16a34a" fill="#bbf7d0" />
+                      </RechartsAreaChart>
+                    </RechartsResponsiveContainer>
+                  </Suspense>
                 </div>
                 <div style={{ width: '100%', height: '260px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={crewUtilizationData} margin={{ bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" interval={0} angle={-24} textAnchor="end" height={70} />
-                      <YAxis />
-                      <Tooltip formatter={(value: number) => `${value}h`} />
-                      <Bar dataKey="averageHours">
-                        {crewUtilizationData.map((row) => (
-                          <Cell key={`util-full-${row.name}`} fill={row.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <Suspense fallback={<TableSkeleton />}>
+                    <RechartsResponsiveContainer width="100%" height="100%">
+                      <RechartsBarChart data={crewUtilizationData} margin={{ bottom: 60 }}>
+                        <RechartsCartesianGrid strokeDasharray="3 3" />
+                        <RechartsXAxis dataKey="name" interval={0} angle={-24} textAnchor="end" height={70} />
+                        <RechartsYAxis />
+                        <RechartsTooltip formatter={(value: number) => `${value}h`} />
+                        <RechartsBar dataKey="averageHours">
+                          {crewUtilizationData.map((row) => (
+                            <RechartsCell key={`util-full-${row.name}`} fill={row.fill} />
+                          ))}
+                        </RechartsBar>
+                      </RechartsBarChart>
+                    </RechartsResponsiveContainer>
+                  </Suspense>
                 </div>
               </div>
             )}

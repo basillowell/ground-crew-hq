@@ -8,8 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
-import { EmployeeRow } from '@/components/workboard/EmployeeRow';
-import { NotesPanel } from '@/components/workboard/NotesPanel';
 import { toast } from '@/components/ui/sonner';
 import {
   type ApplicationArea,
@@ -59,6 +57,12 @@ import { CardSkeleton } from '@/components/CardSkeleton';
 
 const GanttTimeline = lazy(() =>
   import('@/components/workboard/GanttTimeline').then((module) => ({ default: module.GanttTimeline })),
+);
+const EmployeeRow = lazy(() =>
+  import('@/components/workboard/EmployeeRow').then((module) => ({ default: module.EmployeeRow })),
+);
+const NotesPanel = lazy(() =>
+  import('@/components/workboard/NotesPanel').then((module) => ({ default: module.NotesPanel })),
 );
 const WeatherSnapshotCard = lazy(() =>
   import('@/components/weather/WeatherSnapshotCard').then((module) => ({ default: module.WeatherSnapshotCard })),
@@ -448,7 +452,7 @@ export default function WorkboardPage() {
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    document.title = 'Task Board — Ground Crew HQ';
+    document.title = 'Workflow — Ground Crew HQ';
   }, []);
 
   const triggerAssignmentFlash = useCallback((assignmentId: string, tone: 'complete' | 'started') => {
@@ -3607,6 +3611,7 @@ export default function WorkboardPage() {
                           : ''
                     }`}
                   >
+                <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-muted/40" />}>
                 <EmployeeRow
                   employee={lane.employee}
                   assignments={lane.employeeAssignments}
@@ -3648,6 +3653,7 @@ export default function WorkboardPage() {
                   onRemoveAssignment={removeAssignment}
                   weatherWarningsByAssignment={assignmentWeatherWarnings}
                 />
+                </Suspense>
                   </div>
                 );
               })}
@@ -3813,10 +3819,12 @@ export default function WorkboardPage() {
             </button>
             {mobileSectionsOpen.notes ? (
               <div className="border-t px-3 py-2">
-                <NotesPanel
-                  notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-                  onAddNote={() => setNoteDialogOpen(true)}
-                />
+                <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
+                  <NotesPanel
+                    notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
+                    onAddNote={() => setNoteDialogOpen(true)}
+                  />
+                </Suspense>
               </div>
             ) : null}
           </div>
@@ -4096,10 +4104,12 @@ export default function WorkboardPage() {
             <StickyNote className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Notes</h3>
           </div>
-          <NotesPanel
-            notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-            onAddNote={() => setNoteDialogOpen(true)}
-          />
+          <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
+            <NotesPanel
+              notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
+              onAddNote={() => setNoteDialogOpen(true)}
+            />
+          </Suspense>
         </div>
       </div>
 

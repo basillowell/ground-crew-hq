@@ -62,7 +62,7 @@ const adminNavSections: NavSection[] = [
     title: 'Field Ops',
     items: [
       { title: 'Scheduler', url: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
-      { title: 'Task Board', url: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
+      { title: 'Workflow', url: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
       { title: 'Field View', url: '/app/field', icon: MapPin, moduleId: 'field' },
     ],
   },
@@ -108,7 +108,7 @@ const employeeNavSections: NavSection[] = [
     items: [
       { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
       { title: 'Scheduler', url: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
-      { title: 'Task Board', url: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
+      { title: 'Workflow', url: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
       { title: 'Field View', url: '/app/field', icon: MapPin, moduleId: 'field' },
     ],
   },
@@ -198,7 +198,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
                         {!collapsed ? (
                           <span className="inline-flex items-center gap-2">
                             <span>{item.title}</span>
-                            {item.title === 'Task Board' && taskBoardBadgeCount > 0 ? (
+                            {item.title === 'Workflow' && taskBoardBadgeCount > 0 ? (
                               <span className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                                 {taskBoardBadgeCount}
                               </span>

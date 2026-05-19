@@ -413,7 +413,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   );
   const mobilePrimaryTabs = [
     { label: 'Field View', route: '/app/field', icon: MapPin },
-    { label: 'Task Board', route: '/app/workboard', icon: ClipboardList },
+    { label: 'Workflow', route: '/app/workboard', icon: ClipboardList },
     { label: 'Team', route: '/app/employees', icon: Users },
     { label: 'Weather', route: '/app/weather', icon: CloudSun },
   ];
@@ -655,7 +655,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                     >
                       <item.icon className="h-4 w-4" />
                       <span>{item.label}</span>
-                      {item.label === 'Task Board' && openTaskBoardCount > 0 ? (
+                      {item.label === 'Workflow' && openTaskBoardCount > 0 ? (
                         <span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                           {openTaskBoardCount}
                         </span>
