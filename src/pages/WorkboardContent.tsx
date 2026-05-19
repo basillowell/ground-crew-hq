@@ -3372,39 +3372,33 @@ export default function WorkboardContent() {
     (taskRequestsQuery.error as { message?: string } | null)?.message ||
     '';
 
-  if (isLoadingBoard) {
-    return (
-      <div className="p-6">
-        <CardSkeleton />
-      </div>
-    );
-  }
-
-  if (boardErrorMessage) {
-    return (
-      <div className="p-6">
-        <ErrorRetry
-          message={boardErrorMessage}
-          onRetry={() => {
-            void propertiesQuery.refetch();
-            void employeesQuery.refetch();
-            void assignmentsQuery.refetch();
-            void scheduleQuery.refetch();
-            void tasksQuery.refetch();
-            void equipmentQuery.refetch();
-            void notesQuery.refetch();
-            void taskRequestsQuery.refetch();
-            void pendingTaskRequestsQuery.refetch();
-            void weatherLogsQuery.refetch();
-            void weatherLocationsQuery.refetch();
-            void workLocationsQuery.refetch();
-          }}
-        />
-      </div>
-    );
-  }
-
   return (
+    <>
+      {isLoadingBoard ? (
+        <div className="p-6">
+          <CardSkeleton />
+        </div>
+      ) : boardErrorMessage ? (
+        <div className="p-6">
+          <ErrorRetry
+            message={boardErrorMessage}
+            onRetry={() => {
+              void propertiesQuery.refetch();
+              void employeesQuery.refetch();
+              void assignmentsQuery.refetch();
+              void scheduleQuery.refetch();
+              void tasksQuery.refetch();
+              void equipmentQuery.refetch();
+              void notesQuery.refetch();
+              void taskRequestsQuery.refetch();
+              void pendingTaskRequestsQuery.refetch();
+              void weatherLogsQuery.refetch();
+              void weatherLocationsQuery.refetch();
+              void workLocationsQuery.refetch();
+            }}
+          />
+        </div>
+      ) : (
     <div className="relative flex h-[calc(100vh-3.5rem)] overflow-hidden">
       {showFirstVisitHint ? (
         <div className="absolute left-3 right-3 top-3 z-20 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 md:left-5 md:right-5">
@@ -5162,5 +5156,7 @@ export default function WorkboardContent() {
         </DialogContent>
       </Dialog>
     </div>
+      )}
+    </>
   );
 }
