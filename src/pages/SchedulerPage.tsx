@@ -215,6 +215,7 @@ export default function SchedulerPage() {
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
       queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+      enabled: Boolean(currentUser?.orgId),
       queryFn: async () => {
         if (!supabase) return [] as ScheduleEntry[];
         let query = supabase.from('schedule_entries').select('*').eq('date', day.date).order('shift_start');
@@ -241,10 +242,13 @@ export default function SchedulerPage() {
     [employeesQuery.data],
   );
   const scheduleList = useMemo(() => weekScheduleQueries.flatMap((q) => q.data ?? []), [weekScheduleQueries]);
-  const isLoading = employeesQuery.isLoading || weekScheduleQueries.some((q) => q.isLoading);
+  const isWeekScheduleLoading = Boolean(currentUser?.orgId) && weekScheduleQueries.some((q) => q.isLoading || q.isFetching);
+  const isLoading = employeesQuery.isLoading || isWeekScheduleLoading;
   const queryErrorMessage =
     (employeesQuery.error as { message?: string } | null)?.message ||
-    (weekScheduleQueries.find((query) => query.error)?.error as { message?: string } | null)?.message ||
+    (currentUser?.orgId
+      ? (weekScheduleQueries.find((query) => query.error)?.error as { message?: string } | null)?.message
+      : '') ||
     '';
 
   useEffect(() => {
