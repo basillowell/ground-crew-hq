@@ -196,7 +196,7 @@ export default function SettingsPage() {
           />
         )}
         {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
-        {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId ?? ''} />}
+        {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId} />}
         {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
         {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
       </fieldset>
@@ -1737,6 +1737,9 @@ function AccessTab({
   const queryClient = useQueryClient();
   const [organizationName, setOrganizationName] = useState<string>('');
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'Manager' | 'Field Staff'>('Manager');
   const [systemInfo, setSystemInfo] = useState({
     propertyCount: 0,
     employeeCount: 0,
@@ -2618,7 +2621,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   );
 }
 
-function SchedulerTab({ orgId }: { orgId: string }) {
+function SchedulerTab({ orgId }: { orgId: string | null }) {
   const [settings, setSettings] = useState<SchedulerSettings | null>(null);
   const [alertsConfig, setAlertsConfig] = useState<EscalationThresholds>(DEFAULT_ESCALATION_THRESHOLDS);
   const [loading, setLoading] = useState(true);
@@ -2662,8 +2665,9 @@ function SchedulerTab({ orgId }: { orgId: string }) {
       return;
     }
     if (!orgId) {
-      setLoading(true);
+      setLoading(false);
       setError(null);
+      setSettings(null);
       return;
     }
     setLoading(true);
@@ -2686,8 +2690,9 @@ function SchedulerTab({ orgId }: { orgId: string }) {
       return;
     }
     if (!orgId) {
-      setTemplatesLoading(true);
+      setTemplatesLoading(false);
       setTemplatesError(null);
+      setTemplates([]);
       return;
     }
     setTemplatesLoading(true);
@@ -2713,6 +2718,8 @@ function SchedulerTab({ orgId }: { orgId: string }) {
   useEffect(() => {
     void fetchTemplates();
   }, [fetchTemplates]);
+
+  if (!orgId) return <PageSkeleton />;
 
   const toggleDayValue = (currentDays: string[], dayValue: string) =>
     currentDays.includes(dayValue) ? currentDays.filter((day) => day !== dayValue) : [...currentDays, dayValue];
