@@ -107,6 +107,21 @@ function coverageBadgeClass(coveragePercent: number) {
   return 'bg-red-100 text-red-700 border-red-200';
 }
 
+function getEstimatedHoursForAssignment(assignment: Assignment) {
+  const estimate = Number(assignment.estimatedHours ?? 0);
+  if (Number.isFinite(estimate) && estimate > 0) return estimate;
+  const durationHours = Number(assignment.duration ?? 0) / 60;
+  return Number.isFinite(durationHours) ? Math.max(durationHours, 0) : 0;
+}
+
+function getActualHoursTone(actualHours: number, estimatedHours: number) {
+  if (actualHours <= 0 || estimatedHours <= 0) return 'text-muted-foreground';
+  const ratio = actualHours / estimatedHours;
+  if (ratio <= 1) return 'text-emerald-700';
+  if (ratio < 1.25) return 'text-amber-700';
+  return 'text-red-700';
+}
+
 function taskRowClass(status: string) {
   const normalized = normalizeAssignmentStatus(status);
   if (normalized === 'in-progress') return 'border-l-[3px] border-l-blue-500 bg-blue-50';
@@ -480,6 +495,7 @@ export default function WorkboardContent() {
   const [weatherSnapshot, setWeatherSnapshot] = useState<WorkboardWeatherSnapshot | null>(null);
   const [dismissedEscalationIds, setDismissedEscalationIds] = useState<string[]>([]);
   const [assignmentFlashMap, setAssignmentFlashMap] = useState<Record<string, 'complete' | 'started'>>({});
+  const [actualHoursMenuAssignmentId, setActualHoursMenuAssignmentId] = useState<string | null>(null);
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
   const assignmentFlashTimeoutsRef = useRef<Record<string, number>>({});
   const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
@@ -1399,6 +1415,51 @@ export default function WorkboardContent() {
     },
     [assignmentsQuery.queryKey, boardDate, currentUser?.orgId, effectivePropertyId, queryClient],
   );
+
+  const setAssignmentActualHours = useCallback(
+    async (assignment: Assignment, hours: number) => {
+      if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      const nextHours = Math.max(0, Number(hours));
+      const completedAtIso = new Date().toISOString();
+      const previousActualHours = Number(assignment.actualHours ?? 0);
+
+      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+        (current ?? []).map((row) =>
+          row.id === assignment.id
+            ? {
+                ...row,
+                actualHours: nextHours,
+              }
+            : row,
+        ),
+      );
+
+      const { error } = await supabase
+        .from('assignments')
+        .update({ actual_hours: nextHours, completed_at: completedAtIso })
+        .eq('id', assignment.id)
+        .eq('org_id', currentUser.orgId);
+
+      if (error) {
+        queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+          (current ?? []).map((row) =>
+            row.id === assignment.id
+              ? {
+                  ...row,
+                  actualHours: previousActualHours,
+                }
+              : row,
+          ),
+        );
+        toast.error(`Failed to update actual hours: ${error.message}`);
+        return;
+      }
+
+      toast.success(`Actual hours set to ${nextHours.toFixed(1)}h`);
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    },
+    [assignmentsQuery.queryKey, currentUser?.orgId, queryClient],
+  );
   const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
     if (workOrders.length > 0) {
       return workOrders.slice(0, 6).map((row) => ({
@@ -1437,9 +1498,21 @@ export default function WorkboardContent() {
           .filter((a) => a.employeeId === employee.id)
           .sort((a, b) => a.startTime.localeCompare(b.startTime));
         const assignedMinutes = employeeAssignments.reduce((s, a) => s + a.duration, 0);
+        const estimatedHours = employeeAssignments.reduce((sum, assignment) => sum + getEstimatedHoursForAssignment(assignment), 0);
+        const actualHours = employeeAssignments.reduce((sum, assignment) => sum + Number(assignment.actualHours ?? 0), 0);
         const shiftMinutes = shift ? Math.max(timeToMinutes(shift.shiftEnd) - timeToMinutes(shift.shiftStart), 0) : 0;
         const coveragePercent = shiftMinutes > 0 ? (assignedMinutes / shiftMinutes) * 100 : 0;
-        return { employee, shift, employeeAssignments, assignedMinutes, shiftMinutes, openMinutes: Math.max(shiftMinutes - assignedMinutes, 0), coveragePercent };
+        return {
+          employee,
+          shift,
+          employeeAssignments,
+          assignedMinutes,
+          estimatedHours,
+          actualHours,
+          shiftMinutes,
+          openMinutes: Math.max(shiftMinutes - assignedMinutes, 0),
+          coveragePercent,
+        };
       }),
     [boardDate, dayAssignments, scheduleList, scheduledEmployees],
   );
@@ -3800,7 +3873,7 @@ export default function WorkboardContent() {
                       shiftLabel={lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : undefined}
                       laneSummary={
                         lane.shift
-                          ? `${lane.assignedMinutes} min assigned · ${lane.openMinutes} min open`
+                          ? `Est: ${lane.estimatedHours.toFixed(1)}h · Actual: ${lane.actualHours.toFixed(1)}h`
                           : `${lane.employeeAssignments.length} tasks assigned`
                       }
                       laneWarning={
@@ -3889,6 +3962,9 @@ export default function WorkboardContent() {
                           <div className="space-y-2">
                             {lane.employeeAssignments.map((assignment) => {
                               const task = taskList.find((candidate) => candidate.id === assignment.taskId);
+                              const estimatedHours = getEstimatedHoursForAssignment(assignment);
+                              const actualHours = Math.max(0, Number(assignment.actualHours ?? 0));
+                              const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
                               return (
                                 <div key={`mobile-assignment-${assignment.id}`} className="rounded-xl border bg-muted/20 p-2.5">
                                   <div className="flex items-start justify-between gap-2">
@@ -3897,15 +3973,66 @@ export default function WorkboardContent() {
                                       <p className="text-xs text-muted-foreground">
                                         {formatMinutesAsHoursAndMinutes(assignment.duration)} · {assignment.status}
                                       </p>
+                                      <p className={`text-xs ${actualHoursTone}`}>
+                                        Est: {estimatedHours.toFixed(1)}h | Actual: {actualHours.toFixed(1)}h
+                                      </p>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditAssignmentDialog(assignment)}
-                                      className="min-h-11 min-w-11 rounded-md border px-2 text-xs font-medium"
-                                    >
-                                      Edit
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        aria-label="Set actual hours"
+                                        onClick={() =>
+                                          setActualHoursMenuAssignmentId((current) =>
+                                            current === assignment.id ? null : assignment.id,
+                                          )
+                                        }
+                                        className="min-h-11 min-w-11 rounded-md border px-2 text-xs font-medium"
+                                      >
+                                        <Clock className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => openEditAssignmentDialog(assignment)}
+                                        className="min-h-11 min-w-11 rounded-md border px-2 text-xs font-medium"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
                                   </div>
+                                  {actualHoursMenuAssignmentId === assignment.id ? (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {[0.5, 1, 1.5, 2, 3, 4].map((value) => (
+                                        <button
+                                          key={`actual-hours-${assignment.id}-${value}`}
+                                          type="button"
+                                          className="rounded-md border px-2 py-1 text-[11px] font-medium"
+                                          onClick={() => {
+                                            void setAssignmentActualHours(assignment, value);
+                                            setActualHoursMenuAssignmentId(null);
+                                          }}
+                                        >
+                                          {value}h
+                                        </button>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        className="rounded-md border px-2 py-1 text-[11px] font-medium"
+                                        onClick={() => {
+                                          const value = window.prompt('Enter actual hours', String(actualHours > 0 ? actualHours : estimatedHours || 1));
+                                          if (!value) return;
+                                          const parsed = Number(value);
+                                          if (!Number.isFinite(parsed) || parsed < 0) {
+                                            toast.error('Enter a valid number of hours.');
+                                            return;
+                                          }
+                                          void setAssignmentActualHours(assignment, parsed);
+                                          setActualHoursMenuAssignmentId(null);
+                                        }}
+                                      >
+                                        Other
+                                      </button>
+                                    </div>
+                                  ) : null}
                                 </div>
                               );
                             })}
@@ -3948,7 +4075,9 @@ export default function WorkboardContent() {
                 {orderedDispatchBoard.map((lane) => (
                   <div key={`mobile-summary-${lane.employee.id}`} className="rounded-xl bg-muted/30 px-3 py-2 text-xs">
                     <p className="font-medium">{lane.employee.firstName} {lane.employee.lastName}</p>
-                    <p className="text-muted-foreground">{lane.employeeAssignments.length} tasks · {Math.round(lane.coveragePercent)}% coverage</p>
+                    <p className="text-muted-foreground">
+                      {lane.employeeAssignments.length} tasks · Est: {lane.estimatedHours.toFixed(1)}h · Actual: {lane.actualHours.toFixed(1)}h
+                    </p>
                   </div>
                 ))}
               </div>
