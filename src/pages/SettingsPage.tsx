@@ -77,6 +77,7 @@ interface OrganizationInfo {
   name: string;
   plan: string | null;
   subscription_status?: string | null;
+  created_at?: string | null;
 }
 
 interface PropertyItem {
@@ -160,7 +161,7 @@ export default function SettingsPage() {
   }, [location.search]);
 
   return (
-    <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-6">
+    <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-4">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Operations Control Center</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">{user?.email}</p>
@@ -181,7 +182,7 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      <div className="hidden md:flex flex-wrap items-center gap-2 border-b pb-1">
+      <div className="sticky top-0 z-10 mb-4 hidden md:flex flex-wrap items-center gap-2 border-b bg-background pb-1">
         {TABS.map((t) => (
           <button
             key={t}
@@ -338,7 +339,7 @@ function WorkspaceTab({
       { count: shiftTemplatesCount, error: shiftTemplatesError },
       { data: equipmentTypesData, error: equipmentTypesError },
     ] = await Promise.all([
-      supabase.from('organizations').select('name, plan, subscription_status').eq('id', orgId).single(),
+      supabase.from('organizations').select('name, plan, subscription_status, created_at').eq('id', orgId).single(),
       supabase
         .from('properties')
         .select('id, name, short_name, logo_initials, color, city, state, latitude, longitude, acreage, status, created_at, org_id, weather_location_label')
@@ -408,7 +409,7 @@ function WorkspaceTab({
       return;
     }
     setOrgInfo((current) => (current ? { ...current, name: orgNameDraft.trim() } : current));
-    toast.success(`Organization name updated to ${orgNameDraft.trim()}`);
+    toast.success('Organization updated');
   };
 
   const addProperty = async () => {
@@ -1035,12 +1036,12 @@ function WorkspaceTab({
         )}
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Organization Info</h3>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px', display: 'grid', gap: '8px' }}>
+        <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Organization Info</h3>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'grid', gap: '6px', minWidth: '240px' }}>
             <label style={{ color: '#6b7280', fontSize: '12px' }}>Organization name</label>
-            <input value={orgNameDraft} onChange={(event) => setOrgNameDraft(event.target.value)} />
+            <input value={orgNameDraft} onChange={(event) => setOrgNameDraft(event.target.value)} style={{ height: '36px', fontSize: '14px' }} />
           </div>
           <div style={{ display: 'grid', gap: '6px' }}>
             <label style={{ color: '#6b7280', fontSize: '12px' }}>Plan</label>
@@ -1048,11 +1049,17 @@ function WorkspaceTab({
               {(orgInfo?.plan ?? 'starter').toString()}
             </span>
           </div>
+          <div style={{ display: 'grid', gap: '6px' }}>
+            <label style={{ color: '#6b7280', fontSize: '12px' }}>Created</label>
+            <span style={{ fontSize: '12px', color: '#374151' }}>
+              {orgInfo?.created_at ? new Date(orgInfo.created_at).toLocaleDateString() : '—'}
+            </span>
+          </div>
         </div>
         <button
           onClick={() => void saveOrganization()}
           disabled={savingOrg}
-          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '6px 12px', cursor: 'pointer', height: '32px', fontSize: '14px' }}
         >
           {savingOrg ? 'Saving...' : 'Save'}
         </button>
