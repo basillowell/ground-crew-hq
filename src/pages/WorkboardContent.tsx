@@ -505,6 +505,7 @@ export default function WorkboardContent() {
   const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
   const [applyingTaskTemplate, setApplyingTaskTemplate] = useState(false);
   const [expandedMobileCrewIds, setExpandedMobileCrewIds] = useState<string[]>([]);
+  const [expandedDesktopCrewId, setExpandedDesktopCrewId] = useState<string | null>(null);
   const [quickPlanLoading, setQuickPlanLoading] = useState(false);
   const [quickPlanApplying, setQuickPlanApplying] = useState(false);
   const [quickPlanError, setQuickPlanError] = useState<string | null>(null);
@@ -1708,6 +1709,10 @@ export default function WorkboardContent() {
     setExpandedMobileCrewIds((current) =>
       current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
     );
+  }, []);
+
+  const toggleDesktopCrew = useCallback((employeeId: string) => {
+    setExpandedDesktopCrewId((current) => (current === employeeId ? null : employeeId));
   }, []);
 
   const toggleMobileSection = useCallback((section: keyof typeof mobileSectionsOpen) => {
@@ -3854,12 +3859,14 @@ export default function WorkboardContent() {
           ) : (
             <>
             <div className="hidden space-y-2 md:block">
-              <div className="rounded-2xl border bg-card/70 px-4 py-2 text-[11px] text-muted-foreground">
-                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3">
-                  <span className="font-medium text-foreground/90">Employee / Assignments</span>
+              <div className="rounded-xl border bg-card/70 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <div className="grid grid-cols-[minmax(0,1fr)_90px_60px_90px_80px_24px] items-center gap-3">
+                  <span>Employee</span>
+                  <span className="text-right">Shift</span>
+                  <span className="text-right">Tasks</span>
+                  <span className="text-right">Coverage</span>
                   <span className="text-right">Duration</span>
-                  <span className="text-right">Equipment</span>
-                  <span className="text-right">Status</span>
+                  <span />
                 </div>
               </div>
               {orderedDispatchBoard.map((lane, index) => {
@@ -3869,10 +3876,18 @@ export default function WorkboardContent() {
                   return nextTone ?? tone;
                 }, null);
                 const initials = `${lane.employee.firstName?.[0] ?? ''}${lane.employee.lastName?.[0] ?? ''}`.toUpperCase();
+                const isExpanded = expandedDesktopCrewId === lane.employee.id;
+                const coverageRounded = Math.round(lane.coveragePercent);
+                const coverageToneClass =
+                  coverageRounded > 80
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : coverageRounded >= 50
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-red-100 text-red-800';
                 return (
                   <div
                     key={lane.employee.id}
-                    className={`rounded-3xl transition-all duration-500 ${
+                    className={`rounded-xl border bg-card transition-all duration-500 ${
                       laneFlashTone === 'complete'
                         ? 'ring-2 ring-green-400/70 bg-green-50/40'
                         : laneFlashTone === 'started'
@@ -3880,6 +3895,38 @@ export default function WorkboardContent() {
                           : ''
                     }`}
                   >
+                    <button
+                      type="button"
+                      onClick={() => toggleDesktopCrew(lane.employee.id)}
+                      className="flex w-full items-center gap-3 border-b px-3 py-2 text-left hover:bg-muted/30"
+                    >
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                        {initials}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {lane.employee.firstName} {lane.employee.lastName}
+                      </span>
+                      <span className="w-[90px] text-right font-mono text-xs text-muted-foreground">
+                        {lane.shift ? `${formatTime(lane.shift.shiftStart)}-${formatTime(lane.shift.shiftEnd)}` : 'No shift'}
+                      </span>
+                      <span className="w-[60px] text-right">
+                        <span className="inline-flex rounded-full border px-2 py-0.5 text-[11px]">
+                          {lane.employeeAssignments.length}
+                        </span>
+                      </span>
+                      <span className="w-[90px] text-right">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${coverageToneClass}`}>
+                          {coverageRounded}%
+                        </span>
+                      </span>
+                      <span className="w-[80px] text-right text-xs text-muted-foreground">
+                        {lane.assignedMinutes}min
+                      </span>
+                      <span className="w-6 text-muted-foreground">
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </span>
+                    </button>
+                    {isExpanded ? (
                 <SafeSection fallback={<div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">This crew lane could not be rendered.</div>}>
                   <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-muted/40" />}>
                     <EmployeeRow
@@ -3925,6 +3972,7 @@ export default function WorkboardContent() {
                     />
                   </Suspense>
                 </SafeSection>
+                    ) : null}
                   </div>
                 );
               })}
