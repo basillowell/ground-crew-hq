@@ -83,10 +83,16 @@ interface PropertyItem {
   id: string;
   name: string;
   org_id: string;
-  address: string | null;
+  short_name: string | null;
+  logo_initials: string | null;
+  color: string | null;
+  city: string | null;
+  state: string | null;
   latitude: number | null;
   longitude: number | null;
-  timezone: string | null;
+  acreage: number | null;
+  status: string | null;
+  weather_location_label: string | null;
   created_at: string | null;
 }
 
@@ -335,7 +341,7 @@ function WorkspaceTab({
       supabase.from('organizations').select('name, plan, subscription_status').eq('id', orgId).single(),
       supabase
         .from('properties')
-        .select('id, name, org_id, address, latitude, longitude, timezone, created_at')
+        .select('id, name, short_name, logo_initials, color, city, state, latitude, longitude, acreage, status, created_at, org_id, weather_location_label')
         .eq('org_id', orgId)
         .order('name', { ascending: true }),
       supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
@@ -413,10 +419,8 @@ function WorkspaceTab({
       .insert({
         name: newPropertyName.trim(),
         org_id: orgId,
-        address: newPropertyAddress.trim() || null,
-        timezone: newPropertyTimezone || 'America/New_York',
       })
-      .select('id, name, org_id, address, latitude, longitude, timezone, created_at')
+      .select('id, name, short_name, logo_initials, color, city, state, latitude, longitude, acreage, status, created_at, org_id, weather_location_label')
       .single();
     if (insertError) {
       setError(insertError.message);
