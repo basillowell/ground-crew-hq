@@ -52,6 +52,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
+import { isoToLocalHHMM, isoToLocalTimeLabel, localDateAndTimeToIso } from '@/lib/timeWorkflow';
 import { formatTime } from '@/utils/formatTime';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -136,18 +137,13 @@ type AssignmentTimelineMeta = {
 
 function toLocalTimeLabel(value?: string | null) {
   if (!value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '';
-  return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  // Workboard actual times are treated as operational wall-clock times for the selected workflow date.
+  return isoToLocalTimeLabel(value);
 }
 
 function toTimeInputValue(value?: string | null) {
   if (!value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '';
-  const hours = String(parsed.getHours()).padStart(2, '0');
-  const minutes = String(parsed.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+  return isoToLocalHHMM(value);
 }
 
 function taskRowClass(status: string) {
@@ -1551,6 +1547,51 @@ export default function WorkboardContent() {
     [assignmentsQuery.queryKey, currentUser?.orgId, queryClient],
   );
 
+  const syncTimelineCaches = useCallback(
+    (
+      assignmentId: string,
+      patch: {
+        actualStartAt?: string | null;
+        actualCompletedAt?: string | null;
+        status?: string;
+        actualHours?: number;
+      },
+    ) => {
+      queryClient.setQueryData<AssignmentTimelineMeta[]>(assignmentTimelineQuery.queryKey, (current) =>
+        (current ?? []).map((row) =>
+          row.id === assignmentId
+            ? {
+                ...row,
+                actualStartAt: patch.actualStartAt !== undefined ? patch.actualStartAt : row.actualStartAt,
+                actualCompletedAt: patch.actualCompletedAt !== undefined ? patch.actualCompletedAt : row.actualCompletedAt,
+                status: patch.status ?? row.status,
+                actualHours: patch.actualHours ?? row.actualHours,
+              }
+            : row,
+        ),
+      );
+
+      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+        (current ?? []).map((row) => {
+          if (row.id !== assignmentId) return row;
+          const enriched = row as Assignment & Record<string, unknown>;
+          if (patch.actualStartAt !== undefined) enriched.actual_start_at = patch.actualStartAt;
+          if (patch.actualCompletedAt !== undefined) enriched.actual_completed_at = patch.actualCompletedAt;
+          if (patch.status) {
+            enriched.status = patch.status;
+            row.status = normalizeAssignmentStatus(patch.status) as Assignment['status'];
+          }
+          if (typeof patch.actualHours === 'number' && Number.isFinite(patch.actualHours)) {
+            enriched.actual_hours = patch.actualHours;
+            row.actualHours = patch.actualHours;
+          }
+          return { ...row };
+        }),
+      );
+    },
+    [assignmentTimelineQuery.queryKey, assignmentsQuery.queryKey, queryClient],
+  );
+
   const getAssignmentTimelineMeta = useCallback(
     (assignment: Assignment) => {
       const timelineRow = assignment.id ? assignmentTimelineById.get(assignment.id) : undefined;
@@ -1561,7 +1602,11 @@ export default function WorkboardContent() {
           (typeof assignmentRecord.actual_start_at === 'string' ? String(assignmentRecord.actual_start_at) : null),
         actualCompletedAt:
           timelineRow?.actualCompletedAt ??
-          (typeof assignmentRecord.actual_completed_at === 'string' ? String(assignmentRecord.actual_completed_at) : null),
+          (typeof assignmentRecord.actual_completed_at === 'string'
+            ? String(assignmentRecord.actual_completed_at)
+            : typeof assignmentRecord.completed_at === 'string'
+              ? String(assignmentRecord.completed_at)
+              : null),
         orderIndex:
           timelineRow?.orderIndex ??
           (typeof assignmentRecord.order_index === 'number'
@@ -1572,6 +1617,27 @@ export default function WorkboardContent() {
       };
     },
     [assignmentTimelineById],
+  );
+
+  const getCanonicalActualTimes = useCallback(
+    (assignment: Assignment) => {
+      const { timelineMeta } = getCanonicalActualTimes(assignment);
+      const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+      const canonicalStartAt =
+        timelineMeta.actualStartAt ??
+        (typeof assignmentRecord.actual_start_at === 'string'
+          ? String(assignmentRecord.actual_start_at)
+          : null);
+      const canonicalCompletedAt =
+        timelineMeta.actualCompletedAt ??
+        (typeof assignmentRecord.actual_completed_at === 'string'
+          ? String(assignmentRecord.actual_completed_at)
+          : typeof assignmentRecord.completed_at === 'string'
+            ? String(assignmentRecord.completed_at)
+            : null);
+      return { canonicalStartAt, canonicalCompletedAt, timelineMeta };
+    },
+    [getAssignmentTimelineMeta],
   );
 
   const orderEmployeeAssignments = useCallback(
@@ -1600,13 +1666,14 @@ export default function WorkboardContent() {
         setSavingTimelineAssignmentId(null);
         return;
       }
+      syncTimelineCaches(assignment.id, { status: 'in_progress', actualStartAt: nowIso });
       triggerAssignmentFlash(assignment.id, 'started');
       toast.success(`Started ${assignment.title || 'task'}`);
       await queryClient.invalidateQueries({ queryKey: ['assignments'] });
       await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
-    [currentUser?.orgId, queryClient, triggerAssignmentFlash],
+    [currentUser?.orgId, queryClient, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const completeAssignmentTimeline = useCallback(
@@ -1618,9 +1685,14 @@ export default function WorkboardContent() {
       const timelineMeta = getAssignmentTimelineMeta(assignment);
       let calculatedHours: number | undefined;
       if (timelineMeta.actualStartAt) {
-        const startedAt = new Date(timelineMeta.actualStartAt);
-        if (!Number.isNaN(startedAt.getTime()) && now.getTime() >= startedAt.getTime()) {
-          calculatedHours = Math.max(0, (now.getTime() - startedAt.getTime()) / (1000 * 60 * 60));
+        const nowHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const startHHMM = isoToLocalHHMM(timelineMeta.actualStartAt);
+        if (startHHMM) {
+          const nowMinutes = timeToMinutes(nowHHMM);
+          const startMinutes = timeToMinutes(startHHMM);
+          if (nowMinutes >= startMinutes) {
+            calculatedHours = Math.max(0, (nowMinutes - startMinutes) / 60);
+          }
         }
       }
 
@@ -1642,11 +1714,16 @@ export default function WorkboardContent() {
         setSavingTimelineAssignmentId(null);
         return;
       }
+      syncTimelineCaches(assignment.id, {
+        status: 'completed',
+        actualCompletedAt: nowIso,
+        actualHours: typeof updatePayload.actual_hours === 'number' ? Number(updatePayload.actual_hours) : undefined,
+      });
 
       const ordered = orderEmployeeAssignments(employeeAssignments);
-      const currentOrder = getAssignmentTimelineMeta(assignment).orderIndex;
+      const currentOrder = getCanonicalActualTimes(assignment).timelineMeta.orderIndex;
       const nextTask = ordered.find((row) => {
-        const rowOrder = getAssignmentTimelineMeta(row).orderIndex;
+        const rowOrder = getCanonicalActualTimes(row).timelineMeta.orderIndex;
         return rowOrder > currentOrder && normalizeAssignmentStatus(row.status) === 'planned';
       });
 
@@ -1657,6 +1734,7 @@ export default function WorkboardContent() {
           .eq('id', nextTask.id)
           .eq('org_id', currentUser.orgId);
         if (!nextResult.error) {
+          syncTimelineCaches(nextTask.id, { status: 'in_progress', actualStartAt: nowIso });
           triggerAssignmentFlash(nextTask.id, 'started');
         }
       }
@@ -1667,19 +1745,18 @@ export default function WorkboardContent() {
       await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
-    [currentUser?.orgId, getAssignmentTimelineMeta, orderEmployeeAssignments, queryClient, triggerAssignmentFlash],
+    [currentUser?.orgId, getCanonicalActualTimes, orderEmployeeAssignments, queryClient, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const saveAssignmentTimelineTimes = useCallback(
     async (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
       const dateStr = assignment.date;
-      const startTs = startInput ? `${dateStr}T${startInput}:00` : null;
-      const endTs = endInput ? `${dateStr}T${endInput}:00` : null;
-      if (startTs && endTs) {
-        const startDate = new Date(startTs);
-        const endDate = new Date(endTs);
-        if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate < startDate) {
+      // Convert local workflow time to UTC ISO once before persisting to timestamptz.
+      const startTs = startInput ? localDateAndTimeToIso(dateStr, startInput) : null;
+      const endTs = endInput ? localDateAndTimeToIso(dateStr, endInput) : null;
+      if (startInput && endInput) {
+        if (endInput < startInput) {
           toast.error('Completed time cannot be before start time.');
           return;
         }
@@ -1689,43 +1766,73 @@ export default function WorkboardContent() {
         actual_start_at: startTs,
         actual_completed_at: endTs,
       };
-      if (startTs && endTs) {
-        const startDate = new Date(startTs);
-        const endDate = new Date(endTs);
-        if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
-          payload.actual_hours = Number(((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60)).toFixed(2));
+      if (startInput && endInput) {
+        const startMinutes = timeToMinutes(startInput);
+        const endMinutes = timeToMinutes(endInput);
+        if (endMinutes >= startMinutes) {
+          payload.actual_hours = Number(((endMinutes - startMinutes) / 60).toFixed(2));
         }
       }
 
       setSavingTimelineAssignmentId(assignment.id);
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('assignments')
         .update(payload)
         .eq('id', assignment.id)
-        .eq('org_id', currentUser.orgId);
+        .eq('org_id', currentUser.orgId)
+        .select('id, actual_start_at, actual_completed_at, actual_hours')
+        .single();
       if (error) {
         toast.error(`Failed to save actual times: ${error.message}`);
         setSavingTimelineAssignmentId(null);
         return;
       }
+      const returnedStartAt = typeof data?.actual_start_at === 'string' ? data.actual_start_at : startTs;
+      const returnedCompletedAt =
+        typeof data?.actual_completed_at === 'string' ? data.actual_completed_at : endTs;
+      const derivedHours =
+        typeof data?.actual_hours === 'number'
+          ? Number(data.actual_hours)
+          : typeof payload.actual_hours === 'number'
+            ? Number(payload.actual_hours)
+            : undefined;
+      syncTimelineCaches(assignment.id, {
+        actualStartAt: returnedStartAt,
+        actualCompletedAt: returnedCompletedAt,
+        actualHours: derivedHours,
+      });
+      if (import.meta.env.DEV) {
+        console.debug('[workboard:actual-times-save]', {
+          assignmentId: assignment.id,
+          inputStart: startInput,
+          inputComplete: endInput,
+          payloadActualStartAt: startTs,
+          payloadActualCompletedAt: endTs,
+          returnedActualStartAt: returnedStartAt,
+          returnedActualCompletedAt: returnedCompletedAt,
+        });
+      }
 
       if (endTs) {
         const ordered = orderEmployeeAssignments(employeeAssignments);
-        const currentOrder = getAssignmentTimelineMeta(assignment).orderIndex;
+        const currentOrder = getCanonicalActualTimes(assignment).timelineMeta.orderIndex;
         const nextTask = ordered.find((row) => {
-          const rowOrder = getAssignmentTimelineMeta(row).orderIndex;
+          const rowOrder = getCanonicalActualTimes(row).timelineMeta.orderIndex;
           return rowOrder > currentOrder && normalizeAssignmentStatus(row.status) !== 'done';
         });
         if (nextTask?.id) {
-          const nextMeta = getAssignmentTimelineMeta(nextTask);
-          const nextStart = nextMeta.actualStartAt ? new Date(nextMeta.actualStartAt) : null;
-          const endDate = new Date(endTs);
-          if (!nextStart || Number.isNaN(nextStart.getTime()) || nextStart < endDate) {
-            await supabase
+          const nextMeta = getCanonicalActualTimes(nextTask).timelineMeta;
+          const nextStartHHMM = nextMeta.actualStartAt ? isoToLocalHHMM(nextMeta.actualStartAt) : '';
+          const completionHHMM = returnedCompletedAt ? isoToLocalHHMM(returnedCompletedAt) : endInput;
+          if (!nextStartHHMM || (completionHHMM && timeToMinutes(nextStartHHMM) < timeToMinutes(completionHHMM))) {
+            const nextUpdate = await supabase
               .from('assignments')
-              .update({ actual_start_at: endTs })
+              .update({ actual_start_at: returnedCompletedAt ?? endTs })
               .eq('id', nextTask.id)
               .eq('org_id', currentUser.orgId);
+            if (!nextUpdate.error) {
+              syncTimelineCaches(nextTask.id, { actualStartAt: returnedCompletedAt ?? endTs });
+            }
           }
         }
       }
@@ -1735,7 +1842,7 @@ export default function WorkboardContent() {
       await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
-    [currentUser?.orgId, getAssignmentTimelineMeta, orderEmployeeAssignments, queryClient],
+    [currentUser?.orgId, getCanonicalActualTimes, orderEmployeeAssignments, queryClient, syncTimelineCaches],
   );
   const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
     if (workOrders.length > 0) {
@@ -4308,30 +4415,27 @@ export default function WorkboardContent() {
                             {laneOrderedAssignments.map((assignment, assignmentIndex) => {
                               const task = taskList.find((candidate) => candidate.id === assignment.taskId);
                               const estimatedHours = getEstimatedHoursForAssignment(assignment);
-                              const timelineMeta = getAssignmentTimelineMeta(assignment);
+                              const { canonicalStartAt, canonicalCompletedAt } = getCanonicalActualTimes(assignment);
+                              const canonicalStartHHMM = canonicalStartAt ? isoToLocalHHMM(canonicalStartAt) : '';
+                              const canonicalCompletedHHMM = canonicalCompletedAt ? isoToLocalHHMM(canonicalCompletedAt) : '';
                               const timelineActualHours =
-                                timelineMeta.actualStartAt && timelineMeta.actualCompletedAt
-                                  ? Math.max(
-                                      0,
-                                      (new Date(timelineMeta.actualCompletedAt).getTime() -
-                                        new Date(timelineMeta.actualStartAt).getTime()) /
-                                        (1000 * 60 * 60),
-                                    )
+                                canonicalStartHHMM && canonicalCompletedHHMM
+                                  ? Math.max(0, (timeToMinutes(canonicalCompletedHHMM) - timeToMinutes(canonicalStartHHMM)) / 60)
                                   : 0;
                               const actualHours = Math.max(0, Number(assignment.actualHours ?? timelineActualHours ?? 0));
                               const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
                               const statusNormalized = normalizeAssignmentStatus(assignment.status);
                               const canStartTask = statusNormalized === 'planned' && !laneHasInProgress && assignmentIndex === 0;
                               const timeSummary =
-                                timelineMeta.actualStartAt && timelineMeta.actualCompletedAt
-                                  ? `${toLocalTimeLabel(timelineMeta.actualStartAt)} → ${toLocalTimeLabel(timelineMeta.actualCompletedAt)} (${actualHours.toFixed(1)}h)`
-                                  : timelineMeta.actualStartAt
-                                    ? `Started: ${toLocalTimeLabel(timelineMeta.actualStartAt)}`
-                                    : timelineMeta.actualCompletedAt
-                                      ? `Completed: ${toLocalTimeLabel(timelineMeta.actualCompletedAt)}`
+                                canonicalStartAt && canonicalCompletedAt
+                                  ? `${toLocalTimeLabel(canonicalStartAt)} → ${toLocalTimeLabel(canonicalCompletedAt)} (${actualHours.toFixed(1)}h)`
+                                  : canonicalStartAt
+                                    ? `Started: ${toLocalTimeLabel(canonicalStartAt)}`
+                                    : canonicalCompletedAt
+                                      ? `Completed: ${toLocalTimeLabel(canonicalCompletedAt)}`
                                       : '';
                               return (
-                                <div key={`mobile-assignment-${assignment.id}`} className="rounded-xl border bg-muted/20 p-2.5">
+                                <div key={`mobile-assignment-${assignment.id}`} className="relative overflow-visible rounded-xl border bg-muted/20 p-2.5">
                                   <div className="flex items-start justify-between gap-2">
                                     <div>
                                       <p className="text-sm font-medium">{assignment.title || task?.name || 'Untitled task'}</p>
@@ -4393,14 +4497,18 @@ export default function WorkboardContent() {
                                         return;
                                       }
                                       setTimelineEditAssignmentId(assignment.id ?? null);
-                                      setTimelineEditStart(toTimeInputValue(timelineMeta.actualStartAt));
-                                      setTimelineEditEnd(toTimeInputValue(timelineMeta.actualCompletedAt));
+                                      const startInputValue =
+                                        toTimeInputValue(canonicalStartAt) ||
+                                        toTimeInputValue(String(assignment.startTime ?? ''));
+                                      const endInputValue = toTimeInputValue(canonicalCompletedAt);
+                                      setTimelineEditStart(startInputValue);
+                                      setTimelineEditEnd(endInputValue);
                                     }}
                                   >
                                     <Pencil className="h-3 w-3" /> Edit times
                                   </button>
                                   {timelineEditAssignmentId === assignment.id ? (
-                                    <div className="mt-2 flex flex-wrap items-end gap-2 rounded-md border bg-background/70 p-2">
+                                    <div className="relative z-20 mt-2 flex flex-wrap items-end gap-2 rounded-md border bg-background/70 p-2 pointer-events-auto">
                                       <label className="text-[10px] text-muted-foreground">
                                         Start
                                         <input

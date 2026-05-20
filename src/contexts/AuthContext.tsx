@@ -91,10 +91,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthContextValue['authState']>('checking-session');
   const [hasSession, setHasSession] = useState(false);
   const isReadyRef = useRef(false);
+  const authStateRef = useRef<AuthContextValue['authState']>('checking-session');
+  const hasCurrentUserRef = useRef(false);
 
   useEffect(() => {
     isReadyRef.current = isReady;
   }, [isReady]);
+
+  useEffect(() => {
+    authStateRef.current = authState;
+  }, [authState]);
+
+  useEffect(() => {
+    hasCurrentUserRef.current = Boolean(currentUser);
+  }, [currentUser]);
 
   async function buildProfile(authUser: User, appUser: AppUserRow): Promise<AuthProfile> {
     let employee: EmployeeRow | null = null;
@@ -289,6 +299,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void init();
     const safetyTimer = window.setTimeout(() => {
       if (mounted && !isReadyRef.current) {
+        if (hasCurrentUserRef.current || authStateRef.current === 'authenticated') {
+          return;
+        }
         setOrgId(null);
         setIsReady(true);
       }
@@ -304,10 +317,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isReady) return;
     const timeoutId = window.setTimeout(() => {
+      // Keep recovery behavior only when auth is genuinely stalled.
+      if (isReadyRef.current || hasCurrentUserRef.current || authStateRef.current === 'authenticated') {
+        return;
+      }
       setAuthDebugMessage((current) => current || 'Auth initialization timed out. You can refresh or sign in again.');
       setAuthState((state) => (state === 'authenticated' ? state : 'network-timeout'));
       setIsReady(true);
-      console.error('[Auth] isReady timeout — forcing ready state');
+      if (isDev) {
+        console.warn('[Auth] isReady timeout — forcing ready state');
+      }
     }, 20000);
     return () => window.clearTimeout(timeoutId);
   }, [isReady]);

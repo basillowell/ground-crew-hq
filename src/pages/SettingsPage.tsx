@@ -8,7 +8,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { isPro } from '@/utils/planGating';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
 
@@ -1114,7 +1113,7 @@ function WorkspaceTab({
             onClick={() => navigate('/app/settings?tab=Access')}
             style={{ width: 'fit-content', border: 'none', background: 'transparent', color: '#166534', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: '13px' }}
           >
-            Upgrade to Pro for unlimited access
+            Usage limit reached. Review workspace access settings.
           </button>
         ) : null}
       </div>
@@ -2006,7 +2005,6 @@ function AccessTab({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [organizationName, setOrganizationName] = useState<string>('');
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'Manager' | 'Field Staff'>('Manager');
@@ -2046,11 +2044,7 @@ function AccessTab({
       assignmentsCountResult,
       equipmentCountResult,
     ] = await Promise.all([
-      supabase
-        .from('organizations')
-        .select('name, subscription_status, stripe_customer_id, stripe_subscription_id')
-        .eq('id', orgId)
-        .single(),
+      supabase.from('organizations').select('name').eq('id', orgId).single(),
       supabase.from('properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
@@ -2084,7 +2078,6 @@ function AccessTab({
     }
 
     setOrganizationName(String(orgResult.data?.name ?? ''));
-    setSubscriptionStatus(orgResult.data?.subscription_status ? String(orgResult.data.subscription_status) : null);
     setSystemInfo({
       propertyCount: propertiesCountResult.count ?? 0,
       employeeCount: employeesCountResult.count ?? 0,
@@ -2150,24 +2143,6 @@ function AccessTab({
       const message = copyError instanceof Error ? copyError.message : 'Clipboard unavailable';
       toast.error(`Failed to copy system info: ${message}`);
     }
-  };
-
-  const handleUpgradeToPro = () => {
-    const placeholderCheckoutUrl = 'https://checkout.stripe.com/pay/placeholder';
-    toast.info("Stripe integration coming soon. You're on the free beta plan.");
-    window.location.href = placeholderCheckoutUrl;
-  };
-
-  const handleManageBilling = () => {
-    const placeholderPortalUrl = 'https://billing.stripe.com/p/login/placeholder';
-    toast.info('Billing portal integration coming soon.');
-    window.open(placeholderPortalUrl, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleCancelSubscription = () => {
-    const confirmed = window.confirm('Cancel Pro subscription?');
-    if (!confirmed) return;
-    toast.info('Contact support@groundcrewhq.com to cancel');
   };
 
   const closeInviteModal = () => {
@@ -2251,48 +2226,23 @@ Your role: ${inviteRole}
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Upgrade to Pro</h3>
+        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Workspace Status</h3>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
-          <strong>Current plan:</strong> {isPro(subscriptionStatus) ? 'Pro' : 'Free (Beta)'}
+          <strong>Current workspace:</strong> Ground Crew HQ
         </p>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
-          Pro plan: $49/month — Unlimited properties, employees, advanced reports
+          <strong>Plan/status:</strong> Active workspace
         </p>
-        <button
-          onClick={handleUpgradeToPro}
-          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
-        >
-          Upgrade to Pro →
-        </button>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+          Billing controls appear when workspace billing is enabled.
+        </p>
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Billing</h3>
-        {isPro(subscriptionStatus) ? (
-          <>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Plan:</strong> Pro ($49/month)</p>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Status:</strong> Active</p>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Next billing date:</strong> Coming soon</p>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                onClick={handleManageBilling}
-                style={{ border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
-              >
-                Manage Billing
-              </button>
-              <button
-                onClick={handleCancelSubscription}
-                style={{ border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
-              >
-                Cancel Subscription
-              </button>
-            </div>
-          </>
-        ) : (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
-            You're on the free beta plan. No payment method required.
-          </p>
-        )}
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+          Billing management is currently unavailable in-product.
+        </p>
       </div>
 
       <div style={{ border: '1px solid #fecaca', borderRadius: '12px', padding: '16px', background: '#fef2f2' }}>

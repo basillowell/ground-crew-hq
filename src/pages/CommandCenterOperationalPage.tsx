@@ -298,9 +298,14 @@ export default function CommandCenterOperationalPage() {
   const allProperties = dashboardDataQuery.data?.properties ?? [];
   const properties = useMemo(() => {
     if (isAdmin || isManager) return allProperties;
-    if (!currentUser?.propertyId) return [];
-    return allProperties.filter((property) => property.id === currentUser.propertyId);
-  }, [allProperties, currentUser?.propertyId, isAdmin, isManager]);
+    if (currentPropertyId && currentPropertyId !== 'all') {
+      return allProperties.filter((property) => property.id === currentPropertyId);
+    }
+    if (currentUser?.propertyId) {
+      return allProperties.filter((property) => property.id === currentUser.propertyId);
+    }
+    return allProperties;
+  }, [allProperties, currentPropertyId, currentUser?.propertyId, isAdmin, isManager]);
 
   const employees = dashboardDataQuery.data?.employees ?? [];
   const assignments = dashboardDataQuery.data?.assignments ?? [];
@@ -1071,9 +1076,10 @@ export default function CommandCenterOperationalPage() {
       }));
     },
   });
+  const complianceStatusEnabled = false;
   const complianceStatusQuery = useQuery({
     queryKey: ['dashboard-compliance-status', orgId ?? 'no-org'],
-    enabled: Boolean(orgId),
+    enabled: Boolean(orgId) && complianceStatusEnabled,
     staleTime: 1000 * 60,
     retry: false,
     queryFn: async () => {
@@ -1107,6 +1113,13 @@ export default function CommandCenterOperationalPage() {
   });
   const overdueEquipmentCount = equipmentAlertsQuery.data?.length ?? 0;
   const complianceSummary = useMemo(() => {
+    if (!complianceStatusEnabled) {
+      return {
+        value: 'Unavailable',
+        subtitle: 'Compliance status is available in Chemical Logs',
+        tone: 'neutral' as const,
+      };
+    }
     const activeReiCount = complianceStatusQuery.data?.pending ?? 0;
     const missingSupervisorLicenseCount = complianceStatusQuery.data?.incomplete ?? 0;
     const issueCount = activeReiCount + missingSupervisorLicenseCount;

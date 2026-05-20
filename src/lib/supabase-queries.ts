@@ -901,20 +901,24 @@ async function fetchWorkLocations(): Promise<WorkLocation[]> {
 }
 
 export async function fetchWeatherLocations(propertyId?: string, orgId?: string, activeOnly = false): Promise<WeatherLocation[]> {
-  const client = ensureSupabase();
-  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let query = client
-    .from('weather_locations')
-    .select('id, name, property, area, latitude, longitude, org_id, is_active')
-    .order('name');
-  if (orgId) query = query.eq('org_id', orgId);
-  if (activeOnly) query = query.eq('is_active', true);
-  const { data, error } = await query;
-  if (error) throw error;
-  const rows = (data as DbWeatherLocation[]) ?? [];
-  if (!scopedPropertyId) return rows.map(toWeatherLocation);
-  const filtered = rows.filter((row) => row.property === scopedPropertyId);
-  return filtered.map(toWeatherLocation);
+  try {
+    const client = ensureSupabase();
+    const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
+    let query = client
+      .from('weather_locations')
+      .select('id, name, property, area, latitude, longitude, org_id, is_active')
+      .order('name');
+    if (orgId) query = query.eq('org_id', orgId);
+    if (activeOnly) query = query.eq('is_active', true);
+    const { data, error } = await query;
+    if (error) return [];
+    const rows = (data as DbWeatherLocation[]) ?? [];
+    if (!scopedPropertyId) return rows.map(toWeatherLocation);
+    const filtered = rows.filter((row) => row.property === scopedPropertyId);
+    return filtered.map(toWeatherLocation);
+  } catch {
+    return [];
+  }
 }
 
 /** Full table fetch for hooks that need unbounded history (e.g. Breakroom, Scheduler). */

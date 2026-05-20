@@ -6,6 +6,7 @@ import { TaskBlock } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Pencil, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Employee, Assignment, Task } from '@/data/seedData';
+import { isoToLocalHHMM, isoToLocalTimeLabel } from '@/lib/timeWorkflow';
 
 interface EmployeeRowProps {
   employee: Employee;
@@ -45,9 +46,16 @@ function coverageBadgeClass(coveragePercent: number | undefined) {
 function normalizeStatus(status: string | null | undefined): string {
   if (!status) return 'planned';
   const s = status.toLowerCase().trim();
-  if (s === 'done' || s === 'complete') return 'completed';
-  if (s === 'in-progress' || s === 'active' || s === 'started') return 'in_progress';
-  return s;
+  if (s === 'done' || s === 'complete' || s === 'completed') return 'done';
+  if (s === 'in-progress' || s === 'in_progress' || s === 'active' || s === 'started') return 'in-progress';
+  return 'planned';
+}
+
+function timeToMinutes(value?: string) {
+  if (!value) return 0;
+  const [hours, minutes] = value.split(':').map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return 0;
+  return hours * 60 + minutes;
 }
 
 export function EmployeeRow({
@@ -85,16 +93,13 @@ export function EmployeeRow({
 
   const formatLabel = (value?: string | null) => {
     if (!value) return '';
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return '';
-    return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    // Persisted UTC timestamptz -> local operational label.
+    return isoToLocalTimeLabel(value);
   };
 
   const toInputValue = (value?: string | null) => {
     if (!value) return '';
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return '';
-    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+    return isoToLocalHHMM(value);
   };
 
   const getEstimatedHours = (assignment: Assignment) => {
@@ -106,15 +111,17 @@ export function EmployeeRow({
 
   const getActualHours = (assignment: Assignment, startAt?: string | null, completedAt?: string | null) => {
     const assignmentRecord = assignment as Assignment & Record<string, unknown>;
-    const explicit = Number(assignmentRecord.actualHours ?? assignmentRecord.actual_hours ?? 0);
-    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    // Prefer timestamps first so visible runtime reflects edited actual start/end immediately.
     if (startAt && completedAt) {
-      const startDate = new Date(startAt);
-      const endDate = new Date(completedAt);
-      if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
-        return (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+      const startHHMM = isoToLocalHHMM(startAt);
+      const endHHMM = isoToLocalHHMM(completedAt);
+      if (startHHMM && endHHMM) {
+        const diffMinutes = timeToMinutes(endHHMM) - timeToMinutes(startHHMM);
+        if (diffMinutes >= 0) return diffMinutes / 60;
       }
     }
+    const explicit = Number(assignmentRecord.actualHours ?? assignmentRecord.actual_hours ?? 0);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
     return 0;
   };
 
@@ -131,6 +138,7 @@ export function EmployeeRow({
       className={`rounded-xl border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30 ${
         isDropTarget ? 'border-primary shadow-md ring-2 ring-primary/20' : ''
       } ${isDragging ? 'opacity-60' : ''}`}
+      style={{ overflow: 'visible' }}
       onDragOver={(event) => event.preventDefault()}
       onDragEnter={() => onDragEnter?.(employee.id)}
       onDrop={() => onDropRow?.(employee.id)}
@@ -179,10 +187,21 @@ export function EmployeeRow({
                 const task = tasks.find((item) => item.id === assignment.taskId);
                 const assignmentStatus = normalizeStatus(assignment.status);
                 const timeline = assignmentTimelineById?.[assignment.id ?? ''];
-                const startLabel = formatLabel(timeline?.actualStartAt);
-                const completedLabel = formatLabel(timeline?.actualCompletedAt);
+                const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+                const actualStartSource =
+                  timeline?.actualStartAt ??
+                  (typeof assignmentRecord.actual_start_at === 'string' ? String(assignmentRecord.actual_start_at) : null);
+                const actualCompletedSource =
+                  timeline?.actualCompletedAt ??
+                  (typeof assignmentRecord.actual_completed_at === 'string'
+                    ? String(assignmentRecord.actual_completed_at)
+                    : typeof assignmentRecord.completed_at === 'string'
+                      ? String(assignmentRecord.completed_at)
+                      : null);
+                const startLabel = formatLabel(actualStartSource);
+                const completedLabel = formatLabel(actualCompletedSource);
                 const estimatedHours = getEstimatedHours(assignment);
-                const actualHours = getActualHours(assignment, timeline?.actualStartAt, timeline?.actualCompletedAt);
+                const actualHours = getActualHours(assignment, actualStartSource, actualCompletedSource);
                 const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
                 const isFirstPlannedTask = assignmentStatus === 'planned' && !hasInProgress && sortedAssignments[0]?.id === assignment.id;
                 return task ? (
@@ -244,8 +263,8 @@ export function EmployeeRow({
                               return;
                             }
                             setEditingTimelineAssignmentId(assignment.id ?? null);
-                            setTimelineStartInput(toInputValue(timeline?.actualStartAt));
-                            setTimelineEndInput(toInputValue(timeline?.actualCompletedAt));
+                            setTimelineStartInput(toInputValue(actualStartSource));
+                            setTimelineEndInput(toInputValue(actualCompletedSource));
                           }}
                         >
                           <Pencil className="mr-1 h-3 w-3" /> Edit times
@@ -253,7 +272,7 @@ export function EmployeeRow({
                       ) : null}
                     </div>
                     {editingTimelineAssignmentId === assignment.id && onSaveAssignmentTimes ? (
-                      <div className="mx-2 mb-1 flex flex-wrap items-end gap-2 rounded-lg border bg-muted/20 p-2">
+                      <div className="relative z-20 mx-2 mb-1 flex flex-wrap items-end gap-2 rounded-lg border bg-muted/20 p-2 pointer-events-auto">
                         <label className="text-[10px] text-muted-foreground">
                           Start
                           <input
