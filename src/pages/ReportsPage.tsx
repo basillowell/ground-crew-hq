@@ -935,8 +935,7 @@ export default function ReportsPage() {
         });
 
         const totalScheduled = Number(days.reduce((sum, day) => sum + day.scheduled, 0).toFixed(2));
-        const rawTotalActual = Number(days.reduce((sum, day) => sum + day.actual, 0).toFixed(2));
-        const totalActual = rawTotalActual > 0 ? rawTotalActual : totalScheduled;
+        const totalActual = Number(days.reduce((sum, day) => sum + day.actual, 0).toFixed(2));
         const cost = Number((totalActual * hourlyRate).toFixed(2));
 
         return { employeeId, employeeName, hourlyRate, days, totalScheduled, totalActual, cost };
@@ -958,20 +957,22 @@ export default function ReportsPage() {
 
   const exportPayrollCsv = useCallback(() => {
     if (timesheetRows.length === 0) return;
-    const headers = ['Employee Name', 'Date', 'Scheduled Hours', 'Actual Hours', 'Hourly Rate', 'Daily Cost'];
+    const headers = ['Employee Name', 'Employee ID', 'Date', 'Scheduled Hours', 'Actual Hours', 'Hourly Rate', 'Daily Cost', 'Weekly Total'];
     const lines = [headers.map(quoteCsv).join(',')];
     timesheetRows.forEach((row) => {
       row.days.forEach((day) => {
-        const actualHours = day.actual > 0 ? day.actual : day.scheduled;
+        const actualHours = day.actual;
         const dailyCost = actualHours * row.hourlyRate;
         lines.push(
           [
             quoteCsv(row.employeeName),
+            quoteCsv(row.employeeId),
             quoteCsv(day.date),
             quoteCsv(day.scheduled.toFixed(2)),
             quoteCsv(actualHours.toFixed(2)),
             quoteCsv(row.hourlyRate.toFixed(2)),
             quoteCsv(dailyCost.toFixed(2)),
+            quoteCsv(row.totalActual.toFixed(2)),
           ].join(','),
         );
       });
@@ -1080,7 +1081,7 @@ export default function ReportsPage() {
                     setTimesheetWeekStart(toIsoDate(startOfWeek(next)));
                   }}
                 >
-                  Previous Week
+                  ‹
                 </button>
                 <span style={{ fontSize: '12px', color: '#6b7280' }}>
                   {timesheetWeekDays[0]?.key} to {timesheetWeekDays[6]?.key}
@@ -1091,7 +1092,7 @@ export default function ReportsPage() {
                     setTimesheetWeekStart(toIsoDate(startOfWeek(next)));
                   }}
                 >
-                  Next Week
+                  ›
                 </button>
               </div>
             </div>
@@ -1122,15 +1123,13 @@ export default function ReportsPage() {
                         <td style={{ padding: '8px' }}>{row.employeeName}</td>
                         {row.days.map((day) => {
                           const hasActual = day.actual > 0;
-                          const value = hasActual ? day.actual : day.scheduled;
                           return (
                             <td key={`timesheet-cell-${row.employeeId}-${day.date}`} style={{ padding: '8px' }}>
-                              <div style={{ display: 'grid', gap: '2px' }}>
-                                <span>{value.toFixed(1)}h</span>
-                                {!hasActual && day.scheduled > 0 ? (
-                                  <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>est.</span>
-                                ) : null}
-                              </div>
+                              {hasActual ? (
+                                <span>{day.scheduled.toFixed(1)} / {day.actual.toFixed(1)}</span>
+                              ) : (
+                                <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>{day.scheduled.toFixed(1)}</span>
+                              )}
                             </td>
                           );
                         })}
@@ -1145,7 +1144,7 @@ export default function ReportsPage() {
                         const dayTotal = timesheetRows.reduce((sum, row) => {
                           const cell = row.days.find((entry) => entry.date === day.key);
                           if (!cell) return sum;
-                          return sum + (cell.actual > 0 ? cell.actual : cell.scheduled);
+                          return sum + cell.actual;
                         }, 0);
                         return (
                           <td key={`timesheet-total-${day.key}`} style={{ padding: '8px' }}>{dayTotal.toFixed(1)}h</td>
