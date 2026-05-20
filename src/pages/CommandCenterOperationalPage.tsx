@@ -1628,44 +1628,6 @@ export default function CommandCenterOperationalPage() {
     return () => window.clearTimeout(timeoutId);
   }, [canLoadDashboard, isLoading]);
 
-  if (!isReady) {
-    return (
-      <div className="h-full overflow-auto bg-background p-6">
-        <div className="rounded-2xl border bg-card p-4 shadow-sm">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="mt-3 h-4 w-96" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!orgId) {
-    return (
-      <div className="h-full overflow-auto bg-background p-6">
-        <Card className="rounded-2xl border p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Unable to load workspace</h2>
-          <p className="mt-1 text-sm text-muted-foreground">We couldn&apos;t load your organization profile yet.</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => window.location.reload()}>
-              Retry
-            </Button>
-            <Button
-              onClick={() => {
-                if (!supabase) {
-                  navigate('/');
-                  return;
-                }
-                void supabase.auth.signOut().finally(() => navigate('/'));
-              }}
-            >
-              Clear session and sign in fresh
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
   const localOnboardingKey = `gcrew-onboarding-complete-${orgId}`;
   const localOnboardingDone = localStorage.getItem(localOnboardingKey) === 'true' || onboardingDismissedLocally;
   const shouldShowOnboarding =
@@ -1679,21 +1641,6 @@ export default function CommandCenterOperationalPage() {
       (onboardingCheckQuery.data?.taskCount ?? 0) === 0
     )
     ));
-
-  if (shouldShowOnboarding) {
-    return (
-      <OnboardingWizardV2
-        orgId={orgId}
-        userId={currentUser?.appUserId}
-        onComplete={() => {
-          setForceOnboarding(false);
-          setOnboardingDismissedLocally(true);
-          void onboardingCheckQuery.refetch();
-          void dashboardDataQuery.refetch();
-        }}
-      />
-    );
-  }
 
   async function handleGenerateBrief() {
     if (!supabase || !currentUser?.orgId || (!isAdmin && !isManager)) return;
@@ -1862,6 +1809,59 @@ export default function CommandCenterOperationalPage() {
     },
     [dashboardDataQuery, equipmentAlertsQuery, orgId],
   );
+
+  if (!isReady) {
+    return (
+      <div className="h-full overflow-auto bg-background p-6">
+        <div className="rounded-2xl border bg-card p-4 shadow-sm">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="mt-3 h-4 w-96" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!orgId) {
+    return (
+      <div className="h-full overflow-auto bg-background p-6">
+        <Card className="rounded-2xl border p-5 shadow-sm">
+          <h2 className="text-lg font-semibold">Unable to load workspace</h2>
+          <p className="mt-1 text-sm text-muted-foreground">We couldn&apos;t load your organization profile yet.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+            <Button
+              onClick={() => {
+                if (!supabase) {
+                  navigate('/');
+                  return;
+                }
+                void supabase.auth.signOut().finally(() => navigate('/'));
+              }}
+            >
+              Clear session and sign in fresh
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (shouldShowOnboarding) {
+    return (
+      <OnboardingWizardV2
+        orgId={orgId}
+        userId={currentUser?.appUserId}
+        onComplete={() => {
+          setForceOnboarding(false);
+          setOnboardingDismissedLocally(true);
+          void onboardingCheckQuery.refetch();
+          void dashboardDataQuery.refetch();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="h-full overflow-auto bg-background p-4 md:p-6">
