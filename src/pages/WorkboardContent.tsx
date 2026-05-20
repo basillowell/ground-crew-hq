@@ -40,6 +40,7 @@ import {
   Mail,
   MessageCircle,
   MonitorSmartphone,
+  Pencil,
   Printer,
   Radio,
   Sparkles,
@@ -120,6 +121,33 @@ function getActualHoursTone(actualHours: number, estimatedHours: number) {
   if (ratio <= 1) return 'text-emerald-700';
   if (ratio < 1.25) return 'text-amber-700';
   return 'text-red-700';
+}
+
+type AssignmentTimelineMeta = {
+  id: string;
+  employeeId: string;
+  date: string;
+  orderIndex: number;
+  status: string;
+  actualStartAt: string | null;
+  actualCompletedAt: string | null;
+  actualHours: number | null;
+};
+
+function toLocalTimeLabel(value?: string | null) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+function toTimeInputValue(value?: string | null) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const hours = String(parsed.getHours()).padStart(2, '0');
+  const minutes = String(parsed.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
 function taskRowClass(status: string) {
@@ -497,6 +525,10 @@ export default function WorkboardContent() {
   const [assignmentFlashMap, setAssignmentFlashMap] = useState<Record<string, 'complete' | 'started'>>({});
   const [actualHoursMenuAssignmentId, setActualHoursMenuAssignmentId] = useState<string | null>(null);
   const [actualHoursCustomInputByAssignment, setActualHoursCustomInputByAssignment] = useState<Record<string, string>>({});
+  const [savingTimelineAssignmentId, setSavingTimelineAssignmentId] = useState<string | null>(null);
+  const [timelineEditAssignmentId, setTimelineEditAssignmentId] = useState<string | null>(null);
+  const [timelineEditStart, setTimelineEditStart] = useState('');
+  const [timelineEditEnd, setTimelineEditEnd] = useState('');
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
   const assignmentFlashTimeoutsRef = useRef<Record<string, number>>({});
   const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
@@ -601,6 +633,35 @@ export default function WorkboardContent() {
   const propertiesQuery = useProperties(currentUser?.orgId);
   const employeesQuery = useEmployees(effectivePropertyId, currentUser?.orgId);
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, currentUser?.orgId);
+  const assignmentTimelineQuery = useQuery({
+    queryKey: ['workboard-assignment-timeline', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    enabled: Boolean(currentUser?.orgId),
+    queryFn: async () => {
+      if (!supabase || !currentUser?.orgId) return [] as AssignmentTimelineMeta[];
+      let query = supabase
+        .from('assignments')
+        .select('id, employee_id, date, order_index, status, actual_start_at, actual_completed_at, actual_hours')
+        .eq('org_id', currentUser.orgId)
+        .eq('date', boardDate);
+      if (effectivePropertyId && effectivePropertyId !== 'all') {
+        query = query.eq('property_id', effectivePropertyId);
+      }
+      const { data, error } = await query;
+      if (error) return [] as AssignmentTimelineMeta[];
+      return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+        id: String(row.id ?? ''),
+        employeeId: String(row.employee_id ?? ''),
+        date: String(row.date ?? boardDate),
+        orderIndex: Number(row.order_index ?? 0),
+        status: String(row.status ?? 'planned'),
+        actualStartAt: row.actual_start_at ? String(row.actual_start_at) : null,
+        actualCompletedAt: row.actual_completed_at ? String(row.actual_completed_at) : null,
+        actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
+      }));
+    },
+    staleTime: 1000 * 30,
+    retry: false,
+  });
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, currentUser?.orgId);
   const tasksQuery = useTasks(effectivePropertyId, currentUser?.orgId);
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, currentUser?.orgId);
@@ -787,6 +848,21 @@ export default function WorkboardContent() {
     [employeesQuery.data],
   );
   const assignmentList = assignmentsQuery.data ?? [];
+  const assignmentTimelineById = useMemo(() => {
+    const map = new Map<string, AssignmentTimelineMeta>();
+    for (const row of assignmentTimelineQuery.data ?? []) {
+      if (!row.id) continue;
+      map.set(row.id, row);
+    }
+    return map;
+  }, [assignmentTimelineQuery.data]);
+  const assignmentTimelineRecord = useMemo(() => {
+    const record: Record<string, { actualStartAt: string | null; actualCompletedAt: string | null }> = {};
+    for (const [id, row] of assignmentTimelineById.entries()) {
+      record[id] = { actualStartAt: row.actualStartAt, actualCompletedAt: row.actualCompletedAt };
+    }
+    return record;
+  }, [assignmentTimelineById]);
   const scheduleList = scheduleQuery.data ?? [];
   const taskList = useMemo(
     () =>
@@ -1473,6 +1549,193 @@ export default function WorkboardContent() {
       void queryClient.invalidateQueries({ queryKey: ['assignments'] });
     },
     [assignmentsQuery.queryKey, currentUser?.orgId, queryClient],
+  );
+
+  const getAssignmentTimelineMeta = useCallback(
+    (assignment: Assignment) => {
+      const timelineRow = assignment.id ? assignmentTimelineById.get(assignment.id) : undefined;
+      const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+      return {
+        actualStartAt:
+          timelineRow?.actualStartAt ??
+          (typeof assignmentRecord.actual_start_at === 'string' ? String(assignmentRecord.actual_start_at) : null),
+        actualCompletedAt:
+          timelineRow?.actualCompletedAt ??
+          (typeof assignmentRecord.actual_completed_at === 'string' ? String(assignmentRecord.actual_completed_at) : null),
+        orderIndex:
+          timelineRow?.orderIndex ??
+          (typeof assignmentRecord.order_index === 'number'
+            ? Number(assignmentRecord.order_index)
+            : typeof assignmentRecord.order === 'number'
+              ? Number(assignmentRecord.order)
+              : 0),
+      };
+    },
+    [assignmentTimelineById],
+  );
+
+  const orderEmployeeAssignments = useCallback(
+    (employeeAssignments: Assignment[]) =>
+      [...employeeAssignments].sort((a, b) => {
+        const orderA = getAssignmentTimelineMeta(a).orderIndex;
+        const orderB = getAssignmentTimelineMeta(b).orderIndex;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.startTime ?? '').localeCompare(String(b.startTime ?? ''));
+      }),
+    [getAssignmentTimelineMeta],
+  );
+
+  const startAssignmentTimeline = useCallback(
+    async (assignment: Assignment) => {
+      if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      setSavingTimelineAssignmentId(assignment.id);
+      const nowIso = new Date().toISOString();
+      const { error } = await supabase
+        .from('assignments')
+        .update({ status: 'in_progress', actual_start_at: nowIso })
+        .eq('id', assignment.id)
+        .eq('org_id', currentUser.orgId);
+      if (error) {
+        toast.error(`Failed to start task: ${error.message}`);
+        setSavingTimelineAssignmentId(null);
+        return;
+      }
+      triggerAssignmentFlash(assignment.id, 'started');
+      toast.success(`Started ${assignment.title || 'task'}`);
+      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
+      setSavingTimelineAssignmentId(null);
+    },
+    [currentUser?.orgId, queryClient, triggerAssignmentFlash],
+  );
+
+  const completeAssignmentTimeline = useCallback(
+    async (assignment: Assignment, employeeAssignments: Assignment[]) => {
+      if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      setSavingTimelineAssignmentId(assignment.id);
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const timelineMeta = getAssignmentTimelineMeta(assignment);
+      let calculatedHours: number | undefined;
+      if (timelineMeta.actualStartAt) {
+        const startedAt = new Date(timelineMeta.actualStartAt);
+        if (!Number.isNaN(startedAt.getTime()) && now.getTime() >= startedAt.getTime()) {
+          calculatedHours = Math.max(0, (now.getTime() - startedAt.getTime()) / (1000 * 60 * 60));
+        }
+      }
+
+      const updatePayload: Record<string, unknown> = {
+        status: 'completed',
+        actual_completed_at: nowIso,
+      };
+      if (typeof calculatedHours === 'number' && Number.isFinite(calculatedHours)) {
+        updatePayload.actual_hours = Number(calculatedHours.toFixed(2));
+      }
+
+      const { error } = await supabase
+        .from('assignments')
+        .update(updatePayload)
+        .eq('id', assignment.id)
+        .eq('org_id', currentUser.orgId);
+      if (error) {
+        toast.error(`Failed to complete task: ${error.message}`);
+        setSavingTimelineAssignmentId(null);
+        return;
+      }
+
+      const ordered = orderEmployeeAssignments(employeeAssignments);
+      const currentOrder = getAssignmentTimelineMeta(assignment).orderIndex;
+      const nextTask = ordered.find((row) => {
+        const rowOrder = getAssignmentTimelineMeta(row).orderIndex;
+        return rowOrder > currentOrder && normalizeAssignmentStatus(row.status) === 'planned';
+      });
+
+      if (nextTask?.id) {
+        const nextResult = await supabase
+          .from('assignments')
+          .update({ status: 'in_progress', actual_start_at: nowIso })
+          .eq('id', nextTask.id)
+          .eq('org_id', currentUser.orgId);
+        if (!nextResult.error) {
+          triggerAssignmentFlash(nextTask.id, 'started');
+        }
+      }
+
+      triggerAssignmentFlash(assignment.id, 'complete');
+      toast.success(`Completed ${assignment.title || 'task'}`);
+      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
+      setSavingTimelineAssignmentId(null);
+    },
+    [currentUser?.orgId, getAssignmentTimelineMeta, orderEmployeeAssignments, queryClient, triggerAssignmentFlash],
+  );
+
+  const saveAssignmentTimelineTimes = useCallback(
+    async (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => {
+      if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      const dateStr = assignment.date;
+      const startTs = startInput ? `${dateStr}T${startInput}:00` : null;
+      const endTs = endInput ? `${dateStr}T${endInput}:00` : null;
+      if (startTs && endTs) {
+        const startDate = new Date(startTs);
+        const endDate = new Date(endTs);
+        if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate < startDate) {
+          toast.error('Completed time cannot be before start time.');
+          return;
+        }
+      }
+
+      const payload: Record<string, unknown> = {
+        actual_start_at: startTs,
+        actual_completed_at: endTs,
+      };
+      if (startTs && endTs) {
+        const startDate = new Date(startTs);
+        const endDate = new Date(endTs);
+        if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
+          payload.actual_hours = Number(((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60)).toFixed(2));
+        }
+      }
+
+      setSavingTimelineAssignmentId(assignment.id);
+      const { error } = await supabase
+        .from('assignments')
+        .update(payload)
+        .eq('id', assignment.id)
+        .eq('org_id', currentUser.orgId);
+      if (error) {
+        toast.error(`Failed to save actual times: ${error.message}`);
+        setSavingTimelineAssignmentId(null);
+        return;
+      }
+
+      if (endTs) {
+        const ordered = orderEmployeeAssignments(employeeAssignments);
+        const currentOrder = getAssignmentTimelineMeta(assignment).orderIndex;
+        const nextTask = ordered.find((row) => {
+          const rowOrder = getAssignmentTimelineMeta(row).orderIndex;
+          return rowOrder > currentOrder && normalizeAssignmentStatus(row.status) !== 'done';
+        });
+        if (nextTask?.id) {
+          const nextMeta = getAssignmentTimelineMeta(nextTask);
+          const nextStart = nextMeta.actualStartAt ? new Date(nextMeta.actualStartAt) : null;
+          const endDate = new Date(endTs);
+          if (!nextStart || Number.isNaN(nextStart.getTime()) || nextStart < endDate) {
+            await supabase
+              .from('assignments')
+              .update({ actual_start_at: endTs })
+              .eq('id', nextTask.id)
+              .eq('org_id', currentUser.orgId);
+          }
+        }
+      }
+
+      toast.success('Actual times updated.');
+      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
+      setSavingTimelineAssignmentId(null);
+    },
+    [currentUser?.orgId, getAssignmentTimelineMeta, orderEmployeeAssignments, queryClient],
   );
   const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
     if (workOrders.length > 0) {
@@ -3969,6 +4232,17 @@ export default function WorkboardContent() {
                       onEditAssignment={openEditAssignmentDialog}
                       onRemoveAssignment={removeAssignment}
                       weatherWarningsByAssignment={assignmentWeatherWarnings}
+                      assignmentTimelineById={assignmentTimelineRecord}
+                      onStartAssignment={(assignment) => {
+                        void startAssignmentTimeline(assignment);
+                      }}
+                      onCompleteAssignment={(assignment, employeeAssignments) => {
+                        void completeAssignmentTimeline(assignment, employeeAssignments);
+                      }}
+                      onSaveAssignmentTimes={(assignment, employeeAssignments, startInput, endInput) => {
+                        void saveAssignmentTimelineTimes(assignment, employeeAssignments, startInput, endInput);
+                      }}
+                      savingTimelineAssignmentId={savingTimelineAssignmentId}
                     />
                   </Suspense>
                 </SafeSection>
@@ -3997,6 +4271,10 @@ export default function WorkboardContent() {
             <div className="space-y-3 md:hidden">
               {orderedDispatchBoard.map((lane) => {
                 const isExpanded = expandedMobileCrewIds.includes(lane.employee.id);
+                const laneOrderedAssignments = orderEmployeeAssignments(lane.employeeAssignments);
+                const laneHasInProgress = laneOrderedAssignments.some(
+                  (item) => normalizeAssignmentStatus(item.status) === 'in-progress',
+                );
                 return (
                   <div key={`mobile-lane-${lane.employee.id}`} className="rounded-2xl border bg-card">
                     <button
@@ -4027,11 +4305,31 @@ export default function WorkboardContent() {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {lane.employeeAssignments.map((assignment) => {
+                            {laneOrderedAssignments.map((assignment, assignmentIndex) => {
                               const task = taskList.find((candidate) => candidate.id === assignment.taskId);
                               const estimatedHours = getEstimatedHoursForAssignment(assignment);
-                              const actualHours = Math.max(0, Number(assignment.actualHours ?? 0));
+                              const timelineMeta = getAssignmentTimelineMeta(assignment);
+                              const timelineActualHours =
+                                timelineMeta.actualStartAt && timelineMeta.actualCompletedAt
+                                  ? Math.max(
+                                      0,
+                                      (new Date(timelineMeta.actualCompletedAt).getTime() -
+                                        new Date(timelineMeta.actualStartAt).getTime()) /
+                                        (1000 * 60 * 60),
+                                    )
+                                  : 0;
+                              const actualHours = Math.max(0, Number(assignment.actualHours ?? timelineActualHours ?? 0));
                               const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
+                              const statusNormalized = normalizeAssignmentStatus(assignment.status);
+                              const canStartTask = statusNormalized === 'planned' && !laneHasInProgress && assignmentIndex === 0;
+                              const timeSummary =
+                                timelineMeta.actualStartAt && timelineMeta.actualCompletedAt
+                                  ? `${toLocalTimeLabel(timelineMeta.actualStartAt)} → ${toLocalTimeLabel(timelineMeta.actualCompletedAt)} (${actualHours.toFixed(1)}h)`
+                                  : timelineMeta.actualStartAt
+                                    ? `Started: ${toLocalTimeLabel(timelineMeta.actualStartAt)}`
+                                    : timelineMeta.actualCompletedAt
+                                      ? `Completed: ${toLocalTimeLabel(timelineMeta.actualCompletedAt)}`
+                                      : '';
                               return (
                                 <div key={`mobile-assignment-${assignment.id}`} className="rounded-xl border bg-muted/20 p-2.5">
                                   <div className="flex items-start justify-between gap-2">
@@ -4042,6 +4340,28 @@ export default function WorkboardContent() {
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-1">
+                                      {canStartTask ? (
+                                        <button
+                                          type="button"
+                                          aria-label="Start task"
+                                          onClick={() => void startAssignmentTimeline(assignment)}
+                                          disabled={savingTimelineAssignmentId === assignment.id}
+                                          className="min-h-11 rounded-md border px-2 text-xs font-medium"
+                                        >
+                                          Start
+                                        </button>
+                                      ) : null}
+                                      {statusNormalized === 'in-progress' ? (
+                                        <button
+                                          type="button"
+                                          aria-label="Complete task"
+                                          onClick={() => void completeAssignmentTimeline(assignment, laneOrderedAssignments)}
+                                          disabled={savingTimelineAssignmentId === assignment.id}
+                                          className="min-h-11 rounded-md border px-2 text-xs font-medium"
+                                        >
+                                          Complete
+                                        </button>
+                                      ) : null}
                                       <button
                                         type="button"
                                         aria-label="Set actual hours"
@@ -4063,6 +4383,60 @@ export default function WorkboardContent() {
                                       </button>
                                     </div>
                                   </div>
+                                  {timeSummary ? <p className={`mt-1 text-xs ${actualHoursTone}`}>{timeSummary}</p> : null}
+                                  <button
+                                    type="button"
+                                    className="mt-1 inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
+                                    onClick={() => {
+                                      if (timelineEditAssignmentId === assignment.id) {
+                                        setTimelineEditAssignmentId(null);
+                                        return;
+                                      }
+                                      setTimelineEditAssignmentId(assignment.id ?? null);
+                                      setTimelineEditStart(toTimeInputValue(timelineMeta.actualStartAt));
+                                      setTimelineEditEnd(toTimeInputValue(timelineMeta.actualCompletedAt));
+                                    }}
+                                  >
+                                    <Pencil className="h-3 w-3" /> Edit times
+                                  </button>
+                                  {timelineEditAssignmentId === assignment.id ? (
+                                    <div className="mt-2 flex flex-wrap items-end gap-2 rounded-md border bg-background/70 p-2">
+                                      <label className="text-[10px] text-muted-foreground">
+                                        Start
+                                        <input
+                                          type="time"
+                                          value={timelineEditStart}
+                                          onChange={(event) => setTimelineEditStart(event.target.value)}
+                                          className="ml-1 h-7 rounded border px-2 text-[11px]"
+                                        />
+                                      </label>
+                                      <label className="text-[10px] text-muted-foreground">
+                                        Complete
+                                        <input
+                                          type="time"
+                                          value={timelineEditEnd}
+                                          onChange={(event) => setTimelineEditEnd(event.target.value)}
+                                          className="ml-1 h-7 rounded border px-2 text-[11px]"
+                                        />
+                                      </label>
+                                      <button
+                                        type="button"
+                                        className="h-7 rounded-full border px-2 text-xs font-medium"
+                                        onClick={() => {
+                                          void saveAssignmentTimelineTimes(
+                                            assignment,
+                                            laneOrderedAssignments,
+                                            timelineEditStart,
+                                            timelineEditEnd,
+                                          );
+                                          setTimelineEditAssignmentId(null);
+                                        }}
+                                        disabled={savingTimelineAssignmentId === assignment.id}
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  ) : null}
                                   <div className="mt-2">
                                     {actualHours <= 0 ? (
                                       <div className="flex flex-wrap items-center gap-1.5">

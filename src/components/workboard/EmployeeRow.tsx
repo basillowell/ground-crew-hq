@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AvatarInitials } from '@/components/shared';
 import { TaskBlock } from './TaskBlock';
-import { GripVertical, Plus } from 'lucide-react';
+import { CheckCircle2, Clock3, GripVertical, Pencil, Play, Plus } from 'lucide-react';
+import { useState } from 'react';
 import type { Employee, Assignment, Task } from '@/data/seedData';
 
 interface EmployeeRowProps {
@@ -27,6 +28,11 @@ interface EmployeeRowProps {
   onTaskDropOnTask?: (employeeId: string, targetAssignmentId: string) => void;
   coveragePercent?: number;
   weatherWarningsByAssignment?: Record<string, Array<{ level: 'warning' | 'danger'; message: string }>>;
+  assignmentTimelineById?: Record<string, { actualStartAt: string | null; actualCompletedAt: string | null }>;
+  onStartAssignment?: (assignment: Assignment) => void;
+  onCompleteAssignment?: (assignment: Assignment, employeeAssignments: Assignment[]) => void;
+  onSaveAssignmentTimes?: (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => void;
+  savingTimelineAssignmentId?: string | null;
 }
 
 function coverageBadgeClass(coveragePercent: number | undefined) {
@@ -57,8 +63,60 @@ export function EmployeeRow({
   onTaskDropOnTask,
   coveragePercent,
   weatherWarningsByAssignment,
+  assignmentTimelineById,
+  onStartAssignment,
+  onCompleteAssignment,
+  onSaveAssignmentTimes,
+  savingTimelineAssignmentId,
 }: EmployeeRowProps) {
+  const [editingTimelineAssignmentId, setEditingTimelineAssignmentId] = useState<string | null>(null);
+  const [timelineStartInput, setTimelineStartInput] = useState('');
+  const [timelineEndInput, setTimelineEndInput] = useState('');
   const sortedAssignments = [...employeeAssignments];
+  const hasInProgress = sortedAssignments.some((item) => normalizeStatus(item.status) === 'in-progress');
+
+  const formatLabel = (value?: string | null) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const toInputValue = (value?: string | null) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const getEstimatedHours = (assignment: Assignment) => {
+    const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+    const explicit = Number(assignmentRecord.estimatedHours ?? assignmentRecord.estimated_hours ?? 0);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    return Math.max(0, Number(assignment.duration ?? 0) / 60);
+  };
+
+  const getActualHours = (assignment: Assignment, startAt?: string | null, completedAt?: string | null) => {
+    const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+    const explicit = Number(assignmentRecord.actualHours ?? assignmentRecord.actual_hours ?? 0);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    if (startAt && completedAt) {
+      const startDate = new Date(startAt);
+      const endDate = new Date(completedAt);
+      if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
+        return (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+      }
+    }
+    return 0;
+  };
+
+  const getActualHoursTone = (actualHours: number, estimatedHours: number) => {
+    if (actualHours <= 0 || estimatedHours <= 0) return 'text-muted-foreground';
+    const ratio = actualHours / estimatedHours;
+    if (ratio <= 1) return 'text-emerald-700';
+    if (ratio < 1.25) return 'text-amber-700';
+    return 'text-red-700';
+  };
 
   return (
     <Card
@@ -111,19 +169,117 @@ export function EmployeeRow({
             ) : (
               sortedAssignments.map((assignment) => {
                 const task = tasks.find((item) => item.id === assignment.taskId);
+                const assignmentStatus = normalizeStatus(assignment.status);
+                const timeline = assignmentTimelineById?.[assignment.id ?? ''];
+                const startLabel = formatLabel(timeline?.actualStartAt);
+                const completedLabel = formatLabel(timeline?.actualCompletedAt);
+                const estimatedHours = getEstimatedHours(assignment);
+                const actualHours = getActualHours(assignment, timeline?.actualStartAt, timeline?.actualCompletedAt);
+                const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
+                const isFirstPlannedTask = assignmentStatus === 'planned' && !hasInProgress && sortedAssignments[0]?.id === assignment.id;
                 return task ? (
-                  <TaskBlock
-                    key={assignment.id}
-                    task={task}
-                    assignment={assignment}
-                    priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
-                    weatherWarnings={weatherWarningsByAssignment?.[assignment.id ?? ''] ?? []}
-                    draggable
-                    onDragStart={onTaskDragStart ? () => onTaskDragStart(employee.id, assignment.id ?? '') : undefined}
-                    onDrop={onTaskDropOnTask ? () => onTaskDropOnTask(employee.id, assignment.id ?? '') : undefined}
-                    onEdit={onEditAssignment ? () => onEditAssignment(assignment) : undefined}
-                    onRemove={onRemoveAssignment ? () => onRemoveAssignment(assignment.id) : undefined}
-                  />
+                  <div key={assignment.id} className="space-y-1">
+                    <TaskBlock
+                      task={task}
+                      assignment={assignment}
+                      priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
+                      weatherWarnings={weatherWarningsByAssignment?.[assignment.id ?? ''] ?? []}
+                      draggable
+                      onDragStart={onTaskDragStart ? () => onTaskDragStart(employee.id, assignment.id ?? '') : undefined}
+                      onDrop={onTaskDropOnTask ? () => onTaskDropOnTask(employee.id, assignment.id ?? '') : undefined}
+                      onEdit={onEditAssignment ? () => onEditAssignment(assignment) : undefined}
+                      onRemove={onRemoveAssignment ? () => onRemoveAssignment(assignment.id) : undefined}
+                    />
+                    <div className="flex flex-wrap items-center gap-2 px-2 pb-1">
+                      {isFirstPlannedTask && onStartAssignment ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 rounded-full px-2 text-[11px]"
+                          onClick={() => onStartAssignment(assignment)}
+                          disabled={savingTimelineAssignmentId === assignment.id}
+                        >
+                          <Play className="mr-1 h-3 w-3" /> Start
+                        </Button>
+                      ) : null}
+                      {assignmentStatus === 'in-progress' && onCompleteAssignment ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 rounded-full px-2 text-[11px]"
+                          onClick={() => onCompleteAssignment(assignment, sortedAssignments)}
+                          disabled={savingTimelineAssignmentId === assignment.id}
+                        >
+                          <CheckCircle2 className="mr-1 h-3 w-3" /> Complete
+                        </Button>
+                      ) : null}
+                      <span className={`text-[11px] ${actualHoursTone}`}>
+                        {startLabel && completedLabel
+                          ? `${startLabel} → ${completedLabel} (${actualHours.toFixed(1)}h)`
+                          : startLabel
+                            ? `Started: ${startLabel}`
+                            : completedLabel
+                              ? `Completed: ${completedLabel}`
+                              : 'No actual times logged'}
+                      </span>
+                      {onSaveAssignmentTimes ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 rounded-full px-2 text-[11px]"
+                          onClick={() => {
+                            if (editingTimelineAssignmentId === assignment.id) {
+                              setEditingTimelineAssignmentId(null);
+                              return;
+                            }
+                            setEditingTimelineAssignmentId(assignment.id ?? null);
+                            setTimelineStartInput(toInputValue(timeline?.actualStartAt));
+                            setTimelineEndInput(toInputValue(timeline?.actualCompletedAt));
+                          }}
+                        >
+                          <Pencil className="mr-1 h-3 w-3" /> Edit times
+                        </Button>
+                      ) : null}
+                    </div>
+                    {editingTimelineAssignmentId === assignment.id && onSaveAssignmentTimes ? (
+                      <div className="mx-2 mb-1 flex flex-wrap items-end gap-2 rounded-lg border bg-muted/20 p-2">
+                        <label className="text-[10px] text-muted-foreground">
+                          Start
+                          <input
+                            type="time"
+                            value={timelineStartInput}
+                            onChange={(event) => setTimelineStartInput(event.target.value)}
+                            className="ml-1 h-7 rounded border px-2 text-[11px]"
+                          />
+                        </label>
+                        <label className="text-[10px] text-muted-foreground">
+                          Complete
+                          <input
+                            type="time"
+                            value={timelineEndInput}
+                            onChange={(event) => setTimelineEndInput(event.target.value)}
+                            className="ml-1 h-7 rounded border px-2 text-[11px]"
+                          />
+                        </label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 rounded-full px-2 text-[11px]"
+                          onClick={() => {
+                            onSaveAssignmentTimes(assignment, sortedAssignments, timelineStartInput, timelineEndInput);
+                            setEditingTimelineAssignmentId(null);
+                          }}
+                          disabled={savingTimelineAssignmentId === assignment.id}
+                        >
+                          <Clock3 className="mr-1 h-3 w-3" /> Save
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null;
               })
             )}
