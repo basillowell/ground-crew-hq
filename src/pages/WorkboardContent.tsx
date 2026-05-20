@@ -525,6 +525,8 @@ export default function WorkboardContent() {
   const [timelineEditAssignmentId, setTimelineEditAssignmentId] = useState<string | null>(null);
   const [timelineEditStart, setTimelineEditStart] = useState('');
   const [timelineEditEnd, setTimelineEditEnd] = useState('');
+  const timelineSaveGuardRef = useRef<Record<string, number>>({});
+  const timelineSaveWarnedRef = useRef<Record<string, boolean>>({});
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
   const assignmentFlashTimeoutsRef = useRef<Record<string, number>>({});
   const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
@@ -1621,7 +1623,7 @@ export default function WorkboardContent() {
 
   const getCanonicalActualTimes = useCallback(
     (assignment: Assignment) => {
-      const { timelineMeta } = getCanonicalActualTimes(assignment);
+      const timelineMeta = getAssignmentTimelineMeta(assignment);
       const assignmentRecord = assignment as Assignment & Record<string, unknown>;
       const canonicalStartAt =
         timelineMeta.actualStartAt ??
@@ -1751,6 +1753,19 @@ export default function WorkboardContent() {
   const saveAssignmentTimelineTimes = useCallback(
     async (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      if (import.meta.env.DEV) {
+        const now = Date.now();
+        const lastRun = timelineSaveGuardRef.current[assignment.id] ?? 0;
+        if (now - lastRun < 100 && !timelineSaveWarnedRef.current[assignment.id]) {
+          timelineSaveWarnedRef.current[assignment.id] = true;
+          console.warn('[workboard:timeline-save-loop-guard]', {
+            assignmentId: assignment.id,
+            startInput,
+            endInput,
+          });
+        }
+        timelineSaveGuardRef.current[assignment.id] = now;
+      }
       const dateStr = assignment.date;
       // Convert local workflow time to UTC ISO once before persisting to timestamptz.
       const startTs = startInput ? localDateAndTimeToIso(dateStr, startInput) : null;
