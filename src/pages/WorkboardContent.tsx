@@ -496,6 +496,7 @@ export default function WorkboardContent() {
   const [dismissedEscalationIds, setDismissedEscalationIds] = useState<string[]>([]);
   const [assignmentFlashMap, setAssignmentFlashMap] = useState<Record<string, 'complete' | 'started'>>({});
   const [actualHoursMenuAssignmentId, setActualHoursMenuAssignmentId] = useState<string | null>(null);
+  const [actualHoursCustomInputByAssignment, setActualHoursCustomInputByAssignment] = useState<Record<string, string>>({});
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
   const assignmentFlashTimeoutsRef = useRef<Record<string, number>>({});
   const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
@@ -634,7 +635,7 @@ export default function WorkboardContent() {
         .select('id, equipment_unit_id')
         .eq('org_id', currentUser.orgId)
         .eq('date', boardDate);
-      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property', effectivePropertyId);
+      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as Array<{ id: string; equipment_unit_id: string | null }>;
@@ -1454,7 +1455,7 @@ export default function WorkboardContent() {
         return;
       }
 
-      toast.success(`Actual hours set to ${nextHours.toFixed(1)}h`);
+      toast.success(`Logged ${nextHours.toFixed(1)}h for ${assignment.title || 'task'}`);
       void queryClient.invalidateQueries({ queryKey: ['assignments'] });
     },
     [assignmentsQuery.queryKey, currentUser?.orgId, queryClient],
@@ -3972,11 +3973,6 @@ export default function WorkboardContent() {
                                       <p className="text-xs text-muted-foreground">
                                         {formatMinutesAsHoursAndMinutes(assignment.duration)} · {assignment.status}
                                       </p>
-                                      {actualHours > 0 ? (
-                                        <p className={`text-xs ${actualHoursTone}`}>
-                                          Est: {estimatedHours.toFixed(1)}h | Actual: {actualHours.toFixed(1)}h
-                                        </p>
-                                      ) : null}
                                     </div>
                                     <div className="flex items-center gap-1">
                                       <button
@@ -4000,27 +3996,98 @@ export default function WorkboardContent() {
                                       </button>
                                     </div>
                                   </div>
+                                  <div className="mt-2">
+                                    {actualHours <= 0 ? (
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="text-xs text-muted-foreground">Log actual time:</span>
+                                        {[0.5, 1, 1.5, 2, 3, 4].map((value) => (
+                                          <button
+                                            key={`actual-hours-${assignment.id}-${value}`}
+                                            type="button"
+                                            className="h-7 rounded-full border px-2 text-xs font-medium"
+                                            onClick={() => {
+                                              void setAssignmentActualHours(assignment, value);
+                                              setActualHoursMenuAssignmentId(null);
+                                              setActualHoursCustomInputByAssignment((current) => {
+                                                const next = { ...current };
+                                                delete next[assignment.id];
+                                                return next;
+                                              });
+                                            }}
+                                          >
+                                            {value}
+                                          </button>
+                                        ))}
+                                        <button
+                                          type="button"
+                                          className="h-7 rounded-full border px-2 text-xs font-medium"
+                                          onClick={() =>
+                                            setActualHoursMenuAssignmentId((current) =>
+                                              current === assignment.id ? null : assignment.id,
+                                            )
+                                          }
+                                        >
+                                          Other
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <p className={`text-xs ${actualHoursTone}`}>
+                                          Est: {estimatedHours.toFixed(1)}h | Actual: {actualHours.toFixed(1)}h
+                                        </p>
+                                        <button
+                                          type="button"
+                                          className="text-xs text-primary underline-offset-2 hover:underline"
+                                          onClick={() =>
+                                            setActualHoursMenuAssignmentId((current) =>
+                                              current === assignment.id ? null : assignment.id,
+                                            )
+                                          }
+                                        >
+                                          Edit
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                   {actualHoursMenuAssignmentId === assignment.id ? (
-                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                       {[0.5, 1, 1.5, 2, 3, 4].map((value) => (
                                         <button
                                           key={`actual-hours-${assignment.id}-${value}`}
                                           type="button"
-                                          className="rounded-md border px-2 py-1 text-[11px] font-medium"
+                                          className="h-7 rounded-full border px-2 text-xs font-medium"
                                           onClick={() => {
                                             void setAssignmentActualHours(assignment, value);
                                             setActualHoursMenuAssignmentId(null);
+                                            setActualHoursCustomInputByAssignment((current) => {
+                                              const next = { ...current };
+                                              delete next[assignment.id];
+                                              return next;
+                                            });
                                           }}
                                         >
-                                          {value}h
+                                          {value}
                                         </button>
                                       ))}
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step={0.25}
+                                        value={actualHoursCustomInputByAssignment[assignment.id] ?? ''}
+                                        onChange={(event) =>
+                                          setActualHoursCustomInputByAssignment((current) => ({
+                                            ...current,
+                                            [assignment.id]: event.target.value,
+                                          }))
+                                        }
+                                        placeholder="Other"
+                                        className="h-7 w-20 rounded-md border border-input bg-background px-2 text-xs"
+                                      />
                                       <button
                                         type="button"
-                                        className="rounded-md border px-2 py-1 text-[11px] font-medium"
+                                        className="h-7 rounded-full border px-2 text-xs font-medium"
                                         onClick={() => {
-                                          const value = window.prompt('Enter actual hours', String(actualHours > 0 ? actualHours : estimatedHours || 1));
-                                          if (!value) return;
+                                          const value = actualHoursCustomInputByAssignment[assignment.id] ?? '';
                                           const parsed = Number(value);
                                           if (!Number.isFinite(parsed) || parsed < 0) {
                                             toast.error('Enter a valid number of hours.');
@@ -4028,9 +4095,14 @@ export default function WorkboardContent() {
                                           }
                                           void setAssignmentActualHours(assignment, parsed);
                                           setActualHoursMenuAssignmentId(null);
+                                          setActualHoursCustomInputByAssignment((current) => {
+                                            const next = { ...current };
+                                            delete next[assignment.id];
+                                            return next;
+                                          });
                                         }}
                                       >
-                                        Other
+                                        Save
                                       </button>
                                     </div>
                                   ) : null}
