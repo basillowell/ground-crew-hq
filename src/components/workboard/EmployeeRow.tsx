@@ -42,6 +42,14 @@ function coverageBadgeClass(coveragePercent: number | undefined) {
   return 'bg-red-100 text-red-800 border-red-200';
 }
 
+function normalizeStatus(status: string | null | undefined): string {
+  if (!status) return 'planned';
+  const s = status.toLowerCase().trim();
+  if (s === 'done' || s === 'complete') return 'completed';
+  if (s === 'in-progress' || s === 'active' || s === 'started') return 'in_progress';
+  return s;
+}
+
 export function EmployeeRow({
   employee,
   assignments: employeeAssignments,
