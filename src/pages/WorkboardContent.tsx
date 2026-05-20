@@ -1602,15 +1602,21 @@ export default function WorkboardContent() {
 
   useEffect(() => {
     if (orderedDispatchBoard.length === 0) {
-      setExpandedMobileCrewIds([]);
+      setExpandedMobileCrewIds((current) => (current.length === 0 ? current : []));
       return;
     }
 
     setExpandedMobileCrewIds((current) => {
       const validIds = new Set(orderedDispatchBoard.map((lane) => lane.employee.id));
       const filtered = current.filter((id) => validIds.has(id));
-      if (filtered.length > 0) return filtered;
-      return [orderedDispatchBoard[0].employee.id];
+      if (filtered.length > 0) {
+        const unchanged =
+          filtered.length === current.length &&
+          filtered.every((id, index) => id === current[index]);
+        return unchanged ? current : filtered;
+      }
+      const nextDefault = orderedDispatchBoard[0].employee.id;
+      return current.length === 1 && current[0] === nextDefault ? current : [nextDefault];
     });
   }, [orderedDispatchBoard]);
 
