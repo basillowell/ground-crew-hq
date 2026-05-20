@@ -739,8 +739,12 @@ export default function WorkboardContent() {
     enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       if (!supabase) return [] as WeatherLocation[];
-      let query = supabase.from('weather_locations').select('*');
+      let query = supabase
+        .from('weather_locations')
+        .select('id, name, property, area, latitude, longitude, org_id, is_active')
+        .eq('is_active', true);
       if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property', effectivePropertyId);
       const { data, error } = await query;
       if (error) return [] as WeatherLocation[];
       return (data ?? []).map((row) => normalizeWeatherLocation(row as Record<string, unknown>));
@@ -1071,12 +1075,21 @@ export default function WorkboardContent() {
     const firstScheduled =
       scheduleList.find((e) => e.date === boardDate && e.status === 'scheduled')?.employeeId ??
       employeeList.find((e) => e.status === 'active')?.id ?? '';
-    setSelectedEmployeeId((cur) => cur || firstScheduled);
-    setAssignmentDraft((cur) => ({
-      ...cur,
-      employeeId: cur.employeeId || firstScheduled,
-      taskId: cur.taskId || taskList[0]?.id || '',
-    }));
+    if (firstScheduled) {
+      setSelectedEmployeeId((cur) => (cur ? cur : firstScheduled));
+    }
+    setAssignmentDraft((cur) => {
+      const nextEmployeeId = cur.employeeId || firstScheduled;
+      const nextTaskId = cur.taskId || taskList[0]?.id || '';
+      if (cur.employeeId === nextEmployeeId && cur.taskId === nextTaskId) {
+        return cur;
+      }
+      return {
+        ...cur,
+        employeeId: nextEmployeeId,
+        taskId: nextTaskId,
+      };
+    });
   }, [boardDate, employeeList, scheduleList, taskList]);
 
   const fetchTaskLibrary = useCallback(async () => {
