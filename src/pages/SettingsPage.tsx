@@ -103,9 +103,8 @@ interface UsageStats {
 interface StandardOperatingProcedure {
   id: string;
   title: string;
-  category: 'Mowing' | 'Irrigation' | 'Chemical' | 'Bunker' | 'Equipment' | 'General';
+  category: 'Mowing' | 'Irrigation' | 'Chemical Application' | 'Bunker' | 'Equipment' | 'General' | 'Other';
   items: string[];
-  active: boolean;
 }
 
 interface WeatherLocationItem {
@@ -232,35 +231,31 @@ function WorkspaceTab({
   currentPropertyId: string;
 }) {
   const SOP_STORAGE_KEY = 'ground-crew-sops';
-  const sopCategoryOptions: StandardOperatingProcedure['category'][] = ['Mowing', 'Irrigation', 'Chemical', 'Bunker', 'Equipment', 'General'];
+  const sopCategoryOptions: StandardOperatingProcedure['category'][] = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
   const defaultSops: StandardOperatingProcedure[] = [
     {
       id: 'sop-mowing-greens',
       title: 'Mowing Greens',
       category: 'Mowing',
       items: ['Verify height', 'Check fuel', 'Alternate direction', 'Clean after', 'Report damage'],
-      active: true,
     },
     {
       id: 'sop-spray-application',
       title: 'Spray Application',
-      category: 'Chemical',
+      category: 'Chemical Application',
       items: ['Check wind', 'Verify label', 'Calibrate', 'Wear PPE', 'Log in Chemical Logs', 'Record weather'],
-      active: true,
     },
     {
       id: 'sop-irrigation-check',
       title: 'Irrigation Check',
       category: 'Irrigation',
       items: ['Walk zones', 'Check leaks', 'Verify run times', 'Adjust for rain', 'Report issues'],
-      active: true,
     },
     {
       id: 'sop-bunker-maintenance',
       title: 'Bunker Maintenance',
       category: 'Bunker',
       items: ['Rake all', 'Check drainage', 'Repair washouts', 'Edge lips', 'Report sand levels'],
-      active: true,
     },
   ];
 
@@ -290,6 +285,7 @@ function WorkspaceTab({
   const [newSopTitle, setNewSopTitle] = useState('');
   const [newSopCategory, setNewSopCategory] = useState<StandardOperatingProcedure['category']>('General');
   const [newSopChecklist, setNewSopChecklist] = useState('');
+  const [showSopForm, setShowSopForm] = useState(false);
   const [editingSopId, setEditingSopId] = useState<string | null>(null);
   const [editingSopTitle, setEditingSopTitle] = useState('');
   const [editingSopCategory, setEditingSopCategory] = useState<StandardOperatingProcedure['category']>('General');
@@ -940,13 +936,13 @@ function WorkspaceTab({
         title,
         category: newSopCategory,
         items,
-        active: true,
       },
     ];
     persistSops(nextSops);
     setNewSopTitle('');
     setNewSopCategory('General');
     setNewSopChecklist('');
+    setShowSopForm(false);
     toast.success(`SOP added: ${title}`);
   };
 
@@ -979,15 +975,13 @@ function WorkspaceTab({
     toast.success(`SOP updated: ${title}`);
   };
 
-  const softDeleteSop = (sopId: string, title: string) => {
+  const deleteSop = (sopId: string, title: string) => {
     const confirmed = window.confirm(`Delete SOP "${title}"?`);
     if (!confirmed) return;
-    const nextSops = sops.map((sop) => (sop.id === sopId ? { ...sop, active: false } : sop));
+    const nextSops = sops.filter((sop) => sop.id !== sopId);
     persistSops(nextSops);
     toast.success(`SOP deleted: ${title}`);
   };
-
-  const activeSops = sops.filter((sop) => sop.active !== false);
 
   if (!orgId || loading) return <PageSkeleton />;
 
@@ -1228,11 +1222,11 @@ function WorkspaceTab({
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Standard Operating Procedures</h3>
-        {activeSops.length === 0 ? (
+        {sops.length === 0 ? (
           <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No SOPs yet. Add your first SOP below.</p>
         ) : (
           <div style={{ display: 'grid', gap: '8px' }}>
-            {activeSops.map((sop) => (
+            {sops.map((sop) => (
               <div key={sop.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '10px', display: 'grid', gap: '8px' }}>
                 {editingSopId === sop.id ? (
                   <>
@@ -1276,18 +1270,15 @@ function WorkspaceTab({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                       <div>
                         <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{sop.title}</p>
-                        <p style={{ margin: 0, fontSize: '12px', color: '#6b7280' }}>{sop.category}</p>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#6b7280' }}>
+                          {sop.category} · {sop.items.length} item{sop.items.length === 1 ? '' : 's'}
+                        </p>
                       </div>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button onClick={() => startSopEdit(sop)}>Edit</button>
-                        <button onClick={() => softDeleteSop(sop.id, sop.title)} style={{ color: '#dc2626' }}>Delete</button>
+                        <button onClick={() => deleteSop(sop.id, sop.title)} style={{ color: '#dc2626' }}>Delete</button>
                       </div>
                     </div>
-                    <ul style={{ margin: 0, paddingLeft: '18px', color: '#374151', fontSize: '13px', display: 'grid', gap: '2px' }}>
-                      {sop.items.map((item, index) => (
-                        <li key={`${sop.id}-item-${index}`}>{item}</li>
-                      ))}
-                    </ul>
                   </>
                 )}
               </div>
@@ -1295,37 +1286,59 @@ function WorkspaceTab({
           </div>
         )}
 
-        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'grid', gap: '8px', maxWidth: '540px' }}>
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '12px' }}>Add SOP</p>
-          <input
-            value={newSopTitle}
-            onChange={(event) => setNewSopTitle(event.target.value)}
-            placeholder="SOP title"
-          />
-          <select
-            value={newSopCategory}
-            onChange={(event) => setNewSopCategory(event.target.value as StandardOperatingProcedure['category'])}
-            style={{ height: '40px' }}
-          >
-            {sopCategoryOptions.map((category) => (
-              <option key={`sop-category-${category}`} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-          <textarea
-            value={newSopChecklist}
-            onChange={(event) => setNewSopChecklist(event.target.value)}
-            rows={5}
-            placeholder="Checklist items (one per line)"
-          />
+        {showSopForm ? (
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'grid', gap: '8px', maxWidth: '540px' }}>
+            <p style={{ margin: 0, color: '#6b7280', fontSize: '12px' }}>Add SOP</p>
+            <input
+              value={newSopTitle}
+              onChange={(event) => setNewSopTitle(event.target.value)}
+              placeholder="SOP title"
+            />
+            <select
+              value={newSopCategory}
+              onChange={(event) => setNewSopCategory(event.target.value as StandardOperatingProcedure['category'])}
+              style={{ height: '40px' }}
+            >
+              {sopCategoryOptions.map((category) => (
+                <option key={`sop-category-${category}`} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+            <textarea
+              value={newSopChecklist}
+              onChange={(event) => setNewSopChecklist(event.target.value)}
+              rows={5}
+              placeholder="Checklist items (one per line)"
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={addSop}
+                style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setShowSopForm(false);
+                  setNewSopTitle('');
+                  setNewSopCategory('General');
+                  setNewSopChecklist('');
+                }}
+                style={{ border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
           <button
-            onClick={addSop}
-            style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
+            onClick={() => setShowSopForm(true)}
+            style={{ width: 'fit-content', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
           >
-            Save
+            + Add SOP
           </button>
-        </div>
+        )}
       </div>
     </div>
   );
