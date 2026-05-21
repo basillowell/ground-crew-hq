@@ -62,6 +62,25 @@ type WeatherDailyLogRow = {
 
 type OverlayKey = "rain" | "wind" | "gusts" | "temp" | "alerts";
 
+const srq2026RainfallSeed: Array<{ date: string; inches: number }> = [
+  { date: "2026-01-03", inches: 0.6 },
+  { date: "2026-02-15", inches: 0.25 },
+  { date: "2026-02-27", inches: 0.5 },
+  { date: "2026-03-02", inches: 0.1 },
+  { date: "2026-03-04", inches: 0.8 },
+  { date: "2026-03-06", inches: 0.05 },
+  { date: "2026-03-07", inches: 0.25 },
+  { date: "2026-03-13", inches: 0.8 },
+  { date: "2026-03-15", inches: 1.1 },
+  { date: "2026-03-16", inches: 0.25 },
+  { date: "2026-04-02", inches: 2.0 },
+  { date: "2026-04-06", inches: 0.8 },
+  { date: "2026-04-07", inches: 1.8 },
+  { date: "2026-05-17", inches: 0.6 },
+  { date: "2026-05-19", inches: 0.3 },
+  { date: "2026-05-20", inches: 0.8 },
+];
+
 const weatherCodeLabels: Record<number, string> = {
   0: "Clear",
   1: "Mostly clear",
@@ -202,6 +221,7 @@ export default function WeatherPage() {
   const [rainEditDate, setRainEditDate] = useState(todayKey);
   const [rainEditAmount, setRainEditAmount] = useState("");
   const [savingRain, setSavingRain] = useState(false);
+  const [seedingRain, setSeedingRain] = useState(false);
 
   const selectedStation = useMemo(
     () => stations.find((station) => station.id === selectedStationId) ?? null,
@@ -484,6 +504,43 @@ export default function WeatherPage() {
     setIsEditingRain(true);
   };
 
+  const seedSrq2026Rainfall = async () => {
+    if (!selectedStation) return;
+    setSeedingRain(true);
+    try {
+      const upserts = srq2026RainfallSeed.map((entry) => {
+        const existing = rainfallLogs.find((log) => log.date === entry.date && log.source === "manual")
+          ?? rainfallLogs.find((log) => log.date === entry.date);
+        return {
+          id: existing?.id ?? crypto.randomUUID(),
+          locationId: selectedStation.id,
+          stationId: selectedStation.id,
+          date: entry.date,
+          rainfallTotal: inchesToMm(entry.inches),
+          source: "manual",
+          currentConditions: "",
+          forecast: "",
+          temperature: 0,
+          humidity: 0,
+          wind: 0,
+          et: 0,
+          notes: "SRQ 2026 seed",
+        };
+      });
+
+      const { error } = await supabase.from("weather_daily_logs").upsert(upserts, { onConflict: "id" });
+      if (error) {
+        toast.error(`Failed to seed SRQ rainfall: ${error.message}`);
+        return;
+      }
+      toast.success("Seeded 2026 SRQ rainfall values.");
+      setRainfallYear(2026);
+      await loadRainLogs(selectedStation);
+    } finally {
+      setSeedingRain(false);
+    }
+  };
+
   if (!orgId || stationsLoading) return <PageSkeleton />;
 
   if (stationsError) {
@@ -739,18 +796,21 @@ export default function WeatherPage() {
                         <Pencil className="mr-1 h-3.5 w-3.5" />
                         {isEditingRain ? "Hide Editor" : "Edit"}
                       </Button>
+                      <Button size="sm" variant="outline" onClick={seedSrq2026Rainfall} disabled={seedingRain}>
+                        {seedingRain ? "Seeding..." : "Seed 2026 SRQ"}
+                      </Button>
                     </div>
                   </div>
                   <div className="text-sm font-medium">
                     {rainfallYear} Total = {annualRainGrid.yearlyTotal.toFixed(2)}
                   </div>
-                  <div className="overflow-x-auto rounded-md border">
-                    <table className="min-w-[980px] border-collapse text-xs">
+                  <div className="overflow-x-auto rounded-md border border-slate-300">
+                    <table className="min-w-[980px] border-collapse text-[11px]">
                       <thead>
-                        <tr className="bg-muted/30">
-                          <th className="sticky left-0 z-10 border-b border-r bg-muted/50 px-2 py-1 text-left">Day</th>
+                        <tr className="bg-muted/40">
+                          <th className="sticky left-0 z-10 border-b border-r border-slate-300 bg-muted/50 px-2 py-1 text-left">Day</th>
                           {["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"].map((month) => (
-                            <th key={month} className="border-b border-r px-2 py-1 text-center font-semibold">
+                            <th key={month} className="border-b border-r border-slate-300 px-2 py-1 text-center font-semibold">
                               {month}
                             </th>
                           ))}
@@ -760,21 +820,21 @@ export default function WeatherPage() {
                         {Array.from({ length: 31 }, (_, dayIndex) => {
                           const day = dayIndex + 1;
                           return (
-                            <tr key={`day-${day}`}>
-                              <td className="sticky left-0 z-10 border-r bg-background px-2 py-1 font-medium">{day}</td>
+                            <tr key={`day-${day}`} className={dayIndex % 3 === 2 ? "bg-muted/15" : ""}>
+                              <td className="sticky left-0 z-10 border-r border-slate-300 bg-background px-2 py-0.5 font-medium">{day}</td>
                               {Array.from({ length: 12 }, (_, monthIndex) => {
                                 const daysInMonth = new Date(rainfallYear, monthIndex + 1, 0).getDate();
                                 if (day > daysInMonth) {
-                                  return <td key={`${monthIndex}-${day}`} className="border-r bg-muted/20 px-2 py-1" />;
+                                  return <td key={`${monthIndex}-${day}`} className="border-r border-slate-300 bg-muted/20 px-2 py-0.5" />;
                                 }
                                 const hasValue = annualRainGrid.monthDayHasValue[monthIndex][dayIndex];
                                 const value = annualRainGrid.monthDayValues[monthIndex][dayIndex];
                                 return (
-                                  <td key={`${monthIndex}-${day}`} className="border-r px-2 py-1 text-center">
+                                  <td key={`${monthIndex}-${day}`} className="border-r border-slate-300 px-2 py-0.5 text-center">
                                     <button
                                       type="button"
                                       onClick={() => handleRainCellClick(monthIndex, day)}
-                                      className="w-full rounded px-1 py-0.5 hover:bg-muted"
+                                      className="h-5 w-full rounded px-1 hover:bg-muted"
                                     >
                                       {hasValue ? value.toFixed(2) : ""}
                                     </button>
@@ -784,18 +844,18 @@ export default function WeatherPage() {
                             </tr>
                           );
                         })}
-                        <tr className="bg-muted/20 font-semibold">
-                          <td className="sticky left-0 z-10 border-r bg-muted/30 px-2 py-1">Monthly Total</td>
+                        <tr className="sticky bottom-6 z-10 bg-muted/20 font-semibold">
+                          <td className="sticky left-0 z-20 border-r border-t border-slate-400 bg-muted/30 px-2 py-1">Monthly Total</td>
                           {annualRainGrid.monthTotals.map((total, monthIndex) => (
-                            <td key={`total-${monthIndex}`} className="border-r px-2 py-1 text-center">
+                            <td key={`total-${monthIndex}`} className="border-r border-t border-slate-400 bg-muted/30 px-2 py-1 text-center">
                               {total > 0 ? total.toFixed(2) : "0.00"}
                             </td>
                           ))}
                         </tr>
-                        <tr className="bg-muted/30 font-semibold">
-                          <td className="sticky left-0 z-10 border-r bg-muted/40 px-2 py-1">Yearly Running Total</td>
+                        <tr className="sticky bottom-0 z-10 bg-muted/30 font-semibold">
+                          <td className="sticky left-0 z-20 border-r border-t border-slate-500 bg-muted/40 px-2 py-1">Yearly Running Total</td>
                           {annualRainGrid.runningTotals.map((total, monthIndex) => (
-                            <td key={`running-${monthIndex}`} className="border-r px-2 py-1 text-center">
+                            <td key={`running-${monthIndex}`} className="border-r border-t border-slate-500 bg-muted/40 px-2 py-1 text-center">
                               {total > 0 ? total.toFixed(2) : "0.00"}
                             </td>
                           ))}
@@ -846,7 +906,7 @@ export default function WeatherPage() {
         </div>
 
         <div className="lg:col-span-2">
-          <Card className={`relative overflow-hidden rounded-xl transition-all duration-200 ${isRadarExpanded ? "h-[540px]" : "h-[300px]"}`}>
+          <Card className={`relative overflow-hidden rounded-xl transition-all duration-200 ${isRadarExpanded ? "h-[320px]" : "h-[200px]"}`}>
             <div className="absolute left-3 right-3 top-3 z-20 flex items-center justify-between gap-2">
               <span className="rounded-full bg-background/90 px-2 py-1 text-xs font-medium">
                 {selectedStation?.name} • {selectedStation?.area}
