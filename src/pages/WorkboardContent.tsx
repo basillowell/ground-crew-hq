@@ -54,6 +54,7 @@ import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, 
 import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
 import {
   getOperationalTimezone,
+  getNowHHMMInTimezone,
   storedIsoToWallClock,
   storedIsoToWallClockLabel,
   wallClockToStoredIso,
@@ -1694,7 +1695,13 @@ export default function WorkboardContent() {
     async (assignment: Assignment) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
       setSavingTimelineAssignmentId(assignment.id);
-      const nowIso = new Date().toISOString();
+      const nowHHMM = getNowHHMMInTimezone(operationalTimezone);
+      const nowIso = wallClockToStoredIso(boardDate, nowHHMM, operationalTimezone);
+      if (!nowIso) {
+        toast.error('Could not determine current operational time.');
+        setSavingTimelineAssignmentId(null);
+        return;
+      }
       const { error } = await supabase
         .from('assignments')
         .update({ status: 'in_progress', actual_start_at: nowIso })
@@ -1712,18 +1719,23 @@ export default function WorkboardContent() {
       await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
-    [currentUser?.orgId, queryClient, syncTimelineCaches, triggerAssignmentFlash],
+    [boardDate, currentUser?.orgId, operationalTimezone, queryClient, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const completeAssignmentTimeline = useCallback(
     async (assignment: Assignment, employeeAssignments: Assignment[]) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
       setSavingTimelineAssignmentId(assignment.id);
-      const nowIso = new Date().toISOString();
+      const nowHHMM = getNowHHMMInTimezone(operationalTimezone);
+      const nowIso = wallClockToStoredIso(boardDate, nowHHMM, operationalTimezone);
+      if (!nowIso) {
+        toast.error('Could not determine current operational time.');
+        setSavingTimelineAssignmentId(null);
+        return;
+      }
       const timelineMeta = getAssignmentTimelineMeta(assignment);
       let calculatedHours: number | undefined;
       if (timelineMeta.actualStartAt) {
-        const nowHHMM = storedIsoToWallClock(nowIso, operationalTimezone);
         const startHHMM = storedIsoToWallClock(timelineMeta.actualStartAt, operationalTimezone);
         if (startHHMM) {
           const nowMinutes = timeToMinutes(nowHHMM);
