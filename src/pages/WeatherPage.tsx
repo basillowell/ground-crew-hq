@@ -61,7 +61,6 @@ type WeatherDailyLogRow = {
 };
 
 type OverlayKey = "rain" | "wind" | "gusts" | "temp" | "alerts";
-type RainRange = "day" | "week" | "month" | "year";
 
 const weatherCodeLabels: Record<number, string> = {
   0: "Clear",
@@ -145,6 +144,10 @@ function mmToInches(mm: number) {
   return mm / 25.4;
 }
 
+function inchesToMm(inches: number) {
+  return inches * 25.4;
+}
+
 function tempClass(tempF: number) {
   if (tempF < 50) return "text-blue-600";
   if (tempF <= 75) return "text-emerald-600";
@@ -187,13 +190,14 @@ export default function WeatherPage() {
 
   const [expandedDayKey, setExpandedDayKey] = useState(todayKey);
   const [activeOverlays, setActiveOverlays] = useState<Set<OverlayKey>>(new Set(["temp", "rain"]));
-  const [rainRange, setRainRange] = useState<RainRange>("week");
+  const [rainfallYear, setRainfallYear] = useState(new Date().getFullYear());
+  const [isRadarExpanded, setIsRadarExpanded] = useState(false);
 
   useEffect(() => {
     document.title = 'Weather — Ground Crew HQ';
   }, []);
 
-  const [manualLogs, setManualLogs] = useState<WeatherDailyLogRow[]>([]);
+  const [rainfallLogs, setRainfallLogs] = useState<WeatherDailyLogRow[]>([]);
   const [isEditingRain, setIsEditingRain] = useState(false);
   const [rainEditDate, setRainEditDate] = useState(todayKey);
   const [rainEditAmount, setRainEditAmount] = useState("");
@@ -291,21 +295,20 @@ export default function WeatherPage() {
     }
   }, []);
 
-  const loadManualRainLogs = useCallback(async (station: WeatherStation) => {
+  const loadRainLogs = useCallback(async (station: WeatherStation) => {
     try {
       const { data, error } = await supabase
         .from("weather_daily_logs")
         .select("id, locationId, date, rainfallTotal, source")
         .eq("locationId", station.id)
-        .eq("source", "manual")
         .order("date", { ascending: false });
       if (error) {
-        setManualLogs([]);
+        setRainfallLogs([]);
         return;
       }
-      setManualLogs((data ?? []) as WeatherDailyLogRow[]);
+      setRainfallLogs((data ?? []) as WeatherDailyLogRow[]);
     } catch {
-      setManualLogs([]);
+      setRainfallLogs([]);
     }
   }, []);
 
@@ -317,8 +320,8 @@ export default function WeatherPage() {
     if (!selectedStation) return;
     void loadWeather(selectedStation);
     void loadAlerts(selectedStation);
-    void loadManualRainLogs(selectedStation);
-  }, [loadAlerts, loadManualRainLogs, loadWeather, selectedStation]);
+    void loadRainLogs(selectedStation);
+  }, [loadAlerts, loadRainLogs, loadWeather, selectedStation]);
 
   const hourlyRows = useMemo(() => {
     const hourly = weatherData?.hourly;
@@ -349,33 +352,50 @@ export default function WeatherPage() {
     }));
   }, [weatherData]);
 
-  const mergedRainByDate = useMemo(() => {
-    const map = new Map<string, number>();
-    dailyRows.forEach((day) => map.set(day.date, day.precipInches));
-    manualLogs.forEach((log) => map.set(log.date, mmToInches(log.rainfallTotal)));
-    return map;
-  }, [dailyRows, manualLogs]);
-
-  const rainfallTotalInches = useMemo(() => {
-    const days = rainRange === "day" ? 1 : rainRange === "week" ? 7 : rainRange === "month" ? 30 : 365;
-    const window = dailyRows.slice(0, Math.min(days, dailyRows.length));
-    return window.reduce((sum, row) => sum + (mergedRainByDate.get(row.date) ?? row.precipInches), 0);
-  }, [dailyRows, mergedRainByDate, rainRange]);
-
-  const weeklyBars = useMemo(() => {
-    const source = dailyRows.slice(0, 7).reverse();
-    const max = Math.max(...source.map((d) => mergedRainByDate.get(d.date) ?? d.precipInches), 0.01);
-    return source.map((day) => {
-      const inches = mergedRainByDate.get(day.date) ?? day.precipInches;
-      return {
-        date: day.date,
-        label: new Date(day.date).toLocaleDateString([], { weekday: "short" }),
-        inches,
-        heightPct: Math.max(8, (inches / max) * 100),
-        isToday: day.date === todayKey,
-      };
+  const rainfallByDate = useMemo(() => {
+    const map = new Map<string, { inches: number; source: string }>();
+    rainfallLogs.forEach((log) => {
+      const nextEntry = { inches: mmToInches(log.rainfallTotal), source: (log.source ?? "").toLowerCase() };
+      const existing = map.get(log.date);
+      if (!existing) {
+        map.set(log.date, nextEntry);
+        return;
+      }
+      if (existing.source !== "manual" && nextEntry.source === "manual") {
+        map.set(log.date, nextEntry);
+      }
     });
-  }, [dailyRows, mergedRainByDate, todayKey]);
+    return map;
+  }, [rainfallLogs]);
+
+  const annualRainGrid = useMemo(() => {
+    const monthDayValues: number[][] = Array.from({ length: 12 }, () => Array.from({ length: 31 }, () => 0));
+    const monthDayHasValue: boolean[][] = Array.from({ length: 12 }, () => Array.from({ length: 31 }, () => false));
+
+    rainfallByDate.forEach((entry, dateKey) => {
+      if (!dateKey.startsWith(`${rainfallYear}-`)) return;
+      const date = new Date(`${dateKey}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return;
+      const monthIndex = date.getMonth();
+      const dayIndex = date.getDate() - 1;
+      monthDayValues[monthIndex][dayIndex] = entry.inches;
+      monthDayHasValue[monthIndex][dayIndex] = true;
+    });
+
+    const monthTotals = monthDayValues.map((days) => days.reduce((sum, value) => sum + value, 0));
+    const runningTotals = monthTotals.map((_, monthIndex) =>
+      monthTotals.slice(0, monthIndex + 1).reduce((sum, value) => sum + value, 0),
+    );
+    const yearlyTotal = monthTotals.reduce((sum, value) => sum + value, 0);
+
+    return {
+      monthDayValues,
+      monthDayHasValue,
+      monthTotals,
+      runningTotals,
+      yearlyTotal,
+    };
+  }, [rainfallByDate, rainfallYear]);
 
   const todaySpraySegments = useMemo(() => {
     const source = hourlyRows
@@ -421,13 +441,15 @@ export default function WeatherPage() {
 
   const saveManualRain = async () => {
     if (!selectedStation || !rainEditDate || !rainEditAmount) return;
-    const amountMm = Number(rainEditAmount);
-    if (!Number.isFinite(amountMm) || amountMm < 0) {
-      toast.error("Enter a valid rainfall amount in millimeters.");
+    const amountInches = Number(rainEditAmount);
+    if (!Number.isFinite(amountInches) || amountInches < 0) {
+      toast.error("Enter a valid rainfall amount in inches.");
       return;
     }
+    const amountMm = inchesToMm(amountInches);
     setSavingRain(true);
-    const existing = manualLogs.find((log) => log.date === rainEditDate);
+    const existing = rainfallLogs.find((log) => log.date === rainEditDate && log.source === "manual")
+      ?? rainfallLogs.find((log) => log.date === rainEditDate);
     const payload = {
       id: existing?.id ?? crypto.randomUUID(),
       locationId: selectedStation.id,
@@ -450,10 +472,16 @@ export default function WeatherPage() {
       return;
     }
     toast.success("Manual rainfall saved.");
-    setIsEditingRain(false);
-    setRainEditAmount("");
-    await loadManualRainLogs(selectedStation);
+    await loadRainLogs(selectedStation);
     setSavingRain(false);
+  };
+
+  const handleRainCellClick = (monthIndex: number, day: number) => {
+    const dateValue = `${rainfallYear}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    setRainEditDate(dateValue);
+    const existing = rainfallByDate.get(dateValue);
+    setRainEditAmount(typeof existing?.inches === "number" ? existing.inches.toFixed(2) : "");
+    setIsEditingRain(true);
   };
 
   if (!orgId || stationsLoading) return <PageSkeleton />;
@@ -690,35 +718,90 @@ export default function WeatherPage() {
 
               <Card className="rounded-xl">
                 <CardContent className="space-y-4 p-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold">Rainfall Tracker</div>
-                    <Button size="sm" variant="outline" onClick={() => setIsEditingRain((prev) => !prev)}>
-                      <Pencil className="mr-1 h-3.5 w-3.5" />
-                      Edit
-                    </Button>
-                  </div>
-                  <div className="flex h-24 items-end gap-2">
-                    {weeklyBars.map((bar) => (
-                      <div key={bar.date} className="flex flex-1 flex-col items-center gap-1">
-                        <div
-                          className={`w-full rounded-t bg-sky-400 ${bar.isToday ? "ring-2 ring-emerald-500" : ""}`}
-                          style={{ height: `${bar.heightPct}%` }}
-                          title={`${bar.inches.toFixed(2)} in`}
-                        />
-                        <div className="text-[10px] text-muted-foreground">{bar.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {rainRange === "week" ? "This week" : rainRange === "day" ? "Today" : rainRange === "month" ? "This month" : "This year"}:{" "}
-                    {rainfallTotalInches.toFixed(2)} in total
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["day", "week", "month", "year"] as RainRange[]).map((range) => (
-                      <Button key={range} size="sm" variant={rainRange === range ? "default" : "outline"} onClick={() => setRainRange(range)}>
-                        {range[0].toUpperCase() + range.slice(1)}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">Rainfall Tracker</div>
+                      <div className="text-xs text-muted-foreground">Rainfall (in)</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="h-8 rounded-md border bg-background px-2 text-xs"
+                        value={rainfallYear}
+                        onChange={(event) => setRainfallYear(Number(event.target.value))}
+                      >
+                        {Array.from({ length: 6 }, (_, index) => new Date().getFullYear() - 3 + index).map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </select>
+                      <Button size="sm" variant="outline" onClick={() => setIsEditingRain((prev) => !prev)}>
+                        <Pencil className="mr-1 h-3.5 w-3.5" />
+                        {isEditingRain ? "Hide Editor" : "Edit"}
                       </Button>
-                    ))}
+                    </div>
+                  </div>
+                  <div className="text-sm font-medium">
+                    {rainfallYear} Total = {annualRainGrid.yearlyTotal.toFixed(2)}
+                  </div>
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="min-w-[980px] border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-muted/30">
+                          <th className="sticky left-0 z-10 border-b border-r bg-muted/50 px-2 py-1 text-left">Day</th>
+                          {["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"].map((month) => (
+                            <th key={month} className="border-b border-r px-2 py-1 text-center font-semibold">
+                              {month}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: 31 }, (_, dayIndex) => {
+                          const day = dayIndex + 1;
+                          return (
+                            <tr key={`day-${day}`}>
+                              <td className="sticky left-0 z-10 border-r bg-background px-2 py-1 font-medium">{day}</td>
+                              {Array.from({ length: 12 }, (_, monthIndex) => {
+                                const daysInMonth = new Date(rainfallYear, monthIndex + 1, 0).getDate();
+                                if (day > daysInMonth) {
+                                  return <td key={`${monthIndex}-${day}`} className="border-r bg-muted/20 px-2 py-1" />;
+                                }
+                                const hasValue = annualRainGrid.monthDayHasValue[monthIndex][dayIndex];
+                                const value = annualRainGrid.monthDayValues[monthIndex][dayIndex];
+                                return (
+                                  <td key={`${monthIndex}-${day}`} className="border-r px-2 py-1 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRainCellClick(monthIndex, day)}
+                                      className="w-full rounded px-1 py-0.5 hover:bg-muted"
+                                    >
+                                      {hasValue ? value.toFixed(2) : ""}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-muted/20 font-semibold">
+                          <td className="sticky left-0 z-10 border-r bg-muted/30 px-2 py-1">Monthly Total</td>
+                          {annualRainGrid.monthTotals.map((total, monthIndex) => (
+                            <td key={`total-${monthIndex}`} className="border-r px-2 py-1 text-center">
+                              {total > 0 ? total.toFixed(2) : "0.00"}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr className="bg-muted/30 font-semibold">
+                          <td className="sticky left-0 z-10 border-r bg-muted/40 px-2 py-1">Yearly Running Total</td>
+                          {annualRainGrid.runningTotals.map((total, monthIndex) => (
+                            <td key={`running-${monthIndex}`} className="border-r px-2 py-1 text-center">
+                              {total > 0 ? total.toFixed(2) : "0.00"}
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                   {isEditingRain ? (
                     <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1fr_auto]">
@@ -729,7 +812,7 @@ export default function WeatherPage() {
                         step="0.1"
                         value={rainEditAmount}
                         onChange={(event) => setRainEditAmount(event.target.value)}
-                        placeholder="Rainfall (mm)"
+                        placeholder="Rainfall (in)"
                       />
                       <Button size="sm" onClick={saveManualRain} disabled={savingRain}>
                         Save
@@ -762,12 +845,21 @@ export default function WeatherPage() {
           ) : null}
         </div>
 
-        <div className="lg:col-span-2 lg:h-[calc(100vh-11rem)]">
-          <Card className="relative h-[300px] overflow-hidden rounded-xl lg:h-full">
+        <div className="lg:col-span-2">
+          <Card className={`relative overflow-hidden rounded-xl transition-all duration-200 ${isRadarExpanded ? "h-[540px]" : "h-[300px]"}`}>
             <div className="absolute left-3 right-3 top-3 z-20 flex items-center justify-between gap-2">
               <span className="rounded-full bg-background/90 px-2 py-1 text-xs font-medium">
                 {selectedStation?.name} • {selectedStation?.area}
               </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={() => setIsRadarExpanded((prev) => !prev)}
+              >
+                {isRadarExpanded ? "Collapse radar" : "Expand radar"}
+              </Button>
               <div className="flex flex-wrap gap-1 rounded-lg border bg-background/95 p-1">
                 {(Object.keys(overlayLabels) as OverlayKey[]).map((key) => (
                   <button
