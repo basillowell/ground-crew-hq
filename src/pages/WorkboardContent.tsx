@@ -52,7 +52,12 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
-import { isoToLocalHHMM, isoToLocalTimeLabel, localDateAndTimeToIso } from '@/lib/timeWorkflow';
+import {
+  getOperationalTimezone,
+  storedIsoToWallClock,
+  storedIsoToWallClockLabel,
+  wallClockToStoredIso,
+} from '@/lib/timeWorkflow';
 import { formatTime } from '@/utils/formatTime';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -135,15 +140,15 @@ type AssignmentTimelineMeta = {
   actualHours: number | null;
 };
 
-function toLocalTimeLabel(value?: string | null) {
+function toLocalTimeLabel(value: string | null | undefined, timezone: string) {
   if (!value) return '';
-  // Workboard actual times are treated as operational wall-clock times for the selected workflow date.
-  return isoToLocalTimeLabel(value);
+  // Workboard actual times are treated as property-local operational wall-clock times.
+  return storedIsoToWallClockLabel(value, timezone);
 }
 
-function toTimeInputValue(value?: string | null) {
+function toTimeInputValue(value: string | null | undefined, timezone: string) {
   if (!value) return '';
-  return isoToLocalHHMM(value);
+  return storedIsoToWallClock(value, timezone);
 }
 
 function taskRowClass(status: string) {
@@ -1301,6 +1306,10 @@ export default function WorkboardContent() {
     () => properties.find((p) => p.id === effectivePropertyId) ?? null,
     [effectivePropertyId, properties],
   );
+  const operationalTimezone = useMemo(
+    () => getOperationalTimezone(activeProperty),
+    [activeProperty],
+  );
 
   const fetchWorkboardWeather = useCallback(async () => {
     if (!activeProperty?.latitude || !activeProperty?.longitude) {
@@ -1312,7 +1321,7 @@ export default function WorkboardContent() {
       const payload = await fetchOpenMeteoWeather({
         latitude: activeProperty.latitude,
         longitude: activeProperty.longitude,
-        timezone: 'America/New_York',
+        timezone: operationalTimezone,
       });
       const firstHourly = payload.hourly[0];
       setWeatherSnapshot({
@@ -1324,7 +1333,7 @@ export default function WorkboardContent() {
     } catch {
       setWeatherSnapshot(null);
     }
-  }, [activeProperty?.latitude, activeProperty?.longitude]);
+  }, [activeProperty?.latitude, activeProperty?.longitude, operationalTimezone]);
 
   useEffect(() => {
     void fetchWorkboardWeather();
@@ -1682,13 +1691,12 @@ export default function WorkboardContent() {
     async (assignment: Assignment, employeeAssignments: Assignment[]) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
       setSavingTimelineAssignmentId(assignment.id);
-      const now = new Date();
-      const nowIso = now.toISOString();
+      const nowIso = new Date().toISOString();
       const timelineMeta = getAssignmentTimelineMeta(assignment);
       let calculatedHours: number | undefined;
       if (timelineMeta.actualStartAt) {
-        const nowHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        const startHHMM = isoToLocalHHMM(timelineMeta.actualStartAt);
+        const nowHHMM = storedIsoToWallClock(nowIso, operationalTimezone);
+        const startHHMM = storedIsoToWallClock(timelineMeta.actualStartAt, operationalTimezone);
         if (startHHMM) {
           const nowMinutes = timeToMinutes(nowHHMM);
           const startMinutes = timeToMinutes(startHHMM);
@@ -1747,7 +1755,7 @@ export default function WorkboardContent() {
       await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
-    [currentUser?.orgId, getCanonicalActualTimes, orderEmployeeAssignments, queryClient, syncTimelineCaches, triggerAssignmentFlash],
+    [currentUser?.orgId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, queryClient, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const saveAssignmentTimelineTimes = useCallback(
@@ -1768,8 +1776,8 @@ export default function WorkboardContent() {
       }
       const dateStr = assignment.date;
       // Convert local workflow time to UTC ISO once before persisting to timestamptz.
-      const startTs = startInput ? localDateAndTimeToIso(dateStr, startInput) : null;
-      const endTs = endInput ? localDateAndTimeToIso(dateStr, endInput) : null;
+      const startTs = startInput ? wallClockToStoredIso(dateStr, startInput, operationalTimezone) : null;
+      const endTs = endInput ? wallClockToStoredIso(dateStr, endInput, operationalTimezone) : null;
       if (startInput && endInput) {
         if (endInput < startInput) {
           toast.error('Completed time cannot be before start time.');
@@ -1837,8 +1845,12 @@ export default function WorkboardContent() {
         });
         if (nextTask?.id) {
           const nextMeta = getCanonicalActualTimes(nextTask).timelineMeta;
-          const nextStartHHMM = nextMeta.actualStartAt ? isoToLocalHHMM(nextMeta.actualStartAt) : '';
-          const completionHHMM = returnedCompletedAt ? isoToLocalHHMM(returnedCompletedAt) : endInput;
+          const nextStartHHMM = nextMeta.actualStartAt
+            ? storedIsoToWallClock(nextMeta.actualStartAt, operationalTimezone)
+            : '';
+          const completionHHMM = returnedCompletedAt
+            ? storedIsoToWallClock(returnedCompletedAt, operationalTimezone)
+            : endInput;
           if (!nextStartHHMM || (completionHHMM && timeToMinutes(nextStartHHMM) < timeToMinutes(completionHHMM))) {
             const nextUpdate = await supabase
               .from('assignments')
@@ -1857,7 +1869,7 @@ export default function WorkboardContent() {
       await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
-    [currentUser?.orgId, getCanonicalActualTimes, orderEmployeeAssignments, queryClient, syncTimelineCaches],
+    [currentUser?.orgId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, queryClient, syncTimelineCaches],
   );
   const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
     if (workOrders.length > 0) {
@@ -1894,7 +1906,12 @@ export default function WorkboardContent() {
       scheduledEmployees.map((employee) => {
         const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
         const employeeAssignments = dayAssignments
-          .filter((a) => a.employeeId === employee.id)
+          .filter((a) => {
+            const assignmentRecord = a as Assignment & Record<string, unknown>;
+            const snakeEmployeeId =
+              typeof assignmentRecord.employee_id === 'string' ? String(assignmentRecord.employee_id) : '';
+            return a.employeeId === employee.id || snakeEmployeeId === employee.id;
+          })
           .sort((a, b) => a.startTime.localeCompare(b.startTime));
         const assignedMinutes = employeeAssignments.reduce((s, a) => s + a.duration, 0);
         const estimatedHours = employeeAssignments.reduce((sum, assignment) => sum + getEstimatedHoursForAssignment(assignment), 0);
@@ -4355,6 +4372,7 @@ export default function WorkboardContent() {
                       onRemoveAssignment={removeAssignment}
                       weatherWarningsByAssignment={assignmentWeatherWarnings}
                       assignmentTimelineById={assignmentTimelineRecord}
+                      operationalTimezone={operationalTimezone}
                       onStartAssignment={(assignment) => {
                         void startAssignmentTimeline(assignment);
                       }}
@@ -4431,8 +4449,12 @@ export default function WorkboardContent() {
                               const task = taskList.find((candidate) => candidate.id === assignment.taskId);
                               const estimatedHours = getEstimatedHoursForAssignment(assignment);
                               const { canonicalStartAt, canonicalCompletedAt } = getCanonicalActualTimes(assignment);
-                              const canonicalStartHHMM = canonicalStartAt ? isoToLocalHHMM(canonicalStartAt) : '';
-                              const canonicalCompletedHHMM = canonicalCompletedAt ? isoToLocalHHMM(canonicalCompletedAt) : '';
+                              const canonicalStartHHMM = canonicalStartAt
+                                ? storedIsoToWallClock(canonicalStartAt, operationalTimezone)
+                                : '';
+                              const canonicalCompletedHHMM = canonicalCompletedAt
+                                ? storedIsoToWallClock(canonicalCompletedAt, operationalTimezone)
+                                : '';
                               const timelineActualHours =
                                 canonicalStartHHMM && canonicalCompletedHHMM
                                   ? Math.max(0, (timeToMinutes(canonicalCompletedHHMM) - timeToMinutes(canonicalStartHHMM)) / 60)
@@ -4443,11 +4465,11 @@ export default function WorkboardContent() {
                               const canStartTask = statusNormalized === 'planned' && !laneHasInProgress && assignmentIndex === 0;
                               const timeSummary =
                                 canonicalStartAt && canonicalCompletedAt
-                                  ? `${toLocalTimeLabel(canonicalStartAt)} → ${toLocalTimeLabel(canonicalCompletedAt)} (${actualHours.toFixed(1)}h)`
+                                  ? `${toLocalTimeLabel(canonicalStartAt, operationalTimezone)} → ${toLocalTimeLabel(canonicalCompletedAt, operationalTimezone)} (${actualHours.toFixed(1)}h)`
                                   : canonicalStartAt
-                                    ? `Started: ${toLocalTimeLabel(canonicalStartAt)}`
+                                    ? `Started: ${toLocalTimeLabel(canonicalStartAt, operationalTimezone)}`
                                     : canonicalCompletedAt
-                                      ? `Completed: ${toLocalTimeLabel(canonicalCompletedAt)}`
+                                      ? `Completed: ${toLocalTimeLabel(canonicalCompletedAt, operationalTimezone)}`
                                       : '';
                               return (
                                 <div key={`mobile-assignment-${assignment.id}`} className="relative overflow-visible rounded-xl border bg-muted/20 p-2.5">
@@ -4513,9 +4535,9 @@ export default function WorkboardContent() {
                                       }
                                       setTimelineEditAssignmentId(assignment.id ?? null);
                                       const startInputValue =
-                                        toTimeInputValue(canonicalStartAt) ||
-                                        toTimeInputValue(String(assignment.startTime ?? ''));
-                                      const endInputValue = toTimeInputValue(canonicalCompletedAt);
+                                        toTimeInputValue(canonicalStartAt, operationalTimezone) ||
+                                        toTimeInputValue(String(assignment.startTime ?? ''), operationalTimezone);
+                                      const endInputValue = toTimeInputValue(canonicalCompletedAt, operationalTimezone);
                                       setTimelineEditStart(startInputValue);
                                       setTimelineEditEnd(endInputValue);
                                     }}
@@ -4560,7 +4582,14 @@ export default function WorkboardContent() {
                                       </button>
                                     </div>
                                   ) : null}
-                                  <div className="mt-2">
+                                  <div
+                                    className="mt-2 cursor-pointer rounded-md p-1 hover:bg-muted/40"
+                                    onClick={() =>
+                                      setActualHoursMenuAssignmentId((current) =>
+                                        current === assignment.id ? null : assignment.id,
+                                      )
+                                    }
+                                  >
                                     {actualHours <= 0 ? (
                                       <div className="flex flex-wrap items-center gap-1.5">
                                         <span className="text-xs text-muted-foreground">Log actual time:</span>
@@ -4568,8 +4597,9 @@ export default function WorkboardContent() {
                                           <button
                                             key={`actual-hours-${assignment.id}-${value}`}
                                             type="button"
-                                            className="h-7 rounded-full border px-2 text-xs font-medium"
-                                            onClick={() => {
+                                            className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-white active:scale-95"
+                                            onClick={(event) => {
+                                              event.stopPropagation();
                                               void setAssignmentActualHours(assignment, value);
                                               setActualHoursMenuAssignmentId(null);
                                               setActualHoursCustomInputByAssignment((current) => {
@@ -4584,12 +4614,13 @@ export default function WorkboardContent() {
                                         ))}
                                         <button
                                           type="button"
-                                          className="h-7 rounded-full border px-2 text-xs font-medium"
-                                          onClick={() =>
+                                          className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-white active:scale-95"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
                                             setActualHoursMenuAssignmentId((current) =>
                                               current === assignment.id ? null : assignment.id,
-                                            )
-                                          }
+                                            );
+                                          }}
                                         >
                                           Other
                                         </button>
@@ -4602,11 +4633,12 @@ export default function WorkboardContent() {
                                         <button
                                           type="button"
                                           className="text-xs text-primary underline-offset-2 hover:underline"
-                                          onClick={() =>
+                                          onClick={(event) => {
+                                            event.stopPropagation();
                                             setActualHoursMenuAssignmentId((current) =>
                                               current === assignment.id ? null : assignment.id,
-                                            )
-                                          }
+                                            );
+                                          }}
                                         >
                                           Edit
                                         </button>
@@ -4619,8 +4651,9 @@ export default function WorkboardContent() {
                                         <button
                                           key={`actual-hours-${assignment.id}-${value}`}
                                           type="button"
-                                          className="h-7 rounded-full border px-2 text-xs font-medium"
-                                          onClick={() => {
+                                          className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-white active:scale-95"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
                                             void setAssignmentActualHours(assignment, value);
                                             setActualHoursMenuAssignmentId(null);
                                             setActualHoursCustomInputByAssignment((current) => {
@@ -4638,6 +4671,7 @@ export default function WorkboardContent() {
                                         min={0}
                                         step={0.25}
                                         value={actualHoursCustomInputByAssignment[assignment.id] ?? ''}
+                                        onClick={(event) => event.stopPropagation()}
                                         onChange={(event) =>
                                           setActualHoursCustomInputByAssignment((current) => ({
                                             ...current,
@@ -4645,12 +4679,13 @@ export default function WorkboardContent() {
                                           }))
                                         }
                                         placeholder="Other"
-                                        className="h-7 w-20 rounded-md border border-input bg-background px-2 text-xs"
+                                        className="h-8 w-24 rounded-md border border-input bg-background px-2 text-sm"
                                       />
                                       <button
                                         type="button"
-                                        className="h-7 rounded-full border px-2 text-xs font-medium"
-                                        onClick={() => {
+                                        className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-white active:scale-95"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
                                           const value = actualHoursCustomInputByAssignment[assignment.id] ?? '';
                                           const parsed = Number(value);
                                           if (!Number.isFinite(parsed) || parsed < 0) {

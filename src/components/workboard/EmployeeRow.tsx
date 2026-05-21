@@ -6,7 +6,7 @@ import { TaskBlock } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Pencil, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Employee, Assignment, Task } from '@/data/seedData';
-import { isoToLocalHHMM, isoToLocalTimeLabel } from '@/lib/timeWorkflow';
+import { storedIsoToWallClock, storedIsoToWallClockLabel } from '@/lib/timeWorkflow';
 
 interface EmployeeRowProps {
   employee: Employee;
@@ -30,6 +30,7 @@ interface EmployeeRowProps {
   coveragePercent?: number;
   weatherWarningsByAssignment?: Record<string, Array<{ level: 'warning' | 'danger'; message: string }>>;
   assignmentTimelineById?: Record<string, { actualStartAt: string | null; actualCompletedAt: string | null }>;
+  operationalTimezone?: string;
   onStartAssignment?: (assignment: Assignment) => void;
   onCompleteAssignment?: (assignment: Assignment, employeeAssignments: Assignment[]) => void;
   onSaveAssignmentTimes?: (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => void;
@@ -80,6 +81,7 @@ export function EmployeeRow({
   coveragePercent,
   weatherWarningsByAssignment,
   assignmentTimelineById,
+  operationalTimezone = 'America/New_York',
   onStartAssignment,
   onCompleteAssignment,
   onSaveAssignmentTimes,
@@ -93,13 +95,12 @@ export function EmployeeRow({
 
   const formatLabel = (value?: string | null) => {
     if (!value) return '';
-    // Persisted UTC timestamptz -> local operational label.
-    return isoToLocalTimeLabel(value);
+    return storedIsoToWallClockLabel(value, operationalTimezone);
   };
 
   const toInputValue = (value?: string | null) => {
     if (!value) return '';
-    return isoToLocalHHMM(value);
+    return storedIsoToWallClock(value, operationalTimezone);
   };
 
   const getEstimatedHours = (assignment: Assignment) => {
@@ -113,8 +114,8 @@ export function EmployeeRow({
     const assignmentRecord = assignment as Assignment & Record<string, unknown>;
     // Prefer timestamps first so visible runtime reflects edited actual start/end immediately.
     if (startAt && completedAt) {
-      const startHHMM = isoToLocalHHMM(startAt);
-      const endHHMM = isoToLocalHHMM(completedAt);
+      const startHHMM = storedIsoToWallClock(startAt, operationalTimezone);
+      const endHHMM = storedIsoToWallClock(completedAt, operationalTimezone);
       if (startHHMM && endHHMM) {
         const diffMinutes = timeToMinutes(endHHMM) - timeToMinutes(startHHMM);
         if (diffMinutes >= 0) return diffMinutes / 60;
@@ -204,10 +205,24 @@ export function EmployeeRow({
                 const actualHours = getActualHours(assignment, actualStartSource, actualCompletedSource);
                 const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
                 const isFirstPlannedTask = assignmentStatus === 'planned' && !hasInProgress && sortedAssignments[0]?.id === assignment.id;
-                return task ? (
+                return (
                   <div key={assignment.id} className="space-y-1">
                     <TaskBlock
-                      task={task}
+                      task={
+                        task ?? {
+                          id: assignment.taskId ?? assignment.id,
+                          propertyId: assignment.propertyId ?? '',
+                          name: assignment.title || 'Untitled task',
+                          category: 'General',
+                          estimatedHours: Math.max(0, Number(assignment.estimatedHours ?? 0)),
+                          status: 'active',
+                          priority: 3,
+                          weatherDependency: false,
+                          safetySensitive: false,
+                          icon: 'clipboard',
+                          color: '#6b7280',
+                        }
+                      }
                       assignment={assignment}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
                       weatherWarnings={weatherWarningsByAssignment?.[assignment.id ?? ''] ?? []}
@@ -307,7 +322,7 @@ export function EmployeeRow({
                       </div>
                     ) : null}
                   </div>
-                ) : null;
+                );
               })
             )}
           </div>
