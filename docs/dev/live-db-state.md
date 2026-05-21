@@ -419,6 +419,93 @@ If you need a column that is NOT in this file:
 
 ---
 
+## application_areas
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| id | text | NO | | PK |
+| name | text | NO | | |
+| property | text | NO | | |
+| weatherLocationId | text | NO | | |
+
+---
+
+## chemical_products
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| id | text | NO | | PK |
+| name | text | NO | | |
+| productType | text | NO | | |
+| targetUse | text | NO | | |
+| rateUnit | text | NO | | |
+| epaRegistrationNumber | text | NO | '' | |
+| formulation | text | NO | '' | |
+| signalWord | text | NO | '' | |
+| restrictedUse | boolean | NO | false | |
+| reentryIntervalHours | numeric | NO | 0 | REI |
+| preHarvestIntervalHours | numeric | NO | 0 | PHI |
+| defaultApplicationMethod | text | NO | '' | |
+| org_id | uuid | YES | | FK -> organizations |
+
+---
+
+## chemical_application_logs
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| id | text | NO | | PK |
+| applicationDate | date | NO | | |
+| startTime | text | NO | | |
+| endTime | text | NO | | |
+| areaId | text | NO | | FK -> application_areas |
+| targetPest | text | NO | | |
+| agronomicPurpose | text | NO | | |
+| carrierVolume | numeric | NO | 0 | |
+| areaTreated | numeric | NO | 0 | |
+| areaUnit | text | NO | | |
+| applicatorId | text | NO | | FK -> employees |
+| equipmentUsedId | text | YES | | |
+| weatherLogId | text | YES | | |
+| notes | text | NO | '' | |
+| applicationTimestamp | text | NO | '' | |
+| applicationMethod | text | NO | '' | |
+| totalMixVolume | numeric | NO | 0 | |
+| applicatorLicenseNumber | text | NO | '' | |
+| supervisorName | text | NO | '' | |
+| supervisorLicenseNumber | text | NO | '' | |
+| weatherConditionsSummary | text | NO | '' | |
+| windDirection | text | NO | '' | |
+| windSpeedAtApplication | numeric | NO | 0 | |
+| temperatureAtApplication | numeric | NO | 0 | |
+| humidityAtApplication | numeric | NO | 0 | |
+| restrictedEntryUntil | text | NO | '' | |
+| siteConditions | text | NO | '' | |
+| org_id | uuid | YES | | FK -> organizations |
+
+---
+
+## chemical_application_tank_mix_items
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| id | text | NO | | PK |
+| applicationLogId | text | NO | | FK -> chemical_application_logs |
+| productId | text | NO | | FK -> chemical_products |
+| rateApplied | numeric | NO | 0 | |
+| rateUnit | text | NO | | |
+| totalQuantityUsed | numeric | NO | 0 | |
+| mixOrder | integer | NO | 1 | |
+| org_id | uuid | YES | | FK -> organizations |
+
+---
+
+## CRITICAL NOTES — chemical application tables
+1. ALL column names are camelCase (not snake_case) EXCEPT org_id
+2. id columns are TEXT type, not UUID
+3. No created_at or updated_at columns exist
+4. No foreign key constraints to employees/equipment tables (soft references via text IDs)
+5. Compliance query must use supervisorLicenseNumber NOT supervisor_license_number
+6. Compliance query must use restrictedEntryUntil NOT restricted_entry_until
+
+---
+
 ## beta_feedback
 | Column | Type | Nullable | Default |
 |--------|------|----------|---------|
