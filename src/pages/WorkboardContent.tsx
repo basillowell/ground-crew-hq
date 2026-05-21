@@ -1818,17 +1818,21 @@ export default function WorkboardContent() {
       // Convert local workflow time to UTC ISO once before persisting to timestamptz.
       const startTs = startInput ? wallClockToStoredIso(dateStr, startInput, operationalTimezone) : null;
       const endTs = endInput ? wallClockToStoredIso(dateStr, endInput, operationalTimezone) : null;
+      const normalizedStatus = normalizeAssignmentStatus(assignment.status);
       if (startInput && endInput) {
         if (endInput < startInput) {
           toast.error('Completed time cannot be before start time.');
           return;
         }
       }
+      if (!startInput && !endInput) {
+        toast.error('Enter a start or complete time before saving.');
+        return;
+      }
 
-      const payload: Record<string, unknown> = {
-        actual_start_at: startTs,
-        actual_completed_at: endTs,
-      };
+      const payload: Record<string, unknown> = {};
+      if (startInput) payload.actual_start_at = startTs;
+      if (endInput) payload.actual_completed_at = endTs;
       if (startInput && endInput) {
         const startMinutes = timeToMinutes(startInput);
         const endMinutes = timeToMinutes(endInput);
@@ -1852,7 +1856,11 @@ export default function WorkboardContent() {
       }
       const returnedStartAt = typeof data?.actual_start_at === 'string' ? data.actual_start_at : startTs;
       const returnedCompletedAt =
-        typeof data?.actual_completed_at === 'string' ? data.actual_completed_at : endTs;
+        typeof data?.actual_completed_at === 'string'
+          ? data.actual_completed_at
+          : endInput
+            ? endTs
+            : getCanonicalActualTimes(assignment).canonicalCompletedAt;
       const derivedHours =
         typeof data?.actual_hours === 'number'
           ? Number(data.actual_hours)
@@ -1860,8 +1868,8 @@ export default function WorkboardContent() {
             ? Number(payload.actual_hours)
             : undefined;
       syncTimelineCaches(assignment.id, {
-        actualStartAt: returnedStartAt,
-        actualCompletedAt: returnedCompletedAt,
+        actualStartAt: startInput ? returnedStartAt : undefined,
+        actualCompletedAt: endInput ? returnedCompletedAt : undefined,
         actualHours: derivedHours,
       });
       if (import.meta.env.DEV) {
@@ -1904,7 +1912,11 @@ export default function WorkboardContent() {
         }
       }
 
-      toast.success('Actual times updated.');
+      if (normalizedStatus === 'in-progress' && startInput && !endInput) {
+        toast.success('Started time updated.');
+      } else {
+        toast.success('Actual times updated.');
+      }
       await queryClient.invalidateQueries({ queryKey: ['assignments'] });
       await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
