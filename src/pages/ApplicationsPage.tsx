@@ -417,6 +417,7 @@ export default function ApplicationsPage() {
       rateUnit: item.rateUnit,
       totalQuantityUsed: numberValue(item.totalQuantityUsed),
       mixOrder: index + 1,
+      org_id: currentUser?.orgId,
     }));
 
     try {
