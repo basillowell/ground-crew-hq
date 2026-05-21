@@ -1131,20 +1131,24 @@ export async function fetchChemicalApplicationLogs(startDate: string, endDate: s
 }
 
 export async function fetchApplicationAreas(propertyId?: string): Promise<ApplicationArea[]> {
-  const client = ensureSupabase();
-  const { data, error } = await client.from('application_areas').select('*').order('name');
-  if (error) throw error;
-  const rows = (data as (DbApplicationArea & { property_id?: string | null; propertyId?: string | null })[]) ?? [];
-  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  const filtered = scopedPropertyId
-    ? rows.filter(
-        (row) =>
-          row.property_id === scopedPropertyId ||
-          row.propertyId === scopedPropertyId ||
-          row.property === scopedPropertyId,
-      )
-    : rows;
-  return filtered.map(toApplicationArea);
+  try {
+    const client = ensureSupabase();
+    const { data, error } = await client.from('application_areas').select('*').order('name');
+    if (error) return [];
+    const rows = (data as (DbApplicationArea & { property_id?: string | null; propertyId?: string | null })[]) ?? [];
+    const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
+    const filtered = scopedPropertyId
+      ? rows.filter(
+          (row) =>
+            row.property_id === scopedPropertyId ||
+            row.propertyId === scopedPropertyId ||
+            row.property === scopedPropertyId,
+        )
+      : rows;
+    return filtered.map(toApplicationArea);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchChemicalProducts(): Promise<ChemicalProduct[]> {
@@ -1494,6 +1498,7 @@ export function useApplicationAreas(propertyId?: string) {
     queryKey: ['application-areas', propertyId ?? 'all'],
     queryFn: () => fetchApplicationAreas(propertyId),
     staleTime: 1000 * 60 * 10,
+    retry: false,
   });
 }
 
@@ -1502,6 +1507,7 @@ export function useChemicalProducts() {
     queryKey: ['chemical-products'],
     queryFn: fetchChemicalProducts,
     staleTime: 1000 * 60 * 10,
+    retry: false,
   });
 }
 
@@ -1520,6 +1526,7 @@ export function useChemicalApplicationTankMixItems() {
     queryKey: ['chemical-application-tank-mix-items'],
     queryFn: fetchChemicalApplicationTankMixItems,
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 }
 

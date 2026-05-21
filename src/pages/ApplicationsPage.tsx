@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/sonner';
 import { PageHeader } from '@/components/shared';
 import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import {
@@ -181,6 +182,8 @@ export default function ApplicationsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<ApplicationDraft>(emptyDraft);
   const [draftMixItems, setDraftMixItems] = useState<DraftMixItem[]>([{ ...emptyMixItem }]);
+  const [saving, setSaving] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   useEffect(() => {
     document.title = 'Chemical Logs — Ground Crew HQ';
@@ -208,6 +211,15 @@ export default function ApplicationsPage() {
       })),
     );
   }, [applicationAreas, employees, equipmentUnits, weatherLogs, chemicalProducts]);
+
+  useEffect(() => {
+    if (!draft.applicatorId) return;
+    const selectedEmployee = employees.find((employee) => employee.id === draft.applicatorId);
+    if (!selectedEmployee) return;
+    const knownLicense = (selectedEmployee as Employee & { licenseNumber?: string }).licenseNumber;
+    if (!knownLicense || draft.applicatorLicenseNumber) return;
+    setDraft((current) => ({ ...current, applicatorLicenseNumber: knownLicense }));
+  }, [draft.applicatorId, draft.applicatorLicenseNumber, employees]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
@@ -294,15 +306,38 @@ export default function ApplicationsPage() {
   }
 
   async function saveApplication() {
-    const logId = `cal-${Date.now()}`;
+    const missingFields: string[] = [];
+    if (!draft.applicationDate) missingFields.push('Application Date');
+    if (!draft.startTime) missingFields.push('Start Time');
+    if (!draft.endTime) missingFields.push('End Time');
+    if (!draft.areaId) missingFields.push('Area / Location Treated');
+    if (!draft.applicatorId) missingFields.push('Applicator');
+    if (!draft.areaTreated || numberValue(draft.areaTreated) <= 0) missingFields.push('Area Treated');
+    if (!draft.areaUnit) missingFields.push('Area Unit');
+    if (!draft.applicationMethod) missingFields.push('Application Method');
+
+    if (missingFields.length > 0) {
+      setValidationErrors([`Missing required fields: ${missingFields.join(', ')}`]);
+      return;
+    }
+    if (draft.endTime <= draft.startTime) {
+      setValidationErrors(['End Time must be after Start Time.']);
+      return;
+    }
+
+    setValidationErrors([]);
+    setSaving(true);
+
+    const logId = crypto.randomUUID();
     const weatherSource = weatherLogs.find((log) => log.id === draft.weatherLogId) ?? snapshotLog;
     const restrictedEntryUntil = buildRestrictedEntry(draft, chemicalProducts, draftMixItems);
+    const applicationTimestamp = `${draft.applicationDate}T${draft.startTime}:00-04:00`;
     const nextLog: ChemicalApplicationLog = {
       id: logId,
       applicationDate: draft.applicationDate,
       startTime: draft.startTime,
       endTime: draft.endTime,
-      applicationTimestamp: `${draft.applicationDate}T${draft.startTime}:00`,
+      applicationTimestamp,
       areaId: draft.areaId,
       targetPest: draft.targetPest,
       agronomicPurpose: draft.agronomicPurpose,
@@ -337,7 +372,7 @@ export default function ApplicationsPage() {
       notes: draft.notes,
     };
     const nextMix = draftMixItems.map((item, index) => ({
-      id: `mix-${Date.now()}-${index}`,
+      id: crypto.randomUUID(),
       applicationLogId: logId,
       productId: item.productId,
       rateApplied: numberValue(item.rateApplied),
@@ -347,19 +382,33 @@ export default function ApplicationsPage() {
     }));
 
     try {
-      await supabase.from('chemical_application_logs').upsert({
+      const { error: logError } = await supabase.from('chemical_application_logs').upsert({
         ...nextLog,
         org_id: currentUser?.orgId,
       });
-    } catch {
+      if (logError) {
+        toast.error(`Failed to save application log: ${logError.message}`);
+        setSaving(false);
+        return;
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save application log.');
+      setSaving(false);
       return;
     }
     for (const mix of nextMix) {
-      await supabase.from('chemical_application_tank_mix_items').upsert(mix);
+      const { error } = await supabase.from('chemical_application_tank_mix_items').upsert(mix);
+      if (error) {
+        toast.error(`Failed to save tank mix item: ${error.message}`);
+        setSaving(false);
+        return;
+      }
     }
     await queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] });
     await queryClient.invalidateQueries({ queryKey: ['chemical-application-tank-mix-items'] });
+    toast.success('Chemical application logged');
     setDialogOpen(false);
+    setSaving(false);
     setDraft({
       ...emptyDraft,
       areaId: applicationAreas[0]?.id ?? '',
@@ -644,28 +693,34 @@ export default function ApplicationsPage() {
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Application Date</label>
+                  <label className="text-xs font-medium text-muted-foreground">Application Date *</label>
                   <Input className="mt-1" type="date" value={draft.applicationDate} onChange={(e) => setDraft((current) => ({ ...current, applicationDate: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Start Time</label>
+                  <label className="text-xs font-medium text-muted-foreground">Start Time *</label>
                   <Input className="mt-1" type="time" value={draft.startTime} onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">End Time</label>
+                  <label className="text-xs font-medium text-muted-foreground">End Time *</label>
                   <Input className="mt-1" type="time" value={draft.endTime} onChange={(e) => setDraft((current) => ({ ...current, endTime: e.target.value }))} />
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Area / Location Treated</label>
-                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.areaId} onChange={(e) => setDraft((current) => ({ ...current, areaId: e.target.value }))}>
-                    {applicationAreas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
-                  </select>
+                  <label className="text-xs font-medium text-muted-foreground">Area / Location Treated *</label>
+                  {applicationAreas.length > 0 ? (
+                    <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.areaId} onChange={(e) => setDraft((current) => ({ ...current, areaId: e.target.value }))}>
+                      {applicationAreas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
+                    </select>
+                  ) : (
+                    <div className="mt-1 rounded-md border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      No treatment locations configured
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Applicator</label>
+                  <label className="text-xs font-medium text-muted-foreground">Applicator *</label>
                   <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.applicatorId} onChange={(e) => setDraft((current) => ({ ...current, applicatorId: e.target.value }))}>
                     {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
                   </select>
@@ -690,18 +745,18 @@ export default function ApplicationsPage() {
                   <Input className="mt-1" type="number" value={draft.totalMixVolume} onChange={(e) => setDraft((current) => ({ ...current, totalMixVolume: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Area Treated</label>
+                  <label className="text-xs font-medium text-muted-foreground">Area Treated *</label>
                   <Input className="mt-1" type="number" value={draft.areaTreated} onChange={(e) => setDraft((current) => ({ ...current, areaTreated: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Area Unit</label>
+                  <label className="text-xs font-medium text-muted-foreground">Area Unit *</label>
                   <Input className="mt-1" value={draft.areaUnit} onChange={(e) => setDraft((current) => ({ ...current, areaUnit: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Equipment Used</label>
                   <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.equipmentUsedId} onChange={(e) => setDraft((current) => ({ ...current, equipmentUsedId: e.target.value }))}>
                     <option value="">No equipment selected</option>
-                    {equipmentUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unitNumber}</option>)}
+                    {equipmentUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unitNumber || unit.name || unit.id}</option>)}
                   </select>
                 </div>
               </div>
@@ -713,7 +768,7 @@ export default function ApplicationsPage() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">Application Method</label>
+                    <label className="text-xs font-medium text-muted-foreground">Application Method *</label>
                     <Input className="mt-1" value={draft.applicationMethod} onChange={(e) => setDraft((current) => ({ ...current, applicationMethod: e.target.value }))} />
                   </div>
                   <div>
@@ -748,9 +803,9 @@ export default function ApplicationsPage() {
                           <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={item.productId} onChange={(e) => updateMixItem(index, { productId: e.target.value })}>
                             {chemicalProducts.map((productOption) => <option key={productOption.id} value={productOption.id}>{productOption.name}</option>)}
                           </select>
-                          <Input type="number" placeholder="Rate applied" value={item.rateApplied} onChange={(e) => updateMixItem(index, { rateApplied: e.target.value })} />
-                          <Input placeholder="Rate unit" value={item.rateUnit} onChange={(e) => updateMixItem(index, { rateUnit: e.target.value })} />
-                          <Input type="number" placeholder="Total quantity used" value={item.totalQuantityUsed} onChange={(e) => updateMixItem(index, { totalQuantityUsed: e.target.value })} />
+                          <Input type="number" placeholder="Rate" value={item.rateApplied} onChange={(e) => updateMixItem(index, { rateApplied: e.target.value })} />
+                          <Input placeholder="Unit" value={item.rateUnit} onChange={(e) => updateMixItem(index, { rateUnit: e.target.value })} />
+                          <Input type="number" placeholder="Total amount" value={item.totalQuantityUsed} onChange={(e) => updateMixItem(index, { totalQuantityUsed: e.target.value })} />
                           <Button variant="ghost" size="sm" onClick={() => removeMixItem(index)}>Remove</Button>
                         </div>
                         {product && (
@@ -853,9 +908,17 @@ export default function ApplicationsPage() {
             </div>
           </div>
 
-          <div className="mt-4 flex justify-end gap-2">
+          {validationErrors.length > 0 ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {validationErrors.map((error) => (
+                <p key={error}>{error}</p>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t bg-background/95 pt-3 backdrop-blur">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveApplication}>Save Application Log</Button>
+            <Button onClick={saveApplication} disabled={saving}>{saving ? 'Saving...' : 'Save Application Log'}</Button>
           </div>
         </DialogContent>
       </Dialog>
