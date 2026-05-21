@@ -2372,6 +2372,10 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     estimated_hours: 0,
   });
   const [savingRecurringTaskId, setSavingRecurringTaskId] = useState<string | null>(null);
+  const signalTaskLibraryUpdate = () => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('ground-crew-task-library-updated-at', String(Date.now()));
+  };
 
   const dayOptions = [
     { key: 'mon', label: 'Mon' },
@@ -2476,6 +2480,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     setNewCategory('General Maintenance');
     setNewPriority('2');
     setNewEstimatedHours('1');
+    signalTaskLibraryUpdate();
     toast.success(`Task added: ${newName.trim()}`);
   };
 
@@ -2491,6 +2496,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     }
     const deletedTaskName = tasks.find((task) => task.id === taskId)?.name ?? 'Task';
     setTasks((current) => current.filter((task) => task.id !== taskId));
+    signalTaskLibraryUpdate();
     toast.success(`Task deleted: ${deletedTaskName}`);
   };
 
@@ -2539,6 +2545,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
           : task,
       ),
     );
+    signalTaskLibraryUpdate();
     toast.success(`Task updated: ${editDraft.name.trim()}`);
     cancelEditTask();
   };
@@ -2625,10 +2632,11 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   };
 
   return (
-    <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+    <div style={{ display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 600 }}>Task Library</h3>
-        <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>Reusable tasks for daily workflow planning.</p>
+        <p style={{ margin: '0 0 4px', color: '#6b7280', fontSize: '13px' }}>Reusable tasks for daily workflow planning.</p>
+        <p style={{ margin: '0 0 10px', color: '#6b7280', fontSize: '12px' }}>Tasks created here feed the Workboard assignment dropdown.</p>
 
         {!orgId || loading ? (
           <PageSkeleton />
@@ -2641,7 +2649,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', textAlign: 'left' }}>
-                  <th style={{ padding: '8px' }}>Name</th>
+                  <th style={{ padding: '8px' }}>Task name</th>
                   <th style={{ padding: '8px' }}>Category</th>
                   <th style={{ padding: '8px' }}>Priority</th>
                   <th style={{ padding: '8px' }}>Est. Hours</th>
@@ -2662,6 +2670,48 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                         task.name
                       )}
                     </td>
+                    <td style={{ padding: '8px' }}>
+                      {editingTaskId === task.id ? (
+                        <select
+                          value={editDraft.category}
+                          onChange={(event) => setEditDraft((cur) => ({ ...cur, category: event.target.value }))}
+                        >
+                          {taskCategoryOptions.map((category) => (
+                            <option key={`edit-task-category-${category}`} value={category}>
+                              {category}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        task.category ?? 'General Maintenance'
+                      )}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {editingTaskId === task.id ? (
+                        <select
+                          value={String(editDraft.priority)}
+                          onChange={(event) => setEditDraft((cur) => ({ ...cur, priority: Number(event.target.value) }))}
+                        >
+                          <option value="1">High</option>
+                          <option value="2">Med</option>
+                          <option value="3">Low</option>
+                        </select>
+                      ) : task.priority === 1 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      {editingTaskId === task.id ? (
+                        <input
+                          type="number"
+                          step="0.25"
+                          value={String(editDraft.estimated_hours)}
+                          onChange={(event) =>
+                            setEditDraft((cur) => ({ ...cur, estimated_hours: Number(event.target.value || '0') }))
+                          }
+                        />
+                      ) : (
+                        Number(task.estimated_hours ?? 0).toFixed(1)
+                      )}
+                    </td>
                     <td style={{ padding: '8px', minWidth: '260px' }}>
                       <div style={{ display: 'grid', gap: '8px' }}>
                         <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -2670,7 +2720,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                             checked={Boolean(recurringDrafts[task.id]?.enabled)}
                             onChange={(event) => setRecurringEnabled(task.id, event.target.checked)}
                           />
-                          <span>{recurringDrafts[task.id]?.enabled ? 'Enabled' : 'Off'}</span>
+                          <span>Recurring: {recurringDrafts[task.id]?.enabled ? 'On' : 'Off'}</span>
                         </label>
                         {recurringDrafts[task.id]?.enabled ? (
                           <>
@@ -2727,61 +2777,11 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                               style={{ width: 'fit-content', borderRadius: '6px', border: '1px solid #d1d5db', padding: '4px 10px', background: '#fff' }}
                               disabled={savingRecurringTaskId === task.id}
                             >
-                              {savingRecurringTaskId === task.id ? 'Saving...' : 'Save recurring'}
+                              {savingRecurringTaskId === task.id ? 'Saving...' : 'Apply schedule'}
                             </button>
                           </>
-                        ) : (
-                          <button
-                            onClick={() => void saveRecurringRule(task.id)}
-                            style={{ width: 'fit-content', borderRadius: '6px', border: '1px solid #d1d5db', padding: '4px 10px', background: '#fff' }}
-                            disabled={savingRecurringTaskId === task.id}
-                          >
-                            {savingRecurringTaskId === task.id ? 'Saving...' : 'Apply'}
-                          </button>
-                        )}
+                        ) : null}
                       </div>
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      {editingTaskId === task.id ? (
-                        <select
-                          value={editDraft.category}
-                          onChange={(event) => setEditDraft((cur) => ({ ...cur, category: event.target.value }))}
-                        >
-                          {taskCategoryOptions.map((category) => (
-                            <option key={`edit-task-category-${category}`} value={category}>
-                              {category}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        task.category ?? 'General Maintenance'
-                      )}
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      {editingTaskId === task.id ? (
-                        <select
-                          value={String(editDraft.priority)}
-                          onChange={(event) => setEditDraft((cur) => ({ ...cur, priority: Number(event.target.value) }))}
-                        >
-                          <option value="1">High</option>
-                          <option value="2">Med</option>
-                          <option value="3">Low</option>
-                        </select>
-                      ) : task.priority === 1 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      {editingTaskId === task.id ? (
-                        <input
-                          type="number"
-                          step="0.25"
-                          value={String(editDraft.estimated_hours)}
-                          onChange={(event) =>
-                            setEditDraft((cur) => ({ ...cur, estimated_hours: Number(event.target.value || '0') }))
-                          }
-                        />
-                      ) : (
-                        Number(task.estimated_hours ?? 0).toFixed(1)
-                      )}
                     </td>
                     <td style={{ padding: '8px' }}>
                       {editingTaskId === task.id ? (
@@ -2804,7 +2804,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
         )}
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px', display: 'grid', gap: '8px' }}>
         <strong>Add task</strong>
         <input placeholder="Task name" value={newName} onChange={(event) => setNewName(event.target.value)} />
         <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr 1fr' }}>

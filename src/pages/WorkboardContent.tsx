@@ -870,7 +870,7 @@ export default function WorkboardContent() {
   const taskList = useMemo(
     () =>
       (tasksQuery.data ?? [])
-        .filter((t) => t.status === 'active')
+        .filter((t) => String(t.status ?? 'active').toLowerCase() !== 'inactive')
         .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999) || a.name.localeCompare(b.name)),
     [tasksQuery.data],
   );
@@ -1176,25 +1176,53 @@ export default function WorkboardContent() {
     if (!supabase || !currentUser?.orgId) return;
     setTaskLibraryLoading(true);
     setTaskLibraryError(null);
-    const { data, error } = await supabase
+    let query = supabase
       .from('tasks')
-      .select('id, name, category, estimated_hours')
+      .select('id, name, category, estimated_hours, status, property_id')
       .eq('org_id', currentUser.orgId)
-      .eq('status', 'active')
-      .order('category', { ascending: true })
+      .order('priority', { ascending: true })
       .order('name', { ascending: true });
+    if (effectivePropertyId && effectivePropertyId !== 'all') {
+      query = query.eq('property_id', effectivePropertyId);
+    }
+    const { data, error } = await query;
     if (error) {
       setTaskLibraryError(error.message);
       setTaskLibrary([]);
     } else {
-      setTaskLibrary((data ?? []) as TaskLibraryItem[]);
+      const normalized = ((data ?? []) as Array<TaskLibraryItem & { status?: string | null }>)
+        .filter((task) => String(task.status ?? 'active').toLowerCase() !== 'inactive')
+        .map((task) => ({
+          id: task.id,
+          name: task.name,
+          category: task.category,
+          estimated_hours: task.estimated_hours,
+        }));
+      setTaskLibrary(normalized);
     }
     setTaskLibraryLoading(false);
-  }, [currentUser?.orgId]);
+  }, [currentUser?.orgId, effectivePropertyId]);
 
   useEffect(() => {
     void fetchTaskLibrary();
   }, [fetchTaskLibrary]);
+
+  useEffect(() => {
+    if (!assignmentDialogOpen) return;
+    void fetchTaskLibrary();
+    void tasksQuery.refetch();
+  }, [assignmentDialogOpen, fetchTaskLibrary, tasksQuery.refetch]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== 'ground-crew-task-library-updated-at') return;
+      void fetchTaskLibrary();
+      void tasksQuery.refetch();
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [fetchTaskLibrary, tasksQuery.refetch]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -2680,6 +2708,23 @@ export default function WorkboardContent() {
     weatherLogs,
     weatherSnapshot,
   ]);
+
+  const activeWorkflowIssueCount = useMemo(() => {
+    const unscheduledCount = unscheduledEmployees.length;
+    const suggestionsCount = suggestedTasks.length;
+    const escalationCount = escalationAlerts.length;
+    return unscheduledCount + suggestionsCount + escalationCount;
+  }, [escalationAlerts.length, suggestedTasks.length, unscheduledEmployees.length]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !currentUser?.orgId) return;
+    const key = `ground-crew-workflow-badge-count:${currentUser.orgId}`;
+    if (activeWorkflowIssueCount > 0) {
+      window.localStorage.setItem(key, String(activeWorkflowIssueCount));
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  }, [activeWorkflowIssueCount, currentUser?.orgId]);
 
   const dismissSuggestedTask = useCallback((id: string) => {
     setDismissedSuggestionIds((current) => (current.includes(id) ? current : [...current, id]));
@@ -5275,8 +5320,9 @@ export default function WorkboardContent() {
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-assignment-task"
               >
-                {tasksLoading || taskLibrary.length === 0 ? (
-                  <option value="" disabled>No tasks yet - manage task library in Settings</option>
+                {tasksLoading ? <option value="" disabled>Loading tasks...</option> : null}
+                {!tasksLoading && taskLibrary.length === 0 ? (
+                  <option value="" disabled>No tasks in library — add tasks in Settings → Tasks</option>
                 ) : null}
                 {orderedTaskCategories.map((category) => (
                   <optgroup key={category} label={category}>
