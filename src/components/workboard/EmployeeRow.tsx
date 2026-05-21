@@ -91,7 +91,6 @@ export function EmployeeRow({
   const [timelineStartInput, setTimelineStartInput] = useState('');
   const [timelineEndInput, setTimelineEndInput] = useState('');
   const sortedAssignments = [...employeeAssignments];
-  const hasInProgress = sortedAssignments.some((item) => normalizeStatus(item.status) === 'in-progress');
 
   const formatLabel = (value?: string | null) => {
     if (!value) return '';
@@ -204,7 +203,6 @@ export function EmployeeRow({
                 const estimatedHours = getEstimatedHours(assignment);
                 const actualHours = getActualHours(assignment, actualStartSource, actualCompletedSource);
                 const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
-                const isFirstPlannedTask = assignmentStatus === 'planned' && !hasInProgress && sortedAssignments[0]?.id === assignment.id;
                 return (
                   <div key={assignment.id} className="space-y-1">
                     <TaskBlock
@@ -233,7 +231,7 @@ export function EmployeeRow({
                       onRemove={onRemoveAssignment ? () => onRemoveAssignment(assignment.id) : undefined}
                     />
                     <div className="flex flex-wrap items-center gap-2 px-2 pb-1">
-                      {isFirstPlannedTask && onStartAssignment ? (
+                      {assignmentStatus === 'planned' && onStartAssignment ? (
                         <Button
                           type="button"
                           variant="outline"
@@ -264,7 +262,11 @@ export function EmployeeRow({
                             ? `Started: ${startLabel}`
                             : completedLabel
                               ? `Completed: ${completedLabel}`
-                              : 'No actual times logged'}
+                              : assignmentStatus === 'in-progress'
+                                ? 'Started: not logged'
+                                : assignmentStatus === 'completed'
+                                  ? 'Completed: not logged'
+                                  : 'No actual times logged'}
                       </span>
                       {onSaveAssignmentTimes ? (
                         <Button
@@ -272,7 +274,8 @@ export function EmployeeRow({
                           variant="ghost"
                           size="sm"
                           className="h-7 rounded-full px-2 text-[11px]"
-                          onClick={() => {
+                          onClick={(event) => {
+                            event.stopPropagation();
                             if (editingTimelineAssignmentId === assignment.id) {
                               setEditingTimelineAssignmentId(null);
                               return;
@@ -294,7 +297,7 @@ export function EmployeeRow({
                             type="time"
                             value={timelineStartInput}
                             onChange={(event) => setTimelineStartInput(event.target.value)}
-                            className="ml-1 h-7 rounded border px-2 text-[11px]"
+                            className="ml-1 h-10 w-32 rounded border px-2 text-sm"
                           />
                         </label>
                         <label className="text-[10px] text-muted-foreground">
@@ -303,15 +306,15 @@ export function EmployeeRow({
                             type="time"
                             value={timelineEndInput}
                             onChange={(event) => setTimelineEndInput(event.target.value)}
-                            className="ml-1 h-7 rounded border px-2 text-[11px]"
+                            className="ml-1 h-10 w-32 rounded border px-2 text-sm"
                           />
                         </label>
                         <Button
                           type="button"
-                          variant="outline"
                           size="sm"
-                          className="h-7 rounded-full px-2 text-[11px]"
-                          onClick={() => {
+                          className="h-10 rounded-lg bg-primary px-4 text-sm text-white hover:bg-primary/90"
+                          onClick={(event) => {
+                            event.stopPropagation();
                             onSaveAssignmentTimes(assignment, sortedAssignments, timelineStartInput, timelineEndInput);
                             setEditingTimelineAssignmentId(null);
                           }}

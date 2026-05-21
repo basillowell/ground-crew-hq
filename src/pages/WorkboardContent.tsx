@@ -4412,9 +4412,6 @@ export default function WorkboardContent() {
               {orderedDispatchBoard.map((lane) => {
                 const isExpanded = expandedMobileCrewIds.includes(lane.employee.id);
                 const laneOrderedAssignments = orderEmployeeAssignments(lane.employeeAssignments);
-                const laneHasInProgress = laneOrderedAssignments.some(
-                  (item) => normalizeAssignmentStatus(item.status) === 'in-progress',
-                );
                 return (
                   <div key={`mobile-lane-${lane.employee.id}`} className="rounded-2xl border bg-card">
                     <button
@@ -4445,7 +4442,7 @@ export default function WorkboardContent() {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {laneOrderedAssignments.map((assignment, assignmentIndex) => {
+                            {laneOrderedAssignments.map((assignment) => {
                               const task = taskList.find((candidate) => candidate.id === assignment.taskId);
                               const estimatedHours = getEstimatedHoursForAssignment(assignment);
                               const { canonicalStartAt, canonicalCompletedAt } = getCanonicalActualTimes(assignment);
@@ -4462,7 +4459,7 @@ export default function WorkboardContent() {
                               const actualHours = Math.max(0, Number(assignment.actualHours ?? timelineActualHours ?? 0));
                               const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
                               const statusNormalized = normalizeAssignmentStatus(assignment.status);
-                              const canStartTask = statusNormalized === 'planned' && !laneHasInProgress && assignmentIndex === 0;
+                              const canStartTask = statusNormalized === 'planned';
                               const timeSummary =
                                 canonicalStartAt && canonicalCompletedAt
                                   ? `${toLocalTimeLabel(canonicalStartAt, operationalTimezone)} → ${toLocalTimeLabel(canonicalCompletedAt, operationalTimezone)} (${actualHours.toFixed(1)}h)`
@@ -4552,7 +4549,7 @@ export default function WorkboardContent() {
                                           type="time"
                                           value={timelineEditStart}
                                           onChange={(event) => setTimelineEditStart(event.target.value)}
-                                          className="ml-1 h-7 rounded border px-2 text-[11px]"
+                                          className="ml-1 h-10 w-32 rounded border px-2 text-sm"
                                         />
                                       </label>
                                       <label className="text-[10px] text-muted-foreground">
@@ -4561,12 +4558,12 @@ export default function WorkboardContent() {
                                           type="time"
                                           value={timelineEditEnd}
                                           onChange={(event) => setTimelineEditEnd(event.target.value)}
-                                          className="ml-1 h-7 rounded border px-2 text-[11px]"
+                                          className="ml-1 h-10 w-32 rounded border px-2 text-sm"
                                         />
                                       </label>
                                       <button
                                         type="button"
-                                        className="h-7 rounded-full border px-2 text-xs font-medium"
+                                        className="h-10 rounded-lg bg-primary px-4 text-sm text-white hover:bg-primary/90"
                                         onClick={() => {
                                           void saveAssignmentTimelineTimes(
                                             assignment,
