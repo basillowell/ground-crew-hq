@@ -30,14 +30,12 @@ import {
   type WeatherLocation,
 } from '@/data/seedData';
 import {
-  useApplicationAreas,
   useChemicalApplicationLogsAll,
   useChemicalApplicationTankMixItems,
   useChemicalProducts,
   useEmployees,
   useEquipmentUnits,
   useWeatherDailyLogs,
-  useWeatherLocations,
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
@@ -158,8 +156,6 @@ export default function ApplicationsPage() {
   const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
   const orgScope = currentUser?.orgId;
 
-  const applicationAreasQuery = useApplicationAreas(propertyScope);
-  const weatherLocationsQuery = useWeatherLocations(propertyScope);
   const employeesQuery = useEmployees(propertyScope, orgScope);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgScope);
   const weatherLogsQuery = useWeatherDailyLogs();
@@ -167,8 +163,8 @@ export default function ApplicationsPage() {
   const productsQuery = useChemicalProducts();
   const mixItemsQuery = useChemicalApplicationTankMixItems();
 
-  const applicationAreas = applicationAreasQuery.data ?? [];
-  const weatherLocations = weatherLocationsQuery.data ?? [];
+  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
+  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const employees = employeesQuery.data ?? [];
   const equipmentUnits = equipmentUnitsQuery.data ?? [];
   const weatherLogs = weatherLogsQuery.data ?? [];
@@ -188,6 +184,48 @@ export default function ApplicationsPage() {
   useEffect(() => {
     document.title = 'Chemical Logs — Ground Crew HQ';
   }, []);
+
+  useEffect(() => {
+    if (!orgScope) return;
+    let isMounted = true;
+
+    async function loadApplicationAreas() {
+      const { data, error } = await supabase
+        .from('application_areas')
+        .select('*')
+        .eq('org_id', orgScope)
+        .order('name');
+      if (!isMounted) return;
+      if (error) {
+        setApplicationAreas([]);
+        return;
+      }
+      setApplicationAreas(((data ?? []) as ApplicationArea[]));
+    }
+
+    async function loadWeatherLocations() {
+      let query = supabase
+        .from('weather_locations')
+        .select('id, name, property, area, latitude, longitude, org_id, is_active')
+        .eq('org_id', orgScope)
+        .eq('is_active', true);
+      if (propertyScope) query = query.eq('property', propertyScope);
+      const { data, error } = await query.order('name');
+      if (!isMounted) return;
+      if (error) {
+        setWeatherLocations([]);
+        return;
+      }
+      setWeatherLocations(((data ?? []) as WeatherLocation[]));
+    }
+
+    void loadApplicationAreas();
+    void loadWeatherLocations();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [orgScope, propertyScope]);
 
   useEffect(() => {
     if (!applicationAreas.length && !employees.length && !equipmentUnits.length && !weatherLogs.length && !chemicalProducts.length) {
