@@ -41,6 +41,7 @@ import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import ChemicalSettings from '@/pages/settings/ChemicalSettings';
 
 type DraftMixItem = {
   productId: string;
@@ -176,6 +177,7 @@ export default function ApplicationsPage() {
   const [filterProduct, setFilterProduct] = useState('all');
   const [filterApplicator, setFilterApplicator] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'logs' | 'settings'>('logs');
   const [draft, setDraft] = useState<ApplicationDraft>(emptyDraft);
   const [draftMixItems, setDraftMixItems] = useState<DraftMixItem[]>([{ ...emptyMixItem }]);
   const [saving, setSaving] = useState(false);
@@ -582,26 +584,63 @@ export default function ApplicationsPage() {
             <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">EPA-Compliant Record Keeping</Badge>
           </div>
         }
-        action={{
-          label: 'New Application',
-          onClick: () => {
-            setDialogOpen(true);
-          },
-          icon: <FlaskConical className="h-3.5 w-3.5" />,
-        }}
+        action={
+          activeTab === 'logs'
+            ? {
+                label: 'New Application',
+                onClick: () => {
+                  setDialogOpen(true);
+                },
+                icon: <FlaskConical className="h-3.5 w-3.5" />,
+              }
+            : undefined
+        }
       >
-        <Button variant="outline" size="sm" className="gap-1" onClick={exportForAudit}>
-          <Download className="h-3.5 w-3.5" /> Export for Audit
-        </Button>
-        <Button variant="outline" size="sm" className="gap-1" onClick={exportLogs}>
-          <Download className="h-3.5 w-3.5" /> Export CSV
-        </Button>
-        <Button variant="outline" size="sm" className="gap-1" onClick={() => window.print()}>
-          <Printer className="h-3.5 w-3.5" /> Print
-        </Button>
+        {activeTab === 'logs' ? (
+          <>
+            <Button variant="outline" size="sm" className="gap-1" onClick={exportForAudit}>
+              <Download className="h-3.5 w-3.5" /> Export for Audit
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={exportLogs}>
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => window.print()}>
+              <Printer className="h-3.5 w-3.5" /> Print
+            </Button>
+          </>
+        ) : null}
       </PageHeader>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="flex items-center gap-2 rounded-xl border bg-card p-1">
+        <button
+          type="button"
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'logs'
+              ? 'bg-primary/10 text-primary'
+              : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('logs')}
+        >
+          Logs
+        </button>
+        <button
+          type="button"
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'settings'
+              ? 'bg-primary/10 text-primary'
+              : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('settings')}
+        >
+          Settings
+        </button>
+      </div>
+
+      {activeTab === 'settings' ? (
+        <ChemicalSettings />
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Application Logs</p>
           <p className="mt-2 text-3xl font-semibold">{totalApplications}</p>
@@ -619,9 +658,9 @@ export default function ApplicationsPage() {
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Restricted Use Logs</p>
           <p className="mt-2 text-3xl font-semibold">{restrictedUseLogs}</p>
         </Card>
-      </div>
+          </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -647,9 +686,9 @@ export default function ApplicationsPage() {
         {selectedArea && snapshotLocation && (
           <WeatherSnapshotCard location={snapshotLocation} log={snapshotLog} compact />
         )}
-      </div>
+          </div>
 
-      <div className="space-y-3">
+          <div className="space-y-3">
         {filteredLogs.map((log) => {
           const area = applicationAreas.find((item) => item.id === log.areaId);
           const applicator = employees.find((employee) => employee.id === log.applicatorId);
@@ -720,9 +759,9 @@ export default function ApplicationsPage() {
             No application logs match the current filters.
           </Card>
         )}
-      </div>
+          </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
           <DialogHeader>
             <DialogTitle>New Chemical Application</DialogTitle>
@@ -960,7 +999,9 @@ export default function ApplicationsPage() {
             <Button onClick={saveApplication} disabled={saving}>{saving ? 'Saving...' : 'Save Application Log'}</Button>
           </div>
         </DialogContent>
-      </Dialog>
+          </Dialog>
+        </>
+      )}
     </div>
   );
 }
