@@ -137,7 +137,7 @@ export default function ChemicalSettings() {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={!canSave || isSaving}>
+        <Button className="relative z-10 cursor-pointer" onClick={handleSave} disabled={!canSave || isSaving}>
           {isSaving ? 'Saving...' : 'Save Chemical Settings'}
         </Button>
         {saveState === 'saved' ? <span className="text-sm text-emerald-600">Saved</span> : null}

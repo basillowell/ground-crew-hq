@@ -174,7 +174,7 @@ function precipBadge(precipInches: number) {
 
 export default function WeatherPage() {
   const navigate = useNavigate();
-  const { orgId } = useAuth();
+  const { orgId, currentUser } = useAuth();
   const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const [stations, setStations] = useState<WeatherStation[]>([]);
@@ -217,7 +217,7 @@ export default function WeatherPage() {
 
     const { data, error } = await supabase
       .from("weather_locations")
-      .select("*")
+      .select("id, name, property, area, latitude, longitude, org_id, is_active")
       .eq("org_id", orgId)
       .eq("is_active", true)
       .order("name", { ascending: true });
@@ -496,6 +496,7 @@ export default function WeatherPage() {
         wind: 0,
         et: 0,
         notes: "",
+        org_id: currentUser?.orgId ?? null,
       };
       const { error } = await supabase.from("weather_daily_logs").upsert(payload, { onConflict: "id" });
       if (error) {

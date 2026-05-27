@@ -786,7 +786,7 @@ export default function ApplicationsPage() {
           </div>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+        <DialogContent className="relative z-10 max-h-[90vh] max-w-4xl overflow-auto pointer-events-auto">
           <DialogHeader>
             <DialogTitle>New Chemical Application</DialogTitle>
           </DialogHeader>
@@ -894,7 +894,7 @@ export default function ApplicationsPage() {
                     <p className="text-sm font-semibold">Tank Mix</p>
                     <p className="text-xs text-muted-foreground">Log each product in order with the actual rate and total quantity used.</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={addMixItem}>Add Product</Button>
+                  <Button className="relative z-10 cursor-pointer" variant="outline" size="sm" onClick={addMixItem}>Add Product</Button>
                 </div>
                 <div className="space-y-3">
                   {draftMixItems.map((item, index) => {
@@ -908,7 +908,7 @@ export default function ApplicationsPage() {
                           <Input type="number" placeholder="Rate" value={item.rateApplied} onChange={(e) => updateMixItem(index, { rateApplied: e.target.value })} />
                           <Input placeholder="Unit" value={item.rateUnit} onChange={(e) => updateMixItem(index, { rateUnit: e.target.value })} />
                           <Input type="number" placeholder="Total amount" value={item.totalQuantityUsed} onChange={(e) => updateMixItem(index, { totalQuantityUsed: e.target.value })} />
-                          <Button variant="ghost" size="sm" onClick={() => removeMixItem(index)}>Remove</Button>
+                          <Button className="relative z-10 cursor-pointer" variant="ghost" size="sm" onClick={() => removeMixItem(index)}>Remove</Button>
                         </div>
                         {product && (
                           <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-4">
@@ -1019,8 +1019,8 @@ export default function ApplicationsPage() {
           ) : null}
 
           <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t bg-background/95 pt-3 backdrop-blur">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveApplication} disabled={saving}>{saving ? 'Saving...' : 'Save Application Log'}</Button>
+            <Button className="relative z-10 cursor-pointer" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button className="relative z-10 cursor-pointer" onClick={saveApplication} disabled={saving}>{saving ? 'Saving...' : 'Save Application Log'}</Button>
           </div>
         </DialogContent>
           </Dialog>
