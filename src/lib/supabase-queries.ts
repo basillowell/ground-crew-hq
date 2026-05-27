@@ -344,29 +344,17 @@ type DbChemicalApplicationLog = {
   applicatorId?: string | null;
   applicator_id?: string | null;
   applicatorLicenseNumber?: string | null;
-  applicator_license_number?: string | null;
   supervisorName?: string | null;
-  supervisor_name?: string | null;
   supervisorLicenseNumber?: string | null;
-  supervisor_license_number?: string | null;
   equipmentUsedId?: string | null;
-  equipment_used_id?: string | null;
   weatherLogId?: string | null;
-  weather_log_id?: string | null;
   weatherConditionsSummary?: string | null;
-  weather_conditions_summary?: string | null;
   windDirection?: string | null;
-  wind_direction?: string | null;
   windSpeedAtApplication?: number | null;
-  wind_speed_at_application?: number | null;
   temperatureAtApplication?: number | null;
-  temperature_at_application?: number | null;
   humidityAtApplication?: number | null;
-  humidity_at_application?: number | null;
   restrictedEntryUntil?: string | null;
-  restricted_entry_until?: string | null;
   siteConditions?: string | null;
-  site_conditions?: string | null;
   notes?: string | null;
 };
 type DbChemicalApplicationTankMixItem = {
@@ -709,18 +697,18 @@ function toChemicalApplicationLog(row: DbChemicalApplicationLog): ChemicalApplic
     areaTreated: Number(row.area_treated ?? row.areaTreated ?? 0),
     areaUnit: row.area_unit ?? row.areaUnit ?? 'acres',
     applicatorId: row.applicator_id ?? row.applicatorId ?? '',
-    applicatorLicenseNumber: row.applicator_license_number ?? row.applicatorLicenseNumber ?? undefined,
-    supervisorName: row.supervisor_name ?? row.supervisorName ?? undefined,
-    supervisorLicenseNumber: row.supervisor_license_number ?? row.supervisorLicenseNumber ?? undefined,
-    equipmentUsedId: row.equipment_used_id ?? row.equipmentUsedId ?? undefined,
-    weatherLogId: row.weather_log_id ?? row.weatherLogId ?? undefined,
-    weatherConditionsSummary: row.weather_conditions_summary ?? row.weatherConditionsSummary ?? undefined,
-    windDirection: row.wind_direction ?? row.windDirection ?? undefined,
-    windSpeedAtApplication: row.wind_speed_at_application ?? row.windSpeedAtApplication ?? undefined,
-    temperatureAtApplication: row.temperature_at_application ?? row.temperatureAtApplication ?? undefined,
-    humidityAtApplication: row.humidity_at_application ?? row.humidityAtApplication ?? undefined,
-    restrictedEntryUntil: row.restricted_entry_until ?? row.restrictedEntryUntil ?? undefined,
-    siteConditions: row.site_conditions ?? row.siteConditions ?? undefined,
+    applicatorLicenseNumber: row.applicatorLicenseNumber ?? undefined,
+    supervisorName: row.supervisorName ?? undefined,
+    supervisorLicenseNumber: row.supervisorLicenseNumber ?? undefined,
+    equipmentUsedId: row.equipmentUsedId ?? undefined,
+    weatherLogId: row.weatherLogId ?? undefined,
+    weatherConditionsSummary: row.weatherConditionsSummary ?? undefined,
+    windDirection: row.windDirection ?? undefined,
+    windSpeedAtApplication: row.windSpeedAtApplication ?? undefined,
+    temperatureAtApplication: row.temperatureAtApplication ?? undefined,
+    humidityAtApplication: row.humidityAtApplication ?? undefined,
+    restrictedEntryUntil: row.restrictedEntryUntil ?? undefined,
+    siteConditions: row.siteConditions ?? undefined,
     notes: row.notes ?? '',
   };
 }

@@ -30,11 +30,11 @@ import {
   type WeatherLocation,
 } from '@/data/seedData';
 import {
-  useChemicalApplicationLogsAll,
   useChemicalApplicationTankMixItems,
   useChemicalProducts,
   useEmployees,
   useEquipmentUnits,
+  useProperties,
   useWeatherDailyLogs,
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
@@ -42,6 +42,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import ChemicalSettings from '@/pages/settings/ChemicalSettings';
+import { useChemicalLogs } from '@/hooks/useChemicalLogs';
 
 type DraftMixItem = {
   productId: string;
@@ -54,7 +55,7 @@ type ApplicationDraft = {
   applicationDate: string;
   startTime: string;
   endTime: string;
-  areaId: string;
+  propertyId: string;
   targetPest: string;
   agronomicPurpose: string;
   applicationMethod: string;
@@ -82,7 +83,7 @@ const emptyDraft: ApplicationDraft = {
   applicationDate: '2024-03-26',
   startTime: '05:30',
   endTime: '07:00',
-  areaId: '',
+  propertyId: '',
   targetPest: '',
   agronomicPurpose: '',
   applicationMethod: 'Ground spray',
@@ -159,8 +160,9 @@ export default function ApplicationsPage() {
 
   const employeesQuery = useEmployees(propertyScope, orgScope);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgScope);
+  const propertiesQuery = useProperties(orgScope);
   const weatherLogsQuery = useWeatherDailyLogs();
-  const logsQuery = useChemicalApplicationLogsAll(orgScope);
+  const logsQuery = useChemicalLogs(orgScope, propertyScope);
   const productsQuery = useChemicalProducts();
   const mixItemsQuery = useChemicalApplicationTankMixItems();
 
@@ -168,12 +170,13 @@ export default function ApplicationsPage() {
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
   const employees = employeesQuery.data ?? [];
   const equipmentUnits = equipmentUnitsQuery.data ?? [];
+  const properties = propertiesQuery.data ?? [];
   const weatherLogs = weatherLogsQuery.data ?? [];
   const logs = logsQuery.data ?? [];
   const chemicalProducts = productsQuery.data ?? [];
   const mixItems = mixItemsQuery.data ?? [];
   const [filterDate, setFilterDate] = useState('');
-  const [filterArea, setFilterArea] = useState('all');
+  const [filterProperty, setFilterProperty] = useState('all');
   const [filterProduct, setFilterProduct] = useState('all');
   const [filterApplicator, setFilterApplicator] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -235,7 +238,7 @@ export default function ApplicationsPage() {
     }
     setDraft((current) => ({
       ...current,
-      areaId: current.areaId || applicationAreas[0]?.id || '',
+      propertyId: current.propertyId || propertyScope || properties[0]?.id || '',
       applicatorId: current.applicatorId || employees[0]?.id || '',
       equipmentUsedId: current.equipmentUsedId || equipmentUnits[0]?.id || '',
       weatherLogId: current.weatherLogId || weatherLogs[0]?.id || '',
@@ -250,7 +253,7 @@ export default function ApplicationsPage() {
           ?? item.rateUnit,
       })),
     );
-  }, [applicationAreas, employees, equipmentUnits, weatherLogs, chemicalProducts]);
+  }, [chemicalProducts, employees, equipmentUnits, properties, propertyScope, weatherLogs]);
 
   useEffect(() => {
     if (!draft.applicatorId) return;
@@ -265,19 +268,18 @@ export default function ApplicationsPage() {
     return logs.filter((log) => {
       const logMixItems = mixItems.filter((item) => item.applicationLogId === log.id);
       const matchesDate = !filterDate || log.applicationDate === filterDate;
-      const matchesArea = filterArea === 'all' || log.areaId === filterArea;
+      const matchesProperty =
+        filterProperty === 'all' ||
+        String((log as ChemicalApplicationLog & { property_id?: string | null }).property_id ?? '') === filterProperty;
       const matchesApplicator = filterApplicator === 'all' || log.applicatorId === filterApplicator;
       const matchesProduct =
         filterProduct === 'all' || logMixItems.some((item) => item.productId === filterProduct);
-      return matchesDate && matchesArea && matchesApplicator && matchesProduct;
+      return matchesDate && matchesProperty && matchesApplicator && matchesProduct;
     });
-  }, [filterApplicator, filterArea, filterDate, filterProduct, logs, mixItems]);
+  }, [filterApplicator, filterDate, filterProduct, filterProperty, logs, mixItems]);
 
-  const selectedArea =
-    applicationAreas.find((area) => area.id === draft.areaId) ?? applicationAreas[0];
-  const snapshotLocation = selectedArea
-    ? weatherLocations.find((location) => location.id === selectedArea.weatherLocationId) ?? weatherLocations[0]
-    : weatherLocations[0];
+  const snapshotLocation =
+    weatherLocations.find((location) => location.property === draft.propertyId) ?? weatherLocations[0];
   const locationWeatherLogs = weatherLogs
     .filter((log) => log.locationId === snapshotLocation?.id)
     .sort((left, right) => right.date.localeCompare(left.date));
@@ -350,7 +352,7 @@ export default function ApplicationsPage() {
     if (!draft.applicationDate) missingFields.push('Application Date');
     if (!draft.startTime) missingFields.push('Start Time');
     if (!draft.endTime) missingFields.push('End Time');
-    if (!draft.areaId) missingFields.push('Area / Location Treated');
+    if (!draft.propertyId) missingFields.push('Property');
     if (!draft.applicatorId) missingFields.push('Applicator');
     if (!draft.areaTreated || numberValue(draft.areaTreated) <= 0) missingFields.push('Area Treated');
     if (!draft.areaUnit) missingFields.push('Area Unit');
@@ -372,13 +374,14 @@ export default function ApplicationsPage() {
     const weatherSource = weatherLogs.find((log) => log.id === draft.weatherLogId) ?? snapshotLog;
     const restrictedEntryUntil = buildRestrictedEntry(draft, chemicalProducts, draftMixItems);
     const applicationTimestamp = `${draft.applicationDate}T${draft.startTime}:00-04:00`;
-    const nextLog: ChemicalApplicationLog = {
+    const nextLog: ChemicalApplicationLog & { property_id: string } = {
       id: logId,
       applicationDate: draft.applicationDate,
       startTime: draft.startTime,
       endTime: draft.endTime,
       applicationTimestamp,
-      areaId: draft.areaId,
+      areaId: draft.propertyId,
+      property_id: draft.propertyId,
       targetPest: draft.targetPest,
       agronomicPurpose: draft.agronomicPurpose,
       applicationMethod: draft.applicationMethod,
@@ -452,7 +455,7 @@ export default function ApplicationsPage() {
     setSaving(false);
     setDraft({
       ...emptyDraft,
-      areaId: applicationAreas[0]?.id ?? '',
+      propertyId: propertyScope || properties[0]?.id || '',
       applicatorId: employees[0]?.id ?? '',
       equipmentUsedId: equipmentUnits[0]?.id ?? '',
       weatherLogId: locationWeatherLogs[0]?.id ?? '',
@@ -484,11 +487,14 @@ export default function ApplicationsPage() {
       'wind_speed_mph',
       'temperature_f',
       'humidity_percent',
-      'restricted_entry_until',
+      'restrictedEntryUntil',
       'notes',
     ];
     const rows = filteredLogs.map((log) => {
-      const area = applicationAreas.find((item) => item.id === log.areaId)?.name ?? log.areaId;
+      const propertyName =
+        properties.find((property) => property.id === (log as ChemicalApplicationLog & { property_id?: string }).property_id)?.name
+        ?? (log as ChemicalApplicationLog & { property_id?: string }).property_id
+        ?? log.areaId;
       const applicator = employees.find((employee) => employee.id === log.applicatorId);
       const productNames = mixItems
         .filter((item) => item.applicationLogId === log.id)
@@ -501,7 +507,7 @@ export default function ApplicationsPage() {
       return [
         quoteCsv(log.applicationDate),
         quoteCsv(log.applicationTimestamp ?? `${log.applicationDate}T${log.startTime}:00`),
-        quoteCsv(area),
+        quoteCsv(propertyName),
         quoteCsv(productNames),
         quoteCsv(applicator ? `${applicator.firstName} ${applicator.lastName}` : log.applicatorId),
         quoteCsv(log.applicatorLicenseNumber ?? ''),
@@ -531,7 +537,7 @@ export default function ApplicationsPage() {
       'area_treated',
       'application_rate',
       'weather_conditions',
-      'supervisor_license_number',
+      'supervisorLicenseNumber',
       'rei_hours',
       'phi_days',
     ];
@@ -668,9 +674,9 @@ export default function ApplicationsPage() {
           </div>
           <div className="grid gap-3 md:grid-cols-4">
             <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
-            <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={filterArea} onChange={(e) => setFilterArea(e.target.value)}>
-              <option value="all">All Areas</option>
-              {applicationAreas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
+            <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={filterProperty} onChange={(e) => setFilterProperty(e.target.value)}>
+              <option value="all">All Properties</option>
+              {properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
             </select>
             <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={filterProduct} onChange={(e) => setFilterProduct(e.target.value)}>
               <option value="all">All Products</option>
@@ -683,14 +689,17 @@ export default function ApplicationsPage() {
           </div>
         </Card>
 
-        {selectedArea && snapshotLocation && (
+        {snapshotLocation && (
           <WeatherSnapshotCard location={snapshotLocation} log={snapshotLog} compact />
         )}
-          </div>
+      </div>
 
           <div className="space-y-3">
         {filteredLogs.map((log) => {
-          const area = applicationAreas.find((item) => item.id === log.areaId);
+          const propertyName =
+            properties.find((property) => property.id === (log as ChemicalApplicationLog & { property_id?: string }).property_id)?.name
+            ?? (log as ChemicalApplicationLog & { property_id?: string }).property_id
+            ?? log.areaId;
           const applicator = employees.find((employee) => employee.id === log.applicatorId);
           const equipment = equipmentUnits.find((unit) => unit.id === log.equipmentUsedId);
           const weather = weatherLogs.find((entry) => entry.id === log.weatherLogId);
@@ -706,7 +715,7 @@ export default function ApplicationsPage() {
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold">{area?.name ?? log.areaId}</h3>
+                    <h3 className="text-base font-semibold">{propertyName}</h3>
                     <Badge variant="outline">{log.applicationDate}</Badge>
                     <Badge variant="secondary">{formatTime(log.startTime)} - {formatTime(log.endTime)}</Badge>
                     {hasRestrictedUse && <Badge variant="destructive">Restricted Use</Badge>}
@@ -786,14 +795,14 @@ export default function ApplicationsPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">Area / Location Treated *</label>
-                  {applicationAreas.length > 0 ? (
-                    <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.areaId} onChange={(e) => setDraft((current) => ({ ...current, areaId: e.target.value }))}>
-                      {applicationAreas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
+                  <label className="text-xs font-medium text-muted-foreground">Property *</label>
+                  {properties.length > 0 ? (
+                    <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.propertyId} onChange={(e) => setDraft((current) => ({ ...current, propertyId: e.target.value }))}>
+                      {properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
                     </select>
                   ) : (
                     <div className="mt-1 rounded-md border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      No treatment locations configured
+                      No properties configured
                     </div>
                   )}
                 </div>
@@ -959,7 +968,7 @@ export default function ApplicationsPage() {
             </div>
 
             <div className="space-y-4">
-              {selectedArea && snapshotLocation && <WeatherSnapshotCard location={snapshotLocation} log={snapshotLog} compact />}
+              {snapshotLocation && <WeatherSnapshotCard location={snapshotLocation} log={snapshotLog} compact />}
               <Card className="p-4">
                 <p className="text-sm font-semibold">Compliance Checklist</p>
                 <div className="mt-3 space-y-3 text-sm text-muted-foreground">

@@ -6,6 +6,7 @@ import { useProperties, useEmployees } from '@/lib/supabase-queries';
 import { useChemicalSettings } from '@/hooks/useChemicalSettings';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/sonner';
+import ProductManager from '@/components/chemicals/ProductManager';
 
 export default function ChemicalSettings() {
   const { currentUser } = useAuth();
@@ -141,6 +142,8 @@ export default function ChemicalSettings() {
         </Button>
         {saveState === 'saved' ? <span className="text-sm text-emerald-600">Saved</span> : null}
       </div>
+
+      <ProductManager />
     </div>
   );
 }

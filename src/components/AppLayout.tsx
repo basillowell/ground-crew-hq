@@ -301,7 +301,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           .from('chemical_application_logs')
           .select('id', { count: 'exact', head: true })
           .eq('org_id', orgId)
-          .or(`supervisor_license_number.is.null,supervisor_license_number.eq.,restricted_entry_until.gt.${nowIso}`);
+          .or(`supervisorLicenseNumber.is.null,supervisorLicenseNumber.eq.,restrictedEntryUntil.gt.${nowIso}`);
         if (error) {
           console.error('[CHEMICAL COMPLIANCE COUNT ERROR]', error);
           return 0;
