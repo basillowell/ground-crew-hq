@@ -774,8 +774,9 @@ export default function WorkboardContent() {
         if (!supabase) return [] as WeatherDailyLog[];
         let locationQuery = supabase
           .from('weather_locations')
-          .select('id, property')
+          .select('id, name, property, area, latitude, longitude, org_id, is_active')
           .eq('org_id', currentUser?.orgId ?? '');
+        locationQuery = locationQuery.eq('is_active', true);
         if (effectivePropertyId && effectivePropertyId !== 'all') {
           locationQuery = locationQuery.eq('property', effectivePropertyId);
         }

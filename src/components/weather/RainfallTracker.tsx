@@ -45,7 +45,7 @@ export function RainfallTracker({ logs: fallbackLogs = [], loading = false }: Pr
     queryFn: async () => {
       const { data, error } = await supabase
         .from('weather_locations')
-        .select('id')
+        .select('id, name, property, area, latitude, longitude, org_id, is_active')
         .eq('org_id', orgId)
         .eq('is_active', true)
         .limit(1);

@@ -37,7 +37,7 @@ export async function fetchAndLogOpenMeteoWeather(args: LogArgs): Promise<void> 
   if (!selectedLocation) {
     const { data: locations, error: locationError } = await supabase
       .from('weather_locations')
-      .select('id, name, property, org_id, is_active')
+      .select('id, name, property, area, latitude, longitude, org_id, is_active')
       .eq('org_id', orgId)
       .eq('is_active', true);
     if (locationError || !locations?.length) return;
