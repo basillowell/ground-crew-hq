@@ -21,10 +21,9 @@ export function useChemicalLogs(orgId?: string, propertyId?: string) {
         .select('*')
         .eq('org_id', orgId)
         .order('applicationDate', { ascending: false });
-
-      if (propertyId && propertyId !== 'all') {
-        query = query.eq('property_id', propertyId);
-      }
+      // property_id is not part of the documented chemical_application_logs schema.
+      // Keep reads org-scoped and let page-level filters apply operational context.
+      void propertyId;
 
       const { data, error } = await query;
       if (error) {
@@ -41,4 +40,3 @@ export function useChemicalLogs(orgId?: string, propertyId?: string) {
     },
   });
 }
-

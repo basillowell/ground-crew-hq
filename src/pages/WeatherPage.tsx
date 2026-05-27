@@ -479,32 +479,45 @@ export default function WeatherPage() {
     }
     const amountMm = inchesToMm(amountInches);
     setSavingRain(true);
-    const existing = rainfallLogs.find((log) => log.date === rainEditDate && log.source === "manual")
-      ?? rainfallLogs.find((log) => log.date === rainEditDate);
-    const payload = {
-      id: existing?.id ?? crypto.randomUUID(),
-      locationId: selectedStation.id,
-      stationId: selectedStation.id,
-      date: rainEditDate,
-      rainfallTotal: amountMm,
-      source: "manual",
-      currentConditions: "",
-      forecast: "",
-      temperature: 0,
-      humidity: 0,
-      wind: 0,
-      et: 0,
-      notes: "",
-    };
-    const { error } = await supabase.from("weather_daily_logs").upsert(payload, { onConflict: "id" });
-    if (error) {
-      toast.error(`Failed to save rainfall: ${error.message}`);
+    try {
+      const existing = rainfallLogs.find((log) => log.date === rainEditDate && log.source === "manual")
+        ?? rainfallLogs.find((log) => log.date === rainEditDate);
+      const payload = {
+        id: existing?.id ?? crypto.randomUUID(),
+        locationId: selectedStation.id,
+        stationId: selectedStation.id,
+        date: rainEditDate,
+        rainfallTotal: amountMm,
+        source: "manual",
+        currentConditions: "",
+        forecast: "",
+        temperature: 0,
+        humidity: 0,
+        wind: 0,
+        et: 0,
+        notes: "",
+      };
+      const { error } = await supabase.from("weather_daily_logs").upsert(payload, { onConflict: "id" });
+      if (error) {
+        toast.error(`Failed to save rainfall: ${error.message}`);
+        return;
+      }
+
+      try {
+        await loadRainLogs(selectedStation);
+      } catch (refreshError) {
+        if (import.meta.env.DEV) {
+          console.error("[rainfall-save] refresh failed", refreshError);
+        }
+        toast.warning("Saved, but refresh failed.");
+        return;
+      }
+      toast.success("Manual rainfall saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save rainfall.");
+    } finally {
       setSavingRain(false);
-      return;
     }
-    toast.success("Manual rainfall saved.");
-    await loadRainLogs(selectedStation);
-    setSavingRain(false);
   };
 
   const handleRainCellClick = (monthIndex: number, day: number) => {

@@ -280,6 +280,10 @@ export default function ApplicationsPage() {
 
   const snapshotLocation =
     weatherLocations.find((location) => location.property === draft.propertyId) ?? weatherLocations[0];
+  const selectedAreaIdForProperty = useMemo(
+    () => applicationAreas.find((area) => area.property === draft.propertyId)?.id ?? '',
+    [applicationAreas, draft.propertyId],
+  );
   const locationWeatherLogs = weatherLogs
     .filter((log) => log.locationId === snapshotLocation?.id)
     .sort((left, right) => right.date.localeCompare(left.date));
@@ -357,6 +361,7 @@ export default function ApplicationsPage() {
     if (!draft.areaTreated || numberValue(draft.areaTreated) <= 0) missingFields.push('Area Treated');
     if (!draft.areaUnit) missingFields.push('Area Unit');
     if (!draft.applicationMethod) missingFields.push('Application Method');
+    if (!selectedAreaIdForProperty) missingFields.push('Area / Location mapping');
 
     if (missingFields.length > 0) {
       setValidationErrors([`Missing required fields: ${missingFields.join(', ')}`]);
@@ -374,27 +379,26 @@ export default function ApplicationsPage() {
     const weatherSource = weatherLogs.find((log) => log.id === draft.weatherLogId) ?? snapshotLog;
     const restrictedEntryUntil = buildRestrictedEntry(draft, chemicalProducts, draftMixItems);
     const applicationTimestamp = `${draft.applicationDate}T${draft.startTime}:00-04:00`;
-    const nextLog: ChemicalApplicationLog & { property_id: string } = {
+    const nextLogPayload: Record<string, string | number | boolean | null> = {
       id: logId,
       applicationDate: draft.applicationDate,
       startTime: draft.startTime,
       endTime: draft.endTime,
       applicationTimestamp,
-      areaId: draft.propertyId,
-      property_id: draft.propertyId,
-      targetPest: draft.targetPest,
-      agronomicPurpose: draft.agronomicPurpose,
+      areaId: selectedAreaIdForProperty,
+      targetPest: draft.targetPest.trim(),
+      agronomicPurpose: draft.agronomicPurpose.trim(),
       applicationMethod: draft.applicationMethod,
       carrierVolume: numberValue(draft.carrierVolume),
       totalMixVolume: numberValue(draft.totalMixVolume),
       areaTreated: numberValue(draft.areaTreated),
       areaUnit: draft.areaUnit,
       applicatorId: draft.applicatorId,
-      applicatorLicenseNumber: draft.applicatorLicenseNumber,
-      supervisorName: draft.supervisorName,
-      supervisorLicenseNumber: draft.supervisorLicenseNumber,
-      equipmentUsedId: draft.equipmentUsedId || undefined,
-      weatherLogId: draft.weatherLogId || weatherSource?.id,
+      applicatorLicenseNumber: draft.applicatorLicenseNumber.trim(),
+      supervisorName: draft.supervisorName.trim(),
+      supervisorLicenseNumber: draft.supervisorLicenseNumber.trim(),
+      equipmentUsedId: draft.equipmentUsedId || null,
+      weatherLogId: draft.weatherLogId || weatherSource?.id || null,
       weatherConditionsSummary:
         draft.weatherConditionsSummary ||
         (weatherSource
@@ -413,8 +417,11 @@ export default function ApplicationsPage() {
       restrictedEntryUntil,
       siteConditions: draft.siteConditions,
       notes: draft.notes,
+      org_id: currentUser?.orgId ?? null,
     };
-    const nextMix = draftMixItems.map((item, index) => ({
+    const nextMix = draftMixItems
+      .filter((item) => item.productId)
+      .map((item, index) => ({
       id: crypto.randomUUID(),
       applicationLogId: logId,
       productId: item.productId,
@@ -426,47 +433,55 @@ export default function ApplicationsPage() {
     }));
 
     try {
-      const { error: logError } = await supabase.from('chemical_application_logs').upsert({
-        ...nextLog,
-        org_id: currentUser?.orgId,
-      });
+      if (import.meta.env.DEV) {
+        console.debug('[chemical-save] started', { logId, payload: nextLogPayload, mixCount: nextMix.length });
+      }
+
+      const { error: logError } = await supabase.from('chemical_application_logs').upsert(nextLogPayload);
       if (logError) {
+        if (import.meta.env.DEV) console.error('[chemical-save] main log error', logError);
         toast.error(`Failed to save application log: ${logError.message}`);
-        setSaving(false);
         return;
       }
+
+      if (import.meta.env.DEV) console.debug('[chemical-save] main log saved');
+
+      for (const mix of nextMix) {
+        const { error } = await supabase.from('chemical_application_tank_mix_items').upsert(mix);
+        if (error) {
+          if (import.meta.env.DEV) console.error('[chemical-save] tank mix error', { mix, error });
+          toast.error(`Failed to save tank mix item: ${error.message}`);
+          return;
+        }
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['chemical-logs'] });
+      await queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] });
+      await queryClient.invalidateQueries({ queryKey: ['chemical-application-tank-mix-items'] });
+
+      toast.success('Chemical application logged');
+      setDialogOpen(false);
+      setDraft({
+        ...emptyDraft,
+        propertyId: propertyScope || properties[0]?.id || '',
+        applicatorId: employees[0]?.id ?? '',
+        equipmentUsedId: equipmentUnits[0]?.id ?? '',
+        weatherLogId: locationWeatherLogs[0]?.id ?? '',
+      });
+      setDraftMixItems([
+        {
+          ...emptyMixItem,
+          productId: chemicalProducts[0]?.id ?? '',
+          rateUnit: chemicalProducts[0]?.rateUnit ?? emptyMixItem.rateUnit,
+        },
+      ]);
     } catch (error) {
+      if (import.meta.env.DEV) console.error('[chemical-save] unexpected error', error);
       toast.error(error instanceof Error ? error.message : 'Failed to save application log.');
+    } finally {
+      if (import.meta.env.DEV) console.debug('[chemical-save] finished');
       setSaving(false);
-      return;
     }
-    for (const mix of nextMix) {
-      const { error } = await supabase.from('chemical_application_tank_mix_items').upsert(mix);
-      if (error) {
-        toast.error(`Failed to save tank mix item: ${error.message}`);
-        setSaving(false);
-        return;
-      }
-    }
-    await queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] });
-    await queryClient.invalidateQueries({ queryKey: ['chemical-application-tank-mix-items'] });
-    toast.success('Chemical application logged');
-    setDialogOpen(false);
-    setSaving(false);
-    setDraft({
-      ...emptyDraft,
-      propertyId: propertyScope || properties[0]?.id || '',
-      applicatorId: employees[0]?.id ?? '',
-      equipmentUsedId: equipmentUnits[0]?.id ?? '',
-      weatherLogId: locationWeatherLogs[0]?.id ?? '',
-    });
-    setDraftMixItems([
-      {
-        ...emptyMixItem,
-        productId: chemicalProducts[0]?.id ?? '',
-        rateUnit: chemicalProducts[0]?.rateUnit ?? emptyMixItem.rateUnit,
-      },
-    ]);
   }
 
   function exportLogs() {
