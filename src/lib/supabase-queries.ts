@@ -232,6 +232,10 @@ type DbWeatherLocation = {
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  timezone?: string | null;
+  is_default?: boolean | null;
+  forecast_provider?: 'auto' | 'open-meteo' | 'noaa-nws' | null;
+  radar_provider?: 'rainviewer' | 'auto' | null;
 };
 
 type DbWeatherDailyLog = {
@@ -697,18 +701,18 @@ function toChemicalApplicationLog(row: DbChemicalApplicationLog): ChemicalApplic
     areaTreated: Number(row.area_treated ?? row.areaTreated ?? 0),
     areaUnit: row.area_unit ?? row.areaUnit ?? 'acres',
     applicatorId: row.applicator_id ?? row.applicatorId ?? '',
-    applicatorLicenseNumber: row.applicatorLicenseNumber ?? undefined,
-    supervisorName: row.supervisorName ?? undefined,
-    supervisorLicenseNumber: row.supervisorLicenseNumber ?? undefined,
-    equipmentUsedId: row.equipmentUsedId ?? undefined,
-    weatherLogId: row.weatherLogId ?? undefined,
-    weatherConditionsSummary: row.weatherConditionsSummary ?? undefined,
-    windDirection: row.windDirection ?? undefined,
-    windSpeedAtApplication: row.windSpeedAtApplication ?? undefined,
-    temperatureAtApplication: row.temperatureAtApplication ?? undefined,
-    humidityAtApplication: row.humidityAtApplication ?? undefined,
-    restrictedEntryUntil: row.restrictedEntryUntil ?? undefined,
-    siteConditions: row.siteConditions ?? undefined,
+    applicatorLicenseNumber: row.applicator_license_number ?? row.applicatorLicenseNumber ?? undefined,
+    supervisorName: row.supervisor_name ?? row.supervisorName ?? undefined,
+    supervisorLicenseNumber: row.supervisor_license_number ?? row.supervisorLicenseNumber ?? undefined,
+    equipmentUsedId: row.equipment_used_id ?? row.equipmentUsedId ?? undefined,
+    weatherLogId: row.weather_log_id ?? row.weatherLogId ?? undefined,
+    weatherConditionsSummary: row.weather_conditions_summary ?? row.weatherConditionsSummary ?? undefined,
+    windDirection: row.wind_direction ?? row.windDirection ?? undefined,
+    windSpeedAtApplication: row.wind_speed_at_application ?? row.windSpeedAtApplication ?? undefined,
+    temperatureAtApplication: row.temperature_at_application ?? row.temperatureAtApplication ?? undefined,
+    humidityAtApplication: row.humidity_at_application ?? row.humidityAtApplication ?? undefined,
+    restrictedEntryUntil: row.restricted_entry_until ?? row.restrictedEntryUntil ?? undefined,
+    siteConditions: row.site_conditions ?? row.siteConditions ?? undefined,
     notes: row.notes ?? '',
   };
 }
@@ -894,7 +898,7 @@ export async function fetchWeatherLocations(propertyId?: string, orgId?: string,
     const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
     let query = client
       .from('weather_locations')
-      .select('id, name, property, area, latitude, longitude, org_id, is_active')
+      .select('id, name, property, area, latitude, longitude, org_id, is_active, timezone, is_default, forecast_provider, radar_provider')
       .order('name');
     if (orgId) query = query.eq('org_id', orgId);
     if (activeOnly) query = query.eq('is_active', true);
@@ -936,7 +940,7 @@ export async function fetchWeatherDailyLogs(startDate: string, endDate: string, 
       .lte('date', endDate)
       .order('date');
     if (locationIds && locationIds.length > 0) {
-      query = query.in('locationId', locationIds);
+      query = query.in('location_id', locationIds);
     }
     const { data, error } = await query;
     if (error) return [];
@@ -1079,12 +1083,16 @@ async function fetchChemicalApplicationLogFieldsForDate(
     const client = ensureSupabase();
     let query = client
       .from('chemical_application_logs')
-      .select('weatherLogId, applicatorLicenseNumber, supervisorLicenseNumber, applicationDate')
-      .eq('applicationDate', date);
+      .select('weather_log_id, applicator_license_number, supervisor_license_number, application_date')
+      .eq('application_date', date);
     if (orgId) query = query.eq('org_id', orgId);
     const { data, error } = await query;
     if (error) return [];
-    return data ?? [];
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      weatherLogId: row.weather_log_id ? String(row.weather_log_id) : null,
+      applicatorLicenseNumber: row.applicator_license_number ? String(row.applicator_license_number) : null,
+      supervisorLicenseNumber: row.supervisor_license_number ? String(row.supervisor_license_number) : null,
+    }));
   } catch {
     return [];
   }
@@ -1103,12 +1111,12 @@ export async function fetchChemicalApplicationLogs(startDate: string, endDate: s
     let query = client
       .from('chemical_application_logs')
       .select('*')
-      .gte('applicationDate', startDate)
-      .lte('applicationDate', endDate)
-      .order('applicationDate');
+      .gte('application_date', startDate)
+      .lte('application_date', endDate)
+      .order('application_date');
     if (orgId) query = query.eq('org_id', orgId);
     if (applicatorIds) {
-      query = query.in('applicatorId', applicatorIds);
+      query = query.in('applicator_id', applicatorIds);
     }
     const { data, error } = await query;
     if (error) return [];
@@ -1150,7 +1158,7 @@ async function fetchChemicalApplicationLogsAll(orgId?: string): Promise<Chemical
     let query = client
       .from('chemical_application_logs')
       .select('*')
-      .order('applicationDate', { ascending: false });
+      .order('application_date', { ascending: false });
     if (orgId) query = query.eq('org_id', orgId);
     const { data, error } = await query;
     if (error) return [];

@@ -342,7 +342,7 @@ export default function ReportsPage() {
     ]);
     const weatherLogsResult = await supabase
       .from('weather_daily_logs')
-      .select('date, rainfallTotal, temperature, wind')
+      .select('date, rainfall_total, temperature, wind')
       .gte('date', startDate)
       .lte('date', endDate);
 
@@ -384,7 +384,14 @@ export default function ReportsPage() {
     setEquipmentRows((equipmentResult.data ?? []) as EquipmentRow[]);
     setOpenNeedsCount(openNeedsResult.count ?? 0);
     setOrganizationName(organizationResult.data?.name ?? 'Ground Crew HQ');
-    setWeatherLogs((weatherLogsResult.data ?? []) as WeatherDailyLogRow[]);
+    setWeatherLogs(
+      ((weatherLogsResult.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+        date: String(row.date ?? ''),
+        rainfallTotal: row.rainfall_total == null ? null : Number(row.rainfall_total),
+        temperature: row.temperature == null ? null : Number(row.temperature),
+        wind: row.wind == null ? null : Number(row.wind),
+      })),
+    );
     setLoading(false);
   }, [endDate, orgId, selectedPropertyId, startDate]);
 

@@ -4,7 +4,7 @@ import type { ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle, Cloud, CloudRain, Sun, HelpCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -1517,6 +1517,7 @@ export default function SchedulerPage() {
         }}
       >
         <DialogContent
+          aria-describedby="dialog-desc"
           role="dialog"
           aria-modal="true"
           className="sm:max-w-md max-h-[85vh] overflow-y-auto"
@@ -1534,6 +1535,9 @@ export default function SchedulerPage() {
               <CalendarDays className="h-4 w-4 text-primary" />
               {isEditing ? 'Edit Shift' : 'Add Shift'}
             </DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Configure shift details for the selected crew member and date.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1705,9 +1709,12 @@ export default function SchedulerPage() {
       </Dialog>
 
       <Dialog open={copyWeekDialogOpen} onOpenChange={setCopyWeekDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" className="max-w-md">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-md">
           <DialogHeader>
             <DialogTitle>Copy this week&apos;s schedule to next week?</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Confirm copying the current week schedule to next week.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm">
             <div className="rounded-md border bg-muted/30 p-3">
@@ -1739,9 +1746,12 @@ export default function SchedulerPage() {
       </Dialog>
 
       <Dialog open={saveTemplateDialogOpen} onOpenChange={setSaveTemplateDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" className="max-w-md">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-md">
           <DialogHeader>
             <DialogTitle>Save this week as template</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Save the current week schedule as a reusable template.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <label className="text-xs text-muted-foreground">Template name</label>
@@ -1763,9 +1773,12 @@ export default function SchedulerPage() {
       </Dialog>
 
       <Dialog open={applyTemplateDialogOpen} onOpenChange={setApplyTemplateDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" className="max-w-md">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-md">
           <DialogHeader>
             <DialogTitle>Apply saved template</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Select a saved week template and apply it to the current week.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <label className="text-xs text-muted-foreground">Template</label>

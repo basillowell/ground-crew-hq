@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -692,9 +692,12 @@ export default function EquipmentPage() {
       )}
 
       <Dialog open={addOpen && !isReadOnly} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent aria-describedby="dialog-desc" className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Equipment</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Add an equipment unit with type, status, and service details.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3">
             {activeEquipmentTypes.length === 0 ? (

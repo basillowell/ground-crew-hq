@@ -1,5 +1,5 @@
 # Ground Crew HQ — Codex Operating Rules
-# Version: 3.0 · May 2026
+# Version: 3.1 · May 2026
 # Maintained by: Claude (supervisor) + Basil Lowell (product owner)
 
 ---
@@ -71,6 +71,28 @@ Replace any agent/skill UI with: "Operations Assistant — Coming soon"
 `npm run build` must pass with 0 errors before every commit.
 Fix all TypeScript errors. Never use `// @ts-ignore`.
 
+**Rule 10 — Column names come from live-db-state, never from memory**
+All DB columns are snake_case. Before using ANY column name in a
+query (.select, .eq, .insert, .update, .order, .filter, payload keys),
+confirm it exists in docs/dev/live-db-state.md. If the column isn't
+listed there, STOP — do not guess or invent it. JS/TS variable and
+interface names may stay camelCase; only DB-bound strings must match
+the schema exactly.
+
+**Rule 11 — Verify after any rename**
+After renaming a column, file, function, or prop, grep the codebase
+for the OLD name and confirm ZERO remaining references before
+finishing. A passing build does NOT prove this — stale column
+strings compile fine and only fail at runtime (400 errors). The
+final step of any rename task is a clean re-grep.
+
+**Rule 12 — One concern per pass**
+Each task changes one feature area. If a prompt spans multiple
+unrelated areas (e.g. weather + chemical + auth), STOP and ask
+Claude to split it. Scope creep across areas is the top cause of
+drift. Touching 1-3 related files is normal; touching 8+ files
+across unrelated features is a red flag — report it.
+
 ---
 
 ## Coding Rules
@@ -87,6 +109,10 @@ Never just `setShowModal(false)` — always reset internal state too.
 **Time values:** Supabase returns times as "HH:MM:SS" — always `.slice(0,5)` before display.
 
 **Org scoping:** Every query must include `.eq('org_id', orgId)` on tables with org_id.
+
+**camelCase tables note:** As of the May 2026 migration, ALL tables are
+snake_case. There are no remaining camelCase columns. If you find a
+camelCase column reference in the code, it is a bug — fix it to snake_case.
 
 ---
 
@@ -108,6 +134,7 @@ Every Codex session must return:
 4. Build result (pass/fail)
 5. Manual test steps
 6. Any `CLAUDE_DB_REQUIRED` flags
+7. If task involved a rename: confirmation of clean re-grep (Rule 11)
 
 ---
 
@@ -119,6 +146,8 @@ Stop immediately if:
 - AuthContext needs modification → flag for Claude
 - A file has JSX corruption → report before rewriting
 - Build fails after 2 attempts → report the exact error
+- A column name isn't in live-db-state.md → do not guess, ask Claude
+- A task spans multiple unrelated feature areas → ask Claude to split
 
 ---
 
@@ -131,7 +160,10 @@ Read CODEX_RULES.md and docs/dev/live-db-state.md before writing code.
 Hard rules:
 - No SQL, no schema changes, no RLS, no auth changes, no new branches
 - No hardcoded UUIDs — read from useAuth()
+- All DB columns snake_case — confirm in live-db-state.md, never guess
 - Product UI only — no Claude/Codex/skill wording
+- One concern per pass — flag if task spans multiple areas
+- After any rename: re-grep for old name, confirm zero hits
 - If DB change needed: CLAUDE_DB_REQUIRED and stop
 - npm run build 0 errors before commit
 

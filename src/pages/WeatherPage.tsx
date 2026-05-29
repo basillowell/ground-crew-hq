@@ -5,21 +5,32 @@ import { toast } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { RadarEmbed } from "@/components/weather/RadarEmbed";
+import {
+  fetchNwsAlerts,
+  fetchNwsForecast,
+  fetchOpenMeteoForecast,
+  getDefaultWeatherLocation,
+  isUSCoordinates,
+  type ForecastProvider,
+} from "@/lib/weather/providers";
 
 type WeatherStation = {
   id: string;
   name: string;
   property: string;
-  area: string;
+  area: string | null;
   latitude: number | null;
   longitude: number | null;
+  timezone: string | null;
+  is_default: boolean | null;
+  forecast_provider: ForecastProvider | null;
+  radar_provider: "rainviewer" | "auto" | null;
 };
-
 type OpenMeteoPayload = {
   current_weather?: {
     time: string;
@@ -185,9 +196,11 @@ export default function WeatherPage() {
   const [weatherData, setWeatherData] = useState<OpenMeteoPayload | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState("");
+  const [forecastSource, setForecastSource] = useState<"open-meteo" | "noaa-nws">("open-meteo");
 
   const [alerts, setAlerts] = useState<NwsAlert[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsError, setAlertsError] = useState("");
 
   const [expandedDayKey, setExpandedDayKey] = useState(todayKey);
   const [activeOverlays, setActiveOverlays] = useState<Set<OverlayKey>>(new Set(["temp", "rain"]));
@@ -209,6 +222,28 @@ export default function WeatherPage() {
     () => stations.find((station) => station.id === selectedStationId) ?? null,
     [stations, selectedStationId],
   );
+  const selectedTimezone = selectedStation?.timezone || "America/New_York";
+
+  const formatTimeForStation = useCallback((value: string | Date, includeMinutes = false) => {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "--";
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: includeMinutes ? "2-digit" : undefined,
+      timeZone: selectedTimezone,
+    });
+  }, [selectedTimezone]);
+
+  const formatDateForStation = useCallback((value: string) => {
+    const date = new Date(`${value}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      timeZone: selectedTimezone,
+    });
+  }, [selectedTimezone]);
 
   const loadStations = useCallback(async () => {
     if (!orgId) return;
@@ -217,7 +252,7 @@ export default function WeatherPage() {
 
     const { data, error } = await supabase
       .from("weather_locations")
-      .select("id, name, property, area, latitude, longitude, org_id, is_active")
+      .select("id, name, property, area, latitude, longitude, org_id, is_active, timezone, is_default, forecast_provider, radar_provider")
       .eq("org_id", orgId)
       .eq("is_active", true)
       .order("name", { ascending: true });
@@ -231,12 +266,16 @@ export default function WeatherPage() {
 
     const nextStations = (data ?? []) as WeatherStation[];
     setStations(nextStations);
-    setSelectedStationId((prev) => prev || nextStations[0]?.id || "");
+    const operationalDefault = getDefaultWeatherLocation(nextStations);
+    setSelectedStationId((prev) => {
+      if (prev && nextStations.some((station) => station.id === prev)) return prev;
+      return operationalDefault?.id || "";
+    });
     setStationsLoading(false);
   }, [orgId]);
 
   const loadWeather = useCallback(async (station: WeatherStation) => {
-    if (!station.latitude || !station.longitude) {
+    if (station.latitude == null || station.longitude == null) {
       setWeatherData(null);
       setWeatherError("Selected station is missing coordinates.");
       return;
@@ -245,23 +284,24 @@ export default function WeatherPage() {
     setWeatherLoading(true);
     setWeatherError("");
     try {
-      // TODO(weather-provider-strategy): Keep Open-Meteo for keyless forecast coverage.
-      // Future free-provider mix: NOAA/NWS forecasts+alerts, Open-Meteo forecast, RainViewer radar tiles.
-      const params = new URLSearchParams({
-        latitude: String(station.latitude),
-        longitude: String(station.longitude),
-        hourly: "temperature_2m,precipitation_probability,weathercode,windspeed_10m,windgusts_10m",
-        daily: "temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode,windspeed_10m_max",
-        current_weather: "true",
-        temperature_unit: "fahrenheit",
-        windspeed_unit: "mph",
-        timezone: "America/New_York",
-        forecast_days: "10",
-      });
+      const provider = station.forecast_provider ?? "auto";
+      const resolvedProvider: "open-meteo" | "noaa-nws" =
+        provider === "auto"
+          ? isUSCoordinates(station.latitude, station.longitude)
+            ? "noaa-nws"
+            : "open-meteo"
+          : provider;
 
-      const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
-      if (!response.ok) throw new Error(`Open-Meteo request failed (${response.status})`);
-      const payload = (await response.json()) as OpenMeteoPayload;
+      const payload =
+        resolvedProvider === "noaa-nws"
+          ? await fetchNwsForecast(station.latitude, station.longitude)
+          : await fetchOpenMeteoForecast(
+              station.latitude,
+              station.longitude,
+              station.timezone || "America/New_York",
+            );
+
+      setForecastSource(resolvedProvider);
       setWeatherData(payload);
       if (payload.daily?.time?.length) {
         const defaultExpanded = payload.daily.time.find((d) => d === todayKey) ?? payload.daily.time[0];
@@ -276,25 +316,23 @@ export default function WeatherPage() {
   }, [todayKey]);
 
   const loadAlerts = useCallback(async (station: WeatherStation) => {
-    if (!station.latitude || !station.longitude) {
+    if (station.latitude == null || station.longitude == null) {
       setAlerts([]);
+      setAlertsError("");
       return;
     }
     setAlertsLoading(true);
+    setAlertsError("");
     try {
-      // TODO(weather-provider-strategy): Continue using NOAA/NWS for free U.S. alert data.
-      const response = await fetch(
-        `https://api.weather.gov/alerts/active?point=${station.latitude},${station.longitude}`,
-        { headers: { "User-Agent": "GroundCrewHQ (support@groundcrewhq.com)" } },
-      );
-      if (!response.ok) {
+      if (!isUSCoordinates(station.latitude, station.longitude)) {
         setAlerts([]);
-      } else {
-        const payload = (await response.json()) as { features?: NwsAlert[] };
-        setAlerts(payload.features ?? []);
+        return;
       }
-    } catch {
+      const payload = await fetchNwsAlerts(station.latitude, station.longitude);
+      setAlerts((payload.features ?? []) as NwsAlert[]);
+    } catch (error) {
       setAlerts([]);
+      setAlertsError(error instanceof Error ? error.message : "Unable to load alerts.");
     } finally {
       setAlertsLoading(false);
     }
@@ -304,14 +342,22 @@ export default function WeatherPage() {
     try {
       const { data, error } = await supabase
         .from("weather_daily_logs")
-        .select("id, locationId, date, rainfallTotal, source")
-        .eq("locationId", station.id)
+        .select("id, location_id, date, rainfall_total, source")
+        .eq("location_id", station.id)
         .order("date", { ascending: false });
       if (error) {
         setRainfallLogs([]);
         return;
       }
-      setRainfallLogs((data ?? []) as WeatherDailyLogRow[]);
+      setRainfallLogs(
+        ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+          id: String(row.id ?? ''),
+          locationId: String(row.location_id ?? ''),
+          date: String(row.date ?? ''),
+          rainfallTotal: Number(row.rainfall_total ?? 0),
+          source: String(row.source ?? ''),
+        })),
+      );
     } catch {
       setRainfallLogs([]);
     }
@@ -334,14 +380,18 @@ export default function WeatherPage() {
     return hourly.time.map((time, index) => ({
       time,
       dateKey: dateKeyFromIso(time),
-      hour: new Date(time).getHours(),
+      hour: Number(
+        new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: selectedTimezone }).format(
+          new Date(time),
+        ),
+      ),
       temp: hourly.temperature_2m[index] ?? 0,
       rainPct: hourly.precipitation_probability[index] ?? 0,
       wind: hourly.windspeed_10m[index] ?? 0,
       gusts: hourly.windgusts_10m[index] ?? 0,
       code: hourly.weathercode[index] ?? 0,
     }));
-  }, [weatherData]);
+  }, [selectedTimezone, weatherData]);
 
   const dailyRows = useMemo(() => {
     const daily = weatherData?.daily;
@@ -453,10 +503,10 @@ export default function WeatherPage() {
       else last.end = entry.hour;
     });
     const formatted = ranges
-      .map((r) => `${new Date(2000, 0, 1, r.start).toLocaleTimeString([], { hour: "numeric" })} - ${new Date(2000, 0, 1, r.end + 1).toLocaleTimeString([], { hour: "numeric" })}`)
+      .map((r) => `${formatTimeForStation(new Date(2000, 0, 1, r.start))} - ${formatTimeForStation(new Date(2000, 0, 1, r.end + 1))}`)
       .join(", ");
     return `Safe to spray: ${formatted}`;
-  }, [todaySpraySegments]);
+  }, [formatTimeForStation, todaySpraySegments]);
 
   const nowHour = new Date().getHours();
   const nowIndex = todaySpraySegments.findIndex((s) => s.hour >= nowHour);
@@ -484,12 +534,12 @@ export default function WeatherPage() {
         ?? rainfallLogs.find((log) => log.date === rainEditDate);
       const payload = {
         id: existing?.id ?? crypto.randomUUID(),
-        locationId: selectedStation.id,
-        stationId: selectedStation.id,
+        location_id: selectedStation.id,
+        station_id: selectedStation.id,
         date: rainEditDate,
-        rainfallTotal: amountMm,
+        rainfall_total: amountMm,
         source: "manual",
-        currentConditions: "",
+        current_conditions: "",
         forecast: "",
         temperature: 0,
         humidity: 0,
@@ -553,7 +603,7 @@ export default function WeatherPage() {
         <Card className="rounded-xl">
           <CardContent className="space-y-3 p-6">
             <p className="text-sm text-muted-foreground">Weather is not configured.</p>
-            <p className="text-sm text-muted-foreground">Set up your weather station in Settings -&gt; Weather to get started.</p>
+            <p className="text-sm text-muted-foreground">Add a weather location in Settings.</p>
             <Button size="sm" onClick={() => navigate("/app/settings?tab=Weather")}>
               Open Settings -&gt; Weather
             </Button>
@@ -569,6 +619,7 @@ export default function WeatherPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Weather</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">Live operations forecast for {selectedStation?.name}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Provider: {forecastSource} · Timezone: {selectedTimezone}</p>
         </div>
         {stations.length > 1 ? (
           <select
@@ -621,6 +672,11 @@ export default function WeatherPage() {
                   <CardContent className="space-y-2 p-6">
                     <div className="text-sm font-semibold">NWS Alerts</div>
                     {alertsLoading ? <div className="h-12 animate-pulse rounded bg-muted" /> : null}
+                    {!alertsLoading && alertsError ? (
+                      <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                        Alerts unavailable. {alertsError}
+                      </div>
+                    ) : null}
                     {!alertsLoading && alerts.length === 0 ? (
                       <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">No active alerts ✓</div>
                     ) : null}
@@ -647,12 +703,9 @@ export default function WeatherPage() {
 
                     const safeHours = dayHours.filter((h) => h.wind < 10 && h.rainPct < 20 && h.temp >= 45 && h.temp <= 95);
                     const daySpray = safeHours.length
-                      ? `Safe ${new Date(2000, 0, 1, safeHours[0].hour).toLocaleTimeString([], { hour: "numeric" })}-${new Date(
-                          2000,
-                          0,
-                          1,
-                          safeHours[safeHours.length - 1].hour + 1,
-                        ).toLocaleTimeString([], { hour: "numeric" })}`
+                      ? `Safe ${formatTimeForStation(new Date(2000, 0, 1, safeHours[0].hour))}-${formatTimeForStation(
+                          new Date(2000, 0, 1, safeHours[safeHours.length - 1].hour + 1),
+                        )}`
                       : "No safe window";
 
                     return (
@@ -669,7 +722,7 @@ export default function WeatherPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="text-sm font-semibold">
-                                {new Date(day.date).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
+                                {formatDateForStation(day.date)}
                               </div>
                               <div className="text-xs text-muted-foreground">{labelForWeatherCode(day.code)}</div>
                             </div>
@@ -697,7 +750,7 @@ export default function WeatherPage() {
                                   hour.rainPct > 70 ? "bg-red-50" : hour.rainPct > 40 ? "bg-amber-50" : hour.code === 0 ? "bg-sky-50" : "bg-slate-50";
                                 return (
                                   <div key={hour.time} className={`min-w-[72px] rounded-lg border p-2 text-center ${bg}`}>
-                                    <div className="text-xs font-medium">{new Date(hour.time).toLocaleTimeString([], { hour: "numeric" })}</div>
+                                    <div className="text-xs font-medium">{formatTimeForStation(hour.time)}</div>
                                     <div className="text-lg">{iconForWeatherCode(hour.code)}</div>
                                     {activeOverlays.has("temp") ? (
                                       <div className={`text-sm font-bold ${tempClass(hour.temp)}`}>{Math.round(hour.temp)}°</div>
@@ -794,9 +847,12 @@ export default function WeatherPage() {
               </Card>
 
               <Dialog open={isRainLogOpen} onOpenChange={setIsRainLogOpen}>
-                <DialogContent className="max-h-[85vh] max-w-[1200px] overflow-y-auto">
+                <DialogContent aria-describedby="dialog-desc" className="max-h-[85vh] max-w-[1200px] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Rainfall Log</DialogTitle>
+                    <DialogDescription id="dialog-desc" className="sr-only">
+                      Review and edit annual rainfall entries for the selected weather location.
+                    </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -957,7 +1013,7 @@ export default function WeatherPage() {
               {selectedStation?.latitude && selectedStation.longitude ? (
                 <RadarEmbed latitude={selectedStation.latitude} longitude={selectedStation.longitude} />
               ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Station coordinates required for radar.</div>
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Radar temporarily unavailable.</div>
               )}
             </div>
             <div className="absolute bottom-2 right-3 text-[10px] text-muted-foreground">RainViewer · Live</div>

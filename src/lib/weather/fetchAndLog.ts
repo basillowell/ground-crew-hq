@@ -52,10 +52,10 @@ export async function fetchAndLogOpenMeteoWeather(args: LogArgs): Promise<void> 
 
   const { data: stationRows } = await supabase
     .from('weather_stations')
-    .select('id, locationId, location_id, isPrimary, is_primary')
+    .select('id, location_id, is_primary')
     .eq('org_id', orgId)
-    .or(`locationId.eq.${selectedLocation.id},location_id.eq.${selectedLocation.id}`)
-    .order('isPrimary', { ascending: false })
+    .eq('location_id', selectedLocation.id)
+    .order('is_primary', { ascending: false })
     .limit(1);
   const primaryStationId = stationRows?.[0]?.id ?? null;
 
@@ -67,13 +67,13 @@ export async function fetchAndLogOpenMeteoWeather(args: LogArgs): Promise<void> 
     .join(' | ');
 
   const upsertPayload = {
-    orgId,
-    locationId: selectedLocation.id,
-    stationId: primaryStationId,
+    org_id: orgId,
+    location_id: selectedLocation.id,
+    station_id: primaryStationId,
     date,
-    currentConditions: 'Open-Meteo live weather',
+    current_conditions: 'Open-Meteo live weather',
     forecast,
-    rainfallTotal,
+    rainfall_total: rainfallTotal,
     temperature: Number(data.current.temperature ?? 0),
     humidity: Number(data.current.humidity ?? 0),
     wind: Number(data.current.windSpeed ?? 0),
@@ -84,7 +84,7 @@ export async function fetchAndLogOpenMeteoWeather(args: LogArgs): Promise<void> 
 
   const upsertResult = await supabase
     .from('weather_daily_logs')
-    .upsert(upsertPayload, { onConflict: 'locationId,date' });
+    .upsert(upsertPayload, { onConflict: 'location_id,date' });
 
   if (upsertResult.error) {
     const fallbackPayload = {

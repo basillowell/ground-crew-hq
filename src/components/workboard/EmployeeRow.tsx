@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AvatarInitials } from '@/components/shared';
 import { TaskBlock } from './TaskBlock';
-import { CheckCircle2, Clock3, GripVertical, Pencil, Play, Plus } from 'lucide-react';
+import { CheckCircle2, Clock3, GripVertical, Loader2, Pencil, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Employee, Assignment, Task } from '@/data/seedData';
 import { storedIsoToWallClock, storedIsoToWallClockLabel } from '@/lib/timeWorkflow';
@@ -31,8 +31,8 @@ interface EmployeeRowProps {
   weatherWarningsByAssignment?: Record<string, Array<{ level: 'warning' | 'danger'; message: string }>>;
   assignmentTimelineById?: Record<string, { actualStartAt: string | null; actualCompletedAt: string | null }>;
   operationalTimezone?: string;
-  onStartAssignment?: (assignment: Assignment) => void;
-  onCompleteAssignment?: (assignment: Assignment, employeeAssignments: Assignment[]) => void;
+  onStartAssignment?: (assignment: Assignment) => Promise<void>;
+  onCompleteAssignment?: (assignment: Assignment, employeeAssignments: Assignment[]) => Promise<void>;
   onSaveAssignmentTimes?: (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => void;
   savingTimelineAssignmentId?: string | null;
 }
@@ -204,7 +204,7 @@ export function EmployeeRow({
                 const actualHours = getActualHours(assignment, actualStartSource, actualCompletedSource);
                 const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
                 return (
-                  <div key={assignment.id} className="space-y-1">
+                  <div key={assignment.id} className="min-h-[44px] space-y-1">
                     <TaskBlock
                       task={
                         task ?? {
@@ -230,17 +230,17 @@ export function EmployeeRow({
                       onEdit={onEditAssignment ? () => onEditAssignment(assignment) : undefined}
                       onRemove={onRemoveAssignment ? () => onRemoveAssignment(assignment.id) : undefined}
                     />
-                    <div className="flex flex-wrap items-center gap-2 px-2 pb-1">
+                    <div className="flex min-h-[44px] flex-wrap items-center gap-2 px-2">
                       {assignmentStatus === 'planned' && onStartAssignment ? (
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-7 rounded-full px-2 text-[11px]"
-                          onClick={() => onStartAssignment(assignment)}
+                          className="min-h-11 w-full rounded-full px-3 text-sm sm:min-h-8 sm:w-auto sm:px-2 sm:text-[11px]"
+                          onClick={() => void onStartAssignment(assignment)}
                           disabled={savingTimelineAssignmentId === assignment.id}
                         >
-                          <Play className="mr-1 h-3 w-3" /> Start
+                          {savingTimelineAssignmentId === assignment.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />} Start
                         </Button>
                       ) : null}
                       {assignmentStatus === 'in-progress' && onCompleteAssignment ? (
@@ -248,11 +248,11 @@ export function EmployeeRow({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-7 rounded-full px-2 text-[11px]"
-                          onClick={() => onCompleteAssignment(assignment, sortedAssignments)}
+                          className="min-h-11 w-full rounded-full px-3 text-sm sm:min-h-8 sm:w-auto sm:px-2 sm:text-[11px]"
+                          onClick={() => void onCompleteAssignment(assignment, sortedAssignments)}
                           disabled={savingTimelineAssignmentId === assignment.id}
                         >
-                          <CheckCircle2 className="mr-1 h-3 w-3" /> Complete
+                          {savingTimelineAssignmentId === assignment.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />} Complete
                         </Button>
                       ) : null}
                       <span className={`text-[11px] ${actualHoursTone}`}>

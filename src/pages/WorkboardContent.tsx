@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -500,7 +500,8 @@ export default function WorkboardContent() {
   const queryClient = useQueryClient();
   const { currentPropertyId, setCurrentPropertyId, currentUser, userRole } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
-  const [boardDate, setBoardDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const getLocalDateKey = useCallback(() => new Date().toLocaleDateString('en-CA'), []);
+  const [boardDate, setBoardDate] = useState(() => new Date().toLocaleDateString('en-CA'));
   const [department, setDepartment] = useState('All Departments');
   const [groupFilter, setGroupFilter] = useState('all');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
@@ -619,7 +620,7 @@ export default function WorkboardContent() {
   });
   const [quickTaskDraft, setQuickTaskDraft] = useState({
     employeeId: '',
-    date: new Date().toISOString().slice(0, 10),
+    date: new Date().toLocaleDateString('en-CA'),
     location: 'Primary zone',
     notes: '',
   });
@@ -745,11 +746,11 @@ export default function WorkboardContent() {
   });
 
   const pendingTaskRequestsQuery = useQuery({
-    queryKey: ['task-requests-pending', new Date().toISOString().slice(0, 10), effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
+    queryKey: ['task-requests-pending', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
     enabled: Boolean(currentUser?.orgId),
     queryFn: async () => {
       if (!supabase) return [] as PendingTaskRequest[];
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getLocalDateKey();
       let query = supabase
         .from('task_requests')
         .select('*')
@@ -790,7 +791,7 @@ export default function WorkboardContent() {
           .from('weather_daily_logs')
           .select('*')
           .eq('date', boardDate)
-          .in('locationId', locationIds);
+          .in('location_id', locationIds);
         const { data, error } = await query;
         if (error) return [] as WeatherDailyLog[];
         return (data ?? []).map((row) => normalizeWeatherLog(row as Record<string, unknown>));
@@ -853,6 +854,26 @@ export default function WorkboardContent() {
     [employeesQuery.data],
   );
   const assignmentList = assignmentsQuery.data ?? [];
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.info('[workboard:data]', {
+      boardDate,
+      orgId: currentUser?.orgId ?? null,
+      propertyId: effectivePropertyId,
+      scheduleEntries: scheduleQuery.data?.length ?? 0,
+      assignments: assignmentList.length,
+      scheduleStatus: scheduleQuery.status,
+      assignmentStatus: assignmentsQuery.status,
+    });
+  }, [
+    assignmentList.length,
+    assignmentsQuery.status,
+    boardDate,
+    currentUser?.orgId,
+    effectivePropertyId,
+    scheduleQuery.data?.length,
+    scheduleQuery.status,
+  ]);
   const assignmentTimelineById = useMemo(() => {
     const map = new Map<string, AssignmentTimelineMeta>();
     for (const row of assignmentTimelineQuery.data ?? []) {
@@ -1703,24 +1724,56 @@ export default function WorkboardContent() {
         setSavingTimelineAssignmentId(null);
         return;
       }
-      const { error } = await supabase
+      const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+      const previousStatus = normalizeAssignmentStatus(assignment.status);
+      const previousStartAt =
+        typeof assignmentRecord.actual_start_at === 'string'
+          ? String(assignmentRecord.actual_start_at)
+          : assignment.id
+            ? assignmentTimelineById.get(assignment.id)?.actualStartAt ?? null
+            : null;
+      syncTimelineCaches(assignment.id, { status: 'in_progress', actualStartAt: nowIso });
+      const propertyForEvent = effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : currentPropertyId;
+      const employeeForEvent = assignment.employeeId || (typeof assignmentRecord.employee_id === 'string' ? assignmentRecord.employee_id : null);
+      const { error: assignmentError } = await supabase
         .from('assignments')
         .update({ status: 'in_progress', actual_start_at: nowIso })
         .eq('id', assignment.id)
         .eq('org_id', currentUser.orgId);
-      if (error) {
-        toast.error(`Failed to start task: ${error.message}`);
+      if (assignmentError) {
+        syncTimelineCaches(assignment.id, { status: previousStatus, actualStartAt: previousStartAt });
+        toast.error(`Failed to start task: ${assignmentError.message}`);
         setSavingTimelineAssignmentId(null);
         return;
       }
-      syncTimelineCaches(assignment.id, { status: 'in_progress', actualStartAt: nowIso });
+      if (propertyForEvent && employeeForEvent) {
+        const { error: clockError } = await supabase.from('clock_events').insert({
+          id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          org_id: currentUser.orgId,
+          property_id: propertyForEvent,
+          employee_id: employeeForEvent,
+          event_type: 'clock_in',
+          timestamp: nowIso,
+          location_lat: null,
+          location_lng: null,
+        });
+        if (clockError) {
+          syncTimelineCaches(assignment.id, { status: previousStatus, actualStartAt: previousStartAt });
+          await supabase
+            .from('assignments')
+            .update({ status: previousStatus, actual_start_at: previousStartAt })
+            .eq('id', assignment.id)
+            .eq('org_id', currentUser.orgId);
+          toast.error(`Failed to start task: ${clockError.message}`);
+          setSavingTimelineAssignmentId(null);
+          return;
+        }
+      }
       triggerAssignmentFlash(assignment.id, 'started');
       toast.success(`Started ${assignment.title || 'task'}`);
-      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
-    [boardDate, currentUser?.orgId, operationalTimezone, queryClient, syncTimelineCaches, triggerAssignmentFlash],
+    [assignmentTimelineById, boardDate, currentPropertyId, currentUser?.orgId, effectivePropertyId, operationalTimezone, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const completeAssignmentTimeline = useCallback(
@@ -1755,21 +1808,69 @@ export default function WorkboardContent() {
         updatePayload.actual_hours = Number(calculatedHours.toFixed(2));
       }
 
+      const previousStatus = normalizeAssignmentStatus(assignment.status);
+      const previousCompletedAt = timelineMeta.actualCompletedAt;
+      const previousActualHours =
+        typeof (assignment as Assignment & Record<string, unknown>).actual_hours === 'number'
+          ? Number((assignment as Assignment & Record<string, unknown>).actual_hours)
+          : typeof assignment.actualHours === 'number'
+            ? Number(assignment.actualHours)
+            : undefined;
+      syncTimelineCaches(assignment.id, {
+        status: 'completed',
+        actualCompletedAt: nowIso,
+        actualHours: typeof updatePayload.actual_hours === 'number' ? Number(updatePayload.actual_hours) : undefined,
+      });
+
       const { error } = await supabase
         .from('assignments')
         .update(updatePayload)
         .eq('id', assignment.id)
         .eq('org_id', currentUser.orgId);
       if (error) {
+        syncTimelineCaches(assignment.id, {
+          status: previousStatus,
+          actualCompletedAt: previousCompletedAt,
+          actualHours: previousActualHours,
+        });
         toast.error(`Failed to complete task: ${error.message}`);
         setSavingTimelineAssignmentId(null);
         return;
       }
-      syncTimelineCaches(assignment.id, {
-        status: 'completed',
-        actualCompletedAt: nowIso,
-        actualHours: typeof updatePayload.actual_hours === 'number' ? Number(updatePayload.actual_hours) : undefined,
-      });
+      const propertyForEvent = effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : currentPropertyId;
+      const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+      const employeeForEvent = assignment.employeeId || (typeof assignmentRecord.employee_id === 'string' ? assignmentRecord.employee_id : null);
+      if (propertyForEvent && employeeForEvent) {
+        const { error: clockError } = await supabase.from('clock_events').insert({
+          id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          org_id: currentUser.orgId,
+          property_id: propertyForEvent,
+          employee_id: employeeForEvent,
+          event_type: 'clock_out',
+          timestamp: nowIso,
+          location_lat: null,
+          location_lng: null,
+        });
+        if (clockError) {
+          syncTimelineCaches(assignment.id, {
+            status: previousStatus,
+            actualCompletedAt: previousCompletedAt,
+            actualHours: previousActualHours,
+          });
+          await supabase
+            .from('assignments')
+            .update({
+              status: previousStatus,
+              actual_completed_at: previousCompletedAt,
+              actual_hours: previousActualHours,
+            })
+            .eq('id', assignment.id)
+            .eq('org_id', currentUser.orgId);
+          toast.error(`Failed to complete task: ${clockError.message}`);
+          setSavingTimelineAssignmentId(null);
+          return;
+        }
+      }
 
       const ordered = orderEmployeeAssignments(employeeAssignments);
       const currentOrder = getCanonicalActualTimes(assignment).timelineMeta.orderIndex;
@@ -1792,11 +1893,9 @@ export default function WorkboardContent() {
 
       triggerAssignmentFlash(assignment.id, 'complete');
       toast.success(`Completed ${assignment.title || 'task'}`);
-      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
-    [currentUser?.orgId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, queryClient, syncTimelineCaches, triggerAssignmentFlash],
+    [currentPropertyId, currentUser?.orgId, effectivePropertyId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const saveAssignmentTimelineTimes = useCallback(
@@ -2561,7 +2660,7 @@ export default function WorkboardContent() {
   }, []);
 
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
-  const [todayDateKey] = useState(() => new Date().toISOString().slice(0, 10));
+  const [todayDateKey] = useState(() => new Date().toLocaleDateString('en-CA'));
 
   useEffect(() => {
     const dismissed = window.localStorage.getItem('ground-crew-first-visit-workboard-dismissed') === 'true';
@@ -4370,7 +4469,7 @@ export default function WorkboardContent() {
                     <button
                       type="button"
                       onClick={() => toggleDesktopCrew(lane.employee.id)}
-                      className="flex w-full items-center gap-3 border-b px-3 py-2 text-left hover:bg-muted/30"
+                      className="flex h-[52px] min-h-[52px] max-h-[52px] w-full items-center gap-3 border-b px-3 text-left hover:bg-muted/30"
                     >
                       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                         {initials}
@@ -4400,7 +4499,15 @@ export default function WorkboardContent() {
                     </button>
                     {isExpanded ? (
                 <SafeSection fallback={<div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">This crew lane could not be rendered.</div>}>
-                  <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-muted/40" />}>
+                  <Suspense
+                    fallback={
+                      <div className="space-y-2 p-2">
+                        <div className="h-[52px] animate-pulse rounded-lg bg-muted/40" />
+                        <div className="h-[52px] animate-pulse rounded-lg bg-muted/40" />
+                        <div className="h-[52px] animate-pulse rounded-lg bg-muted/40" />
+                      </div>
+                    }
+                  >
                     <EmployeeRow
                       employee={lane.employee}
                       assignments={lane.employeeAssignments}
@@ -5173,9 +5280,12 @@ export default function WorkboardContent() {
           }
         }}
       >
-        <DialogContent role="dialog" aria-modal="true" className="max-w-2xl">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Last {quickPlanDayLabel}&apos;s Plan — Apply to today?</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Review and apply the previous day&apos;s plan to today&apos;s schedule.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {quickPlanLoading ? (
@@ -5251,6 +5361,7 @@ export default function WorkboardContent() {
         }}
       >
         <DialogContent
+          aria-describedby="dialog-desc"
           role="dialog"
           aria-modal="true"
           className="sm:max-w-md max-h-[85vh] overflow-y-auto"
@@ -5268,6 +5379,9 @@ export default function WorkboardContent() {
             <DialogTitle>
               {editingAssignmentId ? 'Edit Assignment' : linkedRequestId ? 'Dispatch Need to Crew' : 'Assign Task to Crew'}
             </DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Set task assignment details for crew dispatch.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto px-4 pb-3 md:px-0 md:pb-0">
@@ -5572,9 +5686,12 @@ export default function WorkboardContent() {
       </Dialog>
 
       <Dialog open={quickTaskDialogOpen} onOpenChange={setQuickTaskDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Task</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Add a quick task for an employee on the selected date.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -5630,9 +5747,12 @@ export default function WorkboardContent() {
       </Dialog>
 
       <Dialog open={sendScheduleDialogOpen} onOpenChange={setSendScheduleDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Send today's schedule to crew</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Choose recipients and share today&apos;s schedule.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="max-h-64 space-y-2 overflow-auto rounded-md border p-3">
@@ -5665,9 +5785,12 @@ export default function WorkboardContent() {
       </Dialog>
 
       <Dialog open={taskTemplateDialogOpen} onOpenChange={setTaskTemplateDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" className="max-w-2xl">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Apply Daily Task Template</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Select template tasks and apply them to crew lanes.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-xl border bg-muted/20 p-3">
@@ -5799,11 +5922,14 @@ export default function WorkboardContent() {
 
       {/* ─── NOTE DIALOG ─── */}
       <Dialog open={endOfDayDialogOpen} onOpenChange={setEndOfDayDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-4 w-4" /> End of Day Report
             </DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Review and share the generated end-of-day operations report.
+            </DialogDescription>
           </DialogHeader>
           {endOfDayReportGenerating ? (
             <div className="space-y-2 py-3">
@@ -5837,9 +5963,12 @@ export default function WorkboardContent() {
       </Dialog>
 
       <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Board Note</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Add a board note with type, location, and message details.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>

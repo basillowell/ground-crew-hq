@@ -10,8 +10,9 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
+import { SOPSettings } from '@/components/settings/SOPSettings';
 
-const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'Weather', 'Access', 'Help'] as const;
+const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'SOPs', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
 
 interface SchedulerSettings {
@@ -211,6 +212,7 @@ export default function SettingsPage() {
         {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
         {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId} />}
         {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
+        {tab === 'SOPs' && <SOPSettings key="sops" orgId={orgId} propertyId={taskPropertyId} />}
         {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
       </fieldset>
       {tab === 'Access' && (

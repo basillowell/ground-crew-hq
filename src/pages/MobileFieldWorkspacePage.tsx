@@ -12,6 +12,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
 import { createEvents, type EventAttributes } from 'ics';
+import { Loader2 } from 'lucide-react';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 
@@ -27,6 +28,9 @@ type FieldAssignment = {
   actualHours: number | null;
   startTime: string | null;
   completedAt: string | null;
+  actualStartAt?: string | null;
+  actualCompletedAt?: string | null;
+  employeeId?: string;
 };
 
 type ShiftEntry = {
@@ -56,6 +60,16 @@ type ClockEventRecord = {
   id: string;
   eventType: string;
   timestamp: string;
+};
+
+type TeammateCard = {
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  role: string | null;
+  shiftStart: string | null;
+  shiftEnd: string | null;
+  tasks: FieldAssignment[];
 };
 
 type DeferredInstallPromptEvent = Event & {
@@ -93,6 +107,11 @@ type FieldSyncQueueItem =
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function isUuid(value: string | null | undefined): value is string {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function downloadTextFile(filename: string, contents: string, mimeType: string) {
@@ -166,6 +185,10 @@ export default function MobileFieldWorkspacePage() {
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
+  const [teammates, setTeammates] = useState<TeammateCard[]>([]);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
   useEffect(() => {
     document.title = 'Field — Ground Crew HQ';
@@ -341,7 +364,7 @@ export default function MobileFieldWorkspacePage() {
         .limit(1),
       supabase
         .from('assignments')
-        .select('id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at')
+        .select('id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at, actual_start_at, actual_completed_at')
         .eq('org_id', orgId)
         .eq('employee_id', employeeId)
         .eq('date', boardDate)
@@ -421,6 +444,7 @@ export default function MobileFieldWorkspacePage() {
 
     const normalizedAssignments: FieldAssignment[] = (assignmentRows ?? []).map((row) => ({
       id: String(row.id),
+      employeeId: row.employee_id ? String(row.employee_id) : employeeId,
       taskId: row.task_id ? String(row.task_id) : null,
       title: String(row.title ?? 'Task'),
       location: row.location ? String(row.location) : null,
@@ -431,8 +455,92 @@ export default function MobileFieldWorkspacePage() {
       actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
       startTime: row.start_time ? String(row.start_time).slice(0, 5) : null,
       completedAt: row.completed_at ? String(row.completed_at) : null,
+      actualStartAt: row.actual_start_at ? String(row.actual_start_at) : null,
+      actualCompletedAt: row.actual_completed_at ? String(row.actual_completed_at) : null,
     }));
     setAssignments(normalizedAssignments);
+
+    const teammateScheduleQuery = supabase
+      .from('schedule_entries')
+      .select('employee_id, shift_start, shift_end, status')
+      .eq('org_id', orgId)
+      .eq('date', boardDate);
+    const teammateAssignmentsQuery = supabase
+      .from('assignments')
+      .select('id, employee_id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at')
+      .eq('org_id', orgId)
+      .eq('date', boardDate)
+      .order('order_index', { ascending: true });
+    if (currentUser?.propertyId) {
+      void teammateScheduleQuery.eq('property_id', currentUser.propertyId);
+      void teammateAssignmentsQuery.eq('property_id', currentUser.propertyId);
+    }
+    const [{ data: teammateScheduleRows }, { data: teammateAssignmentRows }] = await Promise.all([
+      teammateScheduleQuery,
+      teammateAssignmentsQuery,
+    ]);
+    const teammateRows = (teammateScheduleRows ?? []).filter((row) => {
+      if (!row.employee_id) return false;
+      if (String(row.employee_id) === employeeId) return false;
+      return String(row.status ?? 'scheduled').toLowerCase() === 'scheduled';
+    });
+    const teammateIds = Array.from(new Set(teammateRows.map((row) => String(row.employee_id))));
+    let teammateEmployeeMap = new Map<string, { firstName: string; lastName: string; role: string | null }>();
+    if (teammateIds.length > 0) {
+      const { data: teammateEmployees } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, role')
+        .eq('org_id', orgId)
+        .in('id', teammateIds);
+      teammateEmployeeMap = new Map(
+        (teammateEmployees ?? []).map((row) => [
+          String(row.id),
+          {
+            firstName: String(row.first_name ?? ''),
+            lastName: String(row.last_name ?? ''),
+            role: row.role ? String(row.role) : null,
+          },
+        ]),
+      );
+    }
+    const groupedTeammateTasks = new Map<string, FieldAssignment[]>();
+    (teammateAssignmentRows ?? []).forEach((row) => {
+      const teammateId = row.employee_id ? String(row.employee_id) : '';
+      if (!teammateId || teammateId === employeeId) return;
+      const list = groupedTeammateTasks.get(teammateId) ?? [];
+      list.push({
+        id: String(row.id),
+        employeeId: teammateId,
+        taskId: row.task_id ? String(row.task_id) : null,
+        title: String(row.title ?? 'Task'),
+        location: row.location ? String(row.location) : null,
+        notes: row.notes ? String(row.notes) : null,
+        status: String(row.status ?? 'planned') as AssignmentStatus,
+        orderIndex: Number(row.order_index ?? 0),
+        estimatedHours: Number(row.estimated_hours ?? 0),
+        actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
+        startTime: row.start_time ? String(row.start_time).slice(0, 5) : null,
+        completedAt: row.completed_at ? String(row.completed_at) : null,
+      });
+      groupedTeammateTasks.set(teammateId, list);
+    });
+    setTeammates(
+      teammateRows
+        .map((row) => {
+          const teammateId = String(row.employee_id);
+          const profile = teammateEmployeeMap.get(teammateId);
+          return {
+            employeeId: teammateId,
+            firstName: profile?.firstName ?? 'Crew',
+            lastName: profile?.lastName ?? '',
+            role: profile?.role ?? null,
+            shiftStart: row.shift_start ? String(row.shift_start).slice(0, 5) : null,
+            shiftEnd: row.shift_end ? String(row.shift_end).slice(0, 5) : null,
+            tasks: (groupedTeammateTasks.get(teammateId) ?? []).sort((a, b) => a.orderIndex - b.orderIndex),
+          };
+        })
+        .sort((a, b) => String(a.shiftStart ?? '').localeCompare(String(b.shiftStart ?? ''))),
+    );
 
     const normalizedClockEvents: ClockEventRecord[] = (clockRows ?? []).map((row) => ({
       id: String(row.id),
@@ -859,17 +967,238 @@ export default function MobileFieldWorkspacePage() {
     setDeferredInstallPrompt(null);
   }, [deferredInstallPrompt, dismissInstallBanner]);
 
-  if (loading) {
-    return <PageSkeleton />;
-  }
-
-  if (error) {
+  if (error && !loading) {
     return (
       <div className="mx-auto w-full max-w-[520px] px-4 py-4 font-sans">
         <ErrorRetry message={error} onRetry={() => void fetchFieldData()} />
       </div>
     );
   }
+
+  const handlePullRefreshStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (window.scrollY > 0 || refreshing) return;
+    setTouchStartY(event.touches[0]?.clientY ?? null);
+  };
+
+  const handlePullRefreshMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartY == null || refreshing) return;
+    const currentY = event.touches[0]?.clientY ?? touchStartY;
+    const nextDistance = Math.max(0, currentY - touchStartY);
+    setPullDistance(Math.min(nextDistance, 84));
+  };
+
+  const handlePullRefreshEnd = async () => {
+    if (pullDistance >= 64 && !refreshing) {
+      setRefreshing(true);
+      await fetchFieldData();
+      setRefreshing(false);
+    }
+    setPullDistance(0);
+    setTouchStartY(null);
+  };
+
+  const handleMyTaskStatusAction = useCallback(
+    async (assignment: FieldAssignment, action: 'start' | 'complete') => {
+      if (!supabase || !orgId || !employeeId || !assignment.id) return;
+      const propertyIdRaw = shift?.propertyId ?? currentUser?.propertyId ?? null;
+      const actingEmployeeId = assignment.employeeId ?? employeeId;
+      if (!isUuid(propertyIdRaw) || !isUuid(actingEmployeeId)) {
+        toast.error('Property is not available for this action.');
+        return;
+      }
+      const propertyId = propertyIdRaw;
+
+      const previous = { ...assignment };
+      const nowIso = new Date().toISOString();
+      const optimisticPatch: Partial<FieldAssignment> =
+        action === 'start'
+          ? {
+              status: 'in_progress',
+              actualStartAt: nowIso,
+            }
+          : (() => {
+              const startIso = assignment.actualStartAt ?? nowIso;
+              const startMs = Date.parse(startIso);
+              const endMs = Date.parse(nowIso);
+              const nextActualHours =
+                Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs
+                  ? Number(((endMs - startMs) / 3_600_000).toFixed(2))
+                  : assignment.actualHours ?? 0;
+              return {
+                status: 'completed',
+                actualCompletedAt: nowIso,
+                actualHours: nextActualHours,
+                completedAt: nowIso,
+              };
+            })();
+
+      setSavingIds((current) => ({ ...current, [assignment.id]: true }));
+      setAssignments((current) =>
+        current.map((row) =>
+          row.id === assignment.id
+            ? { ...row, ...optimisticPatch }
+            : row,
+        ),
+      );
+
+      const assignmentPayload: Record<string, unknown> =
+        action === 'start'
+          ? { status: 'in_progress', actual_start_at: nowIso }
+          : {
+              status: 'completed',
+              actual_completed_at: nowIso,
+              actual_hours: optimisticPatch.actualHours ?? 0,
+            };
+
+      const { error: assignmentError } = await supabase
+        .from('assignments')
+        .update(assignmentPayload)
+        .eq('id', assignment.id)
+        .eq('org_id', orgId);
+      if (assignmentError) {
+        setAssignments((current) => current.map((row) => (row.id === previous.id ? previous : row)));
+        setSavingIds((current) => ({ ...current, [assignment.id]: false }));
+        toast.error(`${action === 'start' ? 'Start' : 'Complete'} failed: ${assignmentError.message}`);
+        return;
+      }
+
+      const { error: clockError } = await supabase.from('clock_events').insert({
+        // supervisor acting on behalf of employee
+        employee_id: actingEmployeeId,
+        property_id: propertyId,
+        org_id: orgId,
+        event_type: action === 'start' ? 'clock_in' : 'clock_out',
+        timestamp: nowIso,
+        location_lat: null,
+        location_lng: null,
+      });
+      if (clockError) {
+        await supabase
+          .from('assignments')
+          .update({
+            status: previous.status,
+            actual_start_at: previous.actualStartAt ?? null,
+            actual_completed_at: previous.actualCompletedAt ?? null,
+            actual_hours: previous.actualHours,
+          })
+          .eq('id', assignment.id)
+          .eq('org_id', orgId);
+        setAssignments((current) => current.map((row) => (row.id === previous.id ? previous : row)));
+        setSavingIds((current) => ({ ...current, [assignment.id]: false }));
+        toast.error(`${action === 'start' ? 'Start' : 'Complete'} failed: ${clockError.message}`);
+        return;
+      }
+
+      setSavingIds((current) => ({ ...current, [assignment.id]: false }));
+      toast.success(action === 'start' ? `Started ${assignment.title}` : `Completed ${assignment.title}`);
+    },
+    [currentUser?.propertyId, employeeId, orgId, shift?.propertyId],
+  );
+
+  const displayOnlyLayout = (
+    <div
+      className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans"
+      onTouchStart={handlePullRefreshStart}
+      onTouchMove={handlePullRefreshMove}
+      onTouchEnd={() => void handlePullRefreshEnd()}
+    >
+      {pullDistance > 0 ? (
+        <div className="mb-2 flex h-8 items-center justify-center text-xs text-muted-foreground">
+          {refreshing ? 'Refreshing…' : pullDistance >= 64 ? 'Release to refresh' : 'Pull to refresh'}
+        </div>
+      ) : null}
+
+      <Card className="mb-4 rounded-2xl p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">My Tasks</p>
+          <p className="text-xs text-muted-foreground">{new Date().toLocaleDateString()}</p>
+        </div>
+        <div className="space-y-2">
+          {loading
+            ? Array.from({ length: 4 }).map((_, idx) => (
+                <div key={`my-task-skeleton-${idx}`} className="h-[44px] animate-pulse rounded-lg bg-muted/40" />
+              ))
+            : assignments.length === 0
+              ? <p className="text-sm text-muted-foreground">No tasks assigned for today.</p>
+              : assignments
+                  .sort((a, b) => a.orderIndex - b.orderIndex)
+                  .map((assignment) => (
+                    <div key={assignment.id} className="flex h-[44px] items-center gap-2 rounded-lg border px-3">
+                      <span className="truncate text-sm font-medium">{assignment.title}</span>
+                      <Badge variant="outline" className="shrink-0 text-[10px]">{assignment.location || 'Area'}</Badge>
+                      <span className="shrink-0 text-xs text-muted-foreground">{assignment.estimatedHours.toFixed(1)}h est</span>
+                      <Badge className={`shrink-0 text-[10px] ${statusBadgeClass(assignment.status)}`}>{statusBadgeLabel(assignment.status)}</Badge>
+                      {displayStatus(assignment.status) === 'done' ? (
+                        <Button type="button" disabled variant="outline" className="ml-auto h-8 min-w-[76px] bg-muted text-muted-foreground">
+                          Done
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="ml-auto h-8 min-w-[76px]"
+                          disabled={Boolean(savingIds[assignment.id])}
+                          onClick={() => void handleMyTaskStatusAction(assignment, displayStatus(assignment.status) === 'planned' ? 'start' : 'complete')}
+                        >
+                          {savingIds[assignment.id] ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                          {displayStatus(assignment.status) === 'planned' ? 'Start' : 'Complete'}
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+        </div>
+      </Card>
+
+      <div className="my-4 border-t" />
+
+      <Card className="mb-4 rounded-2xl p-4">
+        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Teammates</p>
+        <div className="space-y-3">
+          {loading
+            ? Array.from({ length: 3 }).map((_, idx) => (
+                <div key={`teammate-skeleton-${idx}`} className="rounded-xl border p-3">
+                  <div className="h-6 w-40 animate-pulse rounded bg-muted/40" />
+                  <div className="mt-2 h-[44px] animate-pulse rounded-lg bg-muted/40" />
+                </div>
+              ))
+            : teammates.length === 0
+              ? <p className="text-sm text-muted-foreground">No teammates scheduled today.</p>
+              : teammates.map((teammate) => (
+                  <div key={teammate.employeeId} className="rounded-xl border p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div>
+                        <p className="text-base font-semibold">{`${teammate.firstName} ${teammate.lastName}`.trim()}</p>
+                        <p className="text-xs text-muted-foreground">{teammate.role || 'Crew'}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {teammate.shiftStart && teammate.shiftEnd ? `${formatTime(teammate.shiftStart)}–${formatTime(teammate.shiftEnd)}` : 'No shift'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      {teammate.tasks.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No tasks assigned.</p>
+                      ) : (
+                        teammate.tasks.map((task) => (
+                          <div key={task.id} className="flex h-[44px] items-center gap-2 rounded-lg border px-3">
+                            <span className="truncate text-sm font-medium">{task.title}</span>
+                            <Badge variant="outline" className="shrink-0 text-[10px]">{task.location || 'Area'}</Badge>
+                            <span className="shrink-0 text-xs text-muted-foreground">{task.estimatedHours.toFixed(1)}h est</span>
+                            <Badge className={`shrink-0 text-[10px] ${statusBadgeClass(task.status)}`}>{statusBadgeLabel(task.status)}</Badge>
+                            <Button type="button" disabled variant="outline" className="ml-auto h-8 min-w-[76px] bg-muted text-muted-foreground">
+                              Start
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))}
+        </div>
+      </Card>
+    </div>
+  );
+
+  return displayOnlyLayout;
 
   return (
     <div className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans">

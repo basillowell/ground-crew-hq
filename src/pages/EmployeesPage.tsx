@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -889,9 +889,12 @@ export default function EmployeesPage() {
           closeAddModal();
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent aria-describedby="dialog-desc" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Employee</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Enter employee details and save them to the team roster.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3">
             <div className="grid grid-cols-2 gap-2">
@@ -1051,9 +1054,12 @@ export default function EmployeesPage() {
       </Dialog>
 
       <Dialog open={shiftDialogOpen && !isReadOnly} onOpenChange={(open) => { if (!open) { setShiftDialogOpen(false); setEditingShiftId(null); } }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent aria-describedby="dialog-desc" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingShiftId ? 'Edit Shift' : 'Add Shift'}</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Update a team member shift assignment for the selected day.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3">
             <div>

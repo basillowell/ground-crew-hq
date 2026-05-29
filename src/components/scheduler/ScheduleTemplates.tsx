@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Calendar, Copy, Play, Pause, Clock, Users, ListChecks, ChevronRight } from 'lucide-react';
 import { scheduleTemplates, type ScheduleTemplate } from '@/data/multiPropertyData';
@@ -107,7 +107,7 @@ export function ScheduleTemplates({ onApply }: { onApply?: (template: ScheduleTe
 
       {/* Detail dialog */}
       <Dialog open={!!selectedTemplate} onOpenChange={(open) => !open && setSelectedTemplate(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent aria-describedby="dialog-desc" className="max-w-lg">
           {selectedTemplate && (
             <>
               <DialogHeader>
@@ -117,6 +117,9 @@ export function ScheduleTemplates({ onApply }: { onApply?: (template: ScheduleTe
                     {selectedTemplate.season}
                   </Badge>
                 </DialogTitle>
+                <DialogDescription id="dialog-desc" className="sr-only">
+                  Review schedule template details and apply it to the current week.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">{selectedTemplate.description}</p>

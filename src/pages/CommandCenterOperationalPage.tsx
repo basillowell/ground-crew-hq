@@ -1093,12 +1093,12 @@ export default function CommandCenterOperationalPage() {
             .from('chemical_application_logs')
             .select('id', { count: 'exact', head: true })
             .eq('org_id', orgId)
-            .gt('restrictedEntryUntil', nowIso),
+            .gt('restricted_entry_until', nowIso),
           supabase
             .from('chemical_application_logs')
             .select('id', { count: 'exact', head: true })
             .eq('org_id', orgId)
-            .or('supervisorLicenseNumber.is.null,supervisorLicenseNumber.eq.'),
+            .or('supervisor_license_number.is.null'),
         ]);
         if (activeReiResult.error) return { pending: 0, incomplete: 0 };
         if (missingSupervisorResult.error) return { pending: 0, incomplete: 0 };

@@ -68,8 +68,8 @@ export function RainfallTracker({ logs: fallbackLogs = [], loading = false }: Pr
 
       const primaryResult = await supabase
         .from('weather_daily_logs')
-        .select('date, rainfallTotal, source, notes')
-        .eq('locationId', locationId)
+        .select('date, rainfall_total, source, notes')
+        .eq('location_id', locationId)
         .gte('date', yearStart)
         .lte('date', yearEnd)
         .order('date', { ascending: true });
@@ -77,7 +77,7 @@ export function RainfallTracker({ logs: fallbackLogs = [], loading = false }: Pr
       if (!primaryResult.error) {
         return (primaryResult.data ?? []).map((row: any) => ({
           date: String(row.date),
-          rainfallTotal: Number(row.rainfallTotal ?? 0),
+          rainfallTotal: Number(row.rainfall_total ?? 0),
           source: row.source ? String(row.source) : undefined,
           notes: row.notes ? String(row.notes) : undefined,
         }));
@@ -113,7 +113,7 @@ export function RainfallTracker({ logs: fallbackLogs = [], loading = false }: Pr
       const primaryResult = await supabase
         .from('weather_daily_logs')
         .select('date')
-        .eq('locationId', locationId)
+        .eq('location_id', locationId)
         .order('date', { ascending: false });
 
       const rows = primaryResult.error

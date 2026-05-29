@@ -20,7 +20,7 @@ export function useChemicalLogs(orgId?: string, propertyId?: string) {
         .from('chemical_application_logs')
         .select('*')
         .eq('org_id', orgId)
-        .order('applicationDate', { ascending: false });
+        .order('application_date', { ascending: false });
       // property_id is not part of the documented chemical_application_logs schema.
       // Keep reads org-scoped and let page-level filters apply operational context.
       void propertyId;

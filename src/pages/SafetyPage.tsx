@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Shield, FileText, CheckCircle, AlertTriangle, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
@@ -162,9 +162,12 @@ export default function SafetyPage() {
           closeLogTalkModal();
         }}
       >
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent aria-describedby="dialog-desc" className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Log Safety Talk</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Log a safety talk topic, presenter, date, and notes.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>

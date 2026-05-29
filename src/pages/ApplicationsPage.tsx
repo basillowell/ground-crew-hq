@@ -14,7 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import { PageHeader } from '@/components/shared';
@@ -381,41 +381,41 @@ export default function ApplicationsPage() {
     const applicationTimestamp = `${draft.applicationDate}T${draft.startTime}:00-04:00`;
     const nextLogPayload: Record<string, string | number | boolean | null> = {
       id: logId,
-      applicationDate: draft.applicationDate,
-      startTime: draft.startTime,
-      endTime: draft.endTime,
-      applicationTimestamp,
-      areaId: selectedAreaIdForProperty,
-      targetPest: draft.targetPest.trim(),
-      agronomicPurpose: draft.agronomicPurpose.trim(),
-      applicationMethod: draft.applicationMethod,
-      carrierVolume: numberValue(draft.carrierVolume),
-      totalMixVolume: numberValue(draft.totalMixVolume),
-      areaTreated: numberValue(draft.areaTreated),
-      areaUnit: draft.areaUnit,
-      applicatorId: draft.applicatorId,
-      applicatorLicenseNumber: draft.applicatorLicenseNumber.trim(),
-      supervisorName: draft.supervisorName.trim(),
-      supervisorLicenseNumber: draft.supervisorLicenseNumber.trim(),
-      equipmentUsedId: draft.equipmentUsedId || null,
-      weatherLogId: draft.weatherLogId || weatherSource?.id || null,
-      weatherConditionsSummary:
+      application_date: draft.applicationDate,
+      start_time: draft.startTime,
+      end_time: draft.endTime,
+      application_timestamp: applicationTimestamp,
+      area_id: selectedAreaIdForProperty,
+      target_pest: draft.targetPest.trim(),
+      agronomic_purpose: draft.agronomicPurpose.trim(),
+      application_method: draft.applicationMethod,
+      carrier_volume: numberValue(draft.carrierVolume),
+      total_mix_volume: numberValue(draft.totalMixVolume),
+      area_treated: numberValue(draft.areaTreated),
+      area_unit: draft.areaUnit,
+      applicator_id: draft.applicatorId,
+      applicator_license_number: draft.applicatorLicenseNumber.trim(),
+      supervisor_name: draft.supervisorName.trim(),
+      supervisor_license_number: draft.supervisorLicenseNumber.trim(),
+      equipment_used_id: draft.equipmentUsedId || null,
+      weather_log_id: draft.weatherLogId || weatherSource?.id || null,
+      weather_conditions_summary:
         draft.weatherConditionsSummary ||
         (weatherSource
           ? `${weatherSource.currentConditions}; forecast: ${weatherSource.forecast}`
           : ''),
-      windDirection: draft.windDirection,
-      windSpeedAtApplication: numberValue(
+      wind_direction: draft.windDirection,
+      wind_speed_at_application: numberValue(
         draft.windSpeedAtApplication || String(weatherSource?.wind ?? 0)
       ),
-      temperatureAtApplication: numberValue(
+      temperature_at_application: numberValue(
         draft.temperatureAtApplication || String(weatherSource?.temperature ?? 0)
       ),
-      humidityAtApplication: numberValue(
+      humidity_at_application: numberValue(
         draft.humidityAtApplication || String(weatherSource?.humidity ?? 0)
       ),
-      restrictedEntryUntil,
-      siteConditions: draft.siteConditions,
+      restricted_entry_until: restrictedEntryUntil,
+      site_conditions: draft.siteConditions,
       notes: draft.notes,
       org_id: currentUser?.orgId ?? null,
     };
@@ -423,12 +423,12 @@ export default function ApplicationsPage() {
       .filter((item) => item.productId)
       .map((item, index) => ({
       id: crypto.randomUUID(),
-      applicationLogId: logId,
-      productId: item.productId,
-      rateApplied: numberValue(item.rateApplied),
-      rateUnit: item.rateUnit,
-      totalQuantityUsed: numberValue(item.totalQuantityUsed),
-      mixOrder: index + 1,
+      application_log_id: logId,
+      product_id: item.productId,
+      rate_applied: numberValue(item.rateApplied),
+      rate_unit: item.rateUnit,
+      total_quantity_used: numberValue(item.totalQuantityUsed),
+      mix_order: index + 1,
       org_id: currentUser?.orgId,
     }));
 
@@ -786,9 +786,12 @@ export default function ApplicationsPage() {
           </div>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="relative z-10 max-h-[90vh] max-w-4xl overflow-auto pointer-events-auto">
+        <DialogContent aria-describedby="dialog-desc" className="relative z-10 max-h-[90vh] max-w-4xl overflow-auto pointer-events-auto">
           <DialogHeader>
             <DialogTitle>New Chemical Application</DialogTitle>
+            <DialogDescription id="dialog-desc" className="sr-only">
+              Enter spray record details, compliance information, and tank mix products.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
