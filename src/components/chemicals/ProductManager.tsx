@@ -200,11 +200,11 @@ export default function ProductManager() {
       </label>
 
       <div className="flex items-center gap-2">
-        <Button className="relative z-10 cursor-pointer" onClick={saveProduct} disabled={!canSave || isSaving}>
+        <Button onClick={saveProduct} disabled={!canSave || isSaving}>
           {isSaving ? 'Saving...' : editingId ? 'Update Product' : 'Add Product'}
         </Button>
         {editingId ? (
-          <Button className="relative z-10 cursor-pointer" variant="outline" onClick={resetForm}>
+          <Button variant="outline" onClick={resetForm}>
             Cancel Edit
           </Button>
         ) : null}
@@ -223,7 +223,6 @@ export default function ProductManager() {
             </div>
             <div className="flex items-center gap-2">
               <Button
-                className="relative z-10 cursor-pointer"
                 size="sm"
                 variant="outline"
                 onClick={() => {
@@ -245,7 +244,7 @@ export default function ProductManager() {
               >
                 Edit
               </Button>
-              <Button className="relative z-10 cursor-pointer" size="sm" variant="destructive" onClick={() => void deleteProduct(product.id)}>
+              <Button size="sm" variant="destructive" onClick={() => void deleteProduct(product.id)}>
                 Delete
               </Button>
             </div>
