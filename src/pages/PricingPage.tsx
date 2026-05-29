@@ -1,8 +1,6 @@
 import { Check, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 
 type Tier = {
   name: string;
@@ -92,9 +90,11 @@ const featureRows = [
 
 function renderFeatureValue(value: boolean | string) {
   if (typeof value === 'boolean') {
-    return value ? <Check className="mx-auto h-4 w-4 text-emerald-600" /> : <span className="text-muted-foreground">—</span>;
+    return value
+      ? <Check className="mx-auto h-4 w-4 text-lime-400" />
+      : <span className="text-slate-600">—</span>;
   }
-  return <span>{value}</span>;
+  return <span className="text-slate-300">{value}</span>;
 }
 
 export default function PricingPage() {
@@ -103,6 +103,7 @@ export default function PricingPage() {
   useEffect(() => {
     document.title = 'Pricing — Ground Crew HQ';
   }, []);
+
   const effectiveTiers = tiers.map((tier) =>
     tier.name === 'Professional'
       ? { ...tier, price: billingCycle === 'annual' ? '$150/mo' : '$175/mo' }
@@ -110,61 +111,85 @@ export default function PricingPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f7fbf8_0%,#eef6f1_100%)]">
-      <header className="border-b border-emerald-100/80 bg-white/95">
+    <div className="min-h-screen bg-[#0f1a14] text-slate-100">
+      {/* Navbar */}
+      <header className="border-b border-white/[0.06] bg-[#0f1a14]/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
-          <div className="text-base font-semibold tracking-tight">Ground Crew HQ</div>
-          <Link to="/" className="text-sm font-medium text-primary hover:underline">
-            Back to Home
+          <div className="text-base font-semibold tracking-tight text-slate-100">Ground Crew HQ</div>
+          <Link
+            to="/"
+            className="text-sm font-medium text-lime-400 transition-colors hover:text-lime-300"
+          >
+            ← Back to Home
           </Link>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6">
+        {/* Header */}
         <div className="mx-auto max-w-2xl text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-emerald-950 md:text-5xl">Simple Pricing for Every Operation</h1>
-          <p className="mt-3 text-sm text-muted-foreground md:text-base">
+          <h1 className="bg-gradient-to-br from-slate-100 to-lime-400 bg-clip-text text-4xl font-extrabold tracking-tight text-transparent md:text-5xl">
+            Simple Pricing for Every Operation
+          </h1>
+          <p className="mt-3 text-sm text-slate-400 md:text-base">
             All plans include a 14-day free trial. No credit card required.
           </p>
-          <div className="mt-5 inline-flex items-center gap-2 rounded-full border bg-white p-1 text-xs">
+
+          {/* Billing toggle */}
+          <div className="mt-5 inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-[#1a2d1f] p-1 text-xs">
             <button
               type="button"
-              className={`rounded-full px-3 py-1 ${billingCycle === 'monthly' ? 'bg-emerald-600 text-white' : ''}`}
+              className={`rounded-full px-4 py-1.5 font-medium transition-all duration-200 ${
+                billingCycle === 'monthly'
+                  ? 'bg-lime-400 text-black'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
               onClick={() => setBillingCycle('monthly')}
             >
               Monthly
             </button>
             <button
               type="button"
-              className={`rounded-full px-3 py-1 ${billingCycle === 'annual' ? 'bg-emerald-600 text-white' : ''}`}
+              className={`rounded-full px-4 py-1.5 font-medium transition-all duration-200 ${
+                billingCycle === 'annual'
+                  ? 'bg-lime-400 text-black'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
               onClick={() => setBillingCycle('annual')}
             >
               Annual
             </button>
           </div>
-          {billingCycle === 'annual' ? <p className="mt-2 text-xs text-emerald-700">Professional annual plan: $150/mo (save $300/year).</p> : null}
+          {billingCycle === 'annual' ? (
+            <p className="mt-2 text-xs text-lime-400">Professional annual plan: $150/mo (save $300/year).</p>
+          ) : null}
         </div>
 
+        {/* Tier cards */}
         <section className="mt-10 grid gap-4 md:grid-cols-3">
           {effectiveTiers.map((tier) => (
-            <Card
+            <div
               key={tier.name}
-              className={`relative rounded-2xl p-6 ${tier.highlighted ? 'border-emerald-400 bg-emerald-50/70 shadow-md' : 'border-emerald-100 bg-white'}`}
+              className={`relative rounded-2xl border p-6 transition-all duration-200 ${
+                tier.highlighted
+                  ? 'scale-[1.02] border-lime-400/30 bg-[#243828] shadow-[0_0_30px_rgba(163,230,53,0.08)]'
+                  : 'border-white/[0.06] bg-[#1a2d1f] hover:-translate-y-0.5'
+              }`}
             >
               {tier.highlighted ? (
-                <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-lime-400 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-black">
                   <Star className="h-3 w-3" />
                   Most Popular
                 </div>
               ) : null}
-              <h2 className="text-xl font-semibold">{tier.name}</h2>
-              <div className="mt-2 text-3xl font-bold tracking-tight text-emerald-900">{tier.price}</div>
-              <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">{tier.subtitle}</p>
+              <h2 className="text-xl font-semibold text-slate-100">{tier.name}</h2>
+              <div className="mt-2 text-3xl font-bold tracking-tight text-slate-100">{tier.price}</div>
+              <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">{tier.subtitle}</p>
 
               <ul className="mt-5 space-y-2">
                 {tier.features.map((feature) => (
-                  <li key={`${tier.name}-${feature}`} className="flex items-start gap-2 text-sm text-foreground">
-                    <Check className="mt-0.5 h-4 w-4 text-emerald-600" />
+                  <li key={`${tier.name}-${feature}`} className="flex items-start gap-2 text-sm text-slate-300">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-lime-400" />
                     <span>{feature}</span>
                   </li>
                 ))}
@@ -172,54 +197,70 @@ export default function PricingPage() {
 
               <div className="mt-6">
                 {tier.ctaHref.startsWith('mailto:') ? (
-                  <a href={tier.ctaHref}>
-                    <Button className="w-full" variant={tier.highlighted ? 'default' : 'outline'}>
-                      {tier.ctaLabel}
-                    </Button>
+                  <a
+                    href={tier.ctaHref}
+                    className={`block w-full rounded-full py-2.5 text-center text-sm font-semibold transition-all duration-200 ${
+                      tier.highlighted
+                        ? 'bg-lime-400 text-black hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.35)]'
+                        : 'border border-white/[0.12] text-slate-300 hover:border-white/20 hover:bg-white/5'
+                    }`}
+                  >
+                    {tier.ctaLabel}
                   </a>
                 ) : (
-                  <Link to={tier.ctaHref}>
-                    <Button className="w-full" variant={tier.highlighted ? 'default' : 'outline'}>
-                      {tier.ctaLabel}
-                    </Button>
+                  <Link
+                    to={tier.ctaHref}
+                    className={`block w-full rounded-full py-2.5 text-center text-sm font-semibold transition-all duration-200 ${
+                      tier.highlighted
+                        ? 'bg-lime-400 text-black hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.35)]'
+                        : 'border border-white/[0.12] text-slate-300 hover:border-white/20 hover:bg-white/5'
+                    }`}
+                  >
+                    {tier.ctaLabel}
                   </Link>
                 )}
               </div>
-            </Card>
+            </div>
           ))}
         </section>
 
+        {/* Feature comparison table */}
         <section className="mt-10">
-          <Card className="overflow-hidden rounded-2xl border-emerald-100 bg-white">
+          <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#1a2d1f]">
             <div className="overflow-x-auto">
               <table className="min-w-[760px] w-full text-sm">
-                <thead className="bg-emerald-50/70">
+                <thead className="border-b border-white/[0.06] bg-[#243828]">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold">Features</th>
-                    <th className="px-4 py-3 text-center font-semibold">Starter</th>
-                    <th className="px-4 py-3 text-center font-semibold">Pro</th>
-                    <th className="px-4 py-3 text-center font-semibold">Enterprise</th>
+                    <th className="px-4 py-3 text-left font-semibold text-slate-200">Features</th>
+                    <th className="px-4 py-3 text-center font-semibold text-slate-200">Starter</th>
+                    <th className="px-4 py-3 text-center font-semibold text-lime-400">Pro</th>
+                    <th className="px-4 py-3 text-center font-semibold text-slate-200">Enterprise</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {featureRows.map((row) => (
-                    <tr key={row.label} className="border-t">
-                      <td className="px-4 py-3 text-left">{row.label}</td>
-                      <td className="px-4 py-3 text-center">{renderFeatureValue(row.starter)}</td>
-                      <td className="px-4 py-3 text-center">{renderFeatureValue(row.pro)}</td>
-                      <td className="px-4 py-3 text-center">{renderFeatureValue(row.enterprise)}</td>
+                  {featureRows.map((row, i) => (
+                    <tr
+                      key={row.label}
+                      className={`border-t border-white/[0.04] ${i % 2 === 0 ? '' : 'bg-white/[0.015]'}`}
+                    >
+                      <td className="px-4 py-3 text-left text-slate-300">{row.label}</td>
+                      <td className="px-4 py-3 text-center text-slate-400">{renderFeatureValue(row.starter)}</td>
+                      <td className="px-4 py-3 text-center text-slate-300">{renderFeatureValue(row.pro)}</td>
+                      <td className="px-4 py-3 text-center text-slate-300">{renderFeatureValue(row.enterprise)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </Card>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            Questions? Email support@groundcrewhq.com
+          </div>
+          <p className="mt-4 text-center text-sm text-slate-500">
+            Questions?{' '}
+            <a href="mailto:support@groundcrewhq.com" className="text-lime-400 hover:text-lime-300">
+              support@groundcrewhq.com
+            </a>
           </p>
         </section>
       </main>
     </div>
   );
 }
-

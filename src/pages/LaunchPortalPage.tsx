@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BarChart3, CalendarDays, ClipboardList, Loader2, Radar, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -198,211 +197,229 @@ export default function LaunchPortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
+    <div className="min-h-screen bg-[#0f1a14] text-slate-100">
+      {/* ── Navbar ── */}
+      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#0f1a14]/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <div>
-            <div className="text-base font-semibold tracking-tight">{appName}</div>
-            <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{clientName}</div>
+            <div className="text-base font-semibold tracking-tight text-slate-100">{appName}</div>
+            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{clientName}</div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" className="rounded-lg" onClick={() => setLoginOpen(true)}>
+            <button
+              className="rounded-full px-4 py-2 text-sm text-slate-400 transition-colors duration-200 hover:text-slate-100"
+              onClick={() => setLoginOpen(true)}
+            >
               Sign In
-            </Button>
-            <Button className="h-10 rounded-lg bg-emerald-700 hover:bg-emerald-800" onClick={() => setLoginOpen(true)}>
+            </button>
+            <button
+              className="rounded-full bg-lime-400 px-5 py-2 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.4)]"
+              onClick={() => setLoginOpen(true)}
+            >
               Start Free — No Credit Card
-            </Button>
+            </button>
           </div>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6 md:py-16">
+        {/* ── Hero ── */}
         <section className="grid items-center gap-10 lg:grid-cols-2">
           <div className="animate-[hero-enter_600ms_ease-out_forwards] opacity-0 [animation-delay:120ms]">
-            <h1 className="text-4xl font-bold tracking-tight md:text-5xl">Your Crew. Your Course. One Command Center.</h1>
-            <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground md:text-lg">
-              Built for golf course superintendents, grounds managers, and turf professionals who need weather-aware
-              scheduling, EPA-compliant chemical logging, and a mobile crew app that works with gloves on.
+            <h1 className="bg-gradient-to-br from-slate-100 to-lime-400 bg-clip-text text-[clamp(2.5rem,6vw,4.5rem)] font-extrabold leading-[1.05] tracking-tight text-transparent">
+              Your crew ships more. Your schedule runs itself.
+            </h1>
+            <p className="mt-4 max-w-xl text-base leading-7 text-slate-400 md:text-lg">
+              Weather-aware scheduling, EPA-compliant chemical logs, and a mobile crew app that works with gloves on.
+              Built for golf course superintendents and grounds managers.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button
-                size="lg"
-                className="h-11 rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white hover:bg-emerald-800 animate-[pulse-soft_2s_ease-in-out_infinite]"
+              <button
+                className="animate-pulse-glow rounded-full bg-lime-400 px-8 py-3 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
                 onClick={() => setLoginOpen(true)}
               >
                 Start Free — No Credit Card
-              </Button>
-              <Button size="lg" variant="outline" className="h-11 rounded-lg px-6" onClick={() => void handleDemoLogin()}>
-                Watch Demo
-              </Button>
+              </button>
+              <button
+                className="rounded-full border border-lime-400/40 px-8 py-3 text-sm font-semibold text-lime-400 transition-all duration-200 hover:border-lime-400 hover:bg-lime-400/10"
+                onClick={() => void handleDemoLogin()}
+              >
+                Try Live Demo
+              </button>
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">Join 50+ facilities already using Ground Crew HQ</p>
+            <p className="mt-4 text-sm text-slate-500">Join 50+ facilities already running smarter crews</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Weather-Aware</span>
-              <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Bilingual Crews</span>
-              <span className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">Mobile-First</span>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Golf Course Operations</span>
-              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Turf Management</span>
-              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Grounds Crew Scheduling</span>
-              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Chemical Application Tracking</span>
-              <span className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-foreground">Weather Intelligence</span>
+              <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs font-medium text-slate-400">Weather-Aware</span>
+              <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs font-medium text-slate-400">Bilingual Crews</span>
+              <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs font-medium text-slate-400">Mobile-First</span>
+              <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs font-medium text-slate-400">EPA Compliant</span>
             </div>
           </div>
-          <Card className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
-            <div className="flex h-8 items-center gap-2 border-b border-border bg-muted/40 px-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-              <span className="ml-2 text-[11px] text-muted-foreground">ground-crew-hq.vercel.app/dashboard</span>
+
+          {/* Dashboard mockup */}
+          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1a2d1f] shadow-2xl">
+            <div className="flex h-8 items-center gap-2 border-b border-white/[0.06] bg-black/20 px-3">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-lime-400/70" />
+              <span className="ml-2 text-[11px] text-slate-500">ground-crew-hq.vercel.app/dashboard</span>
             </div>
             <div className="grid grid-cols-[80px_1fr]">
-              <div className="space-y-2 bg-emerald-900 p-3">
+              <div className="space-y-2 bg-[#0d1f14] p-3">
                 {['Dashboard', 'Workboard', 'Scheduler', 'Weather'].map((item) => (
-                  <div key={item} className="rounded-md bg-emerald-800/70 px-2 py-1 text-[10px] text-emerald-100">
+                  <div key={item} className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] text-slate-400">
                     {item}
                   </div>
                 ))}
               </div>
               <div className="space-y-3 p-3">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border border-border p-2">
-                    <div className="text-[10px] text-muted-foreground">Crew</div>
-                    <div className="text-sm font-semibold">3 Scheduled</div>
+                  <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                    <div className="text-[10px] text-slate-500">Crew</div>
+                    <div className="text-sm font-semibold text-slate-100">3 Scheduled</div>
                   </div>
-                  <div className="rounded-lg border border-border p-2">
-                    <div className="text-[10px] text-muted-foreground">Tasks</div>
-                    <div className="text-sm font-semibold">8 Assigned</div>
+                  <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                    <div className="text-[10px] text-slate-500">Tasks</div>
+                    <div className="text-sm font-semibold text-slate-100">8 Assigned</div>
                   </div>
-                  <div className="rounded-lg border border-border p-2">
-                    <div className="text-[10px] text-muted-foreground">Weather</div>
-                    <div className="text-sm font-semibold">84°F</div>
+                  <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                    <div className="text-[10px] text-slate-500">Weather</div>
+                    <div className="text-sm font-semibold text-slate-100">84°F</div>
                   </div>
                 </div>
-                <div className="rounded-lg border border-border p-2">
-                  <div className="mb-2 text-[10px] text-muted-foreground">Schedule Grid</div>
+                <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                  <div className="mb-2 text-[10px] text-slate-500">Schedule Grid</div>
                   <div className="space-y-1">
-                    <div className="h-5 rounded bg-emerald-100" />
-                    <div className="h-5 rounded bg-blue-100" />
-                    <div className="h-5 rounded bg-amber-100" />
+                    <div className="h-5 rounded bg-lime-400/25" />
+                    <div className="h-5 rounded bg-sky-400/25" />
+                    <div className="h-5 rounded bg-amber-400/25" />
                   </div>
                 </div>
-                <div className="rounded-lg border border-border p-2">
-                  <div className="mb-2 text-[10px] text-muted-foreground">Spray Window Timeline</div>
+                <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                  <div className="mb-2 text-[10px] text-slate-500">Spray Window Timeline</div>
                   <div className="flex h-3 overflow-hidden rounded-full">
-                    <div className="w-1/2 bg-emerald-400" />
-                    <div className="w-1/4 bg-amber-400" />
-                    <div className="w-1/4 bg-red-400" />
+                    <div className="w-1/2 bg-lime-400/60" />
+                    <div className="w-1/4 bg-amber-400/60" />
+                    <div className="w-1/4 bg-red-400/60" />
                   </div>
                 </div>
               </div>
             </div>
-          </Card>
-        </section>
-
-        <section className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight">Why Ground Crew HQ?</h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card className="rounded-2xl border border-border bg-card p-5">
-              <h3 className="text-sm font-semibold">vs. Spreadsheets</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Real-time crew tracking, weather alerts, mobile access.</p>
-            </Card>
-            <Card className="rounded-2xl border border-border bg-card p-5">
-              <h3 className="text-sm font-semibold">vs. Generic FSM</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Turf-specific workflows, spray windows, EPA compliance.</p>
-            </Card>
-            <Card className="rounded-2xl border border-border bg-card p-5">
-              <h3 className="text-sm font-semibold">vs. Enterprise Tools</h3>
-              <p className="mt-2 text-sm text-muted-foreground">Starts at $100/mo. No implementation fee. No contract.</p>
-            </Card>
           </div>
         </section>
 
+        {/* ── Why GCHQ comparison ── */}
         <section className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight">Built for daily operations, not spreadsheets</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Why Ground Crew HQ?</h2>
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {[
+              { title: 'vs. Spreadsheets', desc: 'Real-time crew tracking, weather alerts, mobile access.' },
+              { title: 'vs. Generic FSM', desc: 'Turf-specific workflows, spray windows, EPA compliance.' },
+              { title: 'vs. Enterprise Tools', desc: 'Starts at $100/mo. No implementation fee. No contract.' },
+            ].map((item) => (
+              <div key={item.title} className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
+                <h3 className="text-sm font-semibold text-slate-100">{item.title}</h3>
+                <p className="mt-2 text-sm text-slate-400">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Bento Feature Grid ── */}
+        <section className="mt-16">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Built for daily operations, not spreadsheets</h2>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((feature) => {
               const Icon = feature.icon;
-              const sizeClass = feature.size === 'large' ? 'lg:col-span-2' : '';
+              const sizeClass = feature.size === 'large' ? 'md:col-span-2' : '';
               return (
                 <ScrollReveal key={feature.title} className={sizeClass}>
-                  <Card className="h-full rounded-2xl border border-border bg-card p-6 transition-shadow duration-200 hover:shadow-md">
-                    <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted/40 text-emerald-700">
-                      <Icon className="h-5 w-5" />
+                  <div className="group h-full rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-6 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] active:scale-[0.98]">
+                    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#243828] text-lime-400 transition-colors duration-200 group-hover:bg-lime-400/[0.12]">
+                      <Icon className="h-6 w-6" />
                     </div>
-                    <h3 className="text-base font-semibold">{feature.title}</h3>
-                    <p className="mt-2 text-sm text-muted-foreground">{feature.description}</p>
-                  </Card>
+                    <h3 className="text-[18px] font-semibold leading-snug text-slate-100">{feature.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-400">{feature.description}</p>
+                  </div>
                 </ScrollReveal>
               );
             })}
           </div>
         </section>
 
+        {/* ── Testimonials ── */}
         <section className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight">Trusted by Grounds Teams Across the Country</h2>
-          <div className="mt-4 rounded-xl border border-border bg-muted/30 px-4 py-3 text-center text-sm font-medium">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Trusted by Grounds Teams Across the Country</h2>
+          <div className="mt-4 rounded-xl border border-white/[0.06] bg-[#1a2d1f] px-4 py-3 text-center text-sm font-medium text-slate-300">
             500+ tasks dispatched · 2,000+ hours tracked · 50+ facilities
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {TESTIMONIALS.map((item) => (
-              <Card key={item.quote} className="rounded-2xl border border-border bg-card p-5 transition-transform duration-200 hover:-translate-y-0.5">
-                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
+              <div
+                key={item.quote}
+                className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-lime-400/10"
+              >
+                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#243828] text-sm font-semibold text-lime-400">
                   {item.initials}
                 </div>
-                <p className="text-sm leading-6 text-foreground">{item.quote}</p>
-                <p className="mt-3 text-xs font-medium text-muted-foreground">— {item.byline}</p>
-              </Card>
+                <p className="text-sm leading-6 text-slate-300">"{item.quote}"</p>
+                <p className="mt-3 text-xs font-medium text-slate-500">— {item.byline}</p>
+              </div>
             ))}
           </div>
         </section>
 
+        {/* ── About ── */}
         <section className="mt-16">
-          <Card className="rounded-2xl border border-border bg-card p-6 md:p-8">
-            <h2 className="text-2xl font-semibold tracking-tight">Built by People Who Know the Course</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+          <div className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-6 md:p-8">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Built by People Who Know the Course</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
               Ground Crew HQ was designed by turf professionals who&apos;ve walked the course at 5 AM, managed crews in
               95° heat, and dealt with weather cancellations. We built the tool we wished we had.
             </p>
-          </Card>
+          </div>
         </section>
 
+        {/* ── Final CTA ── */}
         <section className="mt-16">
-          <Card className="mx-auto max-w-2xl rounded-2xl border border-border bg-card p-8 text-center">
-            <h2 className="text-2xl font-semibold tracking-tight">Ready to run your crew smarter?</h2>
-            <Button
-              className="mt-5 h-11 rounded-lg bg-emerald-700 px-6 text-sm font-semibold text-white hover:bg-emerald-800"
-              size="lg"
+          <div className="mx-auto max-w-2xl rounded-2xl border border-lime-400/20 bg-[#1a2d1f] p-8 text-center">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Ready to run your crew smarter?</h2>
+            <button
+              className="mt-5 rounded-full bg-lime-400 px-8 py-3 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
               onClick={() => setLoginOpen(true)}
             >
               Start Free — No Credit Card
-            </Button>
-            <p className="mt-3 text-sm text-muted-foreground">14-day free trial. All features included.</p>
-          </Card>
+            </button>
+            <p className="mt-3 text-sm text-slate-500">14-day free trial. All features included.</p>
+          </div>
         </section>
       </main>
 
-      <footer className="border-t border-border bg-background/90">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-muted-foreground md:flex-row md:px-6">
+      {/* ── Footer ── */}
+      <footer className="border-t border-white/[0.06] bg-[#0f1a14]">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-slate-500 md:flex-row md:px-6">
           <div>
-            <div className="font-semibold text-foreground">Ground Crew HQ</div>
+            <div className="font-semibold text-slate-300">Ground Crew HQ</div>
             <div>© 2026 Ground Crew HQ · Built for the people who keep courses perfect.</div>
           </div>
           <div className="flex items-center gap-4">
-            <a href="#" className="hover:text-foreground">Features</a>
-            <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
-            <button type="button" className="hover:text-foreground" onClick={() => setLoginOpen(true)}>Login</button>
-            <a href="mailto:support@groundcrewhq.com" className="hover:text-foreground">Contact</a>
+            <a href="#" className="transition-colors hover:text-slate-300">Features</a>
+            <Link to="/pricing" className="transition-colors hover:text-slate-300">Pricing</Link>
+            <button type="button" className="transition-colors hover:text-slate-300" onClick={() => setLoginOpen(true)}>Login</button>
+            <a href="mailto:support@groundcrewhq.com" className="transition-colors hover:text-slate-300">Contact</a>
           </div>
         </div>
       </footer>
 
+      {/* ── Login Dialog (auth logic untouched) ── */}
       <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
-        <DialogContent aria-describedby="dialog-desc" className="max-w-md">
+        <DialogContent
+          aria-describedby="dialog-desc"
+          className="max-w-md border-white/[0.08] bg-[#1a2d1f] text-slate-100 backdrop-blur-xl"
+        >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="h-4 w-4 text-primary" />
+            <DialogTitle className="flex items-center gap-2 text-base text-slate-100">
+              <ShieldCheck className="h-4 w-4 text-lime-400" />
               Sign in to your workspace
             </DialogTitle>
             <DialogDescription id="dialog-desc" className="sr-only">
@@ -411,7 +428,7 @@ export default function LaunchPortalPage() {
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-sm text-slate-300">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -419,10 +436,11 @@ export default function LaunchPortalPage() {
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@club.com"
                 autoComplete="email"
+                className="border-white/[0.10] bg-[#0f1a14] text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-sm text-slate-300">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -430,34 +448,45 @@ export default function LaunchPortalPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Enter your password"
                 autoComplete="current-password"
+                className="border-white/[0.10] bg-[#0f1a14] text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30"
               />
             </div>
             {errorMessage ? (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-3 text-xs text-destructive">
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-400">
                 {errorMessage}
               </div>
             ) : null}
             {!errorMessage && authDebugMessage ? (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-xs text-amber-950">
+              <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-3 text-xs text-amber-300">
                 {authDebugMessage}
                 {hasSession &&
                 (authState === 'network-timeout' || authState === 'profile-error' || authState === 'profile-missing') ? (
                   <div className="mt-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => void retryAuthHydration()}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100"
+                      onClick={() => void retryAuthHydration()}
+                    >
                       Retry profile load
                     </Button>
                   </div>
                 ) : null}
               </div>
             ) : null}
-            <Button className="w-full gap-2" disabled={isSubmitting || !email || !password || !hasSupabaseConfig} type="submit">
+            <Button
+              className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
+              disabled={isSubmitting || !email || !password || !hasSupabaseConfig}
+              type="submit"
+            >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isSubmitting ? (isAwaitingProfile ? 'Loading workspace profile...' : 'Signing in...') : 'Sign In'}
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="w-full"
+              className="w-full border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100"
               disabled={isSubmitting || !hasSupabaseConfig}
               onClick={() => void handleDemoLogin()}
             >
@@ -470,11 +499,7 @@ export default function LaunchPortalPage() {
       <style>{`
         @keyframes hero-enter {
           from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes pulse-soft {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.02); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>
