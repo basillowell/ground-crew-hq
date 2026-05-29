@@ -108,10 +108,10 @@ function SummaryCard({
       onClick={onClick}
       className="text-left"
     >
-      <Card className="rounded-xl border p-5 shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">{title}</div>
-        <div className="mt-2 text-3xl font-semibold">{value}</div>
-      </Card>
+      <div className="group rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+        <div className="text-xs uppercase tracking-wide text-slate-500">{title}</div>
+        <div className="mt-2 text-3xl font-semibold text-slate-100">{value}</div>
+      </div>
     </button>
   );
 }
@@ -129,18 +129,18 @@ function OpsSignalCard({
 }) {
   const toneClass =
     tone === 'good'
-      ? 'border-green-500'
+      ? 'border-l-lime-400'
       : tone === 'warning'
-        ? 'border-yellow-500'
+        ? 'border-l-amber-400'
         : tone === 'critical'
-          ? 'border-red-500'
-          : 'border-slate-400';
+          ? 'border-l-red-500'
+          : 'border-l-white/[0.10]';
   return (
-    <Card className={`rounded-xl border border-l-4 bg-card p-4 shadow-sm transition-all duration-150 hover:bg-muted/30 ${toneClass}`}>
-      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
-      <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
-    </Card>
+    <div className={`group rounded-2xl border border-white/[0.06] border-l-4 bg-[#1a2d1f] p-4 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] ${toneClass}`}>
+      <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">{value}</div>
+      <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+    </div>
   );
 }
 
@@ -149,7 +149,6 @@ function ScorecardMetricCard({
   value,
   trend,
   data,
-  toneClass = 'border-gray-300',
 }: {
   label: string;
   value: string;
@@ -158,24 +157,24 @@ function ScorecardMetricCard({
   toneClass?: string;
 }) {
   return (
-    <Card className={`rounded-xl border p-4 ${toneClass}`}>
+    <div className="rounded-2xl border border-white/[0.06] bg-[#243828] p-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-        <span className="text-xs font-medium">
+        <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+        <span className={`text-xs font-medium ${trend === 'up' ? 'text-lime-400' : trend === 'down' ? 'text-red-400' : 'text-slate-500'}`}>
           {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'}
         </span>
       </div>
-      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">{value}</p>
       <div className="mt-3 h-14">
-        <Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-muted/40" />}>
+        <Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-white/[0.04]" />}>
           <RechartsResponsiveContainer width="100%" height="100%">
             <RechartsLineChart data={data.map((point, index) => ({ index, point }))}>
-              <RechartsLine type="monotone" dataKey="point" stroke="#16a34a" strokeWidth={2} dot={false} />
+              <RechartsLine type="monotone" dataKey="point" stroke="#a3e635" strokeWidth={2} dot={false} />
             </RechartsLineChart>
           </RechartsResponsiveContainer>
         </Suspense>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -213,45 +212,45 @@ function PropertySummaryCard({
   const WeatherIcon = weatherMeta.icon;
 
   return (
-    <Card className="rounded-xl border p-6 shadow-sm">
+    <div className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-lg font-semibold">{property.name}</h3>
-          <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <h3 className="text-lg font-semibold text-slate-100">{property.name}</h3>
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
             <MapPin className="h-4 w-4" />
             {property.city}, {property.state}
           </p>
         </div>
-        <Badge variant="outline" className="capitalize">
+        <span className="rounded-full border border-white/[0.10] px-2.5 py-0.5 text-xs capitalize text-slate-400">
           {property.status}
-        </Badge>
+        </span>
       </div>
 
-      <div className="mt-4 rounded-xl border bg-muted/20 px-3 py-2">
+      <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2">
         {weatherQuery.isLoading && !showWeatherTimeout ? (
-          <div className="text-xs text-muted-foreground">Loading weather...</div>
+          <div className="text-xs text-slate-500">Loading weather...</div>
         ) : weatherQuery.isLoading && showWeatherTimeout ? (
           hasCoordinates ? (
-            <div className="text-xs text-muted-foreground">Weather temporarily unavailable</div>
+            <div className="text-xs text-slate-500">Weather temporarily unavailable</div>
           ) : (
-            <button type="button" className="text-xs text-primary hover:underline" onClick={onOpenWeatherSettings}>
+            <button type="button" className="text-xs text-lime-400 hover:underline" onClick={onOpenWeatherSettings}>
               Set weather location in Weather settings →
             </button>
           )
         ) : weatherQuery.data ? (
           <div className="flex items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
-              <WeatherIcon className="h-3.5 w-3.5 text-primary" />
-              <span className="font-medium text-foreground">{Math.round(weatherQuery.data.current.temperature)}F</span>
-              <span className="text-muted-foreground">{weatherMeta.label}</span>
+              <WeatherIcon className="h-3.5 w-3.5 text-lime-400" />
+              <span className="font-medium text-slate-100">{Math.round(weatherQuery.data.current.temperature)}F</span>
+              <span className="text-slate-500">{weatherMeta.label}</span>
             </div>
-            <span className="text-muted-foreground">Wind {Math.round(weatherQuery.data.current.windSpeed)} mph</span>
+            <span className="text-slate-500">Wind {Math.round(weatherQuery.data.current.windSpeed)} mph</span>
           </div>
         ) : (
           hasCoordinates ? (
-            <div className="text-xs text-muted-foreground">Weather temporarily unavailable</div>
+            <div className="text-xs text-slate-500">Weather temporarily unavailable</div>
           ) : (
-            <button type="button" className="text-xs text-primary hover:underline" onClick={onOpenWeatherSettings}>
+            <button type="button" className="text-xs text-lime-400 hover:underline" onClick={onOpenWeatherSettings}>
               Set weather location in Weather settings →
             </button>
           )
@@ -259,11 +258,11 @@ function PropertySummaryCard({
       </div>
 
       <div className="mt-4">
-        <button type="button" onClick={onViewDetails} className="text-sm font-medium text-primary transition-colors hover:text-primary/80">
+        <button type="button" onClick={onViewDetails} className="text-sm font-medium text-lime-400 transition-colors hover:text-lime-300">
           View Details
         </button>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -1320,7 +1319,7 @@ export default function CommandCenterOperationalPage() {
       return {
         score: 0,
         label: 'Critical',
-        toneClasses: 'border-red-500 bg-red-50/50 text-red-700',
+        toneClasses: 'border-l-red-500',
         trend: 'flat' as const,
       };
     }
@@ -1397,16 +1396,16 @@ export default function CommandCenterOperationalPage() {
     });
 
     let label = 'Critical';
-    let toneClasses = 'border-red-500 text-red-700';
+    let toneClasses = 'border-l-red-500';
     if (todayScore >= 90) {
       label = 'Excellent';
-      toneClasses = 'border-green-500 text-green-700';
+      toneClasses = 'border-l-lime-400';
     } else if (todayScore >= 70) {
       label = 'Good';
-      toneClasses = 'border-blue-500 text-blue-700';
+      toneClasses = 'border-l-sky-400';
     } else if (todayScore >= 50) {
       label = 'Needs Attention';
-      toneClasses = 'border-yellow-500 text-amber-700';
+      toneClasses = 'border-l-amber-400';
     }
 
     return {
@@ -1825,10 +1824,10 @@ export default function CommandCenterOperationalPage() {
 
   if (!isReady) {
     return (
-      <div className="h-full overflow-auto bg-background p-6">
-        <div className="rounded-2xl border bg-card p-4 shadow-sm">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="mt-3 h-4 w-96" />
+      <div className="h-full overflow-auto bg-[#0f1a14] p-6">
+        <div className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-4">
+          <Skeleton className="h-8 w-64 bg-white/[0.06]" />
+          <Skeleton className="mt-3 h-4 w-96 bg-white/[0.06]" />
         </div>
       </div>
     );
@@ -1836,15 +1835,16 @@ export default function CommandCenterOperationalPage() {
 
   if (!orgId) {
     return (
-      <div className="h-full overflow-auto bg-background p-6">
-        <Card className="rounded-2xl border p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Unable to load workspace</h2>
-          <p className="mt-1 text-sm text-muted-foreground">We couldn&apos;t load your organization profile yet.</p>
+      <div className="h-full overflow-auto bg-[#0f1a14] p-6">
+        <div className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
+          <h2 className="text-lg font-semibold text-slate-100">Unable to load workspace</h2>
+          <p className="mt-1 text-sm text-slate-500">We couldn&apos;t load your organization profile yet.</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => window.location.reload()}>
+            <Button variant="outline" className="border-white/[0.10] text-slate-300 hover:bg-white/5" onClick={() => window.location.reload()}>
               Retry
             </Button>
             <Button
+              className="bg-lime-400 text-black hover:brightness-110"
               onClick={() => {
                 if (!supabase) {
                   navigate('/');
@@ -1856,7 +1856,7 @@ export default function CommandCenterOperationalPage() {
               Clear session and sign in fresh
             </Button>
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
@@ -1877,17 +1877,17 @@ export default function CommandCenterOperationalPage() {
   }
 
   return (
-    <div className="h-full overflow-auto bg-background p-4 md:p-6">
+    <div className="h-full overflow-auto bg-[#0f1a14] p-4 md:p-6">
       {showWelcomeBanner ? (
-        <Card className="mb-4 rounded-xl border border-green-500 bg-card p-4 shadow-sm">
+        <div className="mb-4 rounded-2xl border border-lime-400/20 bg-lime-400/5 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-lg font-semibold">Welcome to Ground Crew HQ, {firstName}! 👋</p>
-              <p className="mt-1 text-sm text-white/90">Let's get your operation set up. Start with the setup wizard or explore the dashboard.</p>
+              <p className="text-lg font-semibold text-slate-100">Welcome to Ground Crew HQ, {firstName}!</p>
+              <p className="mt-1 text-sm text-slate-400">Let's get your operation set up. Start with the setup wizard or explore the dashboard.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   size="sm"
-                  className="h-9 gap-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="h-9 gap-1.5 rounded-full bg-lime-400 text-black hover:brightness-110"
                   onClick={() => {
                     window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
                     setShowWelcomeBanner(false);
@@ -1899,7 +1899,7 @@ export default function CommandCenterOperationalPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 rounded-lg"
+                  className="h-9 rounded-full border-white/[0.10] text-slate-300 hover:bg-white/5"
                   onClick={() => {
                     window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
                     setShowWelcomeBanner(false);
@@ -1909,36 +1909,35 @@ export default function CommandCenterOperationalPage() {
                 </Button>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-lg"
+            <button
+              type="button"
+              className="text-slate-500 hover:text-slate-300"
               onClick={() => {
                 window.localStorage.setItem('ground-crew-welcome-dismissed', 'true');
                 setShowWelcomeBanner(false);
               }}
             >
               ×
-            </Button>
+            </button>
           </div>
-        </Card>
+        </div>
       ) : null}
-      <Card className="mb-6 rounded-xl border bg-card p-4 shadow-sm">
-        <h2 className="text-2xl font-semibold tracking-tight">
+      <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-100">
           {greeting}, {firstName}.
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-slate-500">
           Today: {morningDateLabel} · {morningPropertyLabel}
         </p>
         <div className="mt-4 space-y-2 text-sm">
-          <p>
+          <p className="text-slate-300">
             👥 Crew: {crewScheduledCount} scheduled | ✅ Tasks: {tasksAssignedCount} assigned
           </p>
           <div className="flex flex-wrap gap-3">
             {crewScheduledCount === 0 ? (
               <button
                 type="button"
-                className="text-xs font-medium text-primary underline hover:text-primary/80"
+                className="text-xs font-medium text-lime-400 underline hover:text-lime-300"
                 onClick={() => navigate('/app/scheduler')}
               >
                 Schedule Crew
@@ -1947,7 +1946,7 @@ export default function CommandCenterOperationalPage() {
             {tasksAssignedCount === 0 ? (
               <button
                 type="button"
-                className="text-xs font-medium text-primary underline hover:text-primary/80"
+                className="text-xs font-medium text-lime-400 underline hover:text-lime-300"
                 onClick={() => navigate('/app/workboard?quickPlan=1')}
               >
                 Quick Plan
@@ -1956,37 +1955,37 @@ export default function CommandCenterOperationalPage() {
             {crewScheduledCount > 0 && tasksAssignedCount > 0 ? (
               <button
                 type="button"
-                className="text-xs font-medium text-primary underline hover:text-primary/80"
+                className="text-xs font-medium text-lime-400 underline hover:text-lime-300"
                 onClick={() => navigate('/app/workboard')}
               >
                 Open Workboard
               </button>
             ) : null}
           </div>
-          <p>🌤️ Weather: {morningWeatherLine}</p>
+          <p className="text-slate-300">🌤️ Weather: {morningWeatherLine}</p>
           <div>
             <button
               type="button"
-              className="text-xs font-medium text-primary underline hover:text-primary/80"
+              className="text-xs font-medium text-lime-400 underline hover:text-lime-300"
               onClick={() => navigate('/app/weather')}
             >
               View Full Weather
             </button>
           </div>
-          <p>
+          <p className="text-slate-300">
             ⚠️ Alerts: {overdueEquipmentCount} equipment overdue | {openNeedsCount} open needs
           </p>
           <div>
             <button
               type="button"
-              className="text-xs font-medium text-primary underline hover:text-primary/80"
+              className="text-xs font-medium text-lime-400 underline hover:text-lime-300"
               onClick={handleEmailDigest}
             >
               Email Digest
             </button>
             <button
               type="button"
-              className="ml-3 text-xs font-medium text-primary underline hover:text-primary/80"
+              className="ml-3 text-xs font-medium text-lime-400 underline hover:text-lime-300"
               onClick={handleWhatsAppDigest}
             >
               Send via WhatsApp
@@ -1996,7 +1995,7 @@ export default function CommandCenterOperationalPage() {
             <div>
               <button
                 type="button"
-                className="text-xs font-medium text-primary underline hover:text-primary/80"
+                className="text-xs font-medium text-lime-400 underline hover:text-lime-300"
                 onClick={() => navigate('/app/equipment')}
               >
                 Review Equipment
@@ -2004,70 +2003,34 @@ export default function CommandCenterOperationalPage() {
             </div>
           ) : null}
         </div>
-      </Card>
+      </div>
 
       {operationsScorecard ? (
-        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
           <div className="mb-3">
-            <h3 className="text-base font-semibold">Operations Scorecard</h3>
-            <p className="text-xs text-muted-foreground">Last 7 days of operations with trend against previous week.</p>
+            <h3 className="text-base font-semibold text-slate-100">Operations Scorecard</h3>
+            <p className="text-xs text-slate-500">Last 7 days of operations with trend against previous week.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <ScorecardMetricCard
-              label="Task Completion Rate"
-              value={`${operationsScorecard.completionCurrent}%`}
-              trend={operationsScorecard.completionTrend}
-              data={operationsScorecard.completionDaily}
-              toneClass="border-green-200"
-            />
-            <ScorecardMetricCard
-              label="Labor Efficiency"
-              value={`${operationsScorecard.laborCurrent}%`}
-              trend={operationsScorecard.laborTrend}
-              data={operationsScorecard.laborDaily}
-              toneClass={
-                operationsScorecard.laborCurrent >= 90 && operationsScorecard.laborCurrent <= 110
-                  ? 'border-green-200'
-                  : (operationsScorecard.laborCurrent >= 80 && operationsScorecard.laborCurrent < 90) || (operationsScorecard.laborCurrent > 110 && operationsScorecard.laborCurrent <= 120)
-                    ? 'border-yellow-200'
-                    : 'border-red-200'
-              }
-            />
-            <ScorecardMetricCard
-              label="Average Coverage"
-              value={`${operationsScorecard.coverageCurrent}%`}
-              trend={operationsScorecard.coverageTrend}
-              data={operationsScorecard.coverageDaily}
-              toneClass="border-blue-200"
-            />
-            <ScorecardMetricCard
-              label="Equipment Uptime"
-              value={`${operationsScorecard.equipmentUptime}%`}
-              trend={operationsScorecard.equipmentTrend}
-              data={operationsScorecard.equipmentDaily}
-              toneClass="border-emerald-200"
-            />
-            <ScorecardMetricCard
-              label="Crew Utilization"
-              value={`${operationsScorecard.crewUtilization}%`}
-              trend={operationsScorecard.crewTrend}
-              data={operationsScorecard.crewDaily}
-              toneClass="border-indigo-200"
-            />
+            <ScorecardMetricCard label="Task Completion Rate" value={`${operationsScorecard.completionCurrent}%`} trend={operationsScorecard.completionTrend} data={operationsScorecard.completionDaily} />
+            <ScorecardMetricCard label="Labor Efficiency" value={`${operationsScorecard.laborCurrent}%`} trend={operationsScorecard.laborTrend} data={operationsScorecard.laborDaily} />
+            <ScorecardMetricCard label="Average Coverage" value={`${operationsScorecard.coverageCurrent}%`} trend={operationsScorecard.coverageTrend} data={operationsScorecard.coverageDaily} />
+            <ScorecardMetricCard label="Equipment Uptime" value={`${operationsScorecard.equipmentUptime}%`} trend={operationsScorecard.equipmentTrend} data={operationsScorecard.equipmentDaily} />
+            <ScorecardMetricCard label="Crew Utilization" value={`${operationsScorecard.crewUtilization}%`} trend={operationsScorecard.crewTrend} data={operationsScorecard.crewDaily} />
           </div>
-        </Card>
+        </div>
       ) : null}
 
       {showGettingStarted ? (
-        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-lime-400/20 bg-lime-400/5 p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold">Welcome to Ground Crew HQ — let&apos;s get you set up</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Complete these steps to get your team operational</p>
+              <h3 className="text-lg font-semibold text-slate-100">Welcome to Ground Crew HQ — let&apos;s get you set up</h3>
+              <p className="mt-1 text-sm text-slate-500">Complete these steps to get your team operational</p>
             </div>
             <button
               type="button"
-              className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+              className="text-xs text-slate-500 hover:text-slate-300 hover:underline"
               onClick={() => {
                 if (!onboardingDismissKey) return;
                 localStorage.setItem(onboardingDismissKey, 'true');
@@ -2078,175 +2041,147 @@ export default function CommandCenterOperationalPage() {
             </button>
           </div>
           <div className="mt-4">
-            <div className="mb-2 text-xs text-muted-foreground">{onboardingCompleted} of {onboardingItems.length} complete</div>
-            <div className="h-2 w-full rounded-full bg-muted">
+            <div className="mb-2 text-xs text-slate-500">{onboardingCompleted} of {onboardingItems.length} complete</div>
+            <div className="h-2 w-full rounded-full bg-white/[0.06]">
               <div
-                className="h-2 rounded-full bg-emerald-500 transition-all"
+                className="h-2 rounded-full bg-lime-400 transition-all"
                 style={{ width: `${(onboardingCompleted / onboardingItems.length) * 100}%` }}
               />
             </div>
           </div>
           <div className="mt-4 space-y-2">
             {onboardingItems.map((item) => (
-              <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-                <div className={`flex items-center gap-2 text-sm ${item.complete ? 'text-muted-foreground' : 'text-foreground'}`}>
-                  {item.complete ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-muted-foreground" />}
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+                <div className={`flex items-center gap-2 text-sm ${item.complete ? 'text-slate-500' : 'text-slate-200'}`}>
+                  {item.complete ? <CheckCircle2 className="h-4 w-4 text-lime-400" /> : <Circle className="h-4 w-4 text-slate-500" />}
                   <span>{item.label}</span>
                 </div>
                 {!item.complete ? (
-                  <Button size="sm" variant="outline" onClick={() => navigate(item.to)}>
+                  <Button size="sm" variant="outline" className="border-white/[0.10] text-slate-300 hover:bg-white/5" onClick={() => navigate(item.to)}>
                     {item.action}
                   </Button>
                 ) : null}
               </div>
             ))}
           </div>
-        </Card>
+        </div>
       ) : null}
 
       <div className="mb-4">
-        <h1 className="text-lg font-semibold tracking-tight">Operations Summary</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Review readiness, risks, and blockers.</p>
+        <h1 className="text-lg font-semibold tracking-tight text-slate-100">Operations Summary</h1>
+        <p className="mt-0.5 text-sm text-slate-500">Review readiness, risks, and blockers.</p>
       </div>
 
       {!isLoading && !queryTimeoutReached ? (
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="rounded-xl border bg-card p-4 lg:col-span-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Morning Briefing</div>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight">
+          <div className="group rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] lg:col-span-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Morning Briefing</div>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-100">
               {greeting}, {firstName}.
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-slate-500">
               Today: {morningDateLabel} · {morningPropertyLabel}
             </p>
-            <p className="mt-3 text-sm">
+            <p className="mt-3 text-sm text-slate-300">
               {dailyBriefText ?? `${crewScheduledCount} crew scheduled, ${tasksAssignedCount} tasks assigned, ${weatherRiskSummary.value}.`}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" className="h-9 gap-1.5 rounded-lg" onClick={() => navigate('/app/workboard')}>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" className="h-9 gap-1.5 rounded-full bg-lime-400 text-black hover:brightness-110" onClick={() => navigate(‘/app/workboard’)}>
                 Open Workboard
               </Button>
-              <Button size="sm" variant="outline" className="h-9 rounded-lg" onClick={() => navigate('/app/scheduler')}>
+              <Button size="sm" variant="outline" className="h-9 rounded-full border-white/[0.10] text-slate-300 hover:bg-white/5" onClick={() => navigate(‘/app/scheduler’)}>
                 Open Scheduler
               </Button>
             </div>
-          </Card>
+          </div>
 
-          <Card className="rounded-xl border bg-card p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Weather</div>
-            <div className="mt-2 text-3xl font-semibold tracking-tight">
-              {selectedWeatherQuery.data ? `${Math.round(selectedWeatherQuery.data.current.temperature)}°F` : '--'}
+          <div className="group rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Weather</div>
+            <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-100">
+              {selectedWeatherQuery.data ? `${Math.round(selectedWeatherQuery.data.current.temperature)}°F` : ‘--’}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-slate-500">
               {selectedWeatherQuery.data
                 ? `${getWeatherConditionMeta(selectedWeatherQuery.data.current.weatherCode).label} · Wind ${Math.round(selectedWeatherQuery.data.current.windSpeed)} mph`
-                : 'No weather data available'}
+                : ‘No weather data available’}
             </p>
             <button
               type="button"
-              className="mt-3 text-xs font-medium text-primary underline"
-              onClick={() => navigate('/app/weather')}
+              className="mt-3 text-xs font-medium text-lime-400 hover:text-lime-300"
+              onClick={() => navigate(‘/app/weather’)}
             >
               View Full Weather →
             </button>
-          </Card>
+          </div>
 
-          <OpsSignalCard title="Crew Count" value={`${crewScheduledCount}`} subtitle="Crew Scheduled" tone={crewScheduledCount > 0 ? 'good' : 'critical'} />
+          <OpsSignalCard title="Crew Count" value={`${crewScheduledCount}`} subtitle="Crew Scheduled" tone={crewScheduledCount > 0 ? ‘good’ : ‘critical’} />
           <OpsSignalCard
             title="Tasks Count"
             value={`${tasksAssignedCount}`}
-            subtitle={`${assignments.filter((item) => item.status === 'done').length}/${tasksAssignedCount || 0} done`}
-            tone={tasksAssignedCount > 0 ? 'good' : crewScheduledCount > 0 ? 'warning' : 'neutral'}
+            subtitle={`${assignments.filter((item) => item.status === ‘done’).length}/${tasksAssignedCount || 0} done`}
+            tone={tasksAssignedCount > 0 ? ‘good’ : crewScheduledCount > 0 ? ‘warning’ : ‘neutral’}
           />
 
-          <Card className="rounded-xl border bg-card p-4 lg:col-span-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Spray Window</div>
+          <div className="group rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] lg:col-span-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Spray Window</div>
             <div className="mt-3">
               {sprayWindowQuery.isLoading ? (
-                <Skeleton className="h-6 w-full rounded-full" />
+                <Skeleton className="h-6 w-full rounded-full bg-white/[0.06]" />
               ) : (
-                <div className="grid min-w-[520px] grid-cols-12 gap-1 overflow-x-auto">
-                  {(sprayWindowQuery.data ?? []).map((block) => (
-                    <div key={`spray-bento-${block.hour}`} className={`h-5 rounded ${block.safe ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                  ))}
+                <div className="overflow-x-auto">
+                  <div className="grid min-w-[520px] grid-cols-12 gap-1">
+                    {(sprayWindowQuery.data ?? []).map((block) => (
+                      <div key={`spray-bento-${block.hour}`} className={`h-5 rounded ${block.safe ? ‘bg-lime-400’ : ‘bg-red-500/70’}`} />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">{sprayWindowSummary}</p>
-          </Card>
+            <p className="mt-2 text-xs text-slate-500">{sprayWindowSummary}</p>
+          </div>
 
-          <Card className={`rounded-xl border border-l-4 bg-card p-4 ${efficiencyScoreSummary.toneClasses}`}>
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Efficiency Score</div>
-            <div className="mt-2 text-4xl font-semibold tracking-tight">{efficiencyScoreSummary.score}</div>
-            <p className="mt-1 text-sm">{efficiencyScoreSummary.label}</p>
-            <p className="mt-2 text-xs">
-              {efficiencyScoreSummary.trend === 'up' ? '↑' : efficiencyScoreSummary.trend === 'down' ? '↓' : '→'} vs yesterday
+          <div className={`group rounded-2xl border border-white/[0.06] border-l-4 bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] ${efficiencyScoreSummary.toneClasses}`}>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Efficiency Score</div>
+            <div className="mt-2 text-4xl font-semibold tracking-tight text-slate-100">{efficiencyScoreSummary.score}</div>
+            <p className="mt-1 text-sm text-slate-300">{efficiencyScoreSummary.label}</p>
+            <p className="mt-2 text-xs text-slate-500">
+              {efficiencyScoreSummary.trend === ‘up’ ? ‘↑’ : efficiencyScoreSummary.trend === ‘down’ ? ‘↓’ : ‘→’} vs yesterday
             </p>
-          </Card>
+          </div>
 
           <OpsSignalCard title="Schedule Coverage" value={coverageSummary.value} subtitle={coverageSummary.subtitle} tone={coverageSummary.tone} />
           <OpsSignalCard
             title="Equipment Health"
-            value={equipmentUnits.length === 0 ? 'No data' : `${equipmentActiveCount}/${equipmentUnits.length} Ready`}
-            subtitle={overdueEquipmentCount > 0 ? `${overdueEquipmentCount} overdue` : 'All clear'}
-            tone={overdueEquipmentCount === 0 ? 'good' : overdueEquipmentCount <= 2 ? 'warning' : 'critical'}
+            value={equipmentUnits.length === 0 ? ‘No data’ : `${equipmentActiveCount}/${equipmentUnits.length} Ready`}
+            subtitle={overdueEquipmentCount > 0 ? `${overdueEquipmentCount} overdue` : ‘All clear’}
+            tone={overdueEquipmentCount === 0 ? ‘good’ : overdueEquipmentCount <= 2 ? ‘warning’ : ‘critical’}
           />
 
-          <Card className="rounded-xl border bg-card p-4">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open Needs</div>
-            <div className="mt-2 text-2xl font-semibold">{openNeedsCount}</div>
-            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+          <div className="group rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Open Needs</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-100">{openNeedsCount}</div>
+            <div className="mt-2 space-y-1 text-xs text-slate-500">
               {(openNeedsPreviewQuery.data ?? []).map((need) => (
                 <div key={need.id}>• {need.title}</div>
               ))}
               {(openNeedsPreviewQuery.data ?? []).length === 0 ? <div>No open needs</div> : null}
             </div>
-            <button type="button" className="mt-3 text-xs font-medium text-primary underline" onClick={() => navigate('/app/workboard')}>
+            <button type="button" className="mt-3 text-xs font-medium text-lime-400 hover:text-lime-300" onClick={() => navigate(‘/app/workboard’)}>
               View All →
             </button>
-          </Card>
+          </div>
 
           {operationsScorecard ? (
-            <Card className="rounded-xl border bg-card p-4 lg:col-span-3">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Operations Scorecard</div>
+            <div className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 lg:col-span-3">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Operations Scorecard</div>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-                <ScorecardMetricCard
-                  label="Task Completion"
-                  value={`${operationsScorecard.completionCurrent}%`}
-                  trend={operationsScorecard.completionTrend}
-                  data={operationsScorecard.completionDaily}
-                  toneClass="border-green-200"
-                />
-                <ScorecardMetricCard
-                  label="Labor Efficiency"
-                  value={`${operationsScorecard.laborCurrent}%`}
-                  trend={operationsScorecard.laborTrend}
-                  data={operationsScorecard.laborDaily}
-                  toneClass="border-blue-200"
-                />
-                <ScorecardMetricCard
-                  label="Coverage"
-                  value={`${operationsScorecard.coverageCurrent}%`}
-                  trend={operationsScorecard.coverageTrend}
-                  data={operationsScorecard.coverageDaily}
-                  toneClass="border-indigo-200"
-                />
-                <ScorecardMetricCard
-                  label="Equipment"
-                  value={`${operationsScorecard.equipmentUptime}%`}
-                  trend={operationsScorecard.equipmentTrend}
-                  data={operationsScorecard.equipmentDaily}
-                  toneClass="border-emerald-200"
-                />
-                <ScorecardMetricCard
-                  label="Crew Utilization"
-                  value={`${operationsScorecard.crewUtilization}%`}
-                  trend={operationsScorecard.crewTrend}
-                  data={operationsScorecard.crewDaily}
-                  toneClass="border-amber-200"
-                />
+                <ScorecardMetricCard label="Task Completion" value={`${operationsScorecard.completionCurrent}%`} trend={operationsScorecard.completionTrend} data={operationsScorecard.completionDaily} />
+                <ScorecardMetricCard label="Labor Efficiency" value={`${operationsScorecard.laborCurrent}%`} trend={operationsScorecard.laborTrend} data={operationsScorecard.laborDaily} />
+                <ScorecardMetricCard label="Coverage" value={`${operationsScorecard.coverageCurrent}%`} trend={operationsScorecard.coverageTrend} data={operationsScorecard.coverageDaily} />
+                <ScorecardMetricCard label="Equipment" value={`${operationsScorecard.equipmentUptime}%`} trend={operationsScorecard.equipmentTrend} data={operationsScorecard.equipmentDaily} />
+                <ScorecardMetricCard label="Crew Utilization" value={`${operationsScorecard.crewUtilization}%`} trend={operationsScorecard.crewTrend} data={operationsScorecard.crewDaily} />
               </div>
-            </Card>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -2254,22 +2189,22 @@ export default function CommandCenterOperationalPage() {
       {isLoading && !queryTimeoutReached ? <div className="mb-6"><CardSkeleton /></div> : null}
 
       {isLoading && queryTimeoutReached ? (
-        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
-          <h3 className="text-base font-semibold">Taking longer than expected</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Try refreshing.</p>
-        </Card>
+        <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
+          <h3 className="text-base font-semibold text-slate-100">Taking longer than expected</h3>
+          <p className="mt-1 text-sm text-slate-500">Try refreshing.</p>
+        </div>
       ) : null}
 
       {!isLoading && !queryTimeoutReached ? <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <OpsSignalCard
-          title="Today's Crew Readiness"
-          value={crewScheduledCount === 0 ? 'No crew scheduled' : `${crewScheduledCount} scheduled`}
+          title="Today’s Crew Readiness"
+          value={crewScheduledCount === 0 ? ‘No crew scheduled’ : `${crewScheduledCount} scheduled`}
           subtitle={
             crewScheduledCount === 0
-              ? 'Create today’s shifts in Scheduler to begin planning.'
+              ? ‘Create today’s shifts in Scheduler to begin planning.’
               : `${activeEmployees.length} active crew available in roster`
           }
-          tone={crewScheduledCount === 0 ? 'critical' : 'good'}
+          tone={crewScheduledCount === 0 ? ‘critical’ : ‘good’}
         />
         <OpsSignalCard
           title="Active Tasks / Workflow"
@@ -2277,16 +2212,16 @@ export default function CommandCenterOperationalPage() {
           subtitle={
             tasksAssignedCount === 0
               ? crewScheduledCount > 0
-                ? 'Crew is scheduled, but no tasks are assigned yet.'
-                : 'No crew and no tasks scheduled yet.'
+                ? ‘Crew is scheduled, but no tasks are assigned yet.’
+                : ‘No crew and no tasks scheduled yet.’
               : `${pendingAssignmentsCount} still in progress or planned`
           }
           tone={
             tasksAssignedCount > 0
-              ? 'good'
+              ? ‘good’
               : crewScheduledCount > 0
-                ? 'warning'
-                : 'neutral'
+                ? ‘warning’
+                : ‘neutral’
           }
         />
         <OpsSignalCard
@@ -2297,20 +2232,20 @@ export default function CommandCenterOperationalPage() {
         />
         <OpsSignalCard
           title="Equipment Readiness"
-          value={equipmentUnits.length === 0 ? 'No equipment data' : `${equipmentActiveCount} ready`}
+          value={equipmentUnits.length === 0 ? ‘No equipment data’ : `${equipmentActiveCount} ready`}
           subtitle={
             equipmentUnits.length === 0
-              ? 'Add equipment units to track operational readiness.'
+              ? ‘Add equipment units to track operational readiness.’
               : `${overdueEquipmentCount} units overdue for service`
           }
           tone={
             equipmentUnits.length === 0
-              ? 'neutral'
+              ? ‘neutral’
               : overdueEquipmentCount === 0
-                ? 'good'
+                ? ‘good’
                 : overdueEquipmentCount <= 2
-                  ? 'warning'
-                  : 'critical'
+                  ? ‘warning’
+                  : ‘critical’
           }
         />
         <OpsSignalCard
@@ -2334,26 +2269,26 @@ export default function CommandCenterOperationalPage() {
       </div> : null}
 
       {!isLoading && !queryTimeoutReached ? (
-        <Card className="mb-6 rounded-xl border bg-card p-4 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">📋 Next Steps</h3>
-            <span className="text-xs text-muted-foreground">Top priorities</span>
+            <h3 className="text-sm font-semibold text-slate-100">📋 Next Steps</h3>
+            <span className="text-xs text-slate-500">Top priorities</span>
           </div>
           <div className="mt-3 space-y-2">
             {visibleNextSteps.length > 0 ? (
               visibleNextSteps.map((step) => {
                 const Icon = step.icon;
                 return (
-                  <div key={step.id} className="flex items-start justify-between gap-3 rounded-lg border p-3">
+                  <div key={step.id} className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
                     <div className="flex min-w-0 items-start gap-2">
-                      <Icon className="mt-0.5 h-4 w-4 text-primary" />
+                      <Icon className="mt-0.5 h-4 w-4 text-lime-400" />
                       <div>
-                        <p className="text-sm">{step.message}</p>
+                        <p className="text-sm text-slate-200">{step.message}</p>
                         {step.actionPath && step.actionLabel ? (
                           <button
                             type="button"
                             onClick={() => navigate(step.actionPath as string)}
-                            className="mt-1 text-xs font-medium text-primary hover:text-primary/80"
+                            className="mt-1 text-xs font-medium text-lime-400 hover:text-lime-300"
                           >
                             {step.actionLabel} →
                           </button>
@@ -2363,7 +2298,7 @@ export default function CommandCenterOperationalPage() {
                     <button
                       type="button"
                       onClick={() => dismissNextStep(step.id)}
-                      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className="shrink-0 rounded p-1 text-slate-500 hover:bg-white/5 hover:text-slate-300"
                       aria-label="Dismiss next step"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -2372,39 +2307,39 @@ export default function CommandCenterOperationalPage() {
                 );
               })
             ) : (
-              <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-white/[0.08] p-3 text-xs text-slate-500">
                 All current next-step items dismissed for this session.
               </div>
             )}
           </div>
-        </Card>
+        </div>
       ) : null}
 
       {!isLoading && !queryTimeoutReached ? (
-        <Card className={`mb-6 rounded-xl border-l-4 p-5 shadow-sm ${efficiencyScoreSummary.toneClasses}`}>
+        <div className={`mb-6 rounded-2xl border border-white/[0.06] border-l-4 bg-[#1a2d1f] p-5 ${efficiencyScoreSummary.toneClasses}`}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              <div className="inline-flex items-center gap-1 text-[11px] uppercase tracking-[0.16em] text-slate-500">
                 Efficiency Score
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button type="button" aria-label="Efficiency score help">
-                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                      <HelpCircle className="h-3.5 w-3.5 text-slate-500" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>Based on task completion, coverage, labor variance, equipment health, and open needs.</TooltipContent>
                 </Tooltip>
               </div>
               {efficiencyInputsQuery.isLoading ? (
-                <Skeleton className="mt-2 h-10 w-20 rounded-md" />
+                <Skeleton className="mt-2 h-10 w-20 rounded-md bg-white/[0.06]" />
               ) : (
-                <div className="mt-2 text-4xl font-semibold tracking-tight">{efficiencyScoreSummary.score}</div>
+                <div className="mt-2 text-4xl font-semibold tracking-tight text-slate-100">{efficiencyScoreSummary.score}</div>
               )}
-              <p className="mt-1 text-sm">{efficiencyScoreSummary.label}</p>
+              <p className="mt-1 text-sm text-slate-300">{efficiencyScoreSummary.label}</p>
             </div>
-            <div className="flex items-center gap-1 text-xs font-medium">
-              {efficiencyScoreSummary.trend === 'up' ? <ArrowUpRight className="h-4 w-4" /> : null}
-              {efficiencyScoreSummary.trend === 'down' ? <ArrowDownRight className="h-4 w-4" /> : null}
+            <div className="flex items-center gap-1 text-xs font-medium text-slate-400">
+              {efficiencyScoreSummary.trend === 'up' ? <ArrowUpRight className="h-4 w-4 text-lime-400" /> : null}
+              {efficiencyScoreSummary.trend === 'down' ? <ArrowDownRight className="h-4 w-4 text-red-400" /> : null}
               <span>
                 {efficiencyScoreSummary.trend === 'up'
                   ? 'Higher than yesterday'
@@ -2415,13 +2350,13 @@ export default function CommandCenterOperationalPage() {
             </div>
           </div>
           {efficiencyInputsQuery.error ? (
-            <p className="mt-2 text-xs text-muted-foreground">Unable to calculate score right now.</p>
+            <p className="mt-2 text-xs text-slate-500">Unable to calculate score right now.</p>
           ) : (
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-2 text-xs text-slate-500">
               Based on completion, coverage, labor variance, equipment health, and open needs.
             </p>
           )}
-        </Card>
+        </div>
       ) : null}
 
       {!isLoading && crewScheduledCount === 0 && tasksAssignedCount === 0 ? (
@@ -2436,13 +2371,13 @@ export default function CommandCenterOperationalPage() {
         </div>
       ) : null}
 
-      <Card className="mb-6 rounded-2xl border p-4 md:p-5 shadow-sm">
+      <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
         <div className="flex items-center gap-1">
-          <h3 className="text-sm font-semibold">Spray Window — Today</h3>
+          <h3 className="text-sm font-semibold text-slate-100">Spray Window — Today</h3>
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" aria-label="Spray window help">
-                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                <HelpCircle className="h-3.5 w-3.5 text-slate-500" />
               </button>
             </TooltipTrigger>
             <TooltipContent>Green = safe to spray. Red = wind or rain makes spraying risky.</TooltipContent>
@@ -2450,96 +2385,81 @@ export default function CommandCenterOperationalPage() {
         </div>
         <div className="mt-3">
           {sprayWindowQuery.isLoading ? (
-            <Skeleton className="h-6 w-full rounded-full" />
+            <Skeleton className="h-6 w-full rounded-full bg-white/[0.06]" />
           ) : sprayWindowQuery.data && sprayWindowQuery.data.length > 0 ? (
             <div className="relative overflow-x-auto">
               <div className="grid min-w-[520px] grid-cols-12 gap-1">
                 {sprayWindowQuery.data.map((block) => (
                   <div
                     key={`spray-hour-${block.hour}`}
-                    className={`h-6 rounded ${block.safe ? 'bg-emerald-500' : 'bg-red-500'}`}
+                    className={`h-6 rounded ${block.safe ? 'bg-lime-400' : 'bg-red-500/70'}`}
                     title={`${formatTime(`${block.hour.toString().padStart(2, '0')}:00`)} - ${formatTime(`${(block.hour + 1).toString().padStart(2, '0')}:00`)}`}
                   />
                 ))}
               </div>
               {sprayCurrentMarkerPercent !== null ? (
                 <div
-                  className="pointer-events-none absolute -top-1 bottom-0 w-0.5 bg-foreground/80"
+                  className="pointer-events-none absolute -top-1 bottom-0 w-0.5 bg-slate-300/80"
                   style={{ left: `${sprayCurrentMarkerPercent}%` }}
                 >
-                  <span className="absolute -top-4 -translate-x-1/2 text-[10px] font-medium text-foreground">
+                  <span className="absolute -top-4 -translate-x-1/2 text-[10px] font-medium text-slate-300">
                     Now
                   </span>
                 </div>
               ) : null}
-              <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+              <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
                 <span>6:00 AM</span>
                 <span>12:00 PM</span>
                 <span>6:00 PM</span>
               </div>
             </div>
           ) : (
-            <div className="text-xs text-muted-foreground">No weather data available for spray window analysis.</div>
+            <div className="text-xs text-slate-500">No weather data available for spray window analysis.</div>
           )}
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">{sprayWindowSummary}</p>
-      </Card>
+        <p className="mt-3 text-xs text-slate-500">{sprayWindowSummary}</p>
+      </div>
 
-      <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
-        <h3 className="text-sm font-semibold">Labor: Scheduled vs Actual (Last 7 Days)</h3>
+      <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
+        <h3 className="text-sm font-semibold text-slate-100">Labor: Scheduled vs Actual (Last 7 Days)</h3>
         <div className="mt-4 h-64">
           {laborTrendQuery.isLoading ? (
-            <Skeleton className="h-full w-full rounded-xl" />
+            <Skeleton className="h-full w-full rounded-xl bg-white/[0.06]" />
           ) : laborTrendQuery.error ? (
-            <div className="text-xs text-muted-foreground">Unable to load labor chart.</div>
+            <div className="text-xs text-slate-500">Unable to load labor chart.</div>
           ) : (
-            <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+            <Suspense fallback={<Skeleton className="h-full w-full rounded-xl bg-white/[0.06]" />}>
               <RechartsResponsiveContainer width="100%" height="100%">
                 <RechartsBarChart data={laborTrendData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                  <RechartsCartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <RechartsXAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} />
-                  <RechartsYAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
-                  <RechartsTooltip />
-                  <RechartsLegend />
+                  <RechartsCartesianGrid strokeDasharray="3 3" stroke="#243828" />
+                  <RechartsXAxis dataKey="label" tick={{ fontSize: 12, fill: '#64748b' }} />
+                  <RechartsYAxis tick={{ fontSize: 12, fill: '#64748b' }} />
+                  <RechartsTooltip contentStyle={{ background: '#1a2d1f', border: '1px solid rgba(255,255,255,0.06)', color: '#e2e8f0' }} />
+                  <RechartsLegend wrapperStyle={{ color: '#94a3b8' }} />
                   <RechartsBar dataKey="scheduled" name="Scheduled" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                    <RechartsLabelList
-                      dataKey="scheduled"
-                      position="top"
-                      fontSize={10}
-                      fill="#2563eb"
-                      formatter={(value: number) => value.toFixed(1)}
-                    />
+                    <RechartsLabelList dataKey="scheduled" position="top" fontSize={10} fill="#60a5fa" formatter={(value: number) => value.toFixed(1)} />
                   </RechartsBar>
                   <RechartsBar dataKey="actual" name="Actual" radius={[4, 4, 0, 0]}>
                     {laborTrendData.map((entry) => (
-                      <RechartsCell
-                        key={`actual-cell-${entry.date}`}
-                        fill={entry.actual > entry.scheduled ? '#f97316' : '#16a34a'}
-                      />
+                      <RechartsCell key={`actual-cell-${entry.date}`} fill={entry.actual > entry.scheduled ? '#f97316' : '#a3e635'} />
                     ))}
-                    <RechartsLabelList
-                      dataKey="actual"
-                      position="top"
-                      fontSize={10}
-                      fill="#166534"
-                      formatter={(value: number) => value.toFixed(1)}
-                    />
+                    <RechartsLabelList dataKey="actual" position="top" fontSize={10} fill="#a3e635" formatter={(value: number) => value.toFixed(1)} />
                   </RechartsBar>
                 </RechartsBarChart>
               </RechartsResponsiveContainer>
             </Suspense>
           )}
         </div>
-      </Card>
+      </div>
 
       {isAllPropertiesView ? (
-        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
-          <h3 className="text-sm font-semibold">Property Breakdown</h3>
-          <p className="mt-1 text-xs text-muted-foreground">Crew, tasks, and coverage by property for today.</p>
+        <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
+          <h3 className="text-sm font-semibold text-slate-100">Property Breakdown</h3>
+          <p className="mt-1 text-xs text-slate-500">Crew, tasks, and coverage by property for today.</p>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground">
+                <tr className="border-b border-white/[0.06] text-left text-slate-500">
                   <th className="pb-2 font-medium">Property</th>
                   <th className="pb-2 font-medium">Crew</th>
                   <th className="pb-2 font-medium">Tasks</th>
@@ -2550,75 +2470,70 @@ export default function CommandCenterOperationalPage() {
                 {propertyBreakdownRows.map((row) => (
                   <tr
                     key={`property-breakdown-${row.propertyId}`}
-                    className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
+                    className="cursor-pointer border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
                     onClick={() => {
                       setCurrentPropertyId(row.propertyId);
                       navigate(`/app/workboard?property=${encodeURIComponent(row.propertyId)}`);
                     }}
                   >
-                    <td className="py-2 font-medium">{row.propertyName}</td>
-                    <td className="py-2">{row.crewCount} crew</td>
-                    <td className="py-2">{row.taskCount} tasks</td>
-                    <td className="py-2">{row.coveragePct}%</td>
+                    <td className="py-2 font-medium text-slate-200">{row.propertyName}</td>
+                    <td className="py-2 text-slate-400">{row.crewCount} crew</td>
+                    <td className="py-2 text-slate-400">{row.taskCount} tasks</td>
+                    <td className="py-2 text-slate-400">{row.coveragePct}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       ) : null}
 
-      <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
-        <h3 className="text-sm font-semibold">Labor Cost This Week</h3>
-        <div className="mt-2 text-sm text-muted-foreground">{weeklyLaborCostSummary}</div>
+      <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
+        <h3 className="text-sm font-semibold text-slate-100">Labor Cost This Week</h3>
+        <div className="mt-2 text-sm text-slate-400">{weeklyLaborCostSummary}</div>
         {!weeklyLaborCostQuery.isLoading && !weeklyLaborCostQuery.error && !weeklyLaborCostQuery.data?.hasHourlyRates ? (
-          <p className="mt-2 text-xs text-amber-700">
+          <p className="mt-2 text-xs text-amber-400">
             Set employee hourly rates in the Employees page to enable cost tracking.
           </p>
         ) : null}
         <div className="mt-4 h-44">
           {weeklyLaborCostQuery.isLoading ? (
-            <Skeleton className="h-full w-full rounded-xl" />
+            <Skeleton className="h-full w-full rounded-xl bg-white/[0.06]" />
           ) : weeklyLaborCostQuery.error ? (
-            <div className="text-xs text-muted-foreground">Unable to load weekly labor costs.</div>
+            <div className="text-xs text-slate-500">Unable to load weekly labor costs.</div>
           ) : (
-            <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+            <Suspense fallback={<Skeleton className="h-full w-full rounded-xl bg-white/[0.06]" />}>
               <RechartsResponsiveContainer width="100%" height="100%">
                 <RechartsBarChart data={weeklyLaborCostQuery.data?.daily ?? []} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                  <RechartsCartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <RechartsXAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} />
-                  <RechartsYAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
-                  <RechartsTooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
-                  <RechartsBar dataKey="cost" name="Cost" fill="#166534" radius={[4, 4, 0, 0]} />
+                  <RechartsCartesianGrid strokeDasharray="3 3" stroke="#243828" />
+                  <RechartsXAxis dataKey="label" tick={{ fontSize: 12, fill: '#64748b' }} />
+                  <RechartsYAxis tick={{ fontSize: 12, fill: '#64748b' }} />
+                  <RechartsTooltip contentStyle={{ background: '#1a2d1f', border: '1px solid rgba(255,255,255,0.06)', color: '#e2e8f0' }} formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                  <RechartsBar dataKey="cost" name="Cost" fill="#a3e635" radius={[4, 4, 0, 0]} />
                 </RechartsBarChart>
               </RechartsResponsiveContainer>
             </Suspense>
           )}
         </div>
-      </Card>
+      </div>
 
-      <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
-        <h3 className="text-sm font-semibold">Equipment Alerts</h3>
+      <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
+        <h3 className="text-sm font-semibold text-slate-100">Equipment Alerts</h3>
         <div className="mt-3">
           {equipmentAlertsQuery.isLoading ? (
             <div className="space-y-2">
-              <Skeleton className="h-10 w-full rounded-lg" />
-              <Skeleton className="h-10 w-full rounded-lg" />
+              <Skeleton className="h-10 w-full rounded-lg bg-white/[0.06]" />
+              <Skeleton className="h-10 w-full rounded-lg bg-white/[0.06]" />
             </div>
           ) : equipmentAlertsQuery.error ? (
-            <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-white/[0.08] p-3 text-xs text-slate-500">
               Unable to load equipment service alerts.
-              <Button
-                size="sm"
-                variant="outline"
-                className="ml-2"
-                onClick={() => void equipmentAlertsQuery.refetch()}
-              >
+              <Button size="sm" variant="outline" className="ml-2 border-white/[0.10] text-slate-300" onClick={() => void equipmentAlertsQuery.refetch()}>
                 Retry
               </Button>
             </div>
           ) : (equipmentAlertsQuery.data ?? []).length === 0 ? (
-            <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-white/[0.08] p-3 text-sm text-slate-500">
               All equipment is up to date ✓
             </div>
           ) : (
@@ -2630,18 +2545,14 @@ export default function CommandCenterOperationalPage() {
                   ? Math.max(0, Math.floor((Date.now() - servicedDate.getTime()) / (1000 * 60 * 60 * 24)) - 90)
                   : 0;
                 return (
-                  <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                  <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
                     <div className="text-sm">
-                      <span className="font-medium">⚠️ {displayName}</span>
-                      <span className="text-muted-foreground">
+                      <span className="font-medium text-slate-200">⚠️ {displayName}</span>
+                      <span className="text-slate-500">
                         {' '}— overdue for service by {overdueDays} day{overdueDays === 1 ? '' : 's'}
                       </span>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void markEquipmentServiced(item.id)}
-                    >
+                    <Button size="sm" variant="outline" className="border-white/[0.10] text-slate-300 hover:bg-white/5" onClick={() => void markEquipmentServiced(item.id)}>
                       Mark Serviced
                     </Button>
                   </div>
@@ -2650,7 +2561,7 @@ export default function CommandCenterOperationalPage() {
             </div>
           )}
         </div>
-      </Card>
+      </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="Crew Scheduled Today" value={crewScheduledCount} onClick={() => navigate('/app/scheduler')} />
@@ -2660,55 +2571,55 @@ export default function CommandCenterOperationalPage() {
       </div>
 
       {isAdmin || isManager ? (
-        <Card className="mb-6 rounded-2xl border p-5 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold">Ops Brief</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Generate and post the morning operations brief for the crew.</p>
+              <h3 className="text-lg font-semibold text-slate-100">Ops Brief</h3>
+              <p className="mt-1 text-sm text-slate-500">Generate and post the morning operations brief for the crew.</p>
             </div>
-            <Button onClick={() => void handleGenerateBrief()}>Generate Brief</Button>
+            <Button className="rounded-full bg-lime-400 text-black hover:brightness-110" onClick={() => void handleGenerateBrief()}>Generate Brief</Button>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
-            <div className="rounded-xl border bg-muted/20 p-3">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">Scheduled Crew</div>
-              <div className="mt-1 text-lg font-semibold">{crewScheduledCount}</div>
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Scheduled Crew</div>
+              <div className="mt-1 text-lg font-semibold text-slate-100">{crewScheduledCount}</div>
             </div>
-            <div className="rounded-xl border bg-muted/20 p-3">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">Pending Assignments</div>
-              <div className="mt-1 text-lg font-semibold">{pendingAssignmentsCount}</div>
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Pending Assignments</div>
+              <div className="mt-1 text-lg font-semibold text-slate-100">{pendingAssignmentsCount}</div>
             </div>
-            <div className="rounded-xl border bg-muted/20 p-3">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">Last Weather Log</div>
-              <div className="mt-1 text-sm font-medium">{lastWeatherLogSummary}</div>
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Last Weather Log</div>
+              <div className="mt-1 text-sm font-medium text-slate-200">{lastWeatherLogSummary}</div>
             </div>
           </div>
-        </Card>
+        </div>
       ) : null}
 
-      <Card className="mb-6 rounded-xl border bg-card p-4 shadow-sm">
+      <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Button size="sm" className="h-9 gap-1.5 rounded-lg text-sm font-semibold" onClick={() => navigate('/app/workboard')}>
+          <Button size="sm" className="h-9 gap-1.5 rounded-full bg-lime-400 text-sm font-semibold text-black hover:brightness-110" onClick={() => navigate('/app/workboard')}>
             <ArrowRight className="mr-2 h-4 w-4" />
             Build Today's Plan
           </Button>
-          <Button size="sm" className="h-9 gap-1.5 rounded-lg text-sm font-semibold" variant="secondary" onClick={() => navigate('/app/scheduler')}>
+          <Button size="sm" className="h-9 gap-1.5 rounded-full border-white/[0.10] text-sm font-semibold text-slate-300 hover:bg-white/5" variant="outline" onClick={() => navigate('/app/scheduler')}>
             <Calendar className="mr-2 h-4 w-4" />
             Add Shift
           </Button>
-          <Button size="sm" className="h-9 gap-1.5 rounded-lg text-sm font-semibold" variant="outline" onClick={() => navigate('/app/employees')}>
+          <Button size="sm" className="h-9 gap-1.5 rounded-full border-white/[0.10] text-sm font-semibold text-slate-300 hover:bg-white/5" variant="outline" onClick={() => navigate('/app/employees')}>
             <Plus className="mr-2 h-4 w-4" />
             Add Employee
           </Button>
         </div>
-      </Card>
+      </div>
 
-      <Card className="mb-6 rounded-2xl border p-6 shadow-sm">
-        <h3 className="mb-4 text-lg font-semibold">Today's Crew</h3>
+      <div className="mb-6 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-6">
+        <h3 className="mb-4 text-lg font-semibold text-slate-100">Today's Crew</h3>
 
         {isLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-14 rounded-xl" />
+              <Skeleton key={index} className="h-14 rounded-xl bg-white/[0.06]" />
             ))}
           </div>
         ) : scheduledRows.length === 0 ? (
@@ -2723,7 +2634,7 @@ export default function CommandCenterOperationalPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground">
+                <tr className="border-b border-white/[0.06] text-left text-slate-500">
                   <th className="pb-3 font-medium">Employee</th>
                   <th className="pb-3 font-medium">Department</th>
                   <th className="pb-3 font-medium">Shift</th>
@@ -2732,14 +2643,14 @@ export default function CommandCenterOperationalPage() {
               </thead>
               <tbody>
                 {scheduledRows.map((row) => (
-                  <tr key={row.id} className="border-b last:border-0">
-                    <td className="py-3 font-medium">{row.name}</td>
-                    <td className="py-3 text-muted-foreground">{row.department}</td>
-                    <td className="py-3">{formatTime(row.shiftStart)} - {formatTime(row.shiftEnd)}</td>
+                  <tr key={row.id} className="border-b border-white/[0.04] last:border-0">
+                    <td className="py-3 font-medium text-slate-200">{row.name}</td>
+                    <td className="py-3 text-slate-500">{row.department}</td>
+                    <td className="py-3 text-slate-300">{formatTime(row.shiftStart)} - {formatTime(row.shiftEnd)}</td>
                     <td className="py-3">
-                      <Badge variant={row.assigned ? 'default' : 'outline'}>
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${row.assigned ? 'bg-lime-400/10 text-lime-400' : 'border border-white/[0.10] text-slate-500'}`}>
                         {row.assigned ? 'Assigned' : 'Unassigned'}
-                      </Badge>
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -2747,7 +2658,7 @@ export default function CommandCenterOperationalPage() {
             </table>
           </div>
         )}
-      </Card>
+      </div>
 
       {!isLoading && selectedProperty ? (
         <PropertySummaryCard
@@ -2759,23 +2670,23 @@ export default function CommandCenterOperationalPage() {
           }}
         />
       ) : (
-        <Card className="rounded-2xl border p-6 shadow-sm">
-          <div className="text-sm text-muted-foreground">{isLoading ? 'Loading property...' : 'No properties available yet.'}</div>
-        </Card>
+        <div className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-6">
+          <div className="text-sm text-slate-500">{isLoading ? 'Loading property...' : 'No properties available yet.'}</div>
+        </div>
       )}
 
       {notes.some((note) => note.type === 'alert') && !isLoading ? (
-        <Card className="mt-6 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+        <div className="mt-6 rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
           <div className="flex items-start gap-3">
-            <CloudRain className="mt-0.5 h-4 w-4 text-destructive" />
+            <CloudRain className="mt-0.5 h-4 w-4 text-red-400" />
             <div>
-              <div className="text-sm font-semibold text-destructive">Active Alerts</div>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <div className="text-sm font-semibold text-red-400">Active Alerts</div>
+              <p className="mt-1 text-xs text-slate-500">
                 {notes.filter((note) => note.type === 'alert').length} alert(s) detected today.
               </p>
             </div>
           </div>
-        </Card>
+        </div>
       ) : null}
     </div>
   );

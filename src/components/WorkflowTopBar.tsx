@@ -89,16 +89,18 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const allPropertiesLabel = `All Properties (${properties.length})`;
   const bellBadgeLabel = pendingSyncCount > 0 ? `${pendingSyncCount} pending syncs` : String(unreadNotificationCount);
 
+  const rolePillLabel = displayRole === 'MANAGER' ? 'Supervisor' : displayRole === 'ADMIN' ? 'Admin' : 'Field Crew';
+
   return (
-    <header className="sticky top-0 z-20 shrink-0 border-b border-border/80 bg-card/92 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+    <header className="sticky top-0 z-20 shrink-0 border-b border-white/[0.08] bg-[#0f1a14]/80 px-3 py-2 backdrop-blur-md">
       <div className="flex items-center gap-2 md:gap-3">
-        <Button variant="ghost" size="icon" className="h-9 w-9 md:hidden" onClick={onOpenMobileSidebar} aria-label="Open menu">
+        <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:bg-white/5 hover:text-slate-100 md:hidden" onClick={onOpenMobileSidebar} aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </Button>
 
         <div className="hidden md:block">
           <Select value={department} onValueChange={setDepartment}>
-            <SelectTrigger className="h-9 w-[170px] rounded-lg border-border/80 bg-background/90 text-sm">
+            <SelectTrigger className="h-9 w-[170px] rounded-lg border-white/[0.10] bg-[#1a2d1f]/80 text-sm text-slate-200">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -114,7 +116,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
 
         <div className="min-w-0 flex-1 md:flex-none">
           <Select value={currentPropertyId} onValueChange={onSelectProperty}>
-            <SelectTrigger className="h-9 w-full md:w-[190px] rounded-lg border-border/80 bg-background/90 text-sm">
+            <SelectTrigger className="h-9 w-full rounded-lg border-white/[0.10] bg-[#1a2d1f]/80 text-sm text-slate-200 md:w-[190px]">
               <SelectValue placeholder="Select property" />
             </SelectTrigger>
             <SelectContent>
@@ -130,13 +132,13 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </Select>
         </div>
 
-        <div className="hidden md:block min-w-[250px]">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Workflow Date</div>
+        <div className="hidden min-w-[250px] md:block">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Workflow Date</div>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-border/80 bg-background/90 px-3 text-left font-medium">
+              <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-white/[0.10] bg-[#1a2d1f]/80 px-3 text-left font-medium text-slate-200 hover:bg-[#243828]/80 hover:text-slate-100">
                 <span>{formatDate(currentDate)}</span>
-                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                <CalendarDays className="h-4 w-4 text-slate-500" />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="w-auto p-0">
@@ -150,33 +152,33 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </Popover>
         </div>
 
-        <Button variant="outline" size="sm" className="hidden md:inline-flex h-9 rounded-xl border-border/80 bg-background/90 text-xs" onClick={today}>
+        <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-white/[0.10] bg-[#1a2d1f]/80 text-xs text-slate-300 hover:bg-[#243828]/80 hover:text-slate-100 md:inline-flex" onClick={today}>
           {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
         </Button>
 
         {programSetting?.clientLabel ? (
-          <Badge variant="outline" className="hidden rounded-full px-3 py-1 text-[11px] lg:inline-flex">
+          <span className="hidden rounded-full border border-white/[0.08] bg-[#1a2d1f]/60 px-3 py-1 text-[11px] text-slate-400 lg:inline-flex">
             {programSetting.clientLabel}
-          </Badge>
+          </span>
         ) : null}
 
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <DropdownMenu onOpenChange={(open) => open && onMarkAllNotificationsRead()}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent hover:border-border/70 hover:bg-muted/50">
+              <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent text-slate-400 hover:border-white/10 hover:bg-white/5 hover:text-slate-100">
                 <Bell className="h-4 w-4" />
-                <Badge
-                  className={`absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px] ${
-                    syncFlashActive ? 'bg-green-600 text-white' : ''
-                  }`}
+                <span
+                  className={`absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
+                    syncFlashActive ? 'bg-lime-400 text-black' : 'bg-red-500 text-white'
+                  } ${bellBadgeLabel === '0' ? 'hidden' : ''}`}
                 >
                   {bellBadgeLabel}
-                </Badge>
+                </span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-96">
               <DropdownMenuLabel className="flex items-center justify-between">
-                <span>Admin Notifications</span>
+                <span>Notifications</span>
                 <span className="text-[11px] font-normal text-muted-foreground">{programSetting?.clientLabel || 'Active club'}</span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -188,12 +190,12 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                 >
                   <div className="mt-0.5">{getNotificationIcon(notification.icon)}</div>
                   <div
-                    className={`mt-1 h-2.5 w-2.5 rounded-full ${
+                    className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
                       notification.severity === 'critical'
                         ? 'bg-red-500'
                         : notification.severity === 'warning'
                           ? 'bg-amber-500'
-                          : 'bg-emerald-500'
+                          : 'bg-lime-400'
                     }`}
                   />
                   <div className="space-y-1">
@@ -209,7 +211,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           <Button
             variant="outline"
             size="sm"
-            className="hidden md:inline-flex h-9 rounded-xl border-border/80 bg-background/90 text-xs"
+            className="hidden h-9 rounded-xl border-white/[0.10] bg-[#1a2d1f]/80 text-xs text-slate-300 hover:bg-[#243828]/80 hover:text-slate-100 md:inline-flex"
             onClick={onOpenCommandBar}
           >
             <Search className="mr-1.5 h-3.5 w-3.5" />
@@ -218,32 +220,36 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
 
           <div className="hidden text-right md:block">
             <div className="flex items-center justify-end gap-2">
-              <div className="text-sm font-semibold text-foreground">{displayName}</div>
-              <Badge
-                className={`h-5 px-2 text-[10px] ${
-                  planTier === 'PRO' ? 'bg-green-600 text-white' : 'bg-muted text-muted-foreground'
+              <div className="text-sm font-semibold text-slate-100">{displayName}</div>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  planTier === 'PRO' ? 'bg-lime-400/10 text-lime-400' : 'bg-white/[0.06] text-slate-500'
                 }`}
               >
                 {planTier}
-              </Badge>
+              </span>
             </div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{displayRole}</div>
+            <div className="flex items-center justify-end gap-1.5 mt-0.5">
+              <span className="rounded-full bg-[#243828] px-2 py-0.5 text-[10px] font-medium text-slate-400">
+                {rolePillLabel}
+              </span>
+            </div>
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground md:hidden"
+          {/* Mobile avatar */}
+          <button
+            type="button"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#243828] text-xs font-semibold text-lime-400 ring-1 ring-lime-400/20 transition-colors duration-200 hover:ring-lime-400/40 md:hidden"
             onClick={onSignOut}
             aria-label="Account"
           >
-            <span className="text-xs font-semibold">{displayName.slice(0, 1).toUpperCase()}</span>
-          </Button>
+            {displayName.slice(0, 1).toUpperCase()}
+          </button>
 
           <Button
             variant="ghost"
             size="icon"
-            className="hidden md:inline-flex h-9 w-9 rounded-full text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            className="hidden h-9 w-9 rounded-full text-slate-400 hover:bg-white/5 hover:text-slate-100 md:inline-flex"
             onClick={onSignOut}
             aria-label="Sign out"
           >

@@ -152,33 +152,38 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
     }))
     .filter((section) => section.items.length > 0);
 
+  const roleBadgeLabel = currentRole === 'admin' ? 'Admin' : currentRole === 'manager' ? 'Supervisor' : 'Field Crew';
+  const roleBadgeClass = currentRole === 'employee'
+    ? 'bg-slate-400/10 text-slate-400'
+    : 'bg-lime-400/10 text-lime-400';
+
   return (
-    <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarHeader className="border-b border-sidebar-border/80 bg-sidebar p-4">
+    <Sidebar collapsible="icon" className="border-r-0 bg-[#0f1a14]">
+      <SidebarHeader className="border-b border-white/[0.06] bg-[#0f1a14] p-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary shadow-[0_0_0_1px_rgba(255,255,255,0.1)]">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lime-400/10 ring-1 ring-lime-400/20">
             {logoUrl ? (
               <img src={logoUrl} alt={`${navigationTitle} logo`} className="h-7 w-7 rounded-md object-contain" />
             ) : collapsed ? (
-              <span className="text-xs font-bold text-sidebar-primary-foreground">{logoInitials.slice(0, 2)}</span>
+              <span className="text-xs font-bold text-lime-400">{logoInitials.slice(0, 2)}</span>
             ) : (
-              <span className="text-primary-foreground text-sm font-extrabold tracking-tight">HQ</span>
+              <span className="text-sm font-extrabold tracking-tight text-lime-400">HQ</span>
             )}
           </div>
           {!collapsed ? (
             <div>
-              <h1 className="text-sm font-bold text-sidebar-accent-foreground">{navigationTitle}</h1>
-              <p className="text-[11px] uppercase tracking-[0.12em] text-sidebar-foreground/80">{navigationSubtitle}</p>
+              <h1 className="text-sm font-bold text-slate-100">{navigationTitle}</h1>
+              <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">{navigationSubtitle}</p>
             </div>
           ) : null}
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="pt-2">
+      <SidebarContent className="bg-[#0f1a14] pt-2">
         {visibleSections.map((section) => (
           <SidebarGroup key={section.title}>
             {!collapsed ? (
-              <div className="mt-4 mb-1 px-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+              <div className="mb-1 mt-4 px-3 text-[10px] uppercase tracking-widest text-slate-600">
                 {section.title}
               </div>
             ) : null}
@@ -191,20 +196,20 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
                         to={item.url}
                         end
                         onClick={onNavigate}
-                        className="relative rounded-lg border border-transparent px-2.5 py-2 text-sidebar-foreground transition-colors duration-150 hover:bg-muted/30 hover:text-sidebar-accent-foreground"
-                        activeClassName="border-l-2 border-primary bg-primary/10 text-primary font-medium"
+                        className="relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-slate-400 transition-colors duration-200 hover:bg-white/5 hover:text-slate-100"
+                        activeClassName="border-l-2 border-lime-400 bg-lime-400/10 !text-lime-400 font-medium"
                       >
-                        <item.icon className="h-4 w-4" />
+                        <item.icon className="h-4 w-4 shrink-0" />
                         {!collapsed ? (
                           <span className="inline-flex items-center gap-2">
                             <span>{item.title}</span>
                             {item.title === 'Workflow' && taskBoardBadgeCount > 0 ? (
-                              <span className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                              <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
                                 {taskBoardBadgeCount}
                               </span>
                             ) : null}
                             {item.title === 'Chemical Logs' && chemicalLogsBadgeCount > 0 ? (
-                              <span className="rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                              <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
                                 {chemicalLogsBadgeCount}
                               </span>
                             ) : null}
@@ -226,11 +231,22 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
         ))}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border/80 bg-sidebar p-4">
-        <div className="text-[11px] text-sidebar-foreground/85">
+      <SidebarFooter className="border-t border-white/[0.06] bg-[#0f1a14] p-4">
+        {!collapsed ? (
+          <div className="mb-2">
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${roleBadgeClass}`}>
+              {roleBadgeLabel}
+            </span>
+          </div>
+        ) : (
+          <div className="mb-2 flex justify-center">
+            <span className={`h-2 w-2 rounded-full ${currentRole === 'employee' ? 'bg-slate-500' : 'bg-lime-400'}`} />
+          </div>
+        )}
+        <div className="text-[11px] text-slate-600">
           {collapsed ? `v${APP_VERSION}` : `Ground Crew HQ · v${APP_VERSION}`}
         </div>
-        {!collapsed ? <div className="mt-1 text-[10px] text-sidebar-foreground/70">© 2026 Ground Crew HQ</div> : null}
+        {!collapsed ? <div className="mt-1 text-[10px] text-slate-700">© 2026 Ground Crew HQ</div> : null}
       </SidebarFooter>
     </Sidebar>
   );

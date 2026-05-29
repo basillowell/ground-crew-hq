@@ -17,6 +17,7 @@ import { formatTime } from "@/utils/formatTime";
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
 const PricingPage = lazy(() => import("./pages/PricingPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
 const WorkboardPage = lazy(() => import("./pages/WorkboardShell"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
@@ -402,6 +403,7 @@ function AppWithNotificationSetup() {
         <Routes>
           <Route path="/" element={<RouteElementBoundary><LandingRoute /></RouteElementBoundary>} />
           <Route path="/pricing" element={<RouteElementBoundary><Suspense fallback={<RouteFallback />}><PricingPage /></Suspense></RouteElementBoundary>} />
+          <Route path="/auth/reset" element={<RouteElementBoundary><Suspense fallback={<RouteFallback />}><ResetPasswordPage /></Suspense></RouteElementBoundary>} />
           <Route
             path="/app/*"
             element={(

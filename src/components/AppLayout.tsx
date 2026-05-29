@@ -569,7 +569,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         ) : null}
         <div
-          className={`fixed top-0 left-0 h-screen w-60 overflow-y-auto z-40 bg-sidebar border-r flex flex-col transform transition-transform duration-200 ease-in-out ${
+          className={`fixed top-0 left-0 h-screen w-60 overflow-y-auto z-40 bg-[#0f1a14] border-r border-white/[0.06] flex flex-col transform transition-transform duration-200 ease-in-out ${
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           }`}
         >
@@ -617,9 +617,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                   ⚡ You're offline — changes will sync when connected
                 </div>
               ) : null}
-              <div className="md:hidden border-b bg-background/85 px-4 py-2">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Workflow Date</div>
-                <div className="text-sm font-medium text-foreground">
+              <div className="border-b border-white/[0.05] bg-[#0f1a14]/60 px-4 py-2 md:hidden">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Workflow Date</div>
+                <div className="text-sm font-medium text-slate-300">
                   {currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                 </div>
               </div>
@@ -632,8 +632,11 @@ export function AppLayout({ children }: AppLayoutProps) {
               currentDate={currentDate}
               currentPropertyId={currentPropertyId}
             />
-            <nav className="fixed inset-x-0 bottom-0 z-50 h-16 border-t bg-card md:hidden">
-              <div className="grid h-full grid-cols-5">
+            <nav
+              className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.06] bg-[#0f1a14]/95 backdrop-blur-md md:hidden"
+              style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            >
+              <div className="grid h-16 grid-cols-5">
                 {mobilePrimaryTabs.map((tab) => {
                   const isActive = location.pathname === tab.route;
                   return (
@@ -641,10 +644,13 @@ export function AppLayout({ children }: AppLayoutProps) {
                       key={tab.route}
                       type="button"
                       onClick={() => navigate(tab.route)}
-                      className={`flex flex-col items-center justify-center gap-0.5 text-[10px] ${
-                        isActive ? 'text-primary' : 'text-muted-foreground'
+                      className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] transition-colors duration-200 ${
+                        isActive ? 'text-lime-400' : 'text-slate-500 hover:text-slate-300'
                       }`}
                     >
+                      {isActive ? (
+                        <span className="absolute top-1.5 h-0.5 w-5 rounded-full bg-lime-400" />
+                      ) : null}
                       <tab.icon className="h-4 w-4" />
                       <span>{tab.label}</span>
                     </button>
@@ -653,7 +659,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <button
                   type="button"
                   onClick={() => setMobileMoreOpen(true)}
-                  className="flex flex-col items-center justify-center gap-0.5 text-[10px] text-muted-foreground"
+                  className="flex flex-col items-center justify-center gap-0.5 text-[10px] text-slate-500 transition-colors duration-200 hover:text-slate-300"
                 >
                   <Menu className="h-4 w-4" />
                   <span>More</span>
@@ -661,9 +667,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
             </nav>
             <Sheet open={mobileMoreOpen} onOpenChange={setMobileMoreOpen}>
-              <SheetContent side="bottom" className="max-h-[75vh] rounded-t-2xl">
+              <SheetContent side="bottom" className="max-h-[75vh] rounded-t-2xl border-white/[0.08] bg-[#1a2d1f]">
                 <SheetHeader>
-                  <SheetTitle>More</SheetTitle>
+                  <SheetTitle className="text-slate-100">More</SheetTitle>
                 </SheetHeader>
                 <div className="mt-4 grid gap-2 pb-4">
                   {mobileMoreItems.map((item) => (
@@ -674,14 +680,16 @@ export function AppLayout({ children }: AppLayoutProps) {
                         navigate(item.route);
                         setMobileMoreOpen(false);
                       }}
-                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm ${
-                        location.pathname === item.route ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-foreground'
+                      className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
+                        location.pathname === item.route
+                          ? 'border-lime-400/30 bg-lime-400/10 text-lime-400'
+                          : 'border-white/[0.06] text-slate-300 hover:border-white/10 hover:bg-white/5'
                       }`}
                     >
-                      <item.icon className="h-4 w-4" />
+                      <item.icon className="h-4 w-4 shrink-0" />
                       <span>{item.label}</span>
                       {item.label === 'Workflow' && openTaskBoardCount > 0 ? (
-                        <span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                        <span className="ml-auto rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
                           {openTaskBoardCount}
                         </span>
                       ) : null}
