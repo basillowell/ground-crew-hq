@@ -1,11 +1,11 @@
 # Ground Crew HQ — Live Database State
-# AUTHORITATIVE SCHEMA REFERENCE — Last updated: May 17, 2026
+# AUTHORITATIVE SCHEMA REFERENCE — Last updated: May 30, 2026
 # Supabase project: fjqeekwisnbpxgebrnpl
 # ALL tables have RLS enabled
 
 ---
 
-## ⚠️ CODEX SCHEMA VERIFICATION RULES
+## ⚠️ SCHEMA VERIFICATION RULES (applies to all AI agents)
 
 **These rules are MANDATORY. Violating them causes production crashes.**
 
@@ -32,7 +32,7 @@ Never auto-delete. Never batch-delete without explicit user action.
 - notes uses "type" not "category" for note classification
 - task_requests uses "description" not "notes" for detail text
 - task_requests uses "employee_id" not "submitted_by"
-- weather_daily_logs uses camelCase columns (locationId, stationId, rainfallTotal, etc)
+- weather_daily_logs columns are ALL snake_case (location_id, station_id, rainfall_total, current_conditions, org_id) — migrated from camelCase
 
 ### Rule S4 — Time handling
 Supabase returns times as "HH:MM:SS". Always .slice(0,5) before display.
@@ -308,6 +308,10 @@ If you need a column that is NOT in this file:
 | longitude | numeric | YES | |
 | org_id | uuid | YES | |
 | is_active | boolean | YES | true ⚠️ NOT "active" |
+| timezone | text | YES | e.g. "America/New_York" |
+| is_default | boolean | YES | false |
+| forecast_provider | text | YES | "auto" \| "open-meteo" \| "noaa-nws" |
+| radar_provider | text | YES | "auto" \| "rainviewer" |
 
 ---
 
@@ -325,20 +329,34 @@ If you need a column that is NOT in this file:
 ---
 
 ## weather_daily_logs
+⚠️ ALL columns are snake_case — migrated from legacy camelCase. Do not use locationId/rainfallTotal/etc.
 | Column | Type | Nullable | Default |
 |--------|------|----------|---------|
-| id | text | NO | ⚠️ camelCase columns throughout |
-| locationId | text | NO | |
-| stationId | text | YES | |
+| id | text | NO | |
+| location_id | text | NO | FK -> weather_locations.id |
+| station_id | text | YES | |
 | date | date | NO | |
-| currentConditions | text | YES | |
+| current_conditions | text | YES | |
 | forecast | text | YES | |
-| rainfallTotal | numeric | NO | 0 |
+| rainfall_total | numeric | NO | 0 |
 | temperature | numeric | NO | 0 |
 | humidity | numeric | NO | 0 |
 | wind | numeric | NO | 0 |
 | et | numeric | NO | 0 |
 | source | text | NO | |
+| notes | text | YES | |
+| org_id | uuid | YES | FK -> organizations |
+
+---
+
+## manual_rainfall_entries
+| Column | Type | Nullable | Default |
+|--------|------|----------|---------|
+| id | text | NO | |
+| location_id | text | NO | FK -> weather_locations.id |
+| date | date | NO | |
+| rainfall_amount | numeric | NO | 0 |
+| entered_by | uuid | YES | FK -> app_users.id |
 | notes | text | YES | |
 
 ---
@@ -531,7 +549,8 @@ If you need a column that is NOT in this file:
 ---
 
 *This file is the single source of truth for all Supabase table schemas.*
-*Codex MUST read this file before writing ANY Supabase query.*
-*If a column is not listed here, it does not exist.*
-*Last verified: May 17, 2026 via information_schema query.*
+*Any AI agent (Claude Code, Codex, or other) MUST read this file before writing ANY Supabase query.*
+*If a column is not listed here, it does not exist — stop and report DB_CHANGE_REQUIRED.*
+*Update this file in the same session as any migration. Stale docs send agents the wrong way.*
+*Last verified: May 30, 2026 (weather tables corrected; weather_daily_logs snake_case confirmed)*
 
