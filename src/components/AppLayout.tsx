@@ -517,7 +517,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
+      <div className="flex h-screen w-full overflow-hidden bg-[#0f1a14]">
         {isReadOnlyDemo && showDemoBanner ? (
           <div className="fixed inset-x-0 top-0 z-50 h-9 bg-blue-600 text-white">
             <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-3 text-xs md:px-4">
@@ -611,7 +611,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               setDepartment,
             }}
           >
-            <main className="flex-1 bg-background pb-20 md:pb-0">
+            <main className="flex-1 bg-[#0f1a14] pb-20 md:pb-0">
               {isOffline ? (
                 <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-900">
                   ⚡ You're offline — changes will sync when connected
