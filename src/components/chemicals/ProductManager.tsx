@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,6 +57,7 @@ export default function ProductManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductFormState>(defaultForm);
   const [isSaving, setIsSaving] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const productsQuery = useQuery({
     queryKey: ['chemical-products-manager', orgId ?? 'no-org'],
@@ -154,6 +155,8 @@ export default function ProductManager() {
     if (editingId === id) resetForm();
   }
 
+  const editingProduct = editingId ? products.find((p) => p.id === editingId) : null;
+
   return (
     <Card className="space-y-4 p-4">
       <div>
@@ -161,7 +164,15 @@ export default function ProductManager() {
         <p className="text-xs text-muted-foreground">Manage chemical products used in spray logging.</p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      {editingProduct ? (
+        <div className="flex items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">
+          <span className="font-medium">Editing:</span>
+          <span>{editingProduct.name}</span>
+          <span className="ml-auto text-xs text-muted-foreground">Fill fields above and click Update Product</span>
+        </div>
+      ) : null}
+
+      <div ref={formRef} className="grid gap-3 md:grid-cols-2">
         <Input placeholder="Product name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
         <Input placeholder="Product type" value={form.productType} onChange={(event) => setForm((current) => ({ ...current, productType: event.target.value }))} />
         <Input placeholder="Target use" value={form.targetUse} onChange={(event) => setForm((current) => ({ ...current, targetUse: event.target.value }))} />
@@ -240,6 +251,7 @@ export default function ProductManager() {
                     defaultApplicationMethod: product.defaultApplicationMethod ?? '',
                     restrictedUse: Boolean(product.restrictedUse),
                   });
+                  formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
               >
                 Edit
