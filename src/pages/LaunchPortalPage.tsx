@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3, CalendarDays, ClipboardList, Loader2, Radar, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
+import { BarChart3, CalendarDays, CheckCircle2, ClipboardList, Loader2, Radar, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { hasSupabaseConfig, supabase, supabaseConfigError } from '@/lib/supabase';
 import { useProgramSettings } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
+
+type AuthPanel = 'sign-in' | 'sign-up' | 'forgot-password';
 
 type FeatureItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -86,7 +88,6 @@ function ScrollReveal({ children, className = '' }: { children: React.ReactNode;
 
   useEffect(() => {
     if (!ref.current) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
@@ -96,7 +97,6 @@ function ScrollReveal({ children, className = '' }: { children: React.ReactNode;
       },
       { threshold: 0.12 },
     );
-
     observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);
@@ -111,11 +111,62 @@ function ScrollReveal({ children, className = '' }: { children: React.ReactNode;
   );
 }
 
+// ── Shared dialog field components ──────────────────────────────────────────
+
+function DarkInput(props: React.ComponentProps<typeof Input>) {
+  return (
+    <Input
+      {...props}
+      className={`border-white/[0.10] bg-[#0f1a14] text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30 ${props.className ?? ''}`}
+    />
+  );
+}
+
+function DarkLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor: string }) {
+  return (
+    <Label htmlFor={htmlFor} className="text-sm text-slate-300">
+      {children}
+    </Label>
+  );
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-400">
+      {message}
+    </div>
+  );
+}
+
+function SuccessBanner({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-xl border border-lime-400/30 bg-lime-400/10 px-3 py-3 text-xs text-lime-300">
+      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-lime-400" />
+      {message}
+    </div>
+  );
+}
+
+function PanelLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-lime-400 underline-offset-2 hover:underline"
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
+
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
   const { currentUser, authDebugMessage, isLoading, authState, hasSession, retryAuthHydration } = useAuth();
   const programSettingsQuery = useProgramSettings();
 
+  // ── Sign-in state (unchanged) ──
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,11 +174,49 @@ export default function LaunchPortalPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [loginOpen, setLoginOpen] = useState(false);
 
+  // ── Auth panel routing ──
+  const [authPanel, setAuthPanel] = useState<AuthPanel>('sign-in');
+
+  // ── Sign-up state ──
+  const [signUpName, setSignUpName] = useState('');
+  const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpPassword, setSignUpPassword] = useState('');
+  const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
+  const [signUpError, setSignUpError] = useState('');
+  const [signUpSuccess, setSignUpSuccess] = useState(false);
+  const [isSigningUp, setIsSigningUp] = useState(false);
+
+  // ── Forgot-password state ──
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
+
   const appName = programSettingsQuery.data?.appName || 'Ground Crew HQ';
   const clientName = programSettingsQuery.data?.clientLabel || 'Ground Crew HQ';
   const DEMO_EMAIL = 'demo@groundcrewhq.com';
   const DEMO_PASSWORD = 'GroundCrewHQDemo!2026';
 
+  const openDialog = (panel: AuthPanel = 'sign-in') => {
+    setAuthPanel(panel);
+    setErrorMessage('');
+    setSignUpError('');
+    setForgotError('');
+    setSignUpSuccess(false);
+    setForgotSuccess(false);
+    setLoginOpen(true);
+  };
+
+  const switchPanel = (panel: AuthPanel) => {
+    setAuthPanel(panel);
+    setErrorMessage('');
+    setSignUpError('');
+    setForgotError('');
+    setSignUpSuccess(false);
+    setForgotSuccess(false);
+  };
+
+  // ── Existing auth effects (untouched) ──
   useEffect(() => {
     if (currentUser) {
       setIsAwaitingProfile(false);
@@ -136,7 +225,6 @@ export default function LaunchPortalPage() {
       navigate('/app/dashboard', { replace: true });
       return;
     }
-
     if (isAwaitingProfile && !isLoading) {
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
@@ -150,6 +238,7 @@ export default function LaunchPortalPage() {
     }
   }, []);
 
+  // ── Existing sign-in logic (untouched) ──
   const mapAuthError = (message: string) => {
     const normalized = message.toLowerCase();
     if (normalized.includes('invalid login credentials')) return 'Invalid credentials. Please check your email and password.';
@@ -162,7 +251,6 @@ export default function LaunchPortalPage() {
       setErrorMessage(supabaseConfigError || 'Supabase is not configured for this environment.');
       return;
     }
-
     setIsSubmitting(true);
     setIsAwaitingProfile(false);
     setErrorMessage('');
@@ -173,13 +261,11 @@ export default function LaunchPortalPage() {
           setTimeout(() => resolve({ error: { message: 'Sign-in timed out. Please try again.' } }), 15000),
         ),
       ]);
-
       if (result.error) {
         setErrorMessage(mapAuthError(result.error.message));
         setIsSubmitting(false);
         return;
       }
-
       setIsAwaitingProfile(true);
     } catch {
       setErrorMessage('An unexpected error occurred. Please try again.');
@@ -196,6 +282,55 @@ export default function LaunchPortalPage() {
     await signInWithCredentials(DEMO_EMAIL, DEMO_PASSWORD);
   };
 
+  // ── New: sign-up handler ──
+  const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase) { setSignUpError(supabaseConfigError || 'Supabase is not configured.'); return; }
+    if (signUpPassword !== signUpConfirmPassword) { setSignUpError('Passwords do not match.'); return; }
+    if (signUpPassword.length < 8) { setSignUpError('Password must be at least 8 characters.'); return; }
+    setIsSigningUp(true);
+    setSignUpError('');
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: signUpEmail,
+        password: signUpPassword,
+        options: { data: { full_name: signUpName.trim() } },
+      });
+      if (error) { setSignUpError(error.message); return; }
+      setSignUpSuccess(true);
+    } catch {
+      setSignUpError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSigningUp(false);
+    }
+  };
+
+  // ── New: forgot-password handler ──
+  const handleForgotPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase) { setForgotError(supabaseConfigError || 'Supabase is not configured.'); return; }
+    setIsSendingReset(true);
+    setForgotError('');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/auth/reset`,
+      });
+      if (error) { setForgotError(error.message); return; }
+      setForgotSuccess(true);
+    } catch {
+      setForgotError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
+  // ── Dialog title map ──
+  const dialogTitles: Record<AuthPanel, string> = {
+    'sign-in': 'Sign in to your workspace',
+    'sign-up': 'Create your account',
+    'forgot-password': 'Reset your password',
+  };
+
   return (
     <div className="min-h-screen bg-[#0f1a14] text-slate-100">
       {/* ── Navbar ── */}
@@ -208,13 +343,13 @@ export default function LaunchPortalPage() {
           <div className="flex items-center gap-2">
             <button
               className="rounded-full px-4 py-2 text-sm text-slate-400 transition-colors duration-200 hover:text-slate-100"
-              onClick={() => setLoginOpen(true)}
+              onClick={() => openDialog('sign-in')}
             >
               Sign In
             </button>
             <button
-              className="rounded-full bg-lime-400 px-5 py-2 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.4)]"
-              onClick={() => setLoginOpen(true)}
+              className="animate-pulse-glow rounded-full bg-lime-400 px-5 py-2 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.4)]"
+              onClick={() => openDialog('sign-up')}
             >
               Start Free — No Credit Card
             </button>
@@ -236,7 +371,7 @@ export default function LaunchPortalPage() {
             <div className="mt-6 flex flex-wrap gap-3">
               <button
                 className="animate-pulse-glow rounded-full bg-lime-400 px-8 py-3 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
-                onClick={() => setLoginOpen(true)}
+                onClick={() => openDialog('sign-up')}
               >
                 Start Free — No Credit Card
               </button>
@@ -386,7 +521,7 @@ export default function LaunchPortalPage() {
             <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Ready to run your crew smarter?</h2>
             <button
               className="mt-5 rounded-full bg-lime-400 px-8 py-3 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
-              onClick={() => setLoginOpen(true)}
+              onClick={() => openDialog('sign-up')}
             >
               Start Free — No Credit Card
             </button>
@@ -405,13 +540,13 @@ export default function LaunchPortalPage() {
           <div className="flex items-center gap-4">
             <a href="#" className="transition-colors hover:text-slate-300">Features</a>
             <Link to="/pricing" className="transition-colors hover:text-slate-300">Pricing</Link>
-            <button type="button" className="transition-colors hover:text-slate-300" onClick={() => setLoginOpen(true)}>Login</button>
+            <button type="button" className="transition-colors hover:text-slate-300" onClick={() => openDialog('sign-in')}>Login</button>
             <a href="mailto:support@groundcrewhq.com" className="transition-colors hover:text-slate-300">Contact</a>
           </div>
         </div>
       </footer>
 
-      {/* ── Login Dialog (auth logic untouched) ── */}
+      {/* ── Auth Dialog ── */}
       <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
         <DialogContent
           aria-describedby="dialog-desc"
@@ -420,79 +555,204 @@ export default function LaunchPortalPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base text-slate-100">
               <ShieldCheck className="h-4 w-4 text-lime-400" />
-              Sign in to your workspace
+              {dialogTitles[authPanel]}
             </DialogTitle>
             <DialogDescription id="dialog-desc" className="sr-only">
-              Sign in with your workspace email and password to continue.
+              {dialogTitles[authPanel]}
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm text-slate-300">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@club.com"
-                autoComplete="email"
-                className="border-white/[0.10] bg-[#0f1a14] text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm text-slate-300">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter your password"
-                autoComplete="current-password"
-                className="border-white/[0.10] bg-[#0f1a14] text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30"
-              />
-            </div>
-            {errorMessage ? (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-400">
-                {errorMessage}
+
+          {/* ── Panel: Sign In ── */}
+          {authPanel === 'sign-in' && (
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="space-y-2">
+                <DarkLabel htmlFor="email">Email</DarkLabel>
+                <DarkInput
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@club.com"
+                  autoComplete="email"
+                />
               </div>
-            ) : null}
-            {!errorMessage && authDebugMessage ? (
-              <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-3 text-xs text-amber-300">
-                {authDebugMessage}
-                {hasSession &&
-                (authState === 'network-timeout' || authState === 'profile-error' || authState === 'profile-missing') ? (
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100"
-                      onClick={() => void retryAuthHydration()}
-                    >
-                      Retry profile load
-                    </Button>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <DarkLabel htmlFor="password">Password</DarkLabel>
+                  <PanelLink onClick={() => switchPanel('forgot-password')}>
+                    Forgot password?
+                  </PanelLink>
+                </div>
+                <DarkInput
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
+              {!errorMessage && authDebugMessage ? (
+                <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-3 text-xs text-amber-300">
+                  {authDebugMessage}
+                  {hasSession && (authState === 'network-timeout' || authState === 'profile-error' || authState === 'profile-missing') ? (
+                    <div className="mt-2">
+                      <Button type="button" size="sm" variant="outline" className="border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100" onClick={() => void retryAuthHydration()}>
+                        Retry profile load
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <Button
+                className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
+                disabled={isSubmitting || !email || !password || !hasSupabaseConfig}
+                type="submit"
+              >
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {isSubmitting ? (isAwaitingProfile ? 'Loading workspace...' : 'Signing in...') : 'Sign In'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100"
+                disabled={isSubmitting || !hasSupabaseConfig}
+                onClick={() => void handleDemoLogin()}
+              >
+                Try Demo
+              </Button>
+              <p className="text-center text-xs text-slate-500">
+                Don't have an account?{' '}
+                <PanelLink onClick={() => switchPanel('sign-up')}>Create one</PanelLink>
+              </p>
+            </form>
+          )}
+
+          {/* ── Panel: Sign Up ── */}
+          {authPanel === 'sign-up' && (
+            <form className="space-y-4" onSubmit={handleSignUp}>
+              {signUpSuccess ? (
+                <div className="space-y-4">
+                  <SuccessBanner message="Check your email to confirm your account. You'll receive a verification link within a few minutes." />
+                  <p className="text-center text-xs text-slate-500">
+                    Already have an account?{' '}
+                    <PanelLink onClick={() => switchPanel('sign-in')}>Sign in</PanelLink>
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <DarkLabel htmlFor="su-name">Full name</DarkLabel>
+                    <DarkInput
+                      id="su-name"
+                      type="text"
+                      value={signUpName}
+                      onChange={(e) => setSignUpName(e.target.value)}
+                      placeholder="Jane Smith"
+                      autoComplete="name"
+                    />
                   </div>
-                ) : null}
-              </div>
-            ) : null}
-            <Button
-              className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
-              disabled={isSubmitting || !email || !password || !hasSupabaseConfig}
-              type="submit"
-            >
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {isSubmitting ? (isAwaitingProfile ? 'Loading workspace profile...' : 'Signing in...') : 'Sign In'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100"
-              disabled={isSubmitting || !hasSupabaseConfig}
-              onClick={() => void handleDemoLogin()}
-            >
-              Try Demo
-            </Button>
-          </form>
+                  <div className="space-y-2">
+                    <DarkLabel htmlFor="su-email">Work email</DarkLabel>
+                    <DarkInput
+                      id="su-email"
+                      type="email"
+                      value={signUpEmail}
+                      onChange={(e) => setSignUpEmail(e.target.value)}
+                      placeholder="name@club.com"
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <DarkLabel htmlFor="su-password">Password</DarkLabel>
+                    <DarkInput
+                      id="su-password"
+                      type="password"
+                      value={signUpPassword}
+                      onChange={(e) => setSignUpPassword(e.target.value)}
+                      placeholder="Min. 8 characters"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <DarkLabel htmlFor="su-confirm">Confirm password</DarkLabel>
+                    <DarkInput
+                      id="su-confirm"
+                      type="password"
+                      value={signUpConfirmPassword}
+                      onChange={(e) => setSignUpConfirmPassword(e.target.value)}
+                      placeholder="Repeat password"
+                      autoComplete="new-password"
+                    />
+                  </div>
+
+                  {signUpError ? <ErrorBanner message={signUpError} /> : null}
+
+                  <Button
+                    className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
+                    disabled={isSigningUp || !signUpEmail || !signUpPassword || !hasSupabaseConfig}
+                    type="submit"
+                  >
+                    {isSigningUp ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {isSigningUp ? 'Creating account...' : 'Create account'}
+                  </Button>
+                  <p className="text-center text-xs text-slate-500">
+                    Already have an account?{' '}
+                    <PanelLink onClick={() => switchPanel('sign-in')}>Sign in</PanelLink>
+                  </p>
+                </>
+              )}
+            </form>
+          )}
+
+          {/* ── Panel: Forgot Password ── */}
+          {authPanel === 'forgot-password' && (
+            <form className="space-y-4" onSubmit={handleForgotPassword}>
+              {forgotSuccess ? (
+                <div className="space-y-4">
+                  <SuccessBanner message="Password reset link sent. Check your inbox — the link expires in 1 hour." />
+                  <p className="text-center text-xs text-slate-500">
+                    <PanelLink onClick={() => switchPanel('sign-in')}>Back to sign in</PanelLink>
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-400">
+                    Enter the email address on your account and we'll send you a reset link.
+                  </p>
+                  <div className="space-y-2">
+                    <DarkLabel htmlFor="fp-email">Email</DarkLabel>
+                    <DarkInput
+                      id="fp-email"
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="name@club.com"
+                      autoComplete="email"
+                    />
+                  </div>
+
+                  {forgotError ? <ErrorBanner message={forgotError} /> : null}
+
+                  <Button
+                    className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
+                    disabled={isSendingReset || !forgotEmail || !hasSupabaseConfig}
+                    type="submit"
+                  >
+                    {isSendingReset ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {isSendingReset ? 'Sending...' : 'Send reset link'}
+                  </Button>
+                  <p className="text-center text-xs text-slate-500">
+                    Remembered it?{' '}
+                    <PanelLink onClick={() => switchPanel('sign-in')}>Back to sign in</PanelLink>
+                  </p>
+                </>
+              )}
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 

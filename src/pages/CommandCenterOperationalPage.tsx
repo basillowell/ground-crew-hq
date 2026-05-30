@@ -942,7 +942,7 @@ export default function CommandCenterOperationalPage() {
     if (crewScheduledCount === 0) {
       return {
         value: '0% covered',
-        subtitle: 'Open Scheduler to assign today’s crew.',
+        subtitle: "Open Scheduler to assign today's crew.",
         tone: 'critical' as const,
       };
     }
@@ -2086,10 +2086,10 @@ export default function CommandCenterOperationalPage() {
               {dailyBriefText ?? `${crewScheduledCount} crew scheduled, ${tasksAssignedCount} tasks assigned, ${weatherRiskSummary.value}.`}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button size="sm" className="h-9 gap-1.5 rounded-full bg-lime-400 text-black hover:brightness-110" onClick={() => navigate(‘/app/workboard’)}>
+              <Button size="sm" className="h-9 gap-1.5 rounded-full bg-lime-400 text-black hover:brightness-110" onClick={() => navigate('/app/workboard')}>
                 Open Workboard
               </Button>
-              <Button size="sm" variant="outline" className="h-9 rounded-full border-white/[0.10] text-slate-300 hover:bg-white/5" onClick={() => navigate(‘/app/scheduler’)}>
+              <Button size="sm" variant="outline" className="h-9 rounded-full border-white/[0.10] text-slate-300 hover:bg-white/5" onClick={() => navigate('/app/scheduler')}>
                 Open Scheduler
               </Button>
             </div>
@@ -2098,28 +2098,28 @@ export default function CommandCenterOperationalPage() {
           <div className="group rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Weather</div>
             <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-100">
-              {selectedWeatherQuery.data ? `${Math.round(selectedWeatherQuery.data.current.temperature)}°F` : ‘--’}
+              {selectedWeatherQuery.data ? `${Math.round(selectedWeatherQuery.data.current.temperature)}°F` : '--'}
             </div>
             <p className="mt-1 text-xs text-slate-500">
               {selectedWeatherQuery.data
                 ? `${getWeatherConditionMeta(selectedWeatherQuery.data.current.weatherCode).label} · Wind ${Math.round(selectedWeatherQuery.data.current.windSpeed)} mph`
-                : ‘No weather data available’}
+                : 'No weather data available'}
             </p>
             <button
               type="button"
               className="mt-3 text-xs font-medium text-lime-400 hover:text-lime-300"
-              onClick={() => navigate(‘/app/weather’)}
+              onClick={() => navigate('/app/weather')}
             >
               View Full Weather →
             </button>
           </div>
 
-          <OpsSignalCard title="Crew Count" value={`${crewScheduledCount}`} subtitle="Crew Scheduled" tone={crewScheduledCount > 0 ? ‘good’ : ‘critical’} />
+          <OpsSignalCard title="Crew Count" value={`${crewScheduledCount}`} subtitle="Crew Scheduled" tone={crewScheduledCount > 0 ? 'good' : 'critical'} />
           <OpsSignalCard
             title="Tasks Count"
             value={`${tasksAssignedCount}`}
-            subtitle={`${assignments.filter((item) => item.status === ‘done’).length}/${tasksAssignedCount || 0} done`}
-            tone={tasksAssignedCount > 0 ? ‘good’ : crewScheduledCount > 0 ? ‘warning’ : ‘neutral’}
+            subtitle={`${assignments.filter((item) => item.status === 'done').length}/${tasksAssignedCount || 0} done`}
+            tone={tasksAssignedCount > 0 ? 'good' : crewScheduledCount > 0 ? 'warning' : 'neutral'}
           />
 
           <div className="group rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] lg:col-span-2">
@@ -2131,7 +2131,7 @@ export default function CommandCenterOperationalPage() {
                 <div className="overflow-x-auto">
                   <div className="grid min-w-[520px] grid-cols-12 gap-1">
                     {(sprayWindowQuery.data ?? []).map((block) => (
-                      <div key={`spray-bento-${block.hour}`} className={`h-5 rounded ${block.safe ? ‘bg-lime-400’ : ‘bg-red-500/70’}`} />
+                      <div key={`spray-bento-${block.hour}`} className={`h-5 rounded ${block.safe ? 'bg-lime-400' : 'bg-red-500/70'}`} />
                     ))}
                   </div>
                 </div>
@@ -2145,16 +2145,16 @@ export default function CommandCenterOperationalPage() {
             <div className="mt-2 text-4xl font-semibold tracking-tight text-slate-100">{efficiencyScoreSummary.score}</div>
             <p className="mt-1 text-sm text-slate-300">{efficiencyScoreSummary.label}</p>
             <p className="mt-2 text-xs text-slate-500">
-              {efficiencyScoreSummary.trend === ‘up’ ? ‘↑’ : efficiencyScoreSummary.trend === ‘down’ ? ‘↓’ : ‘→’} vs yesterday
+              {efficiencyScoreSummary.trend === 'up' ? '↑' : efficiencyScoreSummary.trend === 'down' ? '↓' : '→'} vs yesterday
             </p>
           </div>
 
           <OpsSignalCard title="Schedule Coverage" value={coverageSummary.value} subtitle={coverageSummary.subtitle} tone={coverageSummary.tone} />
           <OpsSignalCard
             title="Equipment Health"
-            value={equipmentUnits.length === 0 ? ‘No data’ : `${equipmentActiveCount}/${equipmentUnits.length} Ready`}
-            subtitle={overdueEquipmentCount > 0 ? `${overdueEquipmentCount} overdue` : ‘All clear’}
-            tone={overdueEquipmentCount === 0 ? ‘good’ : overdueEquipmentCount <= 2 ? ‘warning’ : ‘critical’}
+            value={equipmentUnits.length === 0 ? 'No data' : `${equipmentActiveCount}/${equipmentUnits.length} Ready`}
+            subtitle={overdueEquipmentCount > 0 ? `${overdueEquipmentCount} overdue` : 'All clear'}
+            tone={overdueEquipmentCount === 0 ? 'good' : overdueEquipmentCount <= 2 ? 'warning' : 'critical'}
           />
 
           <div className="group rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
@@ -2166,7 +2166,7 @@ export default function CommandCenterOperationalPage() {
               ))}
               {(openNeedsPreviewQuery.data ?? []).length === 0 ? <div>No open needs</div> : null}
             </div>
-            <button type="button" className="mt-3 text-xs font-medium text-lime-400 hover:text-lime-300" onClick={() => navigate(‘/app/workboard’)}>
+            <button type="button" className="mt-3 text-xs font-medium text-lime-400 hover:text-lime-300" onClick={() => navigate('/app/workboard')}>
               View All →
             </button>
           </div>
@@ -2197,14 +2197,14 @@ export default function CommandCenterOperationalPage() {
 
       {!isLoading && !queryTimeoutReached ? <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <OpsSignalCard
-          title="Today’s Crew Readiness"
-          value={crewScheduledCount === 0 ? ‘No crew scheduled’ : `${crewScheduledCount} scheduled`}
+          title="Today's Crew Readiness"
+          value={crewScheduledCount === 0 ? 'No crew scheduled' : `${crewScheduledCount} scheduled`}
           subtitle={
             crewScheduledCount === 0
-              ? ‘Create today’s shifts in Scheduler to begin planning.’
+              ? "Create today's shifts in Scheduler to begin planning."
               : `${activeEmployees.length} active crew available in roster`
           }
-          tone={crewScheduledCount === 0 ? ‘critical’ : ‘good’}
+          tone={crewScheduledCount === 0 ? 'critical' : 'good'}
         />
         <OpsSignalCard
           title="Active Tasks / Workflow"
@@ -2212,16 +2212,16 @@ export default function CommandCenterOperationalPage() {
           subtitle={
             tasksAssignedCount === 0
               ? crewScheduledCount > 0
-                ? ‘Crew is scheduled, but no tasks are assigned yet.’
-                : ‘No crew and no tasks scheduled yet.’
+                ? 'Crew is scheduled, but no tasks are assigned yet.'
+                : 'No crew and no tasks scheduled yet.'
               : `${pendingAssignmentsCount} still in progress or planned`
           }
           tone={
             tasksAssignedCount > 0
-              ? ‘good’
+              ? 'good'
               : crewScheduledCount > 0
-                ? ‘warning’
-                : ‘neutral’
+                ? 'warning'
+                : 'neutral'
           }
         />
         <OpsSignalCard
@@ -2232,20 +2232,20 @@ export default function CommandCenterOperationalPage() {
         />
         <OpsSignalCard
           title="Equipment Readiness"
-          value={equipmentUnits.length === 0 ? ‘No equipment data’ : `${equipmentActiveCount} ready`}
+          value={equipmentUnits.length === 0 ? 'No equipment data' : `${equipmentActiveCount} ready`}
           subtitle={
             equipmentUnits.length === 0
-              ? ‘Add equipment units to track operational readiness.’
+              ? 'Add equipment units to track operational readiness.'
               : `${overdueEquipmentCount} units overdue for service`
           }
           tone={
             equipmentUnits.length === 0
-              ? ‘neutral’
+              ? 'neutral'
               : overdueEquipmentCount === 0
-                ? ‘good’
+                ? 'good'
                 : overdueEquipmentCount <= 2
-                  ? ‘warning’
-                  : ‘critical’
+                  ? 'warning'
+                  : 'critical'
           }
         />
         <OpsSignalCard
