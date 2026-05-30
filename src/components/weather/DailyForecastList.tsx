@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { OpenMeteoDailyPoint, OpenMeteoHourlyPoint } from '@/lib/openMeteo';
+import type { ForecastDailyPoint as OpenMeteoDailyPoint, ForecastHourlyPoint as OpenMeteoHourlyPoint } from '@/lib/weather/wmoUtils';
 import { Button } from '@/components/ui/button';
 
 type ForecastRange = '12h' | '24h' | '48h' | '10d';

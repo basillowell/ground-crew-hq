@@ -31,7 +31,7 @@ export async function initOrgSettings({ orgId }: InitOrgSettingsArgs): Promise<v
         app_name: 'Ground Crew HQ',
         weather_default_latitude: DEFAULT_WEATHER_LATITUDE,
         weather_default_longitude: DEFAULT_WEATHER_LONGITUDE,
-        weather_preferred_provider: 'open-meteo',
+        weather_preferred_provider: 'noaa-nws',
       },
       { onConflict: 'org_id', ignoreDuplicates: true },
     );

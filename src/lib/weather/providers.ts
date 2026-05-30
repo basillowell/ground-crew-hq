@@ -1,8 +1,8 @@
 import type { ForecastPayload } from './wmoUtils';
 
 export type { ForecastPayload } from './wmoUtils';
-export type ForecastProvider = "auto" | "open-meteo" | "noaa-nws";
-export type RadarProvider = "auto" | "rainviewer";
+export type ForecastProvider = "auto" | "noaa-nws";
+export type RadarProvider = "auto";
 
 export type OpenMeteoLikePayload = {
   current_weather?: {
@@ -27,11 +27,6 @@ export type OpenMeteoLikePayload = {
     weathercode: number[];
     windspeed_10m_max: number[];
   };
-};
-
-export type RainViewerFrame = {
-  time: number;
-  path: string;
 };
 
 export type OperationalWeatherLocation = {
@@ -59,21 +54,6 @@ type NwsPeriod = {
 
 export function isUSCoordinates(latitude: number, longitude: number): boolean {
   return latitude >= 24.396308 && latitude <= 49.384358 && longitude >= -124.848974 && longitude <= -66.885444;
-}
-
-export function getRadarTileUrl(frame: RainViewerFrame, size = 512): string {
-  return `https://tilecache.rainviewer.com${frame.path}/${size}/{z}/{x}/{y}/2/1_1.png`;
-}
-
-export async function fetchRainViewerFrames(): Promise<RainViewerFrame[]> {
-  const response = await fetch("https://api.rainviewer.com/public/weather-maps.json");
-  if (!response.ok) {
-    throw new Error(`RainViewer frames request failed (${response.status})`);
-  }
-  const payload = (await response.json()) as {
-    radar?: { past?: RainViewerFrame[]; nowcast?: RainViewerFrame[] };
-  };
-  return [...(payload.radar?.past ?? []), ...(payload.radar?.nowcast ?? [])];
 }
 
 function parseWindMph(value: string | undefined): number {
@@ -167,56 +147,6 @@ export async function fetchNwsForecast(latitude: number, longitude: number): Pro
   const forecastPayload = (await forecastResponse.json()) as { properties?: { periods?: NwsPeriod[] } };
   const periods = forecastPayload.properties?.periods ?? [];
   return toOpenMeteoLikeFromNws(periods);
-}
-
-export async function fetchOpenMeteoForecast(
-  latitude: number,
-  longitude: number,
-  timezone: string,
-): Promise<OpenMeteoLikePayload> {
-  const params = new URLSearchParams({
-    latitude: String(latitude),
-    longitude: String(longitude),
-    hourly: "temperature_2m,precipitation_probability,weathercode,wind_speed_10m,wind_gusts_10m,apparent_temperature",
-    daily: "temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode,windspeed_10m_max",
-    current_weather: "true",
-    temperature_unit: "fahrenheit",
-    windspeed_unit: "mph",
-    timezone,
-    forecast_days: "10",
-  });
-
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
-  if (!response.ok) {
-    throw new Error(`Open-Meteo request failed (${response.status})`);
-  }
-  const payload = (await response.json()) as {
-    current_weather?: OpenMeteoLikePayload["current_weather"];
-    daily?: OpenMeteoLikePayload["daily"];
-    hourly?: {
-      time?: string[];
-      temperature_2m?: number[];
-      precipitation_probability?: number[];
-      weathercode?: number[];
-      wind_speed_10m?: number[];
-      wind_gusts_10m?: number[];
-      windspeed_10m?: number[];
-      windgusts_10m?: number[];
-    };
-  };
-
-  return {
-    current_weather: payload.current_weather,
-    daily: payload.daily,
-    hourly: {
-      time: payload.hourly?.time ?? [],
-      temperature_2m: payload.hourly?.temperature_2m ?? [],
-      precipitation_probability: payload.hourly?.precipitation_probability ?? [],
-      weathercode: payload.hourly?.weathercode ?? [],
-      windspeed_10m: payload.hourly?.wind_speed_10m ?? payload.hourly?.windspeed_10m ?? [],
-      windgusts_10m: payload.hourly?.wind_gusts_10m ?? payload.hourly?.windgusts_10m ?? [],
-    },
-  };
 }
 
 export async function fetchNwsAlerts(latitude: number, longitude: number) {

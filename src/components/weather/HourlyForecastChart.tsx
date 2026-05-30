@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import type { OpenMeteoHourlyPoint } from '@/lib/openMeteo';
+import type { ForecastHourlyPoint as OpenMeteoHourlyPoint } from '@/lib/weather/wmoUtils';
 
 type ForecastRange = '12h' | '24h' | '48h' | '10d';
 

@@ -234,8 +234,8 @@ type DbWeatherLocation = {
   longitude?: number | null;
   timezone?: string | null;
   is_default?: boolean | null;
-  forecast_provider?: 'auto' | 'open-meteo' | 'noaa-nws' | null;
-  radar_provider?: 'rainviewer' | 'auto' | null;
+  forecast_provider?: 'auto' | 'noaa-nws' | null;
+  radar_provider?: 'auto' | null;
 };
 
 type DbWeatherDailyLog = {

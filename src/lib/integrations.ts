@@ -1,7 +1,6 @@
 import { createEvents, type EventAttributes } from 'ics';
 import type { Employee, ScheduleEntry } from '@/data/seedData';
 import { supabase } from '@/lib/supabase';
-import { fetchOpenMeteoWeather, type OpenMeteoWeatherPayload } from '@/lib/openMeteo';
 import { handleSupabaseError } from '@/utils/handleSupabaseError';
 
 export type IntegrationResult<T> = {
@@ -53,18 +52,6 @@ export function buildOpenStreetMapEmbedUrl(latitude: number, longitude: number) 
   const offset = 0.01;
   const bbox = [longitude - offset, latitude - offset, longitude + offset, latitude + offset].join('%2C');
   return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${latitude}%2C${longitude}`;
-}
-
-export async function getLiveWeatherForCoordinates(latitude: number, longitude: number): Promise<IntegrationResult<OpenMeteoWeatherPayload>> {
-  try {
-    const data = await fetchOpenMeteoWeather({ latitude, longitude });
-    return { ok: true, data };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Unable to fetch live weather data.',
-    };
-  }
 }
 
 function downloadTextFile(filename: string, contents: string, mimeType: string) {

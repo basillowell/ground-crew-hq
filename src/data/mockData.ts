@@ -134,7 +134,7 @@ export interface WeatherStation {
   locationId: string;
   name: string;
   provider: string;
-  providerType?: 'manual' | 'open-meteo' | 'davis' | 'noaa' | 'airport';
+  providerType?: 'manual' | 'noaa-nws' | 'davis' | 'noaa' | 'airport';
   stationCode: string;
   latitude?: number;
   longitude?: number;
@@ -149,7 +149,7 @@ export interface WeatherStationSuggestion {
   id: string;
   name: string;
   provider: string;
-  providerType: 'open-meteo' | 'noaa' | 'airport';
+  providerType: 'noaa-nws' | 'noaa' | 'airport';
   stationCode: string;
   latitude: number;
   longitude: number;
@@ -693,10 +693,10 @@ export const weatherLocations: WeatherLocation[] = [
 ];
 
 export const weatherStations: WeatherStation[] = [
-  { id: 'ws1', locationId: 'wl1', name: 'North Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'NC-01', latitude: 35.7796, longitude: -78.6382, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'online' },
+  { id: 'ws1', locationId: 'wl1', name: 'North Primary', provider: 'Open-Meteo', providerType: 'noaa-nws', stationCode: 'NC-01', latitude: 35.7796, longitude: -78.6382, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'online' },
   { id: 'ws2', locationId: 'wl1', name: 'North Backup', provider: 'Manual Feed', providerType: 'manual', stationCode: 'NC-ALT', latitude: 35.7815, longitude: -78.6401, timeZone: 'America/New_York', stationCategory: 'manual', isPrimary: false, status: 'online' },
-  { id: 'ws3', locationId: 'wl2', name: 'South Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'SC-01', latitude: 35.7688, longitude: -78.6484, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'offline' },
-  { id: 'ws4', locationId: 'wl3', name: 'Clubhouse Primary', provider: 'Open-Meteo', providerType: 'open-meteo', stationCode: 'CH-01', latitude: 35.7762, longitude: -78.6328, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'online' },
+  { id: 'ws3', locationId: 'wl2', name: 'South Primary', provider: 'Open-Meteo', providerType: 'noaa-nws', stationCode: 'SC-01', latitude: 35.7688, longitude: -78.6484, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'offline' },
+  { id: 'ws4', locationId: 'wl3', name: 'Clubhouse Primary', provider: 'Open-Meteo', providerType: 'noaa-nws', stationCode: 'CH-01', latitude: 35.7762, longitude: -78.6328, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'online' },
 ];
 
 export const weatherDailyLogs: WeatherDailyLog[] = [

@@ -9,14 +9,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { RadarEmbed } from "@/components/weather/RadarEmbed";
 import {
   fetchNwsAlerts,
   fetchNwsForecast,
-  fetchOpenMeteoForecast,
   getDefaultWeatherLocation,
   isUSCoordinates,
-  type ForecastProvider,
 } from "@/lib/weather/providers";
 
 type WeatherStation = {
@@ -28,8 +25,8 @@ type WeatherStation = {
   longitude: number | null;
   timezone: string | null;
   is_default: boolean | null;
-  forecast_provider: ForecastProvider | null;
-  radar_provider: "rainviewer" | "auto" | null;
+  forecast_provider: string | null;
+  radar_provider: string | null;
 };
 type OpenMeteoPayload = {
   current_weather?: {
@@ -196,7 +193,6 @@ export default function WeatherPage() {
   const [weatherData, setWeatherData] = useState<OpenMeteoPayload | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState("");
-  const [forecastSource, setForecastSource] = useState<"open-meteo" | "noaa-nws">("open-meteo");
 
   const [alerts, setAlerts] = useState<NwsAlert[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
@@ -206,7 +202,6 @@ export default function WeatherPage() {
   const [activeOverlays, setActiveOverlays] = useState<Set<OverlayKey>>(new Set(["temp", "rain"]));
   const [rainfallYear, setRainfallYear] = useState(new Date().getFullYear());
   const [isRainLogOpen, setIsRainLogOpen] = useState(false);
-  const [isRadarExpanded, setIsRadarExpanded] = useState(false);
 
   useEffect(() => {
     document.title = 'Weather — Ground Crew HQ';
@@ -284,24 +279,12 @@ export default function WeatherPage() {
     setWeatherLoading(true);
     setWeatherError("");
     try {
-      const provider = station.forecast_provider ?? "auto";
-      const resolvedProvider: "open-meteo" | "noaa-nws" =
-        provider === "auto"
-          ? isUSCoordinates(station.latitude, station.longitude)
-            ? "noaa-nws"
-            : "open-meteo"
-          : provider;
-
-      const payload =
-        resolvedProvider === "noaa-nws"
-          ? await fetchNwsForecast(station.latitude, station.longitude)
-          : await fetchOpenMeteoForecast(
-              station.latitude,
-              station.longitude,
-              station.timezone || "America/New_York",
-            );
-
-      setForecastSource(resolvedProvider);
+      if (!isUSCoordinates(station.latitude, station.longitude)) {
+        setWeatherData(null);
+        setWeatherError("Weather available for US locations only.");
+        return;
+      }
+      const payload = await fetchNwsForecast(station.latitude, station.longitude);
       setWeatherData(payload);
       if (payload.daily?.time?.length) {
         const defaultExpanded = payload.daily.time.find((d) => d === todayKey) ?? payload.daily.time[0];
@@ -619,7 +602,7 @@ export default function WeatherPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Weather</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">Live operations forecast for {selectedStation?.name}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Provider: {forecastSource} · Timezone: {selectedTimezone}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">NOAA/NWS · Timezone: {selectedTimezone}</p>
         </div>
         {stations.length > 1 ? (
           <select
@@ -979,22 +962,10 @@ export default function WeatherPage() {
           ) : null}
         </div>
 
-        <div className="lg:col-span-2">
-          <Card className={`relative overflow-hidden rounded-xl transition-all duration-200 ${isRadarExpanded ? "h-[520px]" : "h-[440px]"}`}>
-            <div className="absolute left-3 right-3 top-3 z-20 flex items-center justify-between gap-2">
-              <span className="rounded-full bg-background/90 px-2 py-1 text-xs font-medium">
-                {selectedStation?.name} • {selectedStation?.area}
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-xs"
-                onClick={() => setIsRadarExpanded((prev) => !prev)}
-              >
-                {isRadarExpanded ? "Collapse radar" : "Expand radar"}
-              </Button>
-              <div className="flex flex-wrap gap-1 rounded-lg border bg-background/95 p-1">
+        <div className="lg:col-span-2 space-y-4">
+          <Card className="rounded-xl">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap gap-1">
                 {(Object.keys(overlayLabels) as OverlayKey[]).map((key) => (
                   <button
                     key={key}
@@ -1008,15 +979,16 @@ export default function WeatherPage() {
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="h-full">
-              {selectedStation?.latitude && selectedStation.longitude ? (
-                <RadarEmbed latitude={selectedStation.latitude} longitude={selectedStation.longitude} />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Radar temporarily unavailable.</div>
-              )}
-            </div>
-            <div className="absolute bottom-2 right-3 text-[10px] text-muted-foreground">RainViewer · Live</div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl">
+            <CardContent className="flex h-[380px] flex-col items-center justify-center gap-3 p-6 text-center">
+              <div className="text-4xl">🛰️</div>
+              <div className="text-sm font-semibold">Radar — Coming Soon</div>
+              <div className="max-w-xs text-xs text-muted-foreground">
+                Live radar will appear here. NOAA/NWS radar integration is in development.
+              </div>
+            </CardContent>
           </Card>
         </div>
       </div>
