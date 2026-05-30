@@ -10,7 +10,8 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, Calendar, CheckCircle2, Circl
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
+import { fetchNwsWeather } from '@/lib/weather/providers';
+import { getWeatherConditionMeta } from '@/lib/weather/wmoUtils';
 import { useWeather } from '@/lib/weather';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { OnboardingWizardV2 } from '@/components/OnboardingWizardV2';
@@ -461,7 +462,7 @@ export default function CommandCenterOperationalPage() {
       if (!selectedProperty || typeof selectedProperty.latitude !== 'number' || typeof selectedProperty.longitude !== 'number') {
         return [] as Array<{ hour: number; safe: boolean }>;
       }
-      const payload = await fetchOpenMeteoWeather({
+      const payload = await fetchNwsWeather({
         latitude: selectedProperty.latitude,
         longitude: selectedProperty.longitude,
         timezone: 'America/New_York',
@@ -671,7 +672,7 @@ export default function CommandCenterOperationalPage() {
       if (!selectedProperty || typeof selectedProperty.latitude !== 'number' || typeof selectedProperty.longitude !== 'number') {
         return null;
       }
-      const payload = await fetchOpenMeteoWeather({
+      const payload = await fetchNwsWeather({
         latitude: selectedProperty.latitude,
         longitude: selectedProperty.longitude,
         timezone: 'America/New_York',

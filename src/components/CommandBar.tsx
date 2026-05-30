@@ -10,7 +10,8 @@ import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperties } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
-import { fetchOpenMeteoWeather, getWeatherConditionMeta } from '@/lib/openMeteo';
+import { fetchNwsWeather } from '@/lib/weather/providers';
+import { getWeatherConditionMeta } from '@/lib/weather/wmoUtils';
 import { formatTime } from '@/utils/formatTime';
 
 const HISTORY_KEY = 'ground-crew-command-history';
@@ -212,7 +213,7 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
       lastWeekQuery,
       supabase.from('employees').select('id, first_name, last_name').eq('org_id', orgId),
       selectedProperty?.latitude && selectedProperty?.longitude
-        ? fetchOpenMeteoWeather({
+        ? fetchNwsWeather({
             latitude: selectedProperty.latitude,
             longitude: selectedProperty.longitude,
             timezone: 'America/New_York',

@@ -15,7 +15,7 @@ import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
-import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
+import { fetchNwsWeather } from '@/lib/weather/providers';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -195,7 +195,7 @@ export default function SchedulerPage() {
     staleTime: 1000 * 60 * 10,
     queryFn: async () => {
       if (!selectedProperty?.latitude || !selectedProperty?.longitude) return {} as Record<string, DayWeather>;
-      const payload = await fetchOpenMeteoWeather({
+      const payload = await fetchNwsWeather({
         latitude: selectedProperty.latitude,
         longitude: selectedProperty.longitude,
         timezone: 'America/New_York',

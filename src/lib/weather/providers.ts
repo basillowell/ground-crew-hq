@@ -1,3 +1,6 @@
+import type { ForecastPayload } from './wmoUtils';
+
+export type { ForecastPayload } from './wmoUtils';
 export type ForecastProvider = "auto" | "open-meteo" | "noaa-nws";
 export type RadarProvider = "auto" | "rainviewer";
 
@@ -251,6 +254,56 @@ export async function getOperationalWeatherLocation(
 
   if (error || !data?.length) return null;
   return getDefaultWeatherLocation(data as OperationalWeatherLocation[]);
+}
+
+export async function fetchNwsWeather(params: {
+  latitude: number;
+  longitude: number;
+  timezone?: string;
+}): Promise<ForecastPayload> {
+  const raw = await fetchNwsForecast(params.latitude, params.longitude);
+
+  const cw = raw.current_weather;
+  const times = raw.hourly?.time ?? [];
+  const temps = raw.hourly?.temperature_2m ?? [];
+  const precip = raw.hourly?.precipitation_probability ?? [];
+  const codes = raw.hourly?.weathercode ?? [];
+  const winds = raw.hourly?.windspeed_10m ?? [];
+
+  const hourly = times.map((t, i) => ({
+    time: t,
+    temperature: Number(temps[i] ?? 0),
+    precipitationProbability: Number(precip[i] ?? 0),
+    precipitation: 0,
+    windSpeed: Number(winds[i] ?? 0),
+    windDirection: 0,
+    weatherCode: Number(codes[i] ?? 0),
+  }));
+
+  const dailyTimes = raw.daily?.time ?? [];
+  const daily = dailyTimes.map((date, i) => ({
+    date,
+    tempMax: Number(raw.daily?.temperature_2m_max?.[i] ?? 0),
+    tempMin: Number(raw.daily?.temperature_2m_min?.[i] ?? 0),
+    precipitationSum: Number(raw.daily?.precipitation_sum?.[i] ?? 0),
+    precipitationProbabilityMax: 0,
+    windSpeedMax: Number(raw.daily?.windspeed_10m_max?.[i] ?? 0),
+    windGustMax: 0,
+    weatherCode: Number(raw.daily?.weathercode?.[i] ?? 0),
+  }));
+
+  return {
+    current: {
+      time: cw?.time ?? new Date().toISOString(),
+      temperature: Number(cw?.temperature ?? 0),
+      windSpeed: Number(cw?.windspeed ?? 0),
+      windDirection: 0,
+      precipitation: 0,
+      weatherCode: Number(cw?.weathercode ?? 0),
+    },
+    hourly,
+    daily,
+  };
 }
 
 export async function getDefaultWeatherLocationForOrg(

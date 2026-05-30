@@ -51,7 +51,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
-import { fetchOpenMeteoWeather } from '@/lib/openMeteo';
+import { fetchNwsWeather } from '@/lib/weather/providers';
 import {
   getOperationalTimezone,
   getNowHHMMInTimezone,
@@ -985,7 +985,7 @@ export default function WorkboardContent() {
         precip: number;
         weatherCode: number;
       }>;
-      const payload = await fetchOpenMeteoWeather({
+      const payload = await fetchNwsWeather({
         latitude: weatherStripProperty.latitude,
         longitude: weatherStripProperty.longitude,
         timezone: 'America/New_York',
@@ -1369,7 +1369,7 @@ export default function WorkboardContent() {
     }
 
     try {
-      const payload = await fetchOpenMeteoWeather({
+      const payload = await fetchNwsWeather({
         latitude: activeProperty.latitude,
         longitude: activeProperty.longitude,
         timezone: operationalTimezone,
