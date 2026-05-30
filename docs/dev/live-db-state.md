@@ -289,7 +289,7 @@ If you need a column that is NOT in this file:
 | id | uuid | NO | gen_random_uuid() |
 | employee_id | uuid | NO | |
 | property_id | uuid | NO | |
-| event_type | text | NO | ('clock_in' or 'clock_out') |
+| event_type | text | NO | CHECK: 'clock_in', 'clock_out', 'break' |
 | timestamp | timestamptz | NO | now() |
 | location_lat | float8 | YES | |
 | location_lng | float8 | YES | |
@@ -599,5 +599,5 @@ If you need a column that is NOT in this file:
 *Any AI agent (Claude Code, Codex, or other) MUST read this file before writing ANY Supabase query.*
 *If a column is not listed here, it does not exist — stop and report DB_CHANGE_REQUIRED.*
 *Update this file in the same session as any migration. Stale docs send agents the wrong way.*
-*Last verified: May 30, 2026 (weather tables corrected; weather_daily_logs snake_case confirmed)*
+*Last verified: May 30, 2026 (weather tables corrected; weather_daily_logs snake_case confirmed; clock_events event_type constraint fixed: was 'in'/'out'/'break', now 'clock_in'/'clock_out'/'break')*
 
