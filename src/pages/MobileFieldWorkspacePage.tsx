@@ -774,6 +774,19 @@ export default function MobileFieldWorkspacePage() {
         toast.error('Property is not available for clock event.');
         return;
       }
+      // employee?.id is fetched directly from the employees table during page load
+      // and is the authoritative employees.id that satisfies the RLS policy.
+      // employeeId (from currentUser) is the same FK but using employee?.id avoids
+      // any stale-cache mismatch between appUser.employee_id and the live employees row.
+      const resolvedEmployeeId = employee?.id ?? employeeId;
+
+      console.log('[CLOCK_EVENT_PAYLOAD]', {
+        'employee?.id': employee?.id,
+        employeeId,
+        resolvedEmployeeId,
+        propertyId,
+        orgId,
+      });
 
       setClockActionSaving(true);
       const optimisticEvent: ClockEventRecord = {
@@ -787,7 +800,7 @@ export default function MobileFieldWorkspacePage() {
         enqueueSyncAction({
           type: 'clock_event',
           payload: {
-            employee_id: employeeId,
+            employee_id: resolvedEmployeeId,
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
@@ -805,13 +818,10 @@ export default function MobileFieldWorkspacePage() {
       const { data, error: insertError } = await supabase
         .from('clock_events')
         .insert({
-          employee_id: employeeId,
+          employee_id: resolvedEmployeeId,
           property_id: propertyId,
           org_id: orgId,
           event_type: eventType,
-          timestamp: optimisticEvent.timestamp,
-          location_lat: null,
-          location_lng: null,
         })
         .select('id, event_type, timestamp')
         .single();
@@ -821,17 +831,16 @@ export default function MobileFieldWorkspacePage() {
         console.error('[CLOCK_EVENT_ERROR]', {
           error: insertError,
           payload: {
-            employee_id: employeeId,
+            employee_id: resolvedEmployeeId,
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
-            timestamp: optimisticEvent.timestamp,
           },
         });
         enqueueSyncAction({
           type: 'clock_event',
           payload: {
-            employee_id: employeeId,
+            employee_id: resolvedEmployeeId,
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
@@ -860,7 +869,7 @@ export default function MobileFieldWorkspacePage() {
       const successTime = formatTime(String(data?.timestamp ?? optimisticEvent.timestamp).slice(11, 16));
       toast.success(eventType === 'clock_in' ? `Clocked in at ${successTime}` : `Clocked out at ${successTime}`);
     },
-    [currentUser?.propertyId, employeeId, enqueueSyncAction, orgId, shift?.propertyId],
+    [currentUser?.propertyId, employee, employeeId, enqueueSyncAction, orgId, shift?.propertyId],
   );
 
   const resetNeedsForm = () => {
@@ -1001,7 +1010,7 @@ export default function MobileFieldWorkspacePage() {
     async (assignment: FieldAssignment, action: 'start' | 'complete') => {
       if (!supabase || !orgId || !employeeId || !assignment.id) return;
       const propertyIdRaw = shift?.propertyId ?? currentUser?.propertyId ?? null;
-      const actingEmployeeId = assignment.employeeId ?? employeeId;
+      const actingEmployeeId = employee?.id ?? assignment.employeeId ?? employeeId;
       if (!isUuid(propertyIdRaw) || !isUuid(actingEmployeeId)) {
         toast.error('Property is not available for this action.');
         return;
@@ -1063,14 +1072,10 @@ export default function MobileFieldWorkspacePage() {
       }
 
       const { error: clockError } = await supabase.from('clock_events').insert({
-        // supervisor acting on behalf of employee
         employee_id: actingEmployeeId,
         property_id: propertyId,
         org_id: orgId,
         event_type: action === 'start' ? 'clock_in' : 'clock_out',
-        timestamp: nowIso,
-        location_lat: null,
-        location_lng: null,
       });
       if (clockError) {
         await supabase
@@ -1092,7 +1097,7 @@ export default function MobileFieldWorkspacePage() {
       setSavingIds((current) => ({ ...current, [assignment.id]: false }));
       toast.success(action === 'start' ? `Started ${assignment.title}` : `Completed ${assignment.title}`);
     },
-    [currentUser?.propertyId, employeeId, orgId, shift?.propertyId],
+    [currentUser?.propertyId, employee, employeeId, orgId, shift?.propertyId],
   );
 
   const displayOnlyLayout = (
