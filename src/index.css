@@ -26,45 +26,45 @@ All colors MUST be HSL.
     --status-info: #3b82f6;
     --status-muted: #94a3b8;
 
-    --background: 210 33% 98%;
-    --foreground: 220 20% 14%;
+    --background: 147 27% 8%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 220 20% 14%;
+    --card: 136 27% 14%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 14%;
+    --popover: 136 27% 14%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 138 64% 25%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 83 78% 56%;
+    --primary-foreground: 0 0% 0%;
 
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 220 20% 14%;
+    --secondary: 132 22% 18%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 210 20% 96%;
-    --muted-foreground: 215 16% 43%;
+    --muted: 132 22% 18%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 152 30% 94%;
-    --accent-foreground: 152 55% 28%;
+    --accent: 136 27% 14%;
+    --accent-foreground: 83 78% 56%;
 
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 22% 86%;
-    --input: 214 22% 86%;
-    --ring: 147 56% 42%;
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.10;
+    --ring: 83 78% 56%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 210 18% 12%;
-    --sidebar-foreground: 214 18% 82%;
-    --sidebar-primary: 138 64% 25%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 212 16% 18%;
-    --sidebar-accent-foreground: 214 16% 92%;
-    --sidebar-border: 214 16% 24%;
-    --sidebar-ring: 138 64% 25%;
-    --sidebar-muted: 214 14% 40%;
+    --sidebar-background: 147 27% 8%;
+    --sidebar-foreground: 215 20% 65%;
+    --sidebar-primary: 83 78% 56%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 132 22% 18%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 0 0% 100% / 0.06;
+    --sidebar-ring: 83 78% 56%;
+    --sidebar-muted: 215 20% 65%;
 
     --success: 152 55% 38%;
     --success-foreground: 0 0% 100%;
