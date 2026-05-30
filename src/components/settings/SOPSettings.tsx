@@ -1,97 +1,105 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { Pencil, RotateCcw, Trash2, Plus, X, GripVertical } from 'lucide-react';
 
-type SopStatus = 'active' | 'inactive';
+const SOP_CATEGORIES = [
+  'Aeration',
+  'Chemical Application',
+  'Fertilization',
+  'General',
+  'General Maintenance',
+  'Irrigation',
+  'Maintenance',
+  'Mowing',
+  'Other',
+] as const;
 
-interface SopTask {
+interface Sop {
   id: string;
-  org_id: string | null;
-  property_id: string;
-  name: string;
+  org_id: string;
+  title: string;
   description: string | null;
-  category: string;
-  status: SopStatus;
-  priority: number;
-  color: string | null;
+  procedure_body: string | null;
+  category: string | null;
   estimated_hours: number | null;
-  location: string | null;
+  color: string | null;
+  is_active: boolean;
+  created_by: string | null;
+}
+
+interface ChecklistItem {
+  id: string | null;
+  label: string;
+  is_required: boolean;
+  order_index: number;
 }
 
 interface SopFormState {
-  name: string;
-  category: string;
+  title: string;
   description: string;
+  category: string;
+  procedure_body: string;
   estimated_hours: string;
   color: string;
-  priority: string;
-  location: string;
+  checklist: ChecklistItem[];
 }
 
 const EMPTY_FORM: SopFormState = {
-  name: '',
-  category: '',
+  title: '',
   description: '',
+  category: 'General',
+  procedure_body: '',
   estimated_hours: '1',
   color: '#166534',
-  priority: '2',
-  location: '',
+  checklist: [],
 };
 
-export function SOPSettings({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
+export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: string | null }) {
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tasks, setTasks] = useState<SopTask[]>([]);
+  const [sops, setSops] = useState<Sop[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<SopFormState>(EMPTY_FORM);
 
   const fetchSops = useCallback(async () => {
-    if (!orgId || !propertyId) {
-      setTasks([]);
+    if (!orgId) {
+      setSops([]);
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setError(null);
     const { data, error: fetchError } = await supabase
-      .from('tasks')
-      .select('id, org_id, property_id, name, description, category, status, priority, color, estimated_hours, location')
+      .from('sops')
+      .select('id, org_id, title, description, procedure_body, category, estimated_hours, color, is_active, created_by')
       .eq('org_id', orgId)
-      .eq('property_id', propertyId)
-      .order('status', { ascending: true })
+      .order('is_active', { ascending: false })
       .order('category', { ascending: true })
-      .order('name', { ascending: true });
+      .order('title', { ascending: true });
 
     if (fetchError) {
       setError(fetchError.message);
-      setTasks([]);
+      setSops([]);
       setLoading(false);
       return;
     }
-
-    setTasks((data as SopTask[]) ?? []);
+    setSops((data as Sop[]) ?? []);
     setLoading(false);
-  }, [orgId, propertyId]);
+  }, [orgId]);
 
   useEffect(() => {
     void fetchSops();
   }, [fetchSops]);
 
-  const activeTasks = useMemo(() => tasks.filter((task) => task.status === 'active'), [tasks]);
-  const inactiveTasks = useMemo(() => tasks.filter((task) => task.status === 'inactive'), [tasks]);
-  const categories = useMemo(() => {
-    const set = new Set(['General Maintenance', 'Mowing', 'Maintenance', 'Aeration']);
-    tasks.forEach((task) => {
-      if (task.category) set.add(task.category);
-    });
-    return Array.from(set);
-  }, [tasks]);
+  const activeSops = useMemo(() => sops.filter((s) => s.is_active), [sops]);
+  const inactiveSops = useMemo(() => sops.filter((s) => !s.is_active), [sops]);
 
   const resetForm = useCallback(() => {
     setForm(EMPTY_FORM);
@@ -105,112 +113,199 @@ export function SOPSettings({ orgId, propertyId }: { orgId: string | null; prope
     setFormOpen(true);
   }, []);
 
-  const startEdit = useCallback((task: SopTask) => {
+  const startEdit = useCallback(async (sop: Sop) => {
+    const { data: items } = await supabase
+      .from('sop_checklist_items')
+      .select('id, label, order_index, is_required')
+      .eq('sop_id', sop.id)
+      .order('order_index', { ascending: true });
+
     setForm({
-      name: task.name ?? '',
-      category: task.category ?? '',
-      description: task.description ?? '',
-      estimated_hours: String(task.estimated_hours ?? 1),
-      color: task.color ?? '#166534',
-      priority: String(task.priority ?? 2),
-      location: task.location ?? '',
+      title: sop.title ?? '',
+      description: sop.description ?? '',
+      category: sop.category ?? 'General',
+      procedure_body: sop.procedure_body ?? '',
+      estimated_hours: String(sop.estimated_hours ?? 1),
+      color: sop.color ?? '#166534',
+      checklist: (items ?? []).map((item) => ({
+        id: item.id as string,
+        label: item.label as string,
+        is_required: item.is_required as boolean,
+        order_index: item.order_index as number,
+      })),
     });
-    setEditingId(task.id);
+    setEditingId(sop.id);
     setFormOpen(true);
   }, []);
 
-  const onSave = useCallback(async () => {
-    if (!orgId || !propertyId) {
-      toast.error('Select a property before saving SOPs.');
-      return;
-    }
-    if (!form.name.trim()) {
-      toast.error('SOP name is required.');
-      return;
-    }
+  const addChecklistItem = useCallback(() => {
+    setForm((current) => ({
+      ...current,
+      checklist: [
+        ...current.checklist,
+        { id: null, label: '', is_required: true, order_index: current.checklist.length },
+      ],
+    }));
+  }, []);
 
+  const removeChecklistItem = useCallback((index: number) => {
+    setForm((current) => ({
+      ...current,
+      checklist: current.checklist
+        .filter((_, i) => i !== index)
+        .map((item, i) => ({ ...item, order_index: i })),
+    }));
+  }, []);
+
+  const updateChecklistItem = useCallback((index: number, patch: Partial<ChecklistItem>) => {
+    setForm((current) => ({
+      ...current,
+      checklist: current.checklist.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+    }));
+  }, []);
+
+  const moveChecklistItem = useCallback((index: number, direction: -1 | 1) => {
+    setForm((current) => {
+      const next = [...current.checklist];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return current;
+      [next[index], next[target]] = [next[target], next[index]];
+      return { ...current, checklist: next.map((item, i) => ({ ...item, order_index: i })) };
+    });
+  }, []);
+
+  const onSave = useCallback(async () => {
+    if (!orgId) {
+      toast.error('No org context — cannot save.');
+      return;
+    }
+    if (!form.title.trim()) {
+      toast.error('Title is required.');
+      return;
+    }
     const estimatedHours = Number(form.estimated_hours);
-    const priority = Number(form.priority);
     if (!Number.isFinite(estimatedHours) || estimatedHours < 0) {
       toast.error('Estimated hours must be 0 or more.');
       return;
     }
-    if (!Number.isFinite(priority) || priority < 1 || priority > 5) {
-      toast.error('Priority must be between 1 and 5.');
-      return;
-    }
 
     setSaving(true);
+
     const payload = {
       org_id: orgId,
-      property_id: propertyId,
-      name: form.name.trim(),
-      category: form.category.trim() || 'General Maintenance',
+      title: form.title.trim(),
       description: form.description.trim() || null,
+      category: form.category || 'General',
+      procedure_body: form.procedure_body.trim() || null,
       estimated_hours: estimatedHours,
       color: form.color || null,
-      priority,
-      location: form.location.trim() || null,
-      status: 'active' as const,
+      is_active: true,
+      ...(editingId ? {} : { created_by: currentUser?.id ?? null }),
     };
 
-    let writeError: string | null = null;
+    let sopId = editingId;
     if (editingId) {
       const { error: updateError } = await supabase
-        .from('tasks')
-        .update(payload)
+        .from('sops')
+        .update({ ...payload, updated_at: new Date().toISOString() })
         .eq('id', editingId)
-        .eq('org_id', orgId)
-        .eq('property_id', propertyId);
-      writeError = updateError?.message ?? null;
+        .eq('org_id', orgId);
+      if (updateError) {
+        toast.error(`Unable to save SOP: ${updateError.message}`);
+        setSaving(false);
+        return;
+      }
     } else {
-      const { error: insertError } = await supabase.from('tasks').insert(payload);
-      writeError = insertError?.message ?? null;
+      const { data: inserted, error: insertError } = await supabase
+        .from('sops')
+        .insert(payload)
+        .select('id')
+        .single();
+      if (insertError || !inserted) {
+        toast.error(`Unable to create SOP: ${insertError?.message ?? 'unknown error'}`);
+        setSaving(false);
+        return;
+      }
+      sopId = inserted.id as string;
     }
 
-    if (writeError) {
-      toast.error(`Unable to save SOP: ${writeError}`);
-      setSaving(false);
-      return;
+    if (sopId && form.checklist.length > 0) {
+      await supabase.from('sop_checklist_items').delete().eq('sop_id', sopId).eq('org_id', orgId);
+      const checklistRows = form.checklist
+        .filter((item) => item.label.trim())
+        .map((item, i) => ({
+          sop_id: sopId,
+          org_id: orgId,
+          label: item.label.trim(),
+          order_index: i,
+          is_required: item.is_required,
+        }));
+      if (checklistRows.length > 0) {
+        const { error: clError } = await supabase.from('sop_checklist_items').insert(checklistRows);
+        if (clError) {
+          toast.error(`SOP saved but checklist failed: ${clError.message}`);
+          setSaving(false);
+          resetForm();
+          await fetchSops();
+          return;
+        }
+      }
+    } else if (sopId && form.checklist.length === 0 && editingId) {
+      await supabase.from('sop_checklist_items').delete().eq('sop_id', sopId).eq('org_id', orgId);
     }
 
     toast.success(editingId ? 'SOP updated' : 'SOP created');
     setSaving(false);
     resetForm();
     await fetchSops();
-  }, [editingId, fetchSops, form, orgId, propertyId, resetForm]);
+  }, [currentUser, editingId, fetchSops, form, orgId, resetForm]);
 
-  const setTaskStatus = useCallback(
-    async (task: SopTask, status: SopStatus) => {
-      if (!orgId || !propertyId) return;
-      const confirmed =
-        status === 'inactive'
-          ? window.confirm(`Deactivate SOP "${task.name}"?`)
-          : window.confirm(`Restore SOP "${task.name}"?`);
+  const setActiveStatus = useCallback(
+    async (sop: Sop, isActive: boolean) => {
+      if (!orgId) return;
+      const verb = isActive ? 'Restore' : 'Deactivate';
+      const confirmed = window.confirm(`${verb} SOP "${sop.title}"?`);
       if (!confirmed) return;
 
       const { error: updateError } = await supabase
-        .from('tasks')
-        .update({ status })
-        .eq('id', task.id)
-        .eq('org_id', orgId)
-        .eq('property_id', propertyId);
+        .from('sops')
+        .update({ is_active: isActive, updated_at: new Date().toISOString() })
+        .eq('id', sop.id)
+        .eq('org_id', orgId);
 
       if (updateError) {
         toast.error(`Unable to update SOP: ${updateError.message}`);
         return;
       }
-
-      toast.success(status === 'inactive' ? 'SOP deactivated' : 'SOP restored');
+      toast.success(isActive ? 'SOP restored' : 'SOP deactivated');
       await fetchSops();
     },
-    [fetchSops, orgId, propertyId]
+    [fetchSops, orgId]
   );
 
-  if (!orgId || !propertyId) {
+  const deleteSop = useCallback(
+    async (sop: Sop) => {
+      if (!orgId) return;
+      const confirmed = window.confirm(`Permanently delete SOP "${sop.title}"? This cannot be undone.`);
+      if (!confirmed) return;
+
+      await supabase.from('sop_checklist_items').delete().eq('sop_id', sop.id).eq('org_id', orgId);
+      const { error: deleteError } = await supabase.from('sops').delete().eq('id', sop.id).eq('org_id', orgId);
+
+      if (deleteError) {
+        toast.error(`Unable to delete SOP: ${deleteError.message}`);
+        return;
+      }
+      toast.success('SOP deleted');
+      await fetchSops();
+    },
+    [fetchSops, orgId]
+  );
+
+  if (!orgId) {
     return (
       <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-        Select a property to manage SOPs.
+        No organization context — cannot load SOPs.
       </div>
     );
   }
@@ -223,40 +318,44 @@ export function SOPSettings({ orgId, propertyId }: { orgId: string | null; prope
       <div className="rounded-xl border bg-card p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold">SOPs</h3>
-            <p className="text-xs text-muted-foreground">Manage standard operating procedures backed by the task library.</p>
+            <h3 className="text-sm font-semibold">Standard Operating Procedures</h3>
+            <p className="text-xs text-muted-foreground">
+              Author SOPs with written procedures and checklists. Org-wide — not property-specific.
+            </p>
           </div>
-          <button type="button" onClick={startCreate} className="h-8 rounded-lg border px-3 text-sm hover:bg-muted">
-            + Add SOP
-          </button>
+          {!formOpen && (
+            <button type="button" onClick={startCreate} className="h-8 rounded-lg border px-3 text-sm hover:bg-muted">
+              + Add SOP
+            </button>
+          )}
         </div>
 
         {formOpen ? (
-          <div className="mb-4 rounded-lg border bg-muted/20 p-3">
-            <div className="grid gap-2 md:grid-cols-2">
+          <div className="mb-4 rounded-lg border bg-muted/20 p-4 space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs text-muted-foreground">
-                Name *
+                Title *
                 <input
-                  value={form.name}
-                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  value={form.title}
+                  onChange={(e) => setForm((c) => ({ ...c, title: e.target.value }))}
                   className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-                  placeholder="SOP name"
+                  placeholder="SOP title"
+                  autoFocus
                 />
               </label>
               <label className="text-xs text-muted-foreground">
                 Category
-                <input
+                <select
                   value={form.category}
-                  onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-                  list="sop-categories"
+                  onChange={(e) => setForm((c) => ({ ...c, category: e.target.value }))}
                   className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-                  placeholder="General Maintenance"
-                />
-                <datalist id="sop-categories">
-                  {categories.map((category) => (
-                    <option key={category} value={category} />
+                >
+                  {SOP_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
                   ))}
-                </datalist>
+                </select>
               </label>
               <label className="text-xs text-muted-foreground">
                 Estimated Hours
@@ -265,51 +364,116 @@ export function SOPSettings({ orgId, propertyId }: { orgId: string | null; prope
                   min="0"
                   step="0.25"
                   value={form.estimated_hours}
-                  onChange={(event) => setForm((current) => ({ ...current, estimated_hours: event.target.value }))}
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-                />
-              </label>
-              <label className="text-xs text-muted-foreground">
-                Priority (1-5)
-                <input
-                  type="number"
-                  min="1"
-                  max="5"
-                  value={form.priority}
-                  onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}
+                  onChange={(e) => setForm((c) => ({ ...c, estimated_hours: e.target.value }))}
                   className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
                 />
               </label>
               <label className="text-xs text-muted-foreground">
                 Color
-                <input
-                  type="color"
-                  value={form.color}
-                  onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))}
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-2"
-                />
-              </label>
-              <label className="text-xs text-muted-foreground">
-                Location
-                <input
-                  value={form.location}
-                  onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-                  placeholder="Optional location"
-                />
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={form.color}
+                    onChange={(e) => setForm((c) => ({ ...c, color: e.target.value }))}
+                    className="h-9 w-12 cursor-pointer rounded-md border bg-background"
+                  />
+                  <span className="text-xs text-muted-foreground">{form.color}</span>
+                </div>
               </label>
             </div>
-            <label className="mt-2 block text-xs text-muted-foreground">
+
+            <label className="block text-xs text-muted-foreground">
               Description
               <textarea
                 value={form.description}
-                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                rows={3}
+                onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
+                rows={2}
                 className="mt-1 w-full rounded-md border bg-background px-2 py-2 text-sm"
-                placeholder="Optional SOP description"
+                placeholder="Brief summary of what this SOP covers"
               />
             </label>
-            <div className="mt-3 flex items-center gap-2">
+
+            <label className="block text-xs text-muted-foreground">
+              Procedure
+              <textarea
+                value={form.procedure_body}
+                onChange={(e) => setForm((c) => ({ ...c, procedure_body: e.target.value }))}
+                rows={5}
+                className="mt-1 w-full rounded-md border bg-background px-2 py-2 font-mono text-sm"
+                placeholder="Step-by-step procedure, safety notes, required equipment..."
+              />
+            </label>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Checklist Items</span>
+                <button
+                  type="button"
+                  onClick={addChecklistItem}
+                  className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                >
+                  <Plus className="h-3 w-3" /> Add Item
+                </button>
+              </div>
+              {form.checklist.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No checklist items yet.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {form.checklist.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2 rounded-md border bg-background px-2 py-1.5">
+                      <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <div className="flex flex-1 items-center gap-2">
+                        <input
+                          value={item.label}
+                          onChange={(e) => updateChecklistItem(index, { label: e.target.value })}
+                          className="h-7 flex-1 rounded border bg-muted/30 px-2 text-xs"
+                          placeholder="Checklist item..."
+                        />
+                        <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={item.is_required}
+                            onChange={(e) => updateChecklistItem(index, { is_required: e.target.checked })}
+                            className="h-3 w-3"
+                          />
+                          Required
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => moveChecklistItem(index, -1)}
+                          disabled={index === 0}
+                          className="h-6 w-6 rounded text-xs hover:bg-muted disabled:opacity-30"
+                          aria-label="Move up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveChecklistItem(index, 1)}
+                          disabled={index === form.checklist.length - 1}
+                          className="h-6 w-6 rounded text-xs hover:bg-muted disabled:opacity-30"
+                          aria-label="Move down"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeChecklistItem(index)}
+                          className="h-6 w-6 rounded text-xs hover:bg-destructive/10 hover:text-destructive"
+                          aria-label="Remove item"
+                        >
+                          <X className="mx-auto h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => void onSave()}
@@ -326,34 +490,44 @@ export function SOPSettings({ orgId, propertyId }: { orgId: string | null; prope
         ) : null}
 
         <div className="rounded-lg border">
-          <div className="grid grid-cols-[2fr_1fr_120px_120px_96px] border-b bg-muted/20 px-3 py-2 text-xs font-medium text-muted-foreground">
-            <span>Name</span>
+          <div className="grid grid-cols-[2fr_1fr_80px_80px_100px] border-b bg-muted/20 px-3 py-2 text-xs font-medium text-muted-foreground">
+            <span>Title</span>
             <span>Category</span>
-            <span>Est. Hours</span>
+            <span>Est. Hrs</span>
             <span>Color</span>
             <span className="text-right">Actions</span>
           </div>
-          {activeTasks.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-muted-foreground">No active SOPs.</p>
+          {activeSops.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-muted-foreground">No active SOPs. Add one above.</p>
           ) : (
-            activeTasks.map((task) => (
-              <div key={task.id} className="grid grid-cols-[2fr_1fr_120px_120px_96px] items-center border-b px-3 py-2 text-sm last:border-b-0">
-                <div className="truncate font-medium">{task.name}</div>
-                <div className="truncate text-muted-foreground">{task.category}</div>
-                <div>{task.estimated_hours ?? '—'}</div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-4 w-4 rounded-full border" style={{ backgroundColor: task.color ?? '#9ca3af' }} />
-                  <span className="text-xs text-muted-foreground">{task.color ?? 'None'}</span>
+            activeSops.map((sop) => (
+              <div
+                key={sop.id}
+                className="grid grid-cols-[2fr_1fr_80px_80px_100px] items-center border-b px-3 py-2 text-sm last:border-b-0"
+              >
+                <div className="truncate font-medium">{sop.title}</div>
+                <div className="truncate text-muted-foreground">{sop.category ?? '—'}</div>
+                <div className="text-muted-foreground">{sop.estimated_hours ?? '—'}</div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-4 w-4 rounded-full border border-white/10"
+                    style={{ backgroundColor: sop.color ?? '#9ca3af' }}
+                  />
                 </div>
                 <div className="flex items-center justify-end gap-1">
-                  <button type="button" onClick={() => startEdit(task)} className="h-7 w-7 rounded-md border hover:bg-muted" aria-label={`Edit ${task.name}`}>
+                  <button
+                    type="button"
+                    onClick={() => void startEdit(sop)}
+                    className="h-7 w-7 rounded-md border hover:bg-muted"
+                    aria-label={`Edit ${sop.title}`}
+                  >
                     <Pencil className="mx-auto h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => void setTaskStatus(task, 'inactive')}
+                    onClick={() => void setActiveStatus(sop, false)}
                     className="h-7 w-7 rounded-md border hover:bg-muted"
-                    aria-label={`Deactivate ${task.name}`}
+                    aria-label={`Deactivate ${sop.title}`}
                   >
                     <Trash2 className="mx-auto h-3.5 w-3.5" />
                   </button>
@@ -364,32 +538,38 @@ export function SOPSettings({ orgId, propertyId }: { orgId: string | null; prope
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card p-4">
-        <h3 className="mb-2 text-sm font-semibold">Inactive SOPs</h3>
-        {inactiveTasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No inactive SOPs.</p>
-        ) : (
+      {inactiveSops.length > 0 && (
+        <div className="rounded-xl border bg-card p-4">
+          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Inactive SOPs</h3>
           <div className="space-y-2">
-            {inactiveTasks.map((task) => (
-              <div key={task.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
+            {inactiveSops.map((sop) => (
+              <div key={sop.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
                 <div>
-                  <p className="text-sm font-medium">{task.name}</p>
-                  <p className="text-xs text-muted-foreground">{task.category}</p>
+                  <p className="text-sm font-medium">{sop.title}</p>
+                  <p className="text-xs text-muted-foreground">{sop.category ?? '—'}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void setTaskStatus(task, 'active')}
-                  className="h-8 rounded-lg border px-3 text-sm hover:bg-muted"
-                >
-                  <RotateCcw className="mr-1 inline-block h-3.5 w-3.5" />
-                  Restore
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void setActiveStatus(sop, true)}
+                    className="h-8 rounded-lg border px-3 text-sm hover:bg-muted"
+                  >
+                    <RotateCcw className="mr-1 inline-block h-3.5 w-3.5" />
+                    Restore
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void deleteSop(sop)}
+                    className="h-8 rounded-lg border border-destructive/30 px-3 text-sm text-destructive hover:bg-destructive/10"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
-

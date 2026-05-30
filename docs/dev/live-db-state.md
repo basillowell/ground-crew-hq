@@ -538,6 +538,53 @@ If you need a column that is NOT in this file:
 
 ---
 
+## sops
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| id | uuid | NO | gen_random_uuid() | PK |
+| org_id | uuid | NO | | FK -> organizations |
+| property_id | uuid | YES | | FK -> properties |
+| title | text | NO | | |
+| description | text | YES | | |
+| procedure_body | text | YES | | Written procedure: steps, safety, equipment |
+| category | text | YES | | Matches task categories (Aeration, Chemical Application, etc.) |
+| estimated_hours | numeric | YES | 0 | |
+| color | text | YES | | Hex color string |
+| is_active | boolean | NO | true | |
+| created_by | uuid | YES | | FK -> app_users.id |
+| created_at | timestamptz | NO | now() | |
+| updated_at | timestamptz | NO | now() | |
+
+---
+
+## sop_checklist_items
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| id | uuid | NO | gen_random_uuid() | PK |
+| sop_id | uuid | NO | | FK -> sops.id CASCADE DELETE |
+| org_id | uuid | NO | | |
+| label | text | NO | | |
+| order_index | integer | NO | 0 | |
+| is_required | boolean | NO | true | |
+| created_at | timestamptz | NO | now() | |
+
+---
+
+## sop_completions
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| id | uuid | NO | gen_random_uuid() | PK |
+| assignment_id | uuid | NO | | FK -> assignments.id CASCADE DELETE |
+| sop_checklist_item_id | uuid | NO | | FK -> sop_checklist_items.id CASCADE DELETE |
+| employee_id | uuid | NO | | |
+| org_id | uuid | NO | | |
+| completed | boolean | NO | false | |
+| completed_at | timestamptz | YES | | |
+| created_at | timestamptz | NO | now() | |
+| | | | | UNIQUE(assignment_id, sop_checklist_item_id) |
+
+---
+
 ## Key IDs (for reference only — never hardcode)
 - Org: bb13da4a-d2de-4fc9-ad5a-bfd266e08807 (Ground Crew HQ)
 - Property: b50b42cd-903e-4280-9373-1d9cae97b2b3 (Sarasota Polo Club)

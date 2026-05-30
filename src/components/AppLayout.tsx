@@ -569,7 +569,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         ) : null}
         <div
-          className={`fixed top-0 left-0 h-screen w-60 overflow-y-auto z-40 bg-[#0f1a14] border-r border-white/[0.06] flex flex-col transform transition-transform duration-200 ease-in-out ${
+          className={`fixed top-0 left-0 h-screen w-60 overflow-y-hidden z-40 bg-[#0f1a14] border-r border-white/[0.06] flex flex-col transform transition-transform duration-200 ease-in-out ${
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           }`}
         >
@@ -580,7 +580,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             chemicalLogsBadgeCount={chemicalLogsPendingCount}
           />
         </div>
-        <div className={`ml-0 md:ml-60 min-h-screen overflow-y-auto flex min-w-0 flex-1 flex-col ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
+        <div className={`ml-0 md:ml-60 overflow-y-auto overflow-x-hidden flex min-w-0 flex-1 flex-col ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
           <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}
