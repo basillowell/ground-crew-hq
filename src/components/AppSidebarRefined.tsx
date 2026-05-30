@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   BarChart3,
   Settings,
-  MessageCircle,
   Mail,
   CloudSun,
   MapPin,
@@ -90,7 +89,7 @@ const adminNavSections: NavSection[] = [
   {
     title: 'Communication',
     items: [
-      { title: 'Team Chat', url: '/app/breakroom', icon: MessageCircle, moduleId: 'breakroom' },
+      { title: 'Breakroom', url: '/app/breakroom', icon: LayoutDashboard, moduleId: 'breakroom' },
       { title: 'Messaging', url: '/app/messaging', icon: Mail, moduleId: 'workflow' },
     ],
   },
@@ -115,7 +114,7 @@ const employeeNavSections: NavSection[] = [
   {
     title: 'Connect',
     items: [
-      { title: 'Team Chat', url: '/app/breakroom', icon: MessageCircle, moduleId: 'breakroom' },
+      { title: 'Breakroom', url: '/app/breakroom', icon: LayoutDashboard, moduleId: 'breakroom' },
       { title: 'Messaging', url: '/app/messaging', icon: Mail, moduleId: 'workflow' },
     ],
   },

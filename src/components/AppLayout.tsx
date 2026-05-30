@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Calendar, ClipboardList, CloudSun, Mail, MapPin, Menu, Settings, Shield, ShieldCheck, BarChart3, Wrench, Users, LayoutDashboard, MessageCircle } from 'lucide-react';
+import { Calendar, ClipboardList, CloudSun, Mail, MapPin, Menu, Settings, Shield, ShieldCheck, BarChart3, Wrench, Users, LayoutDashboard } from 'lucide-react';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { FeedbackWidget } from './FeedbackWidget';
@@ -449,7 +449,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { label: 'Chemical Logs', route: '/app/applications', icon: ShieldCheck },
     { label: 'Safety', route: '/app/safety', icon: Shield },
     { label: 'Reports', route: '/app/reports', icon: BarChart3 },
-    { label: 'Team Chat', route: '/app/breakroom', icon: MessageCircle },
+    { label: 'Breakroom', route: '/app/breakroom', icon: LayoutDashboard },
     { label: 'Messaging', route: '/app/messaging', icon: Mail },
     { label: 'Settings', route: '/app/settings', icon: Settings },
   ];
