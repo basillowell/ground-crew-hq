@@ -11,6 +11,8 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { toast } from '@/components/ui/sonner';
 
+const EMPLOYEES_PER_PAGE = 20;
+
 type EmployeeRow = {
   id: string;
   first_name: string | null;
@@ -97,6 +99,50 @@ function formatHourlyRate(value: number | null) {
   return `$${Number(value ?? 0).toFixed(2)}/hr`;
 }
 
+function EmployeePagination({
+  page,
+  pageCount,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-muted-foreground">
+        Showing {(page - 1) * EMPLOYEES_PER_PAGE + 1}-
+        {Math.min(page * EMPLOYEES_PER_PAGE, total)} of {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page === 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+        >
+          Previous
+        </Button>
+        <span className="min-w-16 text-center text-sm">
+          {page} / {pageCount}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page === pageCount}
+          onClick={() => onPageChange(Math.min(pageCount, page + 1))}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function EmployeesPage() {
   const { orgId, userRole } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
@@ -117,6 +163,7 @@ export default function EmployeesPage() {
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'roster' | 'availability'>('roster');
+  const [employeePage, setEmployeePage] = useState(1);
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -243,9 +290,25 @@ export default function EmployeesPage() {
   }, [monthCursor, orgId]);
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || viewMode !== 'availability') return;
     void fetchMonthEntries();
-  }, [fetchMonthEntries, orgId]);
+  }, [fetchMonthEntries, orgId, viewMode]);
+
+  const employeePageCount = Math.max(1, Math.ceil(employees.length / EMPLOYEES_PER_PAGE));
+  const visibleEmployees = useMemo(() => {
+    const start = (employeePage - 1) * EMPLOYEES_PER_PAGE;
+    return employees.slice(start, start + EMPLOYEES_PER_PAGE);
+  }, [employeePage, employees]);
+
+  useEffect(() => {
+    setEmployeePage((current) => Math.min(current, employeePageCount));
+  }, [employeePageCount]);
+
+  const changeEmployeePage = useCallback((page: number) => {
+    setEditingId(null);
+    setEditDraft(null);
+    setEmployeePage(page);
+  }, []);
 
   const propertyNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -591,7 +654,7 @@ export default function EmployeesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((employee) => {
+                  {visibleEmployees.map((employee) => {
                     const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed';
                     return (
                       <tr key={`cal-${employee.id}`} className="border-t">
@@ -621,7 +684,7 @@ export default function EmployeesPage() {
           <div className="rounded-xl border p-3">
             <h3 className="mb-2 text-sm font-semibold">Quick stats</h3>
             <div className="space-y-1 text-sm text-muted-foreground">
-              {employees.map((employee) => {
+              {visibleEmployees.map((employee) => {
                 const stats = monthlyEmployeeStats.get(employee.id) ?? { scheduled: 0, off: 0, sick: 0, vacation: 0 };
                 const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed';
                 return (
@@ -657,7 +720,7 @@ export default function EmployeesPage() {
                 </td>
               </tr>
             ) : (
-              employees.map((employee) => {
+              visibleEmployees.map((employee) => {
                 const isEditing = editingId === employee.id && editDraft;
                 const fullName = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee';
                 return (
@@ -799,7 +862,7 @@ export default function EmployeesPage() {
         {employees.length === 0 ? (
           <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">No employees yet. Add your first crew member.</div>
         ) : (
-          employees.map((employee) => {
+          visibleEmployees.map((employee) => {
             const fullName = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee';
             const isEditing = editingId === employee.id && editDraft;
             return (
@@ -878,6 +941,13 @@ export default function EmployeesPage() {
         )}
       </div>
       ) : null}
+
+      <EmployeePagination
+        page={employeePage}
+        pageCount={employeePageCount}
+        total={employees.length}
+        onPageChange={changeEmployeePage}
+      />
 
       <Dialog
         open={addOpen && !isReadOnly}
