@@ -8,20 +8,19 @@ import { FeedbackWidget } from './FeedbackWidget';
 import { CommandBar } from './CommandBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import type { ProgramSettings } from '@/data/seedData';
+import type { ProgramSettings, Property } from '@/data/seedData';
 import {
   useAssignments,
   useDepartmentOptions,
-  useEmployees,
   useEquipmentUnits,
   useProgramSettings,
-  useProperties,
   useScheduleEntries,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { OperationsProvider } from '@/contexts/OperationsContext';
 import { supabase } from '@/lib/supabase';
 import { isPro } from '@/utils/planGating';
+import { useAppStore, type Property as StoreProperty } from '@/store/appStore';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -115,6 +114,24 @@ function applyBranding(programSetting?: ProgramSettings) {
   }
 }
 
+function toLayoutProperty(row: StoreProperty): Property {
+  return {
+    id: row.id,
+    name: row.name,
+    shortName: row.short_name,
+    type: 'Property',
+    address: '',
+    city: row.city,
+    state: row.state,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
+    acreage: Number(row.acreage ?? 0),
+    logoInitials: row.logo_initials,
+    color: row.color,
+    status: row.status as Property['status'],
+  };
+}
+
 const inAppNotificationEventName = 'ground-crew-in-app-notification';
 
 type IncomingNotification = Omit<AppNotification, 'read'>;
@@ -139,16 +156,19 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
-  const propertiesQuery = useProperties(orgId);
+  const storeProperties = useAppStore((state) => state.properties);
+  const storeEmployees = useAppStore((state) => state.employees);
   const deptQuery = useDepartmentOptions(orgId);
   const todayKey = currentDate.toISOString().slice(0, 10);
-  const employeesQuery = useEmployees(currentPropertyId, orgId);
   const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
   const assignmentsQuery = useAssignments(todayKey, currentPropertyId, orgId);
   const equipmentQuery = useEquipmentUnits(currentPropertyId, orgId);
 
   const programSetting = programSettingQuery.data ?? null;
-  const properties = propertiesQuery.data ?? [];
+  const properties = useMemo(
+    () => storeProperties.map(toLayoutProperty),
+    [storeProperties],
+  );
 
   useEffect(() => {
     if (!properties.length) return;
@@ -171,7 +191,12 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const computedNotifications = useMemo(() => {
     const currentDayKey = currentDate.toISOString().slice(0, 10);
-    const employees = employeesQuery.data ?? [];
+    const employees = storeEmployees.filter(
+      (employee) =>
+        !currentPropertyId ||
+        currentPropertyId === 'all' ||
+        employee.property_id === currentPropertyId,
+    );
     const scheduleEntries = scheduleQuery.data ?? [];
     const assignments = assignmentsQuery.data ?? [];
     const equipmentUnits = equipmentQuery.data ?? [];
@@ -200,7 +225,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         nextNotifications.push({
           id: 'unscheduled-crew',
           title: `${unscheduledCrew.length} crew members still need shifts`,
-          description: `${unscheduledCrew.slice(0, 3).map((entry) => `${entry.firstName} ${entry.lastName}`).join(', ')}${unscheduledCrew.length > 3 ? ' and more' : ''}`,
+          description: `${unscheduledCrew.slice(0, 3).map((entry) => `${entry.first_name} ${entry.last_name}`).join(', ')}${unscheduledCrew.length > 3 ? ' and more' : ''}`,
           severity: 'warning',
           route: '/app/scheduler',
           icon: 'schedule',
@@ -235,7 +260,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
 
     return nextNotifications;
-  }, [employeesQuery.data, scheduleQuery.data, assignmentsQuery.data, equipmentQuery.data, currentDate, currentUser?.role, department]);
+  }, [assignmentsQuery.data, currentDate, currentPropertyId, currentUser?.role, department, equipmentQuery.data, scheduleQuery.data, storeEmployees]);
 
   useEffect(() => {
     const handleNotification = (event: Event) => {
@@ -587,7 +612,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             departments={deptQuery.data?.map((d) => d.name) ?? []}
             currentDate={currentDate}
             setCurrentDate={setCurrentDate}
-            properties={propertiesQuery.data ?? []}
+            properties={properties}
             currentPropertyId={currentPropertyId}
             onSelectProperty={handleSelectProperty}
             allowAllProperties={currentUser?.role === 'admin' || currentUser?.role === 'manager'}

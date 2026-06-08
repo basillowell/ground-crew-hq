@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
 import { LayoutDashboard } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAppStore } from '@/store/appStore';
 
 const RechartsResponsiveContainer = lazy(() =>
   import('recharts').then((m) => ({ default: m.ResponsiveContainer })),
@@ -279,6 +280,9 @@ export default function CommandCenterOperationalPage() {
   const [dailyBriefError, setDailyBriefError] = useState<string | null>(null);
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   const [forceOnboarding, setForceOnboarding] = useState(false);
+  const storeEmployees = useAppStore((state) => state.employees);
+  const storeProperties = useAppStore((state) => state.properties);
+  const storeProgramSettings = useAppStore((state) => state.programSettings);
 
   const todayKey = currentDate.toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
@@ -293,6 +297,9 @@ export default function CommandCenterOperationalPage() {
     propertyScope,
     todayKey,
     start30Date,
+    employees: storeEmployees,
+    properties: storeProperties,
+    programSettings: storeProgramSettings,
   });
 
   const allProperties = dashboardDataQuery.data?.properties ?? [];
@@ -723,7 +730,7 @@ export default function CommandCenterOperationalPage() {
     },
   });
   const weeklyLaborCostQuery = useQuery({
-    queryKey: ['dashboard-weekly-labor-cost', orgId ?? 'no-org', todayKey, propertyScope ?? 'all'],
+    queryKey: ['dashboard-weekly-labor-cost', orgId ?? 'no-org', todayKey, propertyScope ?? 'all', storeEmployees.length],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
@@ -751,19 +758,12 @@ export default function CommandCenterOperationalPage() {
         assignmentsQuery = assignmentsQuery.eq('property_id', propertyScope);
       }
 
-      const [assignmentsResult, employeesResult] = await Promise.all([
-        assignmentsQuery,
-        supabase
-          .from('employees')
-          .select('id, hourly_rate')
-          .eq('org_id', orgId),
-      ]);
+      const assignmentsResult = await assignmentsQuery;
 
       if (assignmentsResult.error) throw assignmentsResult.error;
-      if (employeesResult.error) throw employeesResult.error;
 
       const hourlyRateByEmployee = new Map<string, number>();
-      (employeesResult.data ?? []).forEach((employee) => {
+      storeEmployees.forEach((employee) => {
         hourlyRateByEmployee.set(String(employee.id), Number(employee.hourly_rate ?? 0));
       });
       const hasHourlyRates = Array.from(hourlyRateByEmployee.values()).some((rate) => rate > 0);
@@ -998,30 +998,33 @@ export default function CommandCenterOperationalPage() {
   const canLoadDashboard = isReady && Boolean(orgId);
 
   const onboardingCheckQuery = useQuery({
-    queryKey: ['dashboard-onboarding-check', orgId ?? 'no-org', currentUser?.employeeId ?? 'no-employee'],
+    queryKey: [
+      'dashboard-onboarding-check',
+      orgId ?? 'no-org',
+      currentUser?.employeeId ?? 'no-employee',
+      storeEmployees.length,
+      storeProperties.length,
+    ],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60,
     queryFn: async () => {
       if (!supabase || !orgId) {
         return { propertyCount: 0, employeeCount: 0, taskCount: 0 };
       }
-      const [propertiesResult, employeesResult, tasksResult] = await Promise.all([
-        supabase.from('properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
-        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
-      ]);
+      const tasksResult = await supabase
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId);
 
-      if (propertiesResult.error) throw propertiesResult.error;
-      if (employeesResult.error) throw employeesResult.error;
       if (tasksResult.error) throw tasksResult.error;
 
-      const totalEmployees = employeesResult.count ?? 0;
+      const totalEmployees = storeEmployees.length;
       const employeeCountExcludingSelf = Math.max(
         0,
         totalEmployees - (currentUser?.employeeId ? 1 : 0),
       );
       return {
-        propertyCount: propertiesResult.count ?? 0,
+        propertyCount: storeProperties.length,
         employeeCount: employeeCountExcludingSelf,
         taskCount: tasksResult.count ?? 0,
       };

@@ -12,12 +12,20 @@ import type {
   Task,
   WeatherLocation,
 } from '@/data/seedData';
+import type {
+  Employee as StoreEmployee,
+  ProgramSettings as StoreProgramSettings,
+  Property as StoreProperty,
+} from '@/store/appStore';
 
 type UseDashboardDataParams = {
   orgId?: string;
   propertyScope?: string;
   todayKey: string;
   start30Date: string;
+  employees: StoreEmployee[];
+  properties: StoreProperty[];
+  programSettings: StoreProgramSettings | null;
 };
 
 type DashboardData = {
@@ -186,10 +194,27 @@ function normalizeProgramSettings(row: any): ProgramSettings {
 }
 
 export function useDashboardData(params: UseDashboardDataParams) {
-  const { orgId, propertyScope, todayKey, start30Date } = params;
+  const {
+    orgId,
+    propertyScope,
+    todayKey,
+    start30Date,
+    employees,
+    properties,
+    programSettings,
+  } = params;
 
   return useQuery<DashboardData>({
-    queryKey: ['dashboard-data', orgId ?? 'no-org', propertyScope ?? 'all', todayKey, start30Date],
+    queryKey: [
+      'dashboard-data',
+      orgId ?? 'no-org',
+      propertyScope ?? 'all',
+      todayKey,
+      start30Date,
+      employees.length,
+      properties.length,
+      programSettings?.id ?? 'no-settings',
+    ],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 3,
     queryFn: async () => {
@@ -199,9 +224,6 @@ export function useDashboardData(params: UseDashboardDataParams) {
       const withProperty = <T,>(query: any) => (scopedPropertyId ? query.eq('property_id', scopedPropertyId) : query) as T;
 
       const [
-        propertiesResult,
-        programSettingsResult,
-        employeesResult,
         assignmentsResult,
         scheduleTodayResult,
         scheduleRangeResult,
@@ -211,9 +233,6 @@ export function useDashboardData(params: UseDashboardDataParams) {
         notesResult,
         clockEventsResult,
       ] = await Promise.all([
-        withOrg<any>(supabase.from('properties').select('*').order('name')),
-        withOrg<any>(supabase.from('program_settings').select('*').order('created_at').limit(1)),
-        withProperty<any>(withOrg<any>(supabase.from('employees').select('*').order('last_name').order('first_name'))),
         withProperty<any>(withOrg<any>(supabase.from('assignments').select('*').eq('date', todayKey).order('created_at'))),
         withProperty<any>(withOrg<any>(supabase.from('schedule_entries').select('*').eq('date', todayKey).order('shift_start'))),
         withProperty<any>(
@@ -240,9 +259,6 @@ export function useDashboardData(params: UseDashboardDataParams) {
       ]);
 
       const firstError =
-        propertiesResult.error ||
-        programSettingsResult.error ||
-        employeesResult.error ||
         assignmentsResult.error ||
         scheduleTodayResult.error ||
         scheduleRangeResult.error ||
@@ -254,10 +270,14 @@ export function useDashboardData(params: UseDashboardDataParams) {
 
       if (firstError) throw firstError;
 
+      const scopedEmployees = scopedPropertyId
+        ? employees.filter((employee) => employee.property_id === scopedPropertyId)
+        : employees;
+
       return {
-        properties: (propertiesResult.data ?? []).map(normalizeProperty),
-        programSettings: programSettingsResult.data?.[0] ? normalizeProgramSettings(programSettingsResult.data[0]) : null,
-        employees: (employeesResult.data ?? []).map(normalizeEmployee),
+        properties: properties.map(normalizeProperty),
+        programSettings: programSettings ? normalizeProgramSettings(programSettings) : null,
+        employees: scopedEmployees.map(normalizeEmployee),
         assignments: (assignmentsResult.data ?? []).map(normalizeAssignment),
         scheduleEntries: (scheduleTodayResult.data ?? []).map(normalizeScheduleEntry),
         scheduleEntriesLast30: (scheduleRangeResult.data ?? []).map(normalizeScheduleEntry),

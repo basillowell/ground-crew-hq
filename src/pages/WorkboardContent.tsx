@@ -50,7 +50,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { useAssignments, useDepartmentOptions, useEquipmentUnits, useNotes, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { useAppStore, type Employee as StoreEmployee, type Property as StoreProperty } from '@/store/appStore';
 import { fetchNwsWeather } from '@/lib/weather/providers';
 import {
   getOperationalTimezone,
@@ -312,6 +313,54 @@ function normalizeWorkLocation(row: Record<string, unknown>): WorkLocation {
     name: String(row.name ?? ''),
     propertyId: row.propertyId ? String(row.propertyId) : row.property_id ? String(row.property_id) : undefined,
     propertyName: row.propertyName ? String(row.propertyName) : row.property_name ? String(row.property_name) : undefined,
+  };
+}
+
+function toWorkboardProperty(row: StoreProperty): Property {
+  return {
+    id: row.id,
+    name: row.name,
+    shortName: row.short_name,
+    type: 'Property',
+    address: '',
+    city: row.city,
+    state: row.state,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
+    acreage: Number(row.acreage ?? 0),
+    logoInitials: row.logo_initials,
+    color: row.color,
+    status: row.status as Property['status'],
+  };
+}
+
+function toWorkboardEmployee(row: StoreEmployee): Employee {
+  return {
+    id: row.id,
+    propertyId: row.property_id ?? undefined,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    role: row.role,
+    department: row.department,
+    status: (row.status as Employee['status']) ?? 'active',
+    phone: row.phone ?? '',
+    email: row.email ?? '',
+    group: row.group_name ?? row.department ?? 'General',
+    wage: Number(row.hourly_rate ?? 0),
+    photo: '',
+    language: row.language ?? 'English',
+    workerType: (row.worker_type as Employee['workerType']) ?? 'full-time',
+    jobDescriptionId: row.job_description_id ?? undefined,
+    jobDescription: row.job_description ?? undefined,
+    employmentStatusId: row.employment_status_id ?? undefined,
+    employmentStatus: row.employment_status ?? undefined,
+    wageCategoryId: row.wage_category_id ?? undefined,
+    overtimeRuleId: row.overtime_rule_id ?? undefined,
+    hireDate: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    defaultLocationId: row.default_location_id ?? undefined,
+    shiftTemplateId: row.preferred_shift_template_id ?? undefined,
+    portalEnabled: row.portal_enabled ?? false,
+    loginEmail: row.login_email ?? undefined,
   };
 }
 
@@ -635,8 +684,8 @@ export default function WorkboardContent() {
     );
   }, []);
 
-  const propertiesQuery = useProperties(currentUser?.orgId);
-  const employeesQuery = useEmployees(effectivePropertyId, currentUser?.orgId);
+  const storeProperties = useAppStore((state) => state.properties);
+  const storeEmployees = useAppStore((state) => state.employees);
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, currentUser?.orgId);
   const assignmentTimelineQuery = useQuery({
     queryKey: ['workboard-assignment-timeline', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
@@ -848,10 +897,22 @@ export default function WorkboardContent() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const properties = propertiesQuery.data ?? [];
+  const properties = useMemo(
+    () => storeProperties.map(toWorkboardProperty),
+    [storeProperties],
+  );
   const employeeList = useMemo(
-    () => (employeesQuery.data ?? []).filter((employee) => String(employee.role ?? '').toLowerCase() !== 'viewer'),
-    [employeesQuery.data],
+    () =>
+      storeEmployees
+        .filter(
+          (employee) =>
+            !effectivePropertyId ||
+            effectivePropertyId === 'all' ||
+            employee.property_id === effectivePropertyId,
+        )
+        .map(toWorkboardEmployee)
+        .filter((employee) => String(employee.role ?? '').toLowerCase() !== 'viewer'),
+    [effectivePropertyId, storeEmployees],
   );
   const assignmentList = assignmentsQuery.data ?? [];
   useEffect(() => {
@@ -3964,16 +4025,12 @@ export default function WorkboardContent() {
   }
 
   const isLoadingBoard =
-    propertiesQuery.isLoading ||
-    employeesQuery.isLoading ||
     assignmentsQuery.isLoading ||
     scheduleQuery.isLoading ||
     tasksQuery.isLoading ||
     equipmentQuery.isLoading ||
     notesQuery.isLoading;
   const boardErrorMessage =
-    (propertiesQuery.error as { message?: string } | null)?.message ||
-    (employeesQuery.error as { message?: string } | null)?.message ||
     (assignmentsQuery.error as { message?: string } | null)?.message ||
     (scheduleQuery.error as { message?: string } | null)?.message ||
     (tasksQuery.error as { message?: string } | null)?.message ||
@@ -3993,8 +4050,6 @@ export default function WorkboardContent() {
           <ErrorRetry
             message={boardErrorMessage}
             onRetry={() => {
-              void propertiesQuery.refetch();
-              void employeesQuery.refetch();
               void assignmentsQuery.refetch();
               void scheduleQuery.refetch();
               void tasksQuery.refetch();

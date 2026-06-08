@@ -1,14 +1,13 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProperties } from '@/lib/supabase-queries';
+import { useAppStore } from '@/store/appStore';
 import { supabase } from '@/lib/supabase';
 import { fetchNwsWeather } from '@/lib/weather/providers';
 import { getWeatherConditionMeta } from '@/lib/weather/wmoUtils';
@@ -112,9 +111,9 @@ function answerLocally(question: string, context: ContextPayload): string {
 
 export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId }: CommandBarProps) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { orgId } = useAuth();
-  const propertiesQuery = useProperties(orgId);
+  const properties = useAppStore((state) => state.properties);
+  const employees = useAppStore((state) => state.employees);
   const [input, setInput] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -126,12 +125,11 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
   }, [open]);
 
   const selectedProperty = useMemo(() => {
-    const properties = propertiesQuery.data ?? [];
     if (currentPropertyId && currentPropertyId !== 'all') {
       return properties.find((entry) => entry.id === currentPropertyId) ?? null;
     }
     return properties[0] ?? null;
-  }, [currentPropertyId, propertiesQuery.data]);
+  }, [currentPropertyId, properties]);
 
   const buildContext = async (): Promise<ContextPayload> => {
     const today = currentDate.toISOString().slice(0, 10);
@@ -153,14 +151,14 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
     }
 
     const employeeNameMap = new Map<string, string>();
-    const cachedEmployees =
-      queryClient.getQueryData<Array<{ id: string; firstName: string; lastName: string }>>([
-        'employees',
-        currentPropertyId ?? 'all',
-        orgId,
-      ]) ?? [];
-    for (const employee of cachedEmployees) {
-      employeeNameMap.set(employee.id, `${employee.firstName} ${employee.lastName}`.trim());
+    const scopedEmployees = employees.filter(
+      (employee) =>
+        !currentPropertyId ||
+        currentPropertyId === 'all' ||
+        employee.property_id === currentPropertyId,
+    );
+    for (const employee of scopedEmployees) {
+      employeeNameMap.set(employee.id, `${employee.first_name} ${employee.last_name}`.trim());
     }
 
     let schedulesQuery = supabase
@@ -205,13 +203,12 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
     overdueCutoff.setDate(overdueCutoff.getDate() - 90);
     equipmentQuery = equipmentQuery.lt('last_serviced', overdueCutoff.toISOString().slice(0, 10));
 
-    const [schedulesResult, assignmentsResult, equipmentResult, needsResult, lastWeekResult, employeesResult, weatherResult] = await Promise.all([
+    const [schedulesResult, assignmentsResult, equipmentResult, needsResult, lastWeekResult, weatherResult] = await Promise.all([
       schedulesQuery,
       assignmentsQuery,
       equipmentQuery,
       needsQuery,
       lastWeekQuery,
-      supabase.from('employees').select('id, first_name, last_name').eq('org_id', orgId),
       selectedProperty?.latitude && selectedProperty?.longitude
         ? fetchNwsWeather({
             latitude: selectedProperty.latitude,
@@ -226,11 +223,6 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
     if (equipmentResult.error) throw equipmentResult.error;
     if (needsResult.error) throw needsResult.error;
     if (lastWeekResult.error) throw lastWeekResult.error;
-    if (employeesResult.error) throw employeesResult.error;
-
-    for (const employee of employeesResult.data ?? []) {
-      employeeNameMap.set(String(employee.id), `${String(employee.first_name ?? '')} ${String(employee.last_name ?? '')}`.trim());
-    }
 
     const shifts = (schedulesResult.data ?? []).map((row) => ({
       employee: employeeNameMap.get(String(row.employee_id ?? '')) ?? 'Crew Member',
@@ -422,4 +414,3 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
     document.body,
   );
 }
-

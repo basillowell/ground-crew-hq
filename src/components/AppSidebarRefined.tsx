@@ -28,8 +28,9 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProgramSettings, useProperties, usePropertyClassOptions } from '@/lib/supabase-queries';
+import { useProgramSettings, usePropertyClassOptions } from '@/lib/supabase-queries';
 import { APP_VERSION } from '@/constants/version';
+import { useAppStore } from '@/store/appStore';
 
 interface AppSidebarRefinedProps {
   onNavigate?: () => void;
@@ -135,10 +136,11 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
   const logoUrl = programSetting?.logoUrl;
-  const properties = useProperties(currentUser?.orgId).data ?? [];
+  const properties = useAppStore((state) => state.properties);
   const propertyClasses = usePropertyClassOptions().data ?? [];
   const currentProperty = properties.find((property) => property.id === currentPropertyId);
-  const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentProperty?.propertyClassId);
+  const currentPropertyClassId = (currentProperty as { property_class_id?: string } | undefined)?.property_class_id;
+  const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentPropertyClassId);
   const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];
   const navRole: NavRole = currentRole === 'admin' || currentRole === 'manager' ? 'admin' : 'employee';
   const baseSections = navRole === 'admin' ? adminNavSections : employeeNavSections;
