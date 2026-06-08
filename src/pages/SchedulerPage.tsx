@@ -189,6 +189,7 @@ export default function SchedulerPage() {
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const storeEmployees = useAppStore((state) => state.employees);
   const storeProperties = useAppStore((state) => state.properties);
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '07:30', end: '16:00' });
   const [schedulerDefaultsLoading, setSchedulerDefaultsLoading] = useState(true);
   const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
@@ -204,7 +205,7 @@ export default function SchedulerPage() {
 
   const assignmentsWeekQuery = useQuery({
     queryKey: ['scheduler-week-assignments', weekStart, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser?.orgId),
+    enabled: Boolean(isHydrated && currentUser?.orgId),
     staleTime: 1000 * 60,
     retry: false,
     queryFn: async () => {
@@ -240,7 +241,7 @@ export default function SchedulerPage() {
 
   const weekWeatherQuery = useQuery({
     queryKey: ['scheduler-week-weather', weekStart, selectedProperty?.id ?? 'none', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser?.orgId && selectedProperty?.latitude && selectedProperty?.longitude),
+    enabled: Boolean(isHydrated && currentUser?.orgId && selectedProperty?.latitude && selectedProperty?.longitude),
     staleTime: 1000 * 60 * 10,
     queryFn: async () => {
       if (!selectedProperty?.latitude || !selectedProperty?.longitude) return {} as Record<string, DayWeather>;
@@ -264,7 +265,7 @@ export default function SchedulerPage() {
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
       queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-      enabled: Boolean(currentUser?.orgId),
+      enabled: Boolean(isHydrated && currentUser?.orgId),
       retry: false,
       queryFn: async () => {
         if (!supabase) return [] as ScheduleEntry[];
@@ -338,6 +339,7 @@ export default function SchedulerPage() {
   }, [weekDays]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     const fetchSchedulerData = async () => {
       if (!supabase || !currentUser?.orgId) {
         setSchedulerDefaultsLoading(false);
@@ -397,7 +399,7 @@ export default function SchedulerPage() {
     };
 
     void fetchSchedulerData();
-  }, [currentUser?.orgId]);
+  }, [currentUser?.orgId, isHydrated]);
 
   useEffect(() => {
     const firstId = employeeList.find((e) => e.status === 'active')?.id ?? '';

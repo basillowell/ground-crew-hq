@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { useAppStore } from "@/store/appStore";
 import {
   fetchNwsAlerts,
   fetchNwsForecast,
@@ -181,6 +182,7 @@ function precipBadge(precipInches: number) {
 }
 
 export default function WeatherPage() {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const navigate = useNavigate();
   const { orgId, currentUser } = useAuth();
   const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -347,15 +349,17 @@ export default function WeatherPage() {
   }, []);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void loadStations();
-  }, [loadStations]);
+  }, [isHydrated, loadStations]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!selectedStation) return;
     void loadWeather(selectedStation);
     void loadAlerts(selectedStation);
     void loadRainLogs(selectedStation);
-  }, [loadAlerts, loadRainLogs, loadWeather, selectedStation]);
+  }, [isHydrated, loadAlerts, loadRainLogs, loadWeather, selectedStation]);
 
   const hourlyRows = useMemo(() => {
     const hourly = weatherData?.hourly;

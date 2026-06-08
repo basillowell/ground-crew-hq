@@ -283,6 +283,7 @@ export default function CommandCenterOperationalPage() {
   const storeEmployees = useAppStore((state) => state.employees);
   const storeProperties = useAppStore((state) => state.properties);
   const storeProgramSettings = useAppStore((state) => state.programSettings);
+  const isHydrated = useAppStore((state) => state.isHydrated);
 
   const todayKey = currentDate.toISOString().slice(0, 10);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || currentUser?.propertyId || undefined;
@@ -293,7 +294,7 @@ export default function CommandCenterOperationalPage() {
   }, [currentDate]);
 
   const dashboardDataQuery = useDashboardData({
-    orgId: orgId ?? undefined,
+    orgId: isHydrated ? orgId ?? undefined : undefined,
     propertyScope,
     todayKey,
     start30Date,
@@ -337,6 +338,7 @@ export default function CommandCenterOperationalPage() {
   }, [currentPropertyId, isAdmin, isManager, properties, setCurrentPropertyId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!supabase) return;
     const channel = supabase
       .channel('dashboard-live-updates')
@@ -354,7 +356,7 @@ export default function CommandCenterOperationalPage() {
     return () => {
       void channel.unsubscribe();
     };
-  }, [dashboardDataQuery, queryClient, todayKey]);
+  }, [dashboardDataQuery, isHydrated, queryClient, todayKey]);
 
   useEffect(() => {
     const dismissed = window.localStorage.getItem('ground-crew-welcome-dismissed') === 'true';
@@ -413,7 +415,7 @@ export default function CommandCenterOperationalPage() {
   const selectedWeatherQuery = useWeather(selectedProperty?.id);
   const laborTrendQuery = useQuery({
     queryKey: ['dashboard-labor-trend-7d', orgId ?? 'no-org', propertyScope ?? 'all'],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       if (!supabase || !orgId) return [] as Array<{ date: string; scheduled: number; actual: number }>;
@@ -460,7 +462,7 @@ export default function CommandCenterOperationalPage() {
   const sprayWindowQuery = useQuery({
     queryKey: ['dashboard-spray-window', orgId ?? 'no-org', selectedProperty?.id ?? 'none'],
     enabled:
-      Boolean(orgId) &&
+      Boolean(isHydrated && orgId) &&
       Boolean(selectedProperty) &&
       typeof selectedProperty?.latitude === 'number' &&
       typeof selectedProperty?.longitude === 'number',
@@ -495,7 +497,7 @@ export default function CommandCenterOperationalPage() {
   });
   const morningNeedsQuery = useQuery({
     queryKey: ['dashboard-morning-open-needs', orgId ?? 'no-org', todayKey, propertyScope ?? 'all'],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 60,
     queryFn: async () => {
       if (!supabase || !orgId) return 0;
@@ -515,7 +517,7 @@ export default function CommandCenterOperationalPage() {
   });
   const yesterdayCompletionQuery = useQuery({
     queryKey: ['dashboard-yesterday-completion-rate', orgId ?? 'no-org', propertyScope ?? 'all', todayKey],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       if (!supabase || !orgId) return 0;
@@ -540,7 +542,7 @@ export default function CommandCenterOperationalPage() {
   });
   const efficiencyInputsQuery = useQuery({
     queryKey: ['dashboard-efficiency-inputs', orgId ?? 'no-org', propertyScope ?? 'all', todayKey],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       if (!supabase || !orgId) {
@@ -632,7 +634,7 @@ export default function CommandCenterOperationalPage() {
 
   const operationsScorecardQuery = useQuery({
     queryKey: ['dashboard-operations-scorecard', orgId ?? 'no-org', propertyScope ?? 'all', todayKey],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       if (!supabase || !orgId) {
@@ -670,7 +672,7 @@ export default function CommandCenterOperationalPage() {
   const morningBriefWeatherQuery = useQuery({
     queryKey: ['dashboard-morning-brief-weather', orgId ?? 'no-org', selectedProperty?.id ?? 'none', todayKey],
     enabled:
-      Boolean(orgId) &&
+      Boolean(isHydrated && orgId) &&
       Boolean(selectedProperty) &&
       typeof selectedProperty?.latitude === 'number' &&
       typeof selectedProperty?.longitude === 'number',
@@ -704,7 +706,7 @@ export default function CommandCenterOperationalPage() {
   });
   const equipmentAlertsQuery = useQuery({
     queryKey: ['dashboard-equipment-alerts', orgId ?? 'no-org', propertyScope ?? 'all'],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 60,
     queryFn: async () => {
       if (!supabase || !orgId) {
@@ -731,7 +733,7 @@ export default function CommandCenterOperationalPage() {
   });
   const weeklyLaborCostQuery = useQuery({
     queryKey: ['dashboard-weekly-labor-cost', orgId ?? 'no-org', todayKey, propertyScope ?? 'all', storeEmployees.length],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       if (!supabase || !orgId) {
@@ -1005,7 +1007,7 @@ export default function CommandCenterOperationalPage() {
       storeEmployees.length,
       storeProperties.length,
     ],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 60,
     queryFn: async () => {
       if (!supabase || !orgId) {
@@ -1057,7 +1059,7 @@ export default function CommandCenterOperationalPage() {
   const openNeedsCount = morningNeedsQuery.data ?? 0;
   const openNeedsPreviewQuery = useQuery({
     queryKey: ['dashboard-open-needs-preview', orgId ?? 'no-org', propertyScope ?? 'all', todayKey],
-    enabled: Boolean(orgId),
+    enabled: Boolean(isHydrated && orgId),
     staleTime: 1000 * 30,
     queryFn: async () => {
       if (!supabase || !orgId) return [] as Array<{ id: string; title: string }>;
@@ -1082,7 +1084,7 @@ export default function CommandCenterOperationalPage() {
   const complianceStatusEnabled = false;
   const complianceStatusQuery = useQuery({
     queryKey: ['dashboard-compliance-status', orgId ?? 'no-org'],
-    enabled: Boolean(orgId) && complianceStatusEnabled,
+    enabled: Boolean(isHydrated && orgId) && complianceStatusEnabled,
     staleTime: 1000 * 60,
     retry: false,
     queryFn: async () => {

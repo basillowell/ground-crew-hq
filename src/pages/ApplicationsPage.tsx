@@ -43,6 +43,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import ChemicalSettings from '@/pages/settings/ChemicalSettings';
 import { useChemicalLogs } from '@/hooks/useChemicalLogs';
+import { useAppStore } from '@/store/appStore';
 
 type DraftMixItem = {
   productId: string;
@@ -154,15 +155,17 @@ function buildRestrictedEntry(
 
 export default function ApplicationsPage() {
   const { currentUser, currentPropertyId } = useAuth();
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const queryClient = useQueryClient();
   const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
   const orgScope = currentUser?.orgId;
+  const hydratedOrgScope = isHydrated ? orgScope : undefined;
 
-  const employeesQuery = useEmployees(propertyScope, orgScope);
-  const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgScope);
-  const propertiesQuery = useProperties(orgScope);
+  const employeesQuery = useEmployees(propertyScope, hydratedOrgScope);
+  const equipmentUnitsQuery = useEquipmentUnits(propertyScope, hydratedOrgScope);
+  const propertiesQuery = useProperties(hydratedOrgScope);
   const weatherLogsQuery = useWeatherDailyLogs();
-  const logsQuery = useChemicalLogs(orgScope, propertyScope);
+  const logsQuery = useChemicalLogs(hydratedOrgScope, propertyScope);
   const productsQuery = useChemicalProducts();
   const mixItemsQuery = useChemicalApplicationTankMixItems();
 
@@ -191,6 +194,7 @@ export default function ApplicationsPage() {
   }, []);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!orgScope) return;
     let isMounted = true;
 
@@ -230,7 +234,7 @@ export default function ApplicationsPage() {
     return () => {
       isMounted = false;
     };
-  }, [orgScope, propertyScope]);
+  }, [isHydrated, orgScope, propertyScope]);
 
   useEffect(() => {
     if (!applicationAreas.length && !employees.length && !equipmentUnits.length && !weatherLogs.length && !chemicalProducts.length) {

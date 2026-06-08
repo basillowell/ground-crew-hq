@@ -10,6 +10,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { toast } from '@/components/ui/sonner';
+import { useAppStore } from '@/store/appStore';
 
 const EMPLOYEES_PER_PAGE = 20;
 const FALLBACK_ROLES = [
@@ -154,6 +155,7 @@ function EmployeePagination({
 
 export default function EmployeesPage() {
   const { orgId, userRole } = useAuth();
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [properties, setProperties] = useState<PropertyRow[]>([]);
@@ -251,8 +253,9 @@ export default function EmployeesPage() {
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchPageData();
-  }, [fetchPageData]);
+  }, [fetchPageData, isHydrated]);
 
   const fetchMonthEntries = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -277,9 +280,10 @@ export default function EmployeesPage() {
   }, [monthCursor, orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!orgId || viewMode !== 'availability') return;
     void fetchMonthEntries();
-  }, [fetchMonthEntries, orgId, viewMode]);
+  }, [fetchMonthEntries, isHydrated, orgId, viewMode]);
 
   const employeePageCount = Math.max(1, Math.ceil(employees.length / EMPLOYEES_PER_PAGE));
   const visibleEmployees = useMemo(() => {

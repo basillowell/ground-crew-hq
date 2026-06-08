@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { handleSupabaseError } from '@/utils/handleSupabaseError';
+import { useAppStore } from '@/store/appStore';
 
 type TaskListItem = {
   id: string;
@@ -27,6 +28,7 @@ function groupedByCategory(tasks: TaskListItem[]) {
 
 export default function TasksCatalogPage() {
   const { currentUser } = useAuth();
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const orgId = currentUser?.orgId ?? '';
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,8 +71,9 @@ export default function TasksCatalogPage() {
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchTasks();
-  }, [fetchTasks]);
+  }, [fetchTasks, isHydrated]);
 
   const groups = useMemo(() => groupedByCategory(tasks), [tasks]);
   const orderedCategories = useMemo(() => Object.keys(groups).sort((a, b) => a.localeCompare(b)), [groups]);

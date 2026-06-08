@@ -13,6 +13,7 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
 import { createEvents, type EventAttributes } from 'ics';
 import { Loader2 } from 'lucide-react';
+import { useAppStore } from '@/store/appStore';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 
@@ -158,6 +159,7 @@ const QUICK_HOURS_OPTIONS = ['1', '1.5', '2', '2.5', '3', '4'];
 export default function MobileFieldWorkspacePage() {
   const LANG_STORAGE_KEY = 'ground-crew-field-lang';
   const { currentUser } = useAuth();
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [employee, setEmployee] = useState<EmployeeRecord | null>(null);
@@ -610,23 +612,26 @@ export default function MobileFieldWorkspacePage() {
   }, [LANG_STORAGE_KEY, applyFieldCache, boardDate, currentUser?.propertyId, employeeId, loadFieldCache, orgId, saveFieldCache]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchFieldData();
-  }, [fetchFieldData]);
+  }, [fetchFieldData, isHydrated]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     const handleOnline = () => {
       void syncQueue();
       void fetchFieldData();
     };
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
-  }, [fetchFieldData, syncQueue]);
+  }, [fetchFieldData, isHydrated, syncQueue]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (navigator.onLine) {
       void syncQueue();
     }
-  }, [syncQueue]);
+  }, [isHydrated, syncQueue]);
 
   const setSaving = (assignmentId: string, isSaving: boolean) => {
     setSavingIds((current) => ({ ...current, [assignmentId]: isSaving }));

@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEmployees } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { useAppStore } from '@/store/appStore';
 
 type MessageRecord = {
   id: string;
@@ -23,6 +24,7 @@ type MessageRecord = {
 };
 
 export default function MessagingPage() {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const [selected, setSelected] = useState<string[]>([]);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -32,10 +34,11 @@ export default function MessagingPage() {
   const { currentPropertyId, currentUser } = useAuth();
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
 
-  const employeesQuery = useEmployees(propertyScope, currentUser?.orgId);
+  const employeesQuery = useEmployees(propertyScope, isHydrated ? currentUser?.orgId : undefined);
 
   const authUserQuery = useQuery({
     queryKey: ['messaging-auth-user'],
+    enabled: isHydrated,
     queryFn: async () => {
       if (!supabase) return null;
       const { data } = await supabase.auth.getUser();
@@ -46,7 +49,7 @@ export default function MessagingPage() {
 
   const messagesQuery = useQuery<MessageRecord[]>({
     queryKey: ['messages', authUserQuery.data?.id ?? 'anonymous'],
-    enabled: Boolean(authUserQuery.data?.id && supabase),
+    enabled: Boolean(isHydrated && authUserQuery.data?.id && supabase),
     queryFn: async () => {
       if (!supabase || !authUserQuery.data?.id) return [];
       const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(20);
@@ -62,6 +65,7 @@ export default function MessagingPage() {
   });
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!supabase || !authUserQuery.data?.id) return;
     const channel = supabase
       .channel(`messages-live-${authUserQuery.data.id}`)
@@ -73,7 +77,7 @@ export default function MessagingPage() {
     return () => {
       void channel.unsubscribe();
     };
-  }, [authUserQuery.data?.id, queryClient]);
+  }, [authUserQuery.data?.id, isHydrated, queryClient]);
 
   const employees = employeesQuery.data ?? [];
   const recentMessages = messagesQuery.data ?? [];

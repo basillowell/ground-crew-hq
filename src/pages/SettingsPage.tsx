@@ -11,6 +11,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
+import { useAppStore } from '@/store/appStore';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'SOPs', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -238,6 +239,7 @@ function WorkspaceTab({
   userRole: string | null;
   currentPropertyId: string;
 }) {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const SOP_STORAGE_KEY = 'ground-crew-sops';
   const sopCategoryOptions: StandardOperatingProcedure['category'][] = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
   const defaultSops: StandardOperatingProcedure[] = [
@@ -394,9 +396,10 @@ function WorkspaceTab({
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!orgId) return;
     void fetchWorkspaceData();
-  }, [fetchWorkspaceData, orgId]);
+  }, [fetchWorkspaceData, isHydrated, orgId]);
 
   const saveOrganization = async () => {
     if (!supabase || !orgId || !orgNameDraft.trim()) return;
@@ -1357,6 +1360,7 @@ function WorkspaceTab({
 }
 
 function WorkforceTab({ orgId }: { orgId: string | null }) {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
   const [newDepartmentName, setNewDepartmentName] = useState('');
@@ -1387,9 +1391,10 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!orgId) return;
     void fetchWorkforceSummary();
-  }, [fetchWorkforceSummary, orgId]);
+  }, [fetchWorkforceSummary, isHydrated, orgId]);
 
   const addDepartment = useCallback(async () => {
     if (!supabase || !orgId || !newDepartmentName.trim()) return;
@@ -1564,6 +1569,7 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
 }
 
 function WeatherTab({ orgId }: { orgId: string | null }) {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const [locations, setLocations] = useState<WeatherLocationItem[]>([]);
   const [properties, setProperties] = useState<Array<{ id: string; name: string }>>([]);
   const [prefs, setPrefs] = useState<{ show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }>({
@@ -1642,9 +1648,10 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
   }, [orgId, stationPropertyId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!orgId) return;
     void fetchWeatherSettings();
-  }, [fetchWeatherSettings, orgId]);
+  }, [fetchWeatherSettings, isHydrated, orgId]);
 
   const savePrefs = useCallback(async (nextPrefs: { show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }) => {
     if (!supabase || !orgId) return;
@@ -2004,6 +2011,7 @@ function AccessTab({
   orgId: string | null;
   employeeName: string;
 }) {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [organizationName, setOrganizationName] = useState<string>('');
@@ -2092,9 +2100,10 @@ function AccessTab({
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!orgId) return;
     void fetchOrganizationName();
-  }, [fetchOrganizationName, orgId]);
+  }, [fetchOrganizationName, isHydrated, orgId]);
 
   const handleSignOut = async () => {
     try {
@@ -2344,6 +2353,7 @@ function HelpTab() {
 }
 
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const taskCategoryOptions = [
     'Mowing',
     'Irrigation',
@@ -2449,8 +2459,9 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchTasks();
-  }, [fetchTasks]);
+  }, [fetchTasks, isHydrated]);
 
   const addTask = async () => {
     if (!supabase || !orgId || !newName.trim()) return;
@@ -2844,6 +2855,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
 }
 
 function SchedulerTab({ orgId }: { orgId: string | null }) {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const [settings, setSettings] = useState<SchedulerSettings | null>(null);
   const [alertsConfig, setAlertsConfig] = useState<EscalationThresholds>(DEFAULT_ESCALATION_THRESHOLDS);
   const [loading, setLoading] = useState(true);
@@ -2934,12 +2946,14 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchSettings();
-  }, [fetchSettings]);
+  }, [fetchSettings, isHydrated]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchTemplates();
-  }, [fetchTemplates]);
+  }, [fetchTemplates, isHydrated]);
 
   if (!orgId) return <PageSkeleton />;
 

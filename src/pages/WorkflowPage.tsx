@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Bell, ChevronLeft, ChevronRight, Copy, RefreshCw, Save, StickyNote, Trash2 } from 'lucide-react';
 import { formatTime } from '@/utils/formatTime';
+import { useAppStore } from '@/store/appStore';
 
 type AssignmentStatus = 'planned' | 'pending' | 'in_progress' | 'done';
 
@@ -114,6 +115,7 @@ function statusPill(status: AssignmentStatus) {
 
 export default function WorkflowPage() {
   const { currentUser, currentPropertyId } = useAuth();
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const orgId = currentUser?.orgId ?? '';
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const [loading, setLoading] = useState(true);
@@ -222,8 +224,9 @@ export default function WorkflowPage() {
   }, [orgId, selectedDate, propertyId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchBoard();
-  }, [fetchBoard]);
+  }, [fetchBoard, isHydrated]);
 
   const fetchTaskLibrary = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -246,8 +249,9 @@ export default function WorkflowPage() {
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchTaskLibrary();
-  }, [fetchTaskLibrary]);
+  }, [fetchTaskLibrary, isHydrated]);
 
   const groupedTaskLibrary = useMemo(() => {
     return taskLibrary.reduce<Record<string, TaskLibraryItem[]>>((acc, task) => {

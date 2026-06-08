@@ -8,6 +8,7 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
+import { useAppStore } from '@/store/appStore';
 
 const RechartsResponsiveContainer = lazy(() =>
   import('recharts').then((m) => ({ default: m.ResponsiveContainer })),
@@ -194,6 +195,7 @@ function calculateShiftHours(shiftStart?: string | null, shiftEnd?: string | nul
 }
 
 export default function ReportsPage() {
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const [searchParams] = useSearchParams();
   const isFullReportView = searchParams.get('fullReport') === '1';
   const queryStartDate = searchParams.get('start');
@@ -396,9 +398,10 @@ export default function ReportsPage() {
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!orgId) return;
     void fetchReportData();
-  }, [fetchReportData, orgId]);
+  }, [fetchReportData, isHydrated, orgId]);
 
   const fetchTimesheetData = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -441,9 +444,10 @@ export default function ReportsPage() {
   }, [orgId, selectedPropertyId, timesheetWeekStart]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (!orgId) return;
     void fetchTimesheetData();
-  }, [fetchTimesheetData, orgId]);
+  }, [fetchTimesheetData, isHydrated, orgId]);
 
   const laborRows = useMemo<LaborSummaryRow[]>(() => {
     const byEmployee = new Map<string, LaborSummaryRow>();
