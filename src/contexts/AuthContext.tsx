@@ -2,6 +2,7 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useSt
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { initOrgSettings } from '@/lib/initOrgSettings';
+import { useAppStore } from '@/store/appStore';
 
 type AuthRole = 'admin' | 'manager' | 'employee';
 
@@ -164,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        useAppStore.getState().reset();
         setHasSession(false);
         setAuthState('no-session');
         setIsReady(true);
@@ -185,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isDev) {
           console.log('[Auth] app_users loaded', { orgId: appUser.org_id, role: appUser.role });
         }
+        await useAppStore.getState().hydrate(appUser.org_id);
 
         try {
           await initOrgSettings({ orgId: appUser.org_id });
@@ -252,6 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
+        useAppStore.getState().reset();
         setUser(null);
         setCurrentUser(null);
         setOrgId(null);
@@ -278,6 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       if (sessionError || !session?.user) {
+        useAppStore.getState().reset();
         setUser(null);
         setOrgId(null);
         setUserRole(null);
@@ -347,6 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCurrentPropertyId,
       signOut: async () => {
         if (!supabase) return;
+        useAppStore.getState().reset();
         await supabase.auth.signOut();
       },
       retryAuthHydration: async () => {
@@ -357,6 +363,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(data.session.user);
           await loadAppUser(data.session.user.id, data.session.user);
         } else {
+          useAppStore.getState().reset();
           setIsReady(true);
           setAuthState('no-session');
         }

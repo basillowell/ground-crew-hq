@@ -13,6 +13,7 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { useAppStore } from "@/store/appStore";
 import { formatTime } from "@/utils/formatTime";
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
@@ -188,6 +189,7 @@ function RouteElementBoundary({ children }: { children: ReactNode }) {
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { currentUser, isLoading, hasSession, authState, authDebugMessage, retryAuthHydration } = useAuth();
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const navigate = useNavigate();
   const [loadingTimeoutReached, setLoadingTimeoutReached] = useState(false);
 
@@ -246,6 +248,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
   if (!currentUser) return <Navigate to="/" replace />;
+  if (!isHydrated) return <RouteFallback />;
   return <>{children}</>;
 }
 

@@ -12,6 +12,15 @@ import { TableSkeleton } from '@/components/TableSkeleton';
 import { toast } from '@/components/ui/sonner';
 
 const EMPLOYEES_PER_PAGE = 20;
+const FALLBACK_ROLES = [
+  'Superintendent',
+  'Assistant Superintendent',
+  'Field Manager',
+  'Field Staff',
+  'Crew Leader',
+  'Irrigation Technician',
+  'Equipment Operator',
+].map((name) => ({ id: name.toLowerCase().replace(/\s+/g, '-'), name }));
 
 type EmployeeRow = {
   id: string;
@@ -215,21 +224,14 @@ export default function EmployeesPage() {
       .eq('active', true)
       .order('name', { ascending: true });
 
-    const rolesQuery = supabase
-      .from('workforce_roles')
-      .select('id, name')
-      .order('name', { ascending: true });
-
     const [
       { data: employeeRows, error: employeesError },
       { data: propertyRows, error: propertiesError },
       { data: departmentRows },
-      { data: roleRows },
     ] = await Promise.all([
       employeesQuery,
       propertiesQuery,
       departmentsQuery,
-      rolesQuery,
     ]);
 
     if (employeesError || propertiesError) {
@@ -244,21 +246,6 @@ export default function EmployeesPage() {
     setProperties((propertyRows ?? []) as PropertyRow[]);
     setDepartments(
       ((departmentRows ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()),
-    );
-    const fallbackRoles = [
-      'Superintendent',
-      'Assistant Superintendent',
-      'Field Manager',
-      'Field Staff',
-      'Crew Leader',
-      'Irrigation Technician',
-      'Equipment Operator',
-    ];
-    const roleOptions = ((roleRows ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim());
-    setRoles(
-      roleOptions.length > 0
-        ? roleOptions
-        : fallbackRoles.map((name) => ({ id: name.toLowerCase().replace(/\s+/g, '-'), name })),
     );
     setLoading(false);
   }, [orgId]);
@@ -318,11 +305,36 @@ export default function EmployeesPage() {
     return map;
   }, [properties]);
 
+  const fetchRoles = useCallback(async () => {
+    if (roles.length > 0) return;
+    if (!supabase || !orgId) {
+      setRoles(FALLBACK_ROLES);
+      return;
+    }
+
+    const { data, error: rolesError } = await supabase
+      .from('workforce_roles')
+      .select('id, name')
+      .eq('org_id', orgId)
+      .eq('active', true)
+      .order('name', { ascending: true });
+
+    if (rolesError) {
+      console.error('Failed to load workforce roles', rolesError);
+      setRoles(FALLBACK_ROLES);
+      return;
+    }
+
+    const roleOptions = ((data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim());
+    setRoles(roleOptions.length > 0 ? roleOptions : FALLBACK_ROLES);
+  }, [orgId, roles.length]);
+
   const openAddModal = useCallback(() => {
+    void fetchRoles();
     setAddDraft(emptyAddDraft());
     setIsAddModalDirty(false);
     setAddOpen(true);
-  }, []);
+  }, [fetchRoles]);
 
   const monthDays = useMemo(() => {
     const year = monthCursor.getFullYear();
@@ -503,6 +515,7 @@ export default function EmployeesPage() {
   }, [addDraft, closeAddModal, fetchPageData, isReadOnly, orgId]);
 
   const startEdit = useCallback((employee: EmployeeRow) => {
+    void fetchRoles();
     setEditingId(employee.id);
     setEditDraft({
       first_name: employee.first_name ?? '',
@@ -515,7 +528,7 @@ export default function EmployeesPage() {
       employment_type: employee.employment_type ?? 'Full-time',
       language: employee.language ?? 'English',
     });
-  }, []);
+  }, [fetchRoles]);
 
   const cancelEdit = useCallback(() => {
     setEditingId(null);

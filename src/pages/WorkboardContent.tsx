@@ -821,7 +821,7 @@ export default function WorkboardContent() {
   });
   const workOrdersQuery = useQuery({
     queryKey: ['work-orders', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(currentUser?.orgId),
+    enabled: Boolean(currentUser?.orgId && workOrdersExpanded),
     queryFn: async () => {
       if (!supabase) return [] as Array<Record<string, unknown>>;
       let query = supabase.from('work_orders').select('*').order('created_at', { ascending: false });
@@ -1015,7 +1015,7 @@ export default function WorkboardContent() {
 
   const recurringRulesQuery = useQuery({
     queryKey: ['recurring-task-rules', currentUser?.orgId ?? 'all-orgs', effectivePropertyId ?? 'all'],
-    enabled: Boolean(currentUser?.orgId),
+    enabled: false,
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       if (!supabase || !currentUser?.orgId) return [] as RecurringTaskRuleRow[];
@@ -1090,18 +1090,38 @@ export default function WorkboardContent() {
     }
   }, [assignmentsQuery.dataUpdatedAt, taskRequestsQuery.dataUpdatedAt]);
 
-  useEffect(() => {
+  const applyRecurringTasks = useCallback(async () => {
     if (!supabase || !currentUser?.orgId) return;
-    if (scheduleQuery.isLoading || assignmentsQuery.isLoading || recurringRulesQuery.isLoading) return;
-    if (dayAssignments.length > 0) return;
+    if (scheduleQuery.isLoading || assignmentsQuery.isLoading) {
+      toast.info('Crew assignments are still loading. Try again in a moment.');
+      return;
+    }
+    if (dayAssignments.length > 0) {
+      toast.info('Recurring tasks were not applied because this day already has assignments.');
+      return;
+    }
     const scheduledToday = scheduleList.filter((entry) => entry.date === boardDate && entry.status === 'scheduled');
-    if (scheduledToday.length === 0) return;
+    if (scheduledToday.length === 0) {
+      toast.info('No scheduled crew found for this date.');
+      return;
+    }
     const dayCode = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(`${boardDate}T00:00:00`).getDay()];
-    const rules = (recurringRulesQuery.data ?? []).filter((rule) => (rule.days_of_week ?? []).includes(dayCode));
-    if (rules.length === 0) return;
+    const recurringRulesResult = await recurringRulesQuery.refetch();
+    if (recurringRulesResult.error) {
+      toast.error(`Failed to load recurring tasks: ${recurringRulesResult.error.message}`);
+      return;
+    }
+    const rules = (recurringRulesResult.data ?? []).filter((rule) => (rule.days_of_week ?? []).includes(dayCode));
+    if (rules.length === 0) {
+      toast.info('No recurring tasks are scheduled for this day.');
+      return;
+    }
 
     const sessionKey = `recurring-applied-${currentUser.orgId}-${effectivePropertyId ?? 'all'}-${boardDate}`;
-    if (sessionStorage.getItem(sessionKey) === 'true') return;
+    if (sessionStorage.getItem(sessionKey) === 'true') {
+      toast.info('Recurring tasks have already been applied for this date.');
+      return;
+    }
 
     const tasksById = new Map(taskList.map((task) => [task.id, task]));
     const scheduledByEmployee = new Map(scheduledToday.map((entry) => [entry.employeeId, entry]));
@@ -1144,21 +1164,18 @@ export default function WorkboardContent() {
 
     if (inserts.length === 0) {
       sessionStorage.setItem(sessionKey, 'true');
+      toast.info('No recurring tasks matched today\'s scheduled crew.');
       return;
     }
 
-    const applyRecurring = async () => {
-      const { error } = await supabase.from('assignments').insert(inserts);
-      if (error) {
-        toast.error(`Failed to auto-apply recurring tasks: ${error.message}`);
-        return;
-      }
-      sessionStorage.setItem(sessionKey, 'true');
-      toast.success(`Auto-assigned ${inserts.length} recurring tasks to ${targetCrewCount} crew members`);
-      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-    };
-
-    void applyRecurring();
+    const { error } = await supabase.from('assignments').insert(inserts);
+    if (error) {
+      toast.error(`Failed to apply recurring tasks: ${error.message}`);
+      return;
+    }
+    sessionStorage.setItem(sessionKey, 'true');
+    toast.success(`Assigned ${inserts.length} recurring tasks to ${targetCrewCount} crew members`);
+    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
   }, [
     assignmentsQuery.isLoading,
     boardDate,
@@ -1166,8 +1183,7 @@ export default function WorkboardContent() {
     dayAssignments.length,
     effectivePropertyId,
     queryClient,
-    recurringRulesQuery.data,
-    recurringRulesQuery.isLoading,
+    recurringRulesQuery,
     scheduleList,
     scheduleQuery.isLoading,
     supabase,
@@ -3954,8 +3970,7 @@ export default function WorkboardContent() {
     scheduleQuery.isLoading ||
     tasksQuery.isLoading ||
     equipmentQuery.isLoading ||
-    notesQuery.isLoading ||
-    workOrdersQuery.isLoading;
+    notesQuery.isLoading;
   const boardErrorMessage =
     (propertiesQuery.error as { message?: string } | null)?.message ||
     (employeesQuery.error as { message?: string } | null)?.message ||
@@ -4107,6 +4122,14 @@ export default function WorkboardContent() {
                 {!isReadOnly ? (
                   <DropdownMenuItem onClick={() => void openQuickPlanDialog()} data-testid="button-open-quick-plan">
                     Quick Plan
+                  </DropdownMenuItem>
+                ) : null}
+                {!isReadOnly ? (
+                  <DropdownMenuItem
+                    onClick={() => void applyRecurringTasks()}
+                    disabled={recurringRulesQuery.isFetching}
+                  >
+                    {recurringRulesQuery.isFetching ? 'Loading Recurring Tasks...' : 'Apply Recurring Tasks'}
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem onClick={handlePrintDailyPlan} data-testid="button-export-workboard-plan">
@@ -4385,6 +4408,8 @@ export default function WorkboardContent() {
             </div>
             {!workOrdersExpanded ? (
               <p className="text-xs text-muted-foreground">Collapsed. Click Show to view work orders.</p>
+            ) : workOrdersQuery.isLoading ? (
+              <p className="text-xs text-muted-foreground">Loading work orders...</p>
             ) : workOrderBoardItems.length === 0 ? (
               <p className="text-xs text-muted-foreground">No work orders or schedule entries found for this date.</p>
             ) : (
