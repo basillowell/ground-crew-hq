@@ -486,7 +486,9 @@ Tag all features in code — gate is easy to add later:
 | 9 | Messaging rebuild | `BreakroomPage.tsx` | ❌ needs messages migration |
 | 10 | Client portal | `/portal/[clientToken]` (new) | ❌ needs clients migration |
 
-**Tasks 1–7 can start immediately. Tasks 8–10 require Claude to write migrations first.**
+**Tasks 1–7 can start immediately. Tasks 8–10 require Claude to write migrations first. Task 11 can run any time after Task 1.**
+
+| 11 | Landing page rebuild | `LandingPage.tsx` + `index.html` | ✓ |
 
 ---
 
@@ -501,6 +503,119 @@ Tag all features in code — gate is easy to add later:
 - No new npm packages without checking if Tailwind + existing deps cover it
 - No table or column names from memory — always from `docs/dev/live-db-state.md` (Rule 10)
 - No DB changes by Codex — Claude writes all migrations
+
+---
+
+## 14. TASK 11 — LANDING PAGE REBUILD
+
+### Current State (as of June 9, 2026)
+- Page title: "Ground Crew HQ — Weather-Aware Crew Scheduling for Turf & Grounds"
+- Meta description: "weather-aware scheduling, EPA chemical application logging"
+- OG tags: all reference weather as the hero claim
+- Pricing: not shown or stale
+- Auth behavior: redirects away from landing page immediately if session exists
+- Color tokens: hardcoded hex, not using new surface/brand/text system
+
+### Auth Behavior Fix (Critical)
+Current behavior likely auto-redirects authenticated users away from `/` to `/app`.
+**Required change:** Landing page must be visible to everyone — authenticated or not.
+- Remove any `useEffect` that redirects on session detect from the landing page
+- Add explicit "Go to App →" CTA button that only appears when `session !== null`
+- User stays on landing page until they click into the app or log out
+- This lets logged-in users share the URL, bookmark it, refresh without losing context
+
+```tsx
+// Pattern for auth-aware landing page CTA
+const { session } = useAuth() // or however session is accessed
+// ...
+{session ? (
+  <Link to="/app/scheduler" className="...">
+    Go to App →
+  </Link>
+) : (
+  <button onClick={() => setShowLogin(true)} className="...">
+    Start Free
+  </button>
+)}
+```
+
+### Value Prop Copy — Replace Throughout
+| Current | Replace With |
+|---|---|
+| "Weather-Aware Crew Scheduling" | "The Operations Brain for Your Grounds Crew" |
+| "Your Crew. Your Weather. One Platform." | "Scheduling. Dispatch. Payroll. One Platform." |
+| "live weather intelligence, spray window alerts" | "GPS clock-in, drag-drop dispatch, automated invoicing" |
+| "weather-aware scheduling" | "operations scheduling" |
+| "spray windows" as hero | Move to features list as passive assist |
+
+### Meta Tags — Update in index.html
+```html
+<title>Ground Crew HQ — Grounds Crew Operations Software</title>
+<meta name="description" content="Scheduling, dispatch, GPS clock in/out, and job costing for golf courses, landscaping, and grounds teams. Built for crew supervisors." />
+<meta property="og:title" content="Ground Crew HQ — Operations Software for Grounds Teams" />
+<meta property="og:description" content="Drag-drop dispatch, GPS-verified clock in/out, recurring jobs, and invoicing — everything your grounds crew needs in one place." />
+<meta name="twitter:title" content="Ground Crew HQ — Grounds Crew Operations" />
+<meta name="twitter:description" content="Scheduling, dispatch, GPS clock in/out, and invoicing for grounds teams." />
+```
+
+### Feature Highlights Section — Replace Weather With
+```
+✓ Drag-drop dispatch board      — plan the day in minutes
+✓ GPS clock in/out              — verified labor tracking
+✓ Recurring job automation      — set schedules once
+✓ Job costing dashboard         — know your margin per job
+✓ Chemical compliance logs      — EPA-ready application records
+✓ Mobile field view             — built for crew members in the field
+```
+Weather stays as: "NWS spray window alerts built in — no extra setup"
+
+### Pricing Section — Add or Update
+```
+Starter  $29/mo   ≤10 crew   Scheduling, job tracking, field view
+Pro      $79/mo   ≤30 crew   + GPS clock in/out, recurring jobs, invoicing, job costing
+Enterprise  Custom           Route optimization, multi-location, API access
+```
+
+### Color Token Migration
+- Replace all hardcoded hex values with new tokens from Task 1
+- Hero section: `bg-surface-base`, headline `text-text-primary`, CTA `bg-brand-bright`
+- Feature cards: `bg-surface-card border-surface-border`
+- No glassmorphism on pricing cards — clean `bg-surface-elevated` only
+
+### Codex Prompt for Task 11
+```
+TASK: Rebuild landing page — value prop pivot, auth behavior fix, token migration
+FILES: 
+  - grep for LandingPage component file (likely src/pages/LandingPage.tsx or LaunchPortalPage.tsx)
+  - index.html (meta tags only)
+CONTEXT:
+  - New color tokens from Task 1 are live — use them, zero hardcoded hex
+  - Auth behavior fix is the most critical change — read carefully
+  - All copy changes in CODEX6.9.26.md Section 14
+  - No DB queries on this page — it is public-facing, no Supabase calls
+AUTH FIX:
+  - Find any useEffect or route guard that auto-redirects authenticated users away from /
+  - Remove the redirect — landing page is always visible
+  - Add "Go to App →" button that appears only when session exists, links to /app/scheduler
+  - Unauthenticated users see "Start Free" / "Log In" buttons as before
+COPY CHANGES:
+  - Update page title, hero headline, hero subheading per Section 14 copy table
+  - Update feature highlights list per Section 14
+  - Add or update pricing section per Section 14 tier map
+META TAGS:
+  - Update index.html title, description, og:title, og:description,
+    twitter:title, twitter:description per Section 14
+  - Do not change any other index.html content
+DESIGN:
+  - Use surface.*, brand.*, text.* tokens throughout — no hardcoded hex
+  - Hero CTA button: bg-brand-bright text-text-inverse
+  - Feature cards: bg-surface-card border border-surface-border rounded-xl
+  - Pricing cards: bg-surface-elevated border border-surface-border
+  - No glassmorphism on pricing — clean surfaces only
+  - Run npm run build — zero errors required
+  - After build: confirm zero hardcoded hex in edited files
+RULES: edit only listed files · no table renames · typed · return files+SQL+tests
+```
 
 ---
 
