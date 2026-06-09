@@ -2,22 +2,33 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { useProperties, useEmployees } from '@/lib/supabase-queries';
 import { useChemicalSettings } from '@/hooks/useChemicalSettings';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/sonner';
 import ProductManager from '@/components/chemicals/ProductManager';
+import { useAppStore } from '@/store/appStore';
 
 export default function ChemicalSettings() {
   const { currentUser } = useAuth();
   const orgId = currentUser?.orgId;
-  const propertiesQuery = useProperties(orgId);
-  const employeesQuery = useEmployees(undefined, orgId);
+  const storeProperties = useAppStore((state) => state.properties);
+  const storeEmployees = useAppStore((state) => state.employees);
   const { settings, setSettings, isLoading, isSaving, error, saveSettings } = useChemicalSettings();
   const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
 
-  const properties = propertiesQuery.data ?? [];
-  const employees = employeesQuery.data ?? [];
+  const properties = useMemo(
+    () => storeProperties.map(({ id, name }) => ({ id, name })),
+    [storeProperties],
+  );
+  const employees = useMemo(
+    () =>
+      storeEmployees.map(({ id, first_name, last_name }) => ({
+        id,
+        firstName: first_name,
+        lastName: last_name,
+      })),
+    [storeEmployees],
+  );
 
   const canSave = useMemo(() => Boolean(settings && orgId), [settings, orgId]);
 

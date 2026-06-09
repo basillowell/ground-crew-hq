@@ -9,7 +9,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOperations } from '@/contexts/OperationsContext';
 import {
   useAssignments,
-  useEmployees,
   useNotes,
   useScheduleEntries,
   useTasks,
@@ -19,6 +18,7 @@ import {
 import { formatTime } from '@/utils/formatTime';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { useAppStore } from '@/store/appStore';
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -28,16 +28,28 @@ export default function BreakroomPage() {
   const queryClient = useQueryClient();
   const { currentPropertyId, currentUser } = useAuth();
   const { currentDate, department } = useOperations();
+  const storeEmployees = useAppStore((state) => state.employees);
   const boardDate = toDateKey(currentDate);
   const propertyId = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
-  const employeesQuery = useEmployees(propertyId, currentUser?.orgId);
   const tasksQuery = useTasks(propertyId, currentUser?.orgId);
   const assignmentsQuery = useAssignments(boardDate, propertyId, currentUser?.orgId);
   const notesQuery = useNotes(propertyId, currentUser?.orgId);
   const scheduleEntriesQuery = useScheduleEntries(boardDate, propertyId, currentUser?.orgId);
   const weatherLogsQuery = useWeatherDailyLogs();
   const weatherLocationsQuery = useWeatherLocations();
-  const employees = employeesQuery.data ?? [];
+  const employees = useMemo(
+    () =>
+      storeEmployees.map((employee) => ({
+        id: employee.id,
+        propertyId: employee.property_id ?? undefined,
+        firstName: employee.first_name,
+        lastName: employee.last_name,
+        role: employee.role,
+        department: employee.department,
+        status: employee.status,
+      })),
+    [storeEmployees],
+  );
   const tasks = tasksQuery.data ?? [];
   const assignments = assignmentsQuery.data ?? [];
   const notes = notesQuery.data ?? [];
@@ -46,7 +58,6 @@ export default function BreakroomPage() {
   const weatherLocations = weatherLocationsQuery.data ?? [];
   const isLoading =
     !currentUser?.orgId ||
-    employeesQuery.isLoading ||
     tasksQuery.isLoading ||
     assignmentsQuery.isLoading ||
     notesQuery.isLoading ||
@@ -54,7 +65,6 @@ export default function BreakroomPage() {
     weatherLogsQuery.isLoading ||
     weatherLocationsQuery.isLoading;
   const errorMessage =
-    (employeesQuery.error as { message?: string } | null)?.message ||
     (tasksQuery.error as { message?: string } | null)?.message ||
     (assignmentsQuery.error as { message?: string } | null)?.message ||
     (notesQuery.error as { message?: string } | null)?.message ||
@@ -66,7 +76,6 @@ export default function BreakroomPage() {
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['employees'] }),
         queryClient.invalidateQueries({ queryKey: ['tasks'] }),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
         queryClient.invalidateQueries({ queryKey: ['notes'] }),
@@ -151,7 +160,6 @@ export default function BreakroomPage() {
         <ErrorRetry
           message={errorMessage}
           onRetry={() => {
-            void employeesQuery.refetch();
             void tasksQuery.refetch();
             void assignmentsQuery.refetch();
             void notesQuery.refetch();

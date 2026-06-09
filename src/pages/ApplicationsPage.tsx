@@ -32,9 +32,7 @@ import {
 import {
   useChemicalApplicationTankMixItems,
   useChemicalProducts,
-  useEmployees,
   useEquipmentUnits,
-  useProperties,
   useWeatherDailyLogs,
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
@@ -156,14 +154,14 @@ function buildRestrictedEntry(
 export default function ApplicationsPage() {
   const { currentUser, currentPropertyId } = useAuth();
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeEmployees = useAppStore((state) => state.employees);
+  const storeProperties = useAppStore((state) => state.properties);
   const queryClient = useQueryClient();
   const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
   const orgScope = currentUser?.orgId;
   const hydratedOrgScope = isHydrated ? orgScope : undefined;
 
-  const employeesQuery = useEmployees(propertyScope, hydratedOrgScope);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, hydratedOrgScope);
-  const propertiesQuery = useProperties(hydratedOrgScope);
   const weatherLogsQuery = useWeatherDailyLogs();
   const logsQuery = useChemicalLogs(hydratedOrgScope, propertyScope);
   const productsQuery = useChemicalProducts();
@@ -171,9 +169,59 @@ export default function ApplicationsPage() {
 
   const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
   const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
-  const employees = employeesQuery.data ?? [];
+  const employees = useMemo<Employee[]>(
+    () =>
+      storeEmployees
+        .filter((employee) => !propertyScope || employee.property_id === propertyScope)
+        .map((employee) => ({
+          id: employee.id,
+          propertyId: employee.property_id ?? undefined,
+          firstName: employee.first_name,
+          lastName: employee.last_name,
+          role: employee.role,
+          department: employee.department,
+          status: (employee.status as Employee['status']) ?? 'active',
+          phone: employee.phone ?? '',
+          email: employee.email ?? '',
+          group: employee.group_name ?? employee.department ?? 'General',
+          wage: Number(employee.hourly_rate ?? 0),
+          photo: '',
+          language: employee.language ?? 'English',
+          workerType: (employee.worker_type as Employee['workerType']) ?? 'full-time',
+          jobDescriptionId: employee.job_description_id ?? undefined,
+          jobDescription: employee.job_description ?? undefined,
+          employmentStatusId: employee.employment_status_id ?? undefined,
+          employmentStatus: employee.employment_status ?? undefined,
+          wageCategoryId: employee.wage_category_id ?? undefined,
+          overtimeRuleId: employee.overtime_rule_id ?? undefined,
+          hireDate: employee.created_at?.slice(0, 10) ?? '',
+          defaultLocationId: employee.default_location_id ?? undefined,
+          shiftTemplateId: employee.preferred_shift_template_id ?? undefined,
+          portalEnabled: employee.portal_enabled ?? false,
+          loginEmail: employee.login_email ?? undefined,
+        })),
+    [propertyScope, storeEmployees],
+  );
   const equipmentUnits = equipmentUnitsQuery.data ?? [];
-  const properties = propertiesQuery.data ?? [];
+  const properties = useMemo(
+    () =>
+      storeProperties.map((property) => ({
+        id: property.id,
+        name: property.name,
+        shortName: property.short_name,
+        type: 'Property' as const,
+        address: '',
+        city: property.city,
+        state: property.state,
+        latitude: property.latitude ?? undefined,
+        longitude: property.longitude ?? undefined,
+        acreage: Number(property.acreage ?? 0),
+        logoInitials: property.logo_initials,
+        color: property.color,
+        status: property.status as 'active' | 'inactive',
+      })),
+    [storeProperties],
+  );
   const weatherLogs = weatherLogsQuery.data ?? [];
   const logs = logsQuery.data ?? [];
   const chemicalProducts = productsQuery.data ?? [];

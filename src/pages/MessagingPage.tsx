@@ -7,13 +7,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Send, Mail, Phone, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEmployees } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { ErrorRetry } from '@/components/ErrorRetry';
 import { useAppStore } from '@/store/appStore';
 
 export default function MessagingPage() {
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeEmployees = useAppStore((state) => state.employees);
   const [selected, setSelected] = useState<string[]>([]);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -22,12 +21,20 @@ export default function MessagingPage() {
   const { currentPropertyId, currentUser } = useAuth();
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
 
-  const employeesQuery = useEmployees(propertyScope, isHydrated ? currentUser?.orgId : undefined);
-
   // TODO: Restore inbox history and realtime updates when a typed chat table is added to the live schema.
 
-  const employees = employeesQuery.data ?? [];
-  const loadError = (employeesQuery.error as { message?: string } | null)?.message || '';
+  const employees = useMemo(
+    () =>
+      storeEmployees
+        .filter((employee) => propertyScope === 'all' || !propertyScope || employee.property_id === propertyScope)
+        .map((employee) => ({
+          id: employee.id,
+          firstName: employee.first_name,
+          lastName: employee.last_name,
+          status: employee.status,
+        })),
+    [propertyScope, storeEmployees],
+  );
 
   const filtered = useMemo(
     () =>
@@ -50,21 +57,8 @@ export default function MessagingPage() {
     setBody('');
   };
 
-  if (!currentUser?.orgId || employeesQuery.isLoading) {
+  if (!currentUser?.orgId || !isHydrated) {
     return <PageSkeleton />;
-  }
-
-  if (loadError) {
-    return (
-      <div className="p-6">
-        <ErrorRetry
-          message={loadError}
-          onRetry={() => {
-            void employeesQuery.refetch();
-          }}
-        />
-      </div>
-    );
   }
 
   return (
