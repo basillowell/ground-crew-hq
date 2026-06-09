@@ -17,6 +17,32 @@ export default {
         sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       colors: {
+        surface: {
+          base: "#0a0f0c",
+          card: "#141f18",
+          elevated: "#1c2d22",
+          border: "#263d2d",
+          hover: "#1f3027",
+        },
+        brand: {
+          DEFAULT: "#84cc16",
+          bright: "#a3e635",
+          dim: "#4d7c0f",
+          ghost: "#1a2e10",
+        },
+        text: {
+          primary: "#f0f4f0",
+          secondary: "#8fa98f",
+          muted: "#556b55",
+          inverse: "#0a0f0c",
+        },
+        status: {
+          active: "#22c55e",
+          pending: "#f59e0b",
+          warning: "#ef4444",
+          complete: "#3b82f6",
+          hold: "#6b7280",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

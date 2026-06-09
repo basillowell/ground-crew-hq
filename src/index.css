@@ -142,3 +142,35 @@ All colors MUST be HSL.
     font-family: var(--brand-heading-font);
   }
 }
+
+@layer utilities {
+  .heading-xl {
+    @apply text-3xl font-bold tracking-tight text-text-primary;
+  }
+
+  .heading-lg {
+    @apply text-xl font-semibold tracking-tight text-text-primary;
+  }
+
+  .heading-md {
+    @apply text-base font-semibold text-text-primary;
+  }
+
+  .body-base {
+    @apply text-sm font-normal text-text-secondary;
+  }
+
+  .body-muted {
+    @apply text-xs font-normal text-text-muted;
+  }
+
+  .label-field {
+    @apply text-xs font-medium uppercase tracking-widest text-text-muted;
+  }
+
+  .glass-modal {
+    background: rgba(20, 31, 24, 0.85);
+    backdrop-filter: blur(16px) saturate(1.4);
+    border: 1px solid rgba(132, 204, 22, 0.12);
+  }
+}
