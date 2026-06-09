@@ -133,6 +133,11 @@ All colors MUST be HSL.
     @apply text-gray-900;
   }
 
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-gray-400;
+  }
+
   h1, h2, h3, h4, .brand-heading {
     font-family: var(--brand-heading-font);
   }
