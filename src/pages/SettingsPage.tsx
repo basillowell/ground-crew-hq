@@ -11,9 +11,10 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
+import { RecurringTasksSection } from '@/components/settings/RecurringTasksSection';
 import { useAppStore } from '@/store/appStore';
 
-const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'SOPs', 'Weather', 'Access', 'Help'] as const;
+const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'SOPs', 'Recurring Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
 
 interface SchedulerSettings {
@@ -214,6 +215,7 @@ export default function SettingsPage() {
         {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId} />}
         {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
         {tab === 'SOPs' && <SOPSettings key="sops" orgId={orgId} propertyId={taskPropertyId} />}
+        {tab === 'Recurring Tasks' && <RecurringTasksSection key="recurring-tasks" orgId={orgId} />}
         {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
       </fieldset>
       {tab === 'Access' && (
