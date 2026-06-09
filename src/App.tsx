@@ -35,6 +35,7 @@ const ApplicationsPage = lazy(() => import("./pages/ApplicationsPage"));
 const MobileFieldPage = lazy(() => import("./pages/MobileFieldWorkspacePage"));
 const JobCostingPage = lazy(() => import("./pages/JobCostingPage"));
 const InvoicingPage = lazy(() => import("./pages/InvoicingPage"));
+const ClientPortalPage = lazy(() => import("./pages/ClientPortalPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -402,6 +403,7 @@ function AppWithNotificationSetup() {
           <Route path="/" element={<RouteElementBoundary><LandingRoute /></RouteElementBoundary>} />
           <Route path="/pricing" element={<RouteElementBoundary><Suspense fallback={<RouteFallback />}><PricingPage /></Suspense></RouteElementBoundary>} />
           <Route path="/auth/reset" element={<RouteElementBoundary><Suspense fallback={<RouteFallback />}><ResetPasswordPage /></Suspense></RouteElementBoundary>} />
+          <Route path="/portal/:clientToken" element={<RouteElementBoundary><Suspense fallback={<RouteFallback />}><ClientPortalPage /></Suspense></RouteElementBoundary>} />
           <Route
             path="/app/*"
             element={(
