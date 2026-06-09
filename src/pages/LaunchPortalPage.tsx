@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BarChart3, CalendarDays, CheckCircle2, ClipboardList, Loader2, Radar, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
+import { BarChart3, CalendarDays, CheckCircle2, Clock, ClipboardList, Loader2, Repeat2, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,40 +26,40 @@ type TestimonialItem = {
 
 const FEATURES: FeatureItem[] = [
   {
-    icon: Radar,
-    title: 'Weather Intelligence Built In',
+    icon: CalendarDays,
+    title: 'Drag-Drop Dispatch Board',
     description:
-      'Live radar, spray window alerts, and severe weather notifications. No other scheduling tool has this.',
+      'Plan the entire week in minutes. Assign crew to properties, reorder on the fly, and see the full picture at a glance.',
     size: 'large',
   },
   {
-    icon: CalendarDays,
-    title: 'Schedule in Minutes',
-    description: 'Drag, drop, copy week. Templates that learn your patterns.',
+    icon: Clock,
+    title: 'GPS-Verified Clock In/Out',
+    description: 'Verified labor tracking that eliminates buddy-punching. Location recorded on every punch.',
     size: 'medium',
   },
   {
     icon: Smartphone,
-    title: 'Mobile Crew App',
-    description: 'Field page works with gloves on. English + Spanish. Offline mode.',
+    title: 'Mobile Field View',
+    description: 'Built for crew members in the field. Works with gloves on. English + Spanish.',
     size: 'medium',
   },
   {
-    icon: ClipboardList,
-    title: 'Task Dispatch',
-    description: 'Weather-conflict warnings before you send crew out.',
+    icon: Repeat2,
+    title: 'Recurring Job Automation',
+    description: 'Set schedules once — lawn care runs on repeat. No more manual weekly entry.',
     size: 'small',
   },
   {
     icon: BarChart3,
-    title: 'Reports That Justify the Budget',
-    description: 'Labor costs, completion rates, equipment health — the numbers your GM needs.',
+    title: 'Job Costing Dashboard',
+    description: 'Know your margin per job. Actual vs. estimated hours, labor cost, gross margin.',
     size: 'small',
   },
   {
-    icon: Wrench,
-    title: 'Equipment Tracking',
-    description: 'Service alerts before breakdowns happen.',
+    icon: ShieldCheck,
+    title: 'Chemical Compliance Logs',
+    description: 'EPA-ready application records. NWS spray window alerts built in — no extra setup.',
     size: 'small',
   },
 ];
@@ -117,7 +117,7 @@ function DarkInput(props: React.ComponentProps<typeof Input>) {
   return (
     <Input
       {...props}
-      className={`border-white/[0.10] bg-[#0f1a14] text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30 ${props.className ?? ''}`}
+      className={`border-white/[0.10] bg-surface-base text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30 ${props.className ?? ''}`}
     />
   );
 }
@@ -216,13 +216,14 @@ export default function LaunchPortalPage() {
     setForgotSuccess(false);
   };
 
-  // ── Existing auth effects (untouched) ──
+  // After form sign-in: navigate to app only when the user triggered it (isAwaitingProfile).
+  // Visiting the landing page while already authenticated shows "Go to App →" instead.
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && isAwaitingProfile) {
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
       setErrorMessage('');
-      navigate('/app/dashboard', { replace: true });
+      navigate('/app/scheduler', { replace: true });
       return;
     }
     if (isAwaitingProfile && !isLoading) {
@@ -332,27 +333,38 @@ export default function LaunchPortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f1a14] text-slate-100">
+    <div className="min-h-screen bg-surface-base text-slate-100">
       {/* ── Navbar ── */}
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#0f1a14]/90 backdrop-blur-md">
+      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-surface-base/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <div>
             <div className="text-base font-semibold tracking-tight text-slate-100">{appName}</div>
             <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{clientName}</div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              className="rounded-full px-4 py-2 text-sm text-slate-400 transition-colors duration-200 hover:text-slate-100"
-              onClick={() => openDialog('sign-in')}
-            >
-              Sign In
-            </button>
-            <button
-              className="animate-pulse-glow rounded-full bg-lime-400 px-5 py-2 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.4)]"
-              onClick={() => openDialog('sign-up')}
-            >
-              Start Free — No Credit Card
-            </button>
+            {currentUser ? (
+              <Link
+                to="/app/scheduler"
+                className="rounded-full bg-brand-bright px-5 py-2 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
+              >
+                Go to App →
+              </Link>
+            ) : (
+              <>
+                <button
+                  className="rounded-full px-4 py-2 text-sm text-text-secondary transition-colors duration-200 hover:text-text-primary"
+                  onClick={() => openDialog('sign-in')}
+                >
+                  Sign In
+                </button>
+                <button
+                  className="rounded-full bg-brand-bright px-5 py-2 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.4)]"
+                  onClick={() => openDialog('sign-up')}
+                >
+                  Start Free — No Credit Card
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -361,38 +373,49 @@ export default function LaunchPortalPage() {
         {/* ── Hero ── */}
         <section className="grid items-center gap-10 lg:grid-cols-2">
           <div className="animate-[hero-enter_600ms_ease-out_forwards] opacity-0 [animation-delay:120ms]">
-            <h1 className="bg-gradient-to-br from-slate-100 to-lime-400 bg-clip-text text-[clamp(2.5rem,6vw,4.5rem)] font-extrabold leading-[1.05] tracking-tight text-transparent">
-              Your crew ships more. Your schedule runs itself.
+            <h1 className="bg-gradient-to-br from-text-primary to-brand-bright bg-clip-text text-[clamp(2.5rem,6vw,4.5rem)] font-extrabold leading-[1.05] tracking-tight text-transparent">
+              The Operations Brain for Your Grounds Crew
             </h1>
-            <p className="mt-4 max-w-xl text-base leading-7 text-slate-400 md:text-lg">
-              Weather-aware scheduling, EPA-compliant chemical logs, and a mobile crew app that works with gloves on.
-              Built for golf course superintendents and grounds managers.
+            <p className="mt-4 max-w-xl text-base leading-7 text-text-secondary md:text-lg">
+              Scheduling. Dispatch. Payroll. One Platform. GPS clock-in, drag-drop dispatch,
+              and automated invoicing — built for golf course superintendents and grounds managers.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <button
-                className="animate-pulse-glow rounded-full bg-lime-400 px-8 py-3 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
-                onClick={() => openDialog('sign-up')}
-              >
-                Start Free — No Credit Card
-              </button>
-              <button
-                className="rounded-full border border-lime-400/40 px-8 py-3 text-sm font-semibold text-lime-400 transition-all duration-200 hover:border-lime-400 hover:bg-lime-400/10"
-                onClick={() => void handleDemoLogin()}
-              >
-                Try Live Demo
-              </button>
+              {currentUser ? (
+                <Link
+                  to="/app/scheduler"
+                  className="rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
+                >
+                  Go to App →
+                </Link>
+              ) : (
+                <>
+                  <button
+                    className="rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
+                    onClick={() => openDialog('sign-up')}
+                  >
+                    Start Free — No Credit Card
+                  </button>
+                  <button
+                    className="rounded-full border border-brand/40 px-8 py-3 text-sm font-semibold text-brand transition-all duration-200 hover:border-brand hover:bg-brand-ghost"
+                    onClick={() => void handleDemoLogin()}
+                  >
+                    Try Live Demo
+                  </button>
+                </>
+              )}
             </div>
-            <p className="mt-4 text-sm text-slate-500">Join 50+ facilities already running smarter crews</p>
+            <p className="mt-4 text-sm text-text-muted">Join 50+ facilities already running smarter crews</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs font-medium text-slate-400">Weather-Aware</span>
-              <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs font-medium text-slate-400">Bilingual Crews</span>
-              <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs font-medium text-slate-400">Mobile-First</span>
-              <span className="rounded-full border border-white/[0.08] px-3 py-1 text-xs font-medium text-slate-400">EPA Compliant</span>
+              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-secondary">GPS Clock In/Out</span>
+              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-secondary">Bilingual Crews</span>
+              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-secondary">Mobile-First</span>
+              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-secondary">EPA Compliant</span>
             </div>
           </div>
 
           {/* Dashboard mockup */}
-          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1a2d1f] shadow-2xl">
+          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-surface-card shadow-2xl">
             <div className="flex h-8 items-center gap-2 border-b border-white/[0.06] bg-black/20 px-3">
               <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
               <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
@@ -409,20 +432,20 @@ export default function LaunchPortalPage() {
               </div>
               <div className="space-y-3 p-3">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                  <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
                     <div className="text-[10px] text-slate-500">Crew</div>
                     <div className="text-sm font-semibold text-slate-100">3 Scheduled</div>
                   </div>
-                  <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                  <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
                     <div className="text-[10px] text-slate-500">Tasks</div>
                     <div className="text-sm font-semibold text-slate-100">8 Assigned</div>
                   </div>
-                  <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                  <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
                     <div className="text-[10px] text-slate-500">Weather</div>
                     <div className="text-sm font-semibold text-slate-100">84°F</div>
                   </div>
                 </div>
-                <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
                   <div className="mb-2 text-[10px] text-slate-500">Schedule Grid</div>
                   <div className="space-y-1">
                     <div className="h-5 rounded bg-lime-400/25" />
@@ -430,7 +453,7 @@ export default function LaunchPortalPage() {
                     <div className="h-5 rounded bg-amber-400/25" />
                   </div>
                 </div>
-                <div className="rounded-lg border border-white/[0.06] bg-[#243828] p-2">
+                <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
                   <div className="mb-2 text-[10px] text-slate-500">Spray Window Timeline</div>
                   <div className="flex h-3 overflow-hidden rounded-full">
                     <div className="w-1/2 bg-lime-400/60" />
@@ -445,16 +468,16 @@ export default function LaunchPortalPage() {
 
         {/* ── Why GCHQ comparison ── */}
         <section className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Why Ground Crew HQ?</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Why Ground Crew HQ?</h2>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
             {[
-              { title: 'vs. Spreadsheets', desc: 'Real-time crew tracking, weather alerts, mobile access.' },
-              { title: 'vs. Generic FSM', desc: 'Turf-specific workflows, spray windows, EPA compliance.' },
-              { title: 'vs. Enterprise Tools', desc: 'Starts at $100/mo. No implementation fee. No contract.' },
+              { title: 'vs. Spreadsheets', desc: 'Real-time crew tracking, GPS verification, mobile access.' },
+              { title: 'vs. Generic FSM', desc: 'Turf-specific workflows, recurring jobs, EPA compliance.' },
+              { title: 'vs. Enterprise Tools', desc: 'Starts at $29/mo. No implementation fee. No contract.' },
             ].map((item) => (
-              <div key={item.title} className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5">
-                <h3 className="text-sm font-semibold text-slate-100">{item.title}</h3>
-                <p className="mt-2 text-sm text-slate-400">{item.desc}</p>
+              <div key={item.title} className="rounded-2xl border border-surface-border bg-surface-card p-5">
+                <h3 className="text-sm font-semibold text-text-primary">{item.title}</h3>
+                <p className="mt-2 text-sm text-text-secondary">{item.desc}</p>
               </div>
             ))}
           </div>
@@ -462,15 +485,15 @@ export default function LaunchPortalPage() {
 
         {/* ── Bento Feature Grid ── */}
         <section className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Built for daily operations, not spreadsheets</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Built for daily operations, not spreadsheets</h2>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((feature) => {
               const Icon = feature.icon;
               const sizeClass = feature.size === 'large' ? 'md:col-span-2' : '';
               return (
                 <ScrollReveal key={feature.title} className={sizeClass}>
-                  <div className="group h-full rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-6 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] active:scale-[0.98]">
-                    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#243828] text-lime-400 transition-colors duration-200 group-hover:bg-lime-400/[0.12]">
+                  <div className="group h-full rounded-2xl border border-white/[0.06] bg-surface-card p-6 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] active:scale-[0.98]">
+                    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated text-lime-400 transition-colors duration-200 group-hover:bg-lime-400/[0.12]">
                       <Icon className="h-6 w-6" />
                     </div>
                     <h3 className="text-[18px] font-semibold leading-snug text-slate-100">{feature.title}</h3>
@@ -482,19 +505,95 @@ export default function LaunchPortalPage() {
           </div>
         </section>
 
+        {/* ── Pricing ── */}
+        <section className="mt-16">
+          <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Simple, Transparent Pricing</h2>
+          <p className="mt-2 text-sm text-text-secondary">No implementation fees. No contracts. Cancel anytime.</p>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {[
+              {
+                name: 'Starter',
+                price: '$29',
+                period: '/mo',
+                crew: '≤ 10 crew',
+                features: ['Scheduling & job tracking', 'Mobile field view', 'Team messaging', 'Equipment tracking'],
+                cta: 'Start Free',
+                highlight: false,
+              },
+              {
+                name: 'Pro',
+                price: '$79',
+                period: '/mo',
+                crew: '≤ 30 crew',
+                features: ['Everything in Starter', 'GPS clock in/out', 'Recurring jobs', 'Invoicing', 'Job costing dashboard'],
+                cta: 'Start Free',
+                highlight: true,
+              },
+              {
+                name: 'Enterprise',
+                price: 'Custom',
+                period: '',
+                crew: 'Unlimited crew',
+                features: ['Everything in Pro', 'Route optimization', 'Multi-location', 'API access', 'Dedicated support'],
+                cta: 'Contact Us',
+                highlight: false,
+              },
+            ].map((plan) => (
+              <div
+                key={plan.name}
+                className={`rounded-2xl border p-6 ${
+                  plan.highlight
+                    ? 'border-brand bg-surface-elevated'
+                    : 'border-surface-border bg-surface-elevated'
+                }`}
+              >
+                {plan.highlight && (
+                  <div className="mb-3 inline-flex rounded-full bg-brand-ghost px-2.5 py-0.5 text-xs font-semibold text-brand">
+                    Most Popular
+                  </div>
+                )}
+                <div className="text-lg font-bold text-text-primary">{plan.name}</div>
+                <div className="mt-1 flex items-baseline gap-0.5">
+                  <span className="text-3xl font-extrabold text-text-primary">{plan.price}</span>
+                  {plan.period && <span className="text-sm text-text-muted">{plan.period}</span>}
+                </div>
+                <div className="mt-0.5 text-xs text-text-muted">{plan.crew}</div>
+                <ul className="mt-4 space-y-2">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-sm text-text-secondary">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-brand" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => openDialog(plan.cta === 'Contact Us' ? 'sign-up' : 'sign-up')}
+                  className={`mt-6 w-full rounded-full py-2.5 text-sm font-semibold transition-all duration-200 ${
+                    plan.highlight
+                      ? 'bg-brand-bright text-text-inverse hover:brightness-110'
+                      : 'border border-surface-border bg-transparent text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {plan.cta}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* ── Testimonials ── */}
         <section className="mt-16">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Trusted by Grounds Teams Across the Country</h2>
-          <div className="mt-4 rounded-xl border border-white/[0.06] bg-[#1a2d1f] px-4 py-3 text-center text-sm font-medium text-slate-300">
+          <div className="mt-4 rounded-xl border border-white/[0.06] bg-surface-card px-4 py-3 text-center text-sm font-medium text-slate-300">
             500+ tasks dispatched · 2,000+ hours tracked · 50+ facilities
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {TESTIMONIALS.map((item) => (
               <div
                 key={item.quote}
-                className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-lime-400/10"
+                className="rounded-2xl border border-white/[0.06] bg-surface-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-lime-400/10"
               >
-                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#243828] text-sm font-semibold text-lime-400">
+                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-elevated text-sm font-semibold text-lime-400">
                   {item.initials}
                 </div>
                 <p className="text-sm leading-6 text-slate-300">"{item.quote}"</p>
@@ -506,7 +605,7 @@ export default function LaunchPortalPage() {
 
         {/* ── About ── */}
         <section className="mt-16">
-          <div className="rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-6 md:p-8">
+          <div className="rounded-2xl border border-white/[0.06] bg-surface-card p-6 md:p-8">
             <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Built by People Who Know the Course</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
               Ground Crew HQ was designed by turf professionals who&apos;ve walked the course at 5 AM, managed crews in
@@ -517,21 +616,30 @@ export default function LaunchPortalPage() {
 
         {/* ── Final CTA ── */}
         <section className="mt-16">
-          <div className="mx-auto max-w-2xl rounded-2xl border border-lime-400/20 bg-[#1a2d1f] p-8 text-center">
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Ready to run your crew smarter?</h2>
-            <button
-              className="mt-5 rounded-full bg-lime-400 px-8 py-3 text-sm font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
-              onClick={() => openDialog('sign-up')}
-            >
-              Start Free — No Credit Card
-            </button>
-            <p className="mt-3 text-sm text-slate-500">14-day free trial. All features included.</p>
+          <div className="mx-auto max-w-2xl rounded-2xl border border-brand/20 bg-surface-card p-8 text-center">
+            <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Ready to run your crew smarter?</h2>
+            {currentUser ? (
+              <Link
+                to="/app/scheduler"
+                className="mt-5 inline-block rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
+              >
+                Go to App →
+              </Link>
+            ) : (
+              <button
+                className="mt-5 rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
+                onClick={() => openDialog('sign-up')}
+              >
+                Start Free — No Credit Card
+              </button>
+            )}
+            <p className="mt-3 text-sm text-text-muted">14-day free trial. All features included.</p>
           </div>
         </section>
       </main>
 
       {/* ── Footer ── */}
-      <footer className="border-t border-white/[0.06] bg-[#0f1a14]">
+      <footer className="border-t border-white/[0.06] bg-surface-base">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-slate-500 md:flex-row md:px-6">
           <div>
             <div className="font-semibold text-slate-300">Ground Crew HQ</div>
@@ -550,7 +658,7 @@ export default function LaunchPortalPage() {
       <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
         <DialogContent
           aria-describedby="dialog-desc"
-          className="max-w-md border-white/[0.08] bg-[#1a2d1f] text-slate-100 backdrop-blur-xl"
+          className="max-w-md border-white/[0.08] bg-surface-card text-slate-100 backdrop-blur-xl"
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base text-slate-100">

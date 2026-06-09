@@ -717,5 +717,58 @@
 
 ---
 
-## Table count: 38
+## invoices
+| column      | type        | nullable | default        |
+|-------------|-------------|----------|----------------|
+| id          | uuid        | NO       | gen_random_uuid() |
+| org_id      | uuid        | NO       |                |
+| property_id | uuid        | YES      |                |
+| employee_id | uuid        | YES      |                |
+| status      | text        | NO       | 'draft'        |
+| line_items  | jsonb       | NO       | '[]'           |
+| subtotal    | numeric     | NO       | 0              |
+| tax_rate    | numeric     | NO       | 0              |
+| total       | numeric     | NO       | 0              |
+| notes       | text        | YES      |                |
+| created_at  | timestamptz | NO       | now()          |
+| sent_at     | timestamptz | YES      |                |
+| paid_at     | timestamptz | YES      |                |
+
+> status CHECK: ('draft','sent','paid','void')
+
+---
+
+## messages
+| column     | type        | nullable | default           |
+|------------|-------------|----------|-------------------|
+| id         | uuid        | NO       | gen_random_uuid() |
+| org_id     | uuid        | NO       |                   |
+| channel    | text        | NO       | 'general'         |
+| sender_id  | uuid        | NO       |                   |
+| body       | text        | NO       |                   |
+| created_at | timestamptz | NO       | now()             |
+
+> Realtime enabled via supabase_realtime publication.
+
+---
+
+## clients
+| column        | type        | nullable | default           |
+|---------------|-------------|----------|-------------------|
+| id            | uuid        | NO       | gen_random_uuid() |
+| org_id        | uuid        | NO       |                   |
+| name          | text        | NO       |                   |
+| email         | text        | YES      |                   |
+| phone         | text        | YES      |                   |
+| address       | text        | YES      |                   |
+| client_token  | uuid        | NO       | gen_random_uuid() |
+| notes         | text        | YES      |                   |
+| active        | boolean     | NO       | true              |
+| created_at    | timestamptz | NO       | now()             |
+
+> public_token_read policy: FOR SELECT USING (true) — allows public portal reads by client_token.
+
+---
+
+## Table count: 41
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl

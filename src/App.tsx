@@ -257,15 +257,8 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 function LandingRoute() {
-  const { currentUser, isLoading, hasSession, authState } = useAuth();
-  const mobileTarget =
-    typeof window !== "undefined" &&
-    (window.innerWidth < 768 || window.matchMedia("(display-mode: standalone)").matches)
-      ? "/app/field"
-      : "/app/dashboard";
-  if (!currentUser && (isLoading || authState === "checking-session" || authState === "loading-profile")) return <RouteFallback />;
-  if (currentUser) return <Navigate to={mobileTarget} replace />;
-  if (hasSession) return <Navigate to={mobileTarget} replace />;
+  // Landing page is visible to everyone — authenticated or not.
+  // Authenticated users see "Go to App →" inside LaunchPortalPage itself.
   return (
     <Suspense fallback={<RouteFallback />}>
       <LandingPage />
