@@ -21,6 +21,7 @@ import {
   Clock3,
   GripVertical,
   MapPin,
+  Plus,
   UserRound,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
@@ -209,6 +210,7 @@ function DispatchCell({
   taskById,
   propertyById,
   onOpen,
+  onCreateClick,
 }: {
   employeeId: string;
   date: string;
@@ -216,6 +218,7 @@ function DispatchCell({
   taskById: Map<string, TaskRow>;
   propertyById: Map<string, Property>;
   onOpen: (assignmentId: string) => void;
+  onCreateClick: () => void;
 }) {
   const cellId = `cell:${employeeId}:${date}`;
   const { isOver, setNodeRef } = useDroppable({
@@ -223,15 +226,19 @@ function DispatchCell({
     data: { type: 'cell', employeeId, date } satisfies CellData,
   });
 
+  const isEmpty = assignments.length === 0;
+
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        'min-h-32 border-l border-surface-border p-2 transition-colors',
+        'group min-h-32 border-l border-surface-border p-2 transition-colors',
         isOver ? 'bg-brand-ghost ring-2 ring-inset ring-brand' : 'bg-surface-base',
+        isEmpty && 'cursor-pointer hover:bg-surface-hover',
       )}
+      onClick={isEmpty ? onCreateClick : undefined}
     >
-      <SortableContext items={assignments.map((assignment) => assignment.id)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={assignments.map((a) => a.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-2">
           {assignments.map((assignment) => (
             <AssignmentCard
@@ -242,6 +249,14 @@ function DispatchCell({
               onOpen={() => onOpen(assignment.id)}
             />
           ))}
+          {isEmpty && (
+            <div className="flex items-center justify-center pt-6 opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="flex items-center gap-1 text-xs text-text-muted">
+                <Plus className="h-3 w-3" />
+                Add assignment
+              </span>
+            </div>
+          )}
         </div>
       </SortableContext>
     </div>
@@ -259,6 +274,15 @@ export default function DispatchBoardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  // Create-assignment slide-over state
+  const [createCell, setCreateCell] = useState<{ employeeId: string; date: string } | null>(null);
+  const [newTaskId, setNewTaskId] = useState('');
+  const [newPropertyId, setNewPropertyId] = useState('');
+  const [newStartTime, setNewStartTime] = useState('');
+  const [newEstimatedHours, setNewEstimatedHours] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -318,13 +342,12 @@ export default function DispatchBoardPage() {
     return () => {
       cancelled = true;
     };
-  }, [isHydrated, orgId, weekEndKey, weekStartKey]);
+  }, [isHydrated, orgId, weekEndKey, weekStartKey, refreshTick]);
 
-  const activeEmployees = useMemo(
+  // All employees rendered as rows — no active/status filter per dispatch spec
+  const sortedEmployees = useMemo(
     () =>
-      employees
-        .filter((employee) => employee.active !== false && employee.status === 'active')
-        .sort((left, right) => employeeName(left).localeCompare(employeeName(right))),
+      [...employees].sort((left, right) => employeeName(left).localeCompare(employeeName(right))),
     [employees],
   );
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
@@ -382,6 +405,42 @@ export default function DispatchBoardPage() {
     toast.success('Assignment moved');
   };
 
+  const openCreateSheet = (employeeId: string, date: string) => {
+    setNewTaskId('');
+    setNewPropertyId('');
+    setNewStartTime('');
+    setNewEstimatedHours('');
+    setCreateCell({ employeeId, date });
+  };
+
+  const handleCreateSave = async () => {
+    if (!orgId || !createCell) return;
+    setIsSaving(true);
+
+    const { error } = await supabase.from('assignments').insert({
+      employee_id: createCell.employeeId,
+      date: createCell.date,
+      task_id: newTaskId || null,
+      property_id: newPropertyId || null,
+      org_id: orgId,
+      status: 'planned',
+      start_time: newStartTime || null,
+      estimated_hours: newEstimatedHours ? parseFloat(newEstimatedHours) : null,
+    });
+
+    setIsSaving(false);
+
+    if (error) {
+      console.error('[DispatchBoard] Create failed:', error);
+      toast.error('Failed to create assignment.');
+      return;
+    }
+
+    toast.success('Assignment created');
+    setCreateCell(null);
+    setRefreshTick((t) => t + 1);
+  };
+
   const selectedTask = selectedAssignment?.task_id
     ? taskById.get(selectedAssignment.task_id)
     : undefined;
@@ -390,6 +449,10 @@ export default function DispatchBoardPage() {
     : undefined;
   const selectedProperty = selectedAssignment
     ? propertyById.get(selectedAssignment.property_id)
+    : undefined;
+
+  const createEmployee = createCell
+    ? employees.find((e) => e.id === createCell.employeeId)
     : undefined;
 
   return (
@@ -463,16 +526,16 @@ export default function DispatchBoardPage() {
                     <div key={row} className="h-32 animate-pulse bg-surface-elevated" />
                   ))}
                 </div>
-              ) : activeEmployees.length === 0 ? (
+              ) : sortedEmployees.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-surface-elevated">
                     <UserRound className="h-6 w-6 text-text-muted" />
                   </div>
-                  <p className="heading-md">No active crew members</p>
-                  <p className="body-base mt-1">Active employees will appear as dispatch rows.</p>
+                  <p className="heading-md">No crew members found</p>
+                  <p className="body-base mt-1">Add employees in Settings to populate the dispatch board.</p>
                 </div>
               ) : (
-                activeEmployees.map((employee) => (
+                sortedEmployees.map((employee) => (
                   <div
                     key={employee.id}
                     className="grid grid-cols-[220px_repeat(7,minmax(180px,1fr))] border-b border-surface-border last:border-b-0"
@@ -494,6 +557,7 @@ export default function DispatchBoardPage() {
                           taskById={taskById}
                           propertyById={propertyById}
                           onOpen={setSelectedAssignmentId}
+                          onCreateClick={() => openCreateSheet(employee.id, date)}
                         />
                       );
                     })}
@@ -505,6 +569,7 @@ export default function DispatchBoardPage() {
         </DndContext>
       </div>
 
+      {/* View assignment details */}
       <Sheet
         open={Boolean(selectedAssignment)}
         onOpenChange={(open) => {
@@ -582,6 +647,119 @@ export default function DispatchBoardPage() {
               </div>
             </div>
           ) : null}
+        </SheetContent>
+      </Sheet>
+
+      {/* Create assignment slide-over */}
+      <Sheet
+        open={Boolean(createCell)}
+        onOpenChange={(open) => {
+          if (!open) setCreateCell(null);
+        }}
+      >
+        <SheetContent className="overflow-y-auto border-surface-border bg-surface-elevated text-text-primary sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle className="text-text-primary">New Assignment</SheetTitle>
+            <SheetDescription className="text-text-secondary">
+              {createEmployee ? `Assign a task to ${employeeName(createEmployee)}` : 'Create a new assignment'}
+              {createCell
+                ? ` on ${new Date(`${createCell.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`
+                : ''}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-5">
+            <div>
+              <label className="label-field block" htmlFor="new-task">
+                Task
+              </label>
+              <select
+                id="new-task"
+                value={newTaskId}
+                onChange={(e) => setNewTaskId(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+              >
+                <option value="">— Select task —</option>
+                {tasks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label-field block" htmlFor="new-property">
+                Property
+              </label>
+              <select
+                id="new-property"
+                value={newPropertyId}
+                onChange={(e) => setNewPropertyId(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+              >
+                <option value="">— Select property —</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {propertyName(p)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label-field block" htmlFor="new-start-time">
+                Start time
+              </label>
+              <input
+                id="new-start-time"
+                type="time"
+                value={newStartTime}
+                onChange={(e) => setNewStartTime(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
+
+            <div>
+              <label className="label-field block" htmlFor="new-estimated-hours">
+                Estimated hours
+              </label>
+              <input
+                id="new-estimated-hours"
+                type="number"
+                min="0.5"
+                max="24"
+                step="0.5"
+                placeholder="e.g. 2.5"
+                value={newEstimatedHours}
+                onChange={(e) => setNewEstimatedHours(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCreateCell(null)}
+                className="flex-1 rounded-lg border border-surface-border bg-surface-card px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-hover"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCreateSave()}
+                disabled={isSaving}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-surface-base hover:bg-brand-bright disabled:opacity-60"
+              >
+                {isSaving ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                Create Assignment
+              </button>
+            </div>
+          </div>
         </SheetContent>
       </Sheet>
     </div>
