@@ -127,6 +127,12 @@ All colors MUST be HSL.
     background-image: none;
   }
 
+  input,
+  select,
+  textarea {
+    @apply text-gray-900;
+  }
+
   h1, h2, h3, h4, .brand-heading {
     font-family: var(--brand-heading-font);
   }

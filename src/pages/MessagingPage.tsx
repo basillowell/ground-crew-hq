@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -7,21 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Send, Mail, Phone, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEmployees } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { useAppStore } from '@/store/appStore';
-
-type MessageRecord = {
-  id: string;
-  subject?: string | null;
-  body?: string | null;
-  sender_id?: string | null;
-  recipient_id?: string | null;
-  created_at?: string | null;
-};
 
 export default function MessagingPage() {
   const isHydrated = useAppStore((state) => state.isHydrated);
@@ -30,62 +19,15 @@ export default function MessagingPage() {
   const [body, setBody] = useState('');
   const [search, setSearch] = useState('');
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const { currentPropertyId, currentUser } = useAuth();
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
 
   const employeesQuery = useEmployees(propertyScope, isHydrated ? currentUser?.orgId : undefined);
 
-  const authUserQuery = useQuery({
-    queryKey: ['messaging-auth-user'],
-    enabled: isHydrated,
-    queryFn: async () => {
-      if (!supabase) return null;
-      const { data } = await supabase.auth.getUser();
-      return data.user ?? null;
-    },
-    staleTime: 1000 * 60 * 10,
-  });
-
-  const messagesQuery = useQuery<MessageRecord[]>({
-    queryKey: ['messages', authUserQuery.data?.id ?? 'anonymous'],
-    enabled: Boolean(isHydrated && authUserQuery.data?.id && supabase),
-    queryFn: async () => {
-      if (!supabase || !authUserQuery.data?.id) return [];
-      const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(20);
-      if (error || !Array.isArray(data)) return [];
-      return (data as MessageRecord[]).filter((message) => {
-        if ('sender_id' in message || 'recipient_id' in message) {
-          return message.sender_id === authUserQuery.data?.id || message.recipient_id === authUserQuery.data?.id;
-        }
-        return true;
-      }) as MessageRecord[];
-    },
-    staleTime: 1000 * 60 * 5,
-  });
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    if (!supabase || !authUserQuery.data?.id) return;
-    const channel = supabase
-      .channel(`messages-live-${authUserQuery.data.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['messages'] });
-      })
-      .subscribe();
-
-    return () => {
-      void channel.unsubscribe();
-    };
-  }, [authUserQuery.data?.id, isHydrated, queryClient]);
+  // TODO: Restore inbox history and realtime updates when a typed chat table is added to the live schema.
 
   const employees = employeesQuery.data ?? [];
-  const recentMessages = messagesQuery.data ?? [];
-  const loadError =
-    (employeesQuery.error as { message?: string } | null)?.message ||
-    (messagesQuery.error as { message?: string } | null)?.message ||
-    (authUserQuery.error as { message?: string } | null)?.message ||
-    '';
+  const loadError = (employeesQuery.error as { message?: string } | null)?.message || '';
 
   const filtered = useMemo(
     () =>
@@ -108,7 +50,7 @@ export default function MessagingPage() {
     setBody('');
   };
 
-  if (!currentUser?.orgId || employeesQuery.isLoading || authUserQuery.isLoading) {
+  if (!currentUser?.orgId || employeesQuery.isLoading) {
     return <PageSkeleton />;
   }
 
@@ -119,8 +61,6 @@ export default function MessagingPage() {
           message={loadError}
           onRetry={() => {
             void employeesQuery.refetch();
-            void authUserQuery.refetch();
-            void messagesQuery.refetch();
           }}
         />
       </div>
@@ -168,25 +108,14 @@ export default function MessagingPage() {
           <div className="flex items-center justify-between gap-2">
             <div>
               <div className="text-sm font-semibold">Recent Messages</div>
-              <div className="text-xs text-muted-foreground">Live inbox activity for the current signed-in user.</div>
+              <div className="text-xs text-muted-foreground">Inbox history for the current signed-in user.</div>
             </div>
-            <Badge variant="outline">{recentMessages.length} recent</Badge>
+            <Badge variant="outline">Coming soon</Badge>
           </div>
           <div className="mt-3 space-y-2">
-            {messagesQuery.isLoading ? (
-              <div className="text-sm text-muted-foreground">Loading recent messages...</div>
-            ) : recentMessages.length > 0 ? (
-              recentMessages.slice(0, 3).map((message) => (
-                <div key={message.id} className="rounded-lg bg-background px-3 py-2">
-                  <div className="text-sm font-medium">{message.subject || 'Message'}</div>
-                  <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{message.body || 'No preview available.'}</div>
-                </div>
-              ))
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                No live messages yet, or the realtime messages table is not configured.
-              </div>
-            )}
+            <div className="text-sm text-muted-foreground">
+              Message history will appear here when inbox delivery is available.
+            </div>
           </div>
         </div>
 

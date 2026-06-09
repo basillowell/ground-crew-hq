@@ -196,6 +196,9 @@ function calculateShiftHours(shiftStart?: string | null, shiftEnd?: string | nul
 
 export default function ReportsPage() {
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeEmployees = useAppStore((state) => state.employees);
+  const storeProperties = useAppStore((state) => state.properties);
+  const storeOrg = useAppStore((state) => state.org);
   const [searchParams] = useSearchParams();
   const isFullReportView = searchParams.get('fullReport') === '1';
   const queryStartDate = searchParams.get('start');
@@ -207,8 +210,25 @@ export default function ReportsPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
     queryPropertyId || (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : 'all'),
   );
-  const [properties, setProperties] = useState<PropertyRow[]>([]);
-  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const properties = useMemo(
+    () => storeProperties.map((property) => ({ id: property.id, name: property.name })),
+    [storeProperties],
+  );
+  const employees = useMemo(
+    () =>
+      storeEmployees
+        .filter(
+          (employee) =>
+            selectedPropertyId === 'all' || employee.property_id === selectedPropertyId,
+        )
+        .map((employee) => ({
+          id: employee.id,
+          first_name: employee.first_name,
+          last_name: employee.last_name,
+          hourly_rate: employee.hourly_rate,
+        })),
+    [selectedPropertyId, storeEmployees],
+  );
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,7 +238,7 @@ export default function ReportsPage() {
   const [trendScheduleEntries, setTrendScheduleEntries] = useState<ScheduleEntryTrendRow[]>([]);
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
   const [openNeedsCount, setOpenNeedsCount] = useState(0);
-  const [organizationName, setOrganizationName] = useState('Ground Crew HQ');
+  const organizationName = storeOrg?.name ?? 'Ground Crew HQ';
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLogRow[]>([]);
   const [timesheetWeekStart, setTimesheetWeekStart] = useState<string>(() => toIsoDate(startOfWeek(new Date())));
   const [timesheetSchedules, setTimesheetSchedules] = useState<TimesheetScheduleRow[]>([]);
@@ -297,24 +317,17 @@ export default function ReportsPage() {
       trendScheduleEntriesQuery = trendScheduleEntriesQuery.eq('property_id', selectedPropertyId);
     }
 
-    let employeesQuery = supabase
-      .from('employees')
-      .select('id, first_name, last_name, hourly_rate')
-      .eq('org_id', orgId);
     let tasksQuery = supabase
       .from('tasks')
       .select('id, name, category')
       .eq('org_id', orgId);
 
     if (selectedPropertyId !== 'all') {
-      employeesQuery = employeesQuery.eq('property_id', selectedPropertyId);
       tasksQuery = tasksQuery.eq('property_id', selectedPropertyId);
     }
 
-    const [assignmentsResult, employeesResult, propertiesResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] = await Promise.all([
+    const [assignmentsResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] = await Promise.all([
       assignmentsQuery,
-      employeesQuery,
-      supabase.from('properties').select('id, name').eq('org_id', orgId).order('name', { ascending: true }),
       tasksQuery,
       trendAssignmentsQuery,
       trendScheduleEntriesQuery,
@@ -337,10 +350,9 @@ export default function ReportsPage() {
       openNeedsQuery = openNeedsQuery.eq('property_id', selectedPropertyId);
     }
 
-    const [equipmentResult, openNeedsResult, organizationResult] = await Promise.all([
+    const [equipmentResult, openNeedsResult] = await Promise.all([
       equipmentQuery,
       openNeedsQuery,
-      supabase.from('organizations').select('name').eq('id', orgId).maybeSingle(),
     ]);
     const weatherLogsResult = await supabase
       .from('weather_daily_logs')
@@ -350,26 +362,20 @@ export default function ReportsPage() {
 
     if (
       assignmentsResult.error ||
-      employeesResult.error ||
-      propertiesResult.error ||
       tasksResult.error ||
       trendAssignmentsResult.error ||
       trendScheduleEntriesResult.error ||
       equipmentResult.error ||
       openNeedsResult.error ||
-      organizationResult.error ||
       weatherLogsResult.error
     ) {
       setError(
         assignmentsResult.error?.message ??
-          employeesResult.error?.message ??
-          propertiesResult.error?.message ??
           tasksResult.error?.message ??
           trendAssignmentsResult.error?.message ??
           trendScheduleEntriesResult.error?.message ??
           equipmentResult.error?.message ??
           openNeedsResult.error?.message ??
-          organizationResult.error?.message ??
           weatherLogsResult.error?.message ??
           'Unable to load report data',
       );
@@ -378,14 +384,11 @@ export default function ReportsPage() {
     }
 
     setAssignments((assignmentsResult.data ?? []) as AssignmentRow[]);
-    setEmployees((employeesResult.data ?? []) as EmployeeRow[]);
-    setProperties((propertiesResult.data ?? []) as PropertyRow[]);
     setTasks((tasksResult.data ?? []) as TaskRow[]);
     setTrendAssignments((trendAssignmentsResult.data ?? []) as AssignmentRow[]);
     setTrendScheduleEntries((trendScheduleEntriesResult.data ?? []) as ScheduleEntryTrendRow[]);
     setEquipmentRows((equipmentResult.data ?? []) as EquipmentRow[]);
     setOpenNeedsCount(openNeedsResult.count ?? 0);
-    setOrganizationName(organizationResult.data?.name ?? 'Ground Crew HQ');
     setWeatherLogs(
       ((weatherLogsResult.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
         date: String(row.date ?? ''),

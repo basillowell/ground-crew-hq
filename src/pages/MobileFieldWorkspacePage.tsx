@@ -160,6 +160,8 @@ export default function MobileFieldWorkspacePage() {
   const LANG_STORAGE_KEY = 'ground-crew-field-lang';
   const { currentUser } = useAuth();
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeEmployees = useAppStore((state) => state.employees);
+  const storeProperties = useAppStore((state) => state.properties);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [employee, setEmployee] = useState<EmployeeRecord | null>(null);
@@ -355,8 +357,8 @@ export default function MobileFieldWorkspacePage() {
     const startOfDayIso = new Date(`${boardDate}T00:00:00`).toISOString();
     const endOfDayIso = new Date(`${boardDate}T23:59:59`).toISOString();
 
-    const [{ data: employeeRow, error: employeeError }, { data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: propertyRows, error: propertyError }, { data: clockRows, error: clockError }] = await Promise.all([
-      supabase.from('employees').select('id, first_name, last_name, language').eq('org_id', orgId).eq('id', employeeId).maybeSingle(),
+    const employeeRow = storeEmployees.find((employee) => employee.id === employeeId) ?? null;
+    const [{ data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: clockRows, error: clockError }] = await Promise.all([
       supabase
         .from('schedule_entries')
         .select('property_id, shift_start, shift_end')
@@ -376,10 +378,6 @@ export default function MobileFieldWorkspacePage() {
         .select('id, category')
         .eq('org_id', orgId),
       supabase
-        .from('properties')
-        .select('id, name')
-        .eq('org_id', orgId),
-      supabase
         .from('clock_events')
         .select('id, event_type, timestamp')
         .eq('org_id', orgId)
@@ -389,7 +387,7 @@ export default function MobileFieldWorkspacePage() {
         .order('timestamp', { ascending: true }),
     ]);
 
-    if (employeeError || shiftError || assignmentsError || tasksError || propertyError || clockError) {
+    if (shiftError || assignmentsError || tasksError || clockError) {
       const cached = loadFieldCache();
       if (cached) {
         applyFieldCache(cached);
@@ -398,11 +396,9 @@ export default function MobileFieldWorkspacePage() {
         return;
       }
       setError(
-        employeeError?.message ||
-          shiftError?.message ||
+        shiftError?.message ||
           assignmentsError?.message ||
           tasksError?.message ||
-          propertyError?.message ||
           clockError?.message ||
           'Unable to load field data.',
       );
@@ -487,24 +483,19 @@ export default function MobileFieldWorkspacePage() {
       return String(row.status ?? 'scheduled').toLowerCase() === 'scheduled';
     });
     const teammateIds = Array.from(new Set(teammateRows.map((row) => String(row.employee_id))));
-    let teammateEmployeeMap = new Map<string, { firstName: string; lastName: string; role: string | null }>();
-    if (teammateIds.length > 0) {
-      const { data: teammateEmployees } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, role')
-        .eq('org_id', orgId)
-        .in('id', teammateIds);
-      teammateEmployeeMap = new Map(
-        (teammateEmployees ?? []).map((row) => [
-          String(row.id),
+    const teammateIdSet = new Set(teammateIds);
+    const teammateEmployeeMap = new Map(
+      storeEmployees
+        .filter((employee) => teammateIdSet.has(employee.id))
+        .map((employee) => [
+          employee.id,
           {
-            firstName: String(row.first_name ?? ''),
-            lastName: String(row.last_name ?? ''),
-            role: row.role ? String(row.role) : null,
+            firstName: employee.first_name,
+            lastName: employee.last_name,
+            role: employee.role || null,
           },
         ]),
-      );
-    }
+    );
     const groupedTeammateTasks = new Map<string, FieldAssignment[]>();
     (teammateAssignmentRows ?? []).forEach((row) => {
       const teammateId = row.employee_id ? String(row.employee_id) : '';
@@ -568,8 +559,8 @@ export default function MobileFieldWorkspacePage() {
     setTaskMetaById(taskMap);
 
     const propertiesById = new Map<string, string>();
-    (propertyRows ?? []).forEach((property: PropertyRecord) => {
-      propertiesById.set(String(property.id), String(property.name));
+    storeProperties.forEach((property) => {
+      propertiesById.set(property.id, property.name);
     });
 
     if (shiftRow?.property_id && propertiesById.has(String(shiftRow.property_id))) {
@@ -609,7 +600,7 @@ export default function MobileFieldWorkspacePage() {
     });
     setIsOfflineData(false);
     setLoading(false);
-  }, [LANG_STORAGE_KEY, applyFieldCache, boardDate, currentUser?.propertyId, employeeId, loadFieldCache, orgId, saveFieldCache]);
+  }, [LANG_STORAGE_KEY, applyFieldCache, boardDate, currentUser?.propertyId, employeeId, loadFieldCache, orgId, saveFieldCache, storeEmployees, storeProperties]);
 
   useEffect(() => {
     if (!isHydrated) return;

@@ -316,17 +316,7 @@ function AppWithNotificationSetup() {
   useEffect(() => {
     if (!supabase || !currentUser) return;
 
-    const messagesChannel = supabase
-      .channel(`app-notify-messages-${currentUser.appUserId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${currentUser.authUser.id}` },
-        (payload) => {
-          const next = payload.new as { subject?: string | null; body?: string | null };
-          sendNotification("New message received", next.subject || next.body || "Open Messaging to view the latest message.", "/app/messaging");
-        },
-      )
-      .subscribe();
+    // TODO: Restore message notifications when a typed chat table is added to the live schema.
 
     const scheduleChannel = supabase
       .channel(`app-notify-schedule-${currentUser.employeeId}`)
@@ -392,7 +382,6 @@ function AppWithNotificationSetup() {
       .subscribe();
 
     return () => {
-      void messagesChannel.unsubscribe();
       void scheduleChannel.unsubscribe();
       void assignmentsChannel.unsubscribe();
     };

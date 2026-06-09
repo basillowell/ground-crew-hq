@@ -116,6 +116,7 @@ function statusPill(status: AssignmentStatus) {
 export default function WorkflowPage() {
   const { currentUser, currentPropertyId } = useAuth();
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeEmployees = useAppStore((state) => state.employees);
   const orgId = currentUser?.orgId ?? '';
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const [loading, setLoading] = useState(true);
@@ -168,16 +169,6 @@ export default function WorkflowPage() {
       return;
     }
 
-    const { data: employeesData, error: employeesError } = await supabase
-      .from('employees')
-      .select('id, first_name, last_name, role, department, property_id')
-      .eq('org_id', orgId);
-    if (employeesError) {
-      setError(employeesError.message);
-      setLoading(false);
-      return;
-    }
-
     const { data: assignmentsData, error: assignmentsError } = await supabase
       .from('assignments')
       .select('id, employee_id, property_id, date, title, location, notes, status, estimated_hours, actual_hours, completed_at, order_index')
@@ -192,7 +183,19 @@ export default function WorkflowPage() {
     }
 
     const employeeMap = new Map<string, LaborEmployee>(
-      ((employeesData ?? []) as LaborEmployee[]).map((emp) => [emp.id, emp]),
+      storeEmployees
+        .filter((employee) => employeeIds.includes(employee.id))
+        .map((employee) => [
+          employee.id,
+          {
+            id: employee.id,
+            first_name: employee.first_name,
+            last_name: employee.last_name,
+            role: employee.role,
+            department: employee.department,
+            property_id: employee.property_id,
+          },
+        ]),
     );
 
     const assignmentByEmployee = new Map<string, AssignmentRow[]>();
@@ -221,7 +224,7 @@ export default function WorkflowPage() {
 
     setCrewRows(builtRows);
     setLoading(false);
-  }, [orgId, selectedDate, propertyId]);
+  }, [orgId, selectedDate, propertyId, storeEmployees]);
 
   useEffect(() => {
     if (!isHydrated) return;

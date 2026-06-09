@@ -156,12 +156,24 @@ function EmployeePagination({
 export default function EmployeesPage() {
   const { orgId, userRole } = useAuth();
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeEmployees = useAppStore((state) => state.employees);
+  const storeProperties = useAppStore((state) => state.properties);
+  const storeDepartments = useAppStore((state) => state.departments);
+  const hydrateStore = useAppStore((state) => state.hydrate);
   const isReadOnly = String(userRole ?? '') === 'viewer';
-  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
-  const [properties, setProperties] = useState<PropertyRow[]>([]);
-  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+  const employees = useMemo(() => storeEmployees as EmployeeRow[], [storeEmployees]);
+  const properties = useMemo(
+    () => storeProperties.map((property) => ({ id: property.id, name: property.name })),
+    [storeProperties],
+  );
+  const departments = useMemo(
+    () =>
+      storeDepartments
+        .filter((department) => department.active)
+        .map((department) => ({ id: department.id, name: department.name })),
+    [storeDepartments],
+  );
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -197,65 +209,6 @@ export default function EmployeesPage() {
   useEffect(() => {
     document.title = 'Team — Ground Crew HQ';
   }, []);
-
-  const fetchPageData = useCallback(async () => {
-    if (!supabase || !orgId) {
-      setLoading(true);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const employeesQuery = supabase
-      .from('employees')
-      .select('id, first_name, last_name, role, department, property_id, org_id, status, active, email, phone, employment_type, language, hourly_rate')
-      .eq('org_id', orgId)
-      .order('last_name', { ascending: true });
-
-    const propertiesQuery = supabase
-      .from('properties')
-      .select('id, name')
-      .eq('org_id', orgId)
-      .order('name', { ascending: true });
-
-    const departmentsQuery = supabase
-      .from('departments')
-      .select('id, name')
-      .eq('org_id', orgId)
-      .eq('active', true)
-      .order('name', { ascending: true });
-
-    const [
-      { data: employeeRows, error: employeesError },
-      { data: propertyRows, error: propertiesError },
-      { data: departmentRows },
-    ] = await Promise.all([
-      employeesQuery,
-      propertiesQuery,
-      departmentsQuery,
-    ]);
-
-    if (employeesError || propertiesError) {
-      setError(employeesError?.message ?? propertiesError?.message ?? 'Unable to load employee roster.');
-      setEmployees([]);
-      setProperties([]);
-      setLoading(false);
-      return;
-    }
-
-    setEmployees((employeeRows ?? []) as EmployeeRow[]);
-    setProperties((propertyRows ?? []) as PropertyRow[]);
-    setDepartments(
-      ((departmentRows ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()),
-    );
-    setLoading(false);
-  }, [orgId]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    void fetchPageData();
-  }, [fetchPageData, isHydrated]);
 
   const fetchMonthEntries = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -514,9 +467,9 @@ export default function EmployeesPage() {
     }
 
     closeAddModal(true);
-    await fetchPageData();
+    await hydrateStore(orgId);
     toast.success(`Added employee: ${addDraft.first_name.trim()} ${addDraft.last_name.trim()}`);
-  }, [addDraft, closeAddModal, fetchPageData, isReadOnly, orgId]);
+  }, [addDraft, closeAddModal, hydrateStore, isReadOnly, orgId]);
 
   const startEdit = useCallback((employee: EmployeeRow) => {
     void fetchRoles();
@@ -570,9 +523,9 @@ export default function EmployeesPage() {
     }
 
     cancelEdit();
-    await fetchPageData();
+    await hydrateStore(orgId);
     toast.success(`Updated employee: ${editDraft.first_name.trim()} ${editDraft.last_name.trim()}`);
-  }, [cancelEdit, editDraft, fetchPageData, isReadOnly, orgId]);
+  }, [cancelEdit, editDraft, hydrateStore, isReadOnly, orgId]);
 
   const deactivateEmployee = useCallback(async (employee: EmployeeRow) => {
     if (isReadOnly) return;
@@ -595,11 +548,11 @@ export default function EmployeesPage() {
       return;
     }
 
-    await fetchPageData();
+    await hydrateStore(orgId);
     toast.success(`Deactivated employee: ${name}`);
-  }, [fetchPageData, isReadOnly, orgId]);
+  }, [hydrateStore, isReadOnly, orgId]);
 
-  if (!orgId || loading) {
+  if (!orgId || !isHydrated) {
     return (
       <div className="p-6">
         <TableSkeleton />
@@ -631,7 +584,7 @@ export default function EmployeesPage() {
         </Button>
       </div>
 
-      {error ? <ErrorRetry message={error} onRetry={() => void fetchPageData()} /> : null}
+      {error ? <ErrorRetry message={error} onRetry={() => orgId && void hydrateStore(orgId)} /> : null}
 
       {viewMode === 'availability' ? (
         <div className="space-y-3">

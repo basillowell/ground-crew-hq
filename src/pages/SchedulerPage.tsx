@@ -268,14 +268,14 @@ export default function SchedulerPage() {
       enabled: Boolean(isHydrated && currentUser?.orgId),
       retry: false,
       queryFn: async () => {
-        if (!supabase) return [] as ScheduleEntry[];
+        if (!supabase || !currentUser?.orgId) return [] as ScheduleEntry[];
         let query = supabase
           .from('schedule_entries')
           .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
+          .eq('org_id', currentUser.orgId)
           .eq('date', day.date)
           .order('shift_start');
         if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
-        if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
         const { data, error } = await query;
         if (error) throw error;
         return (data ?? []).map((row) => ({
@@ -573,6 +573,10 @@ export default function SchedulerPage() {
       toast.error('Database connection not available.');
       return;
     }
+    if (!currentUser?.orgId) {
+      toast.error('Organization context unavailable.');
+      return;
+    }
     if (draft.status === 'scheduled') {
       const startMinutes = draft.shiftStart ? Number(draft.shiftStart.slice(0, 2)) * 60 + Number(draft.shiftStart.slice(3, 5)) : 0;
       const endMinutes = draft.shiftEnd ? Number(draft.shiftEnd.slice(0, 2)) * 60 + Number(draft.shiftEnd.slice(3, 5)) : 0;
@@ -589,6 +593,10 @@ export default function SchedulerPage() {
       (propertyScope && propertyScope !== 'all' ? propertyScope : '') ||
       currentUser?.propertyId ||
       null;
+    if (!propertyId) {
+      toast.error('Select a property before saving the shift.');
+      return;
+    }
 
     const existing = scheduleList.find(
       (e) => e.employeeId === draft.employeeId && e.date === draft.date,
@@ -602,32 +610,18 @@ export default function SchedulerPage() {
       shift_start: draft.status === 'scheduled' ? draft.shiftStart : '00:00',
       shift_end: draft.status === 'scheduled' ? draft.shiftEnd : '00:00',
       status: draft.status,
-      is_day_off: draft.status !== 'scheduled',
       notes: draft.notes.trim() || null,
+      property_id: propertyId,
+      org_id: currentUser.orgId,
     };
-    if (propertyId) payload.property_id = propertyId;
-    if (currentUser?.orgId) payload.org_id = currentUser.orgId;
 
-    let response = existing
+    const response = existing
       ? await supabase
           .from('schedule_entries')
           .update(payload)
           .eq('id', existing.id)
-          .eq('org_id', currentUser?.orgId ?? '')
+          .eq('org_id', currentUser.orgId)
       : await supabase.from('schedule_entries').insert(payload);
-
-    if (response.error && /column/i.test(response.error.message)) {
-      const legacyPayload = { ...payload };
-      delete legacyPayload.is_day_off;
-      delete legacyPayload.notes;
-      response = existing
-        ? await supabase
-            .from('schedule_entries')
-            .update(legacyPayload)
-            .eq('id', existing.id)
-            .eq('org_id', currentUser?.orgId ?? '')
-        : await supabase.from('schedule_entries').insert(legacyPayload);
-    }
 
     setIsSaving(false);
 
@@ -644,14 +638,14 @@ export default function SchedulerPage() {
 
   async function handleDeleteShift() {
     if (isReadOnly) return;
-    if (!supabase) return;
+    if (!supabase || !currentUser?.orgId) return;
     const existing = scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
     if (!existing) { handleCloseModal(); return; }
     const { error } = await supabase
       .from('schedule_entries')
       .delete()
       .eq('id', existing.id)
-      .eq('org_id', currentUser?.orgId ?? '');
+      .eq('org_id', currentUser.orgId);
     if (error) { toast.error(`Failed to delete shift: ${error.message}`); return; }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
     handleCloseModal(true);

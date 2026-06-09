@@ -240,6 +240,11 @@ function WorkspaceTab({
   currentPropertyId: string;
 }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeOrg = useAppStore((state) => state.org);
+  const storeProperties = useAppStore((state) => state.properties);
+  const storeEmployees = useAppStore((state) => state.employees);
+  const storeDepartments = useAppStore((state) => state.departments);
+  const hydrateStore = useAppStore((state) => state.hydrate);
   const SOP_STORAGE_KEY = 'ground-crew-sops';
   const sopCategoryOptions: StandardOperatingProcedure['category'][] = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
   const defaultSops: StandardOperatingProcedure[] = [
@@ -273,7 +278,7 @@ function WorkspaceTab({
   const queryClient = useQueryClient();
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [orgNameDraft, setOrgNameDraft] = useState('');
-  const [properties, setProperties] = useState<PropertyItem[]>([]);
+  const properties = useMemo(() => storeProperties as PropertyItem[], [storeProperties]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -332,23 +337,12 @@ function WorkspaceTab({
     const monthEndKey = monthEnd.toISOString().slice(0, 10);
 
     const [
-      { data: orgData, error: orgError },
-      { data: propertiesData, error: propertiesError },
-      { count: employeesCount, error: employeesError },
       { count: tasksCount, error: tasksError },
       { count: scheduleCount, error: scheduleError },
       { count: weatherCount, error: weatherError },
-      { count: departmentsCount, error: departmentsError },
       { count: shiftTemplatesCount, error: shiftTemplatesError },
       { data: equipmentTypesData, error: equipmentTypesError },
     ] = await Promise.all([
-      supabase.from('organizations').select('name, plan, subscription_status, created_at').eq('id', orgId).single(),
-      supabase
-        .from('properties')
-        .select('id, name, short_name, logo_initials, color, city, state, latitude, longitude, acreage, status, created_at, org_id, weather_location_label')
-        .eq('org_id', orgId)
-        .order('name', { ascending: true }),
-      supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase
         .from('schedule_entries')
@@ -357,20 +351,15 @@ function WorkspaceTab({
         .gte('date', monthStartKey)
         .lte('date', monthEndKey),
       supabase.from('weather_locations').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('is_active', true),
-      supabase.from('departments').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('active', true),
       supabase.from('shift_templates').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('active', true),
       supabase.from('equipment_types').select('id, name, category').eq('org_id', orgId).eq('active', true).order('name', { ascending: true }),
     ]);
 
-    if (orgError || propertiesError || employeesError || tasksError || scheduleError || weatherError || departmentsError || shiftTemplatesError || equipmentTypesError) {
+    if (tasksError || scheduleError || weatherError || shiftTemplatesError || equipmentTypesError) {
       setError(
-        orgError?.message ??
-          propertiesError?.message ??
-          employeesError?.message ??
-          tasksError?.message ??
+        tasksError?.message ??
           scheduleError?.message ??
           weatherError?.message ??
-          departmentsError?.message ??
           shiftTemplatesError?.message ??
           equipmentTypesError?.message ??
           'Unable to load workspace settings',
@@ -379,21 +368,28 @@ function WorkspaceTab({
       return;
     }
 
-    setOrgInfo((orgData ?? null) as OrganizationInfo | null);
-    setOrgNameDraft(String((orgData as OrganizationInfo | null)?.name ?? ''));
-    setProperties((propertiesData ?? []) as PropertyItem[]);
+    const nextOrgInfo = storeOrg
+      ? ({
+          name: storeOrg.name,
+          plan: storeOrg.plan,
+          subscription_status: storeOrg.subscription_status,
+          created_at: '',
+        } satisfies OrganizationInfo)
+      : null;
+    setOrgInfo(nextOrgInfo);
+    setOrgNameDraft(String(nextOrgInfo?.name ?? ''));
     setEquipmentTypes((equipmentTypesData ?? []) as Array<{ id: string; name: string; category: string | null }>);
     setUsageStats({
-      properties: (propertiesData ?? []).length,
-      employees: employeesCount ?? 0,
+      properties: storeProperties.length,
+      employees: storeEmployees.length,
       tasks: tasksCount ?? 0,
       scheduleEntriesThisMonth: scheduleCount ?? 0,
       weatherLocations: weatherCount ?? 0,
-      departments: departmentsCount ?? 0,
+      departments: storeDepartments.filter((department) => department.active).length,
       shiftTemplates: shiftTemplatesCount ?? 0,
     });
     setLoading(false);
-  }, [orgId]);
+  }, [orgId, storeDepartments, storeEmployees.length, storeOrg, storeProperties.length]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -412,6 +408,7 @@ function WorkspaceTab({
       toast.error(`Failed to save organization name: ${updateError.message}`);
       return;
     }
+    await hydrateStore(orgId);
     setOrgInfo((current) => (current ? { ...current, name: orgNameDraft.trim() } : current));
     toast.success('Organization updated');
   };
@@ -419,25 +416,22 @@ function WorkspaceTab({
   const addProperty = async () => {
     if (!supabase || !orgId || !newPropertyName.trim()) return;
     setError(null);
-    const { data, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from('properties')
       .insert({
         name: newPropertyName.trim(),
         org_id: orgId,
-      })
-      .select('id, name, short_name, logo_initials, color, city, state, latitude, longitude, acreage, status, created_at, org_id, weather_location_label')
-      .single();
+      });
     if (insertError) {
       setError(insertError.message);
       toast.error(`Failed to add property: ${insertError.message}`);
       return;
     }
-    setProperties((current) => [...current, data as PropertyItem].sort((a, b) => a.name.localeCompare(b.name)));
+    await hydrateStore(orgId);
     toast.success(`Property added: ${newPropertyName.trim()}`);
     setNewPropertyName('');
     setNewPropertyAddress('');
     setNewPropertyTimezone('America/New_York');
-    await queryClient.invalidateQueries({ queryKey: ['properties'] });
   };
 
   const startPropertyEdit = (property: PropertyItem) => {
@@ -458,11 +452,7 @@ function WorkspaceTab({
       toast.error(`Failed to update property: ${updateError.message}`);
       return;
     }
-    setProperties((current) =>
-      current
-        .map((property) => (property.id === propertyId ? { ...property, name: editingPropertyName.trim() } : property))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    );
+    await hydrateStore(orgId);
     setEditingPropertyId(null);
     setEditingPropertyName('');
     toast.success(`Property renamed to ${editingPropertyName.trim()}`);
@@ -484,7 +474,7 @@ function WorkspaceTab({
       toast.error(`Failed to delete property: ${deleteError.message}`);
       return;
     }
-    setProperties((current) => current.filter((property) => property.id !== propertyId));
+    await hydrateStore(orgId);
     toast.success('Property deleted');
   };
 
@@ -578,8 +568,7 @@ function WorkspaceTab({
       return;
     }
 
-    const [{ count: employeeCount }, { count: taskCount }, { count: equipmentTypeCount }, { count: equipmentCount }] = await Promise.all([
-      supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+    const [{ count: taskCount }, { count: equipmentTypeCount }, { count: equipmentCount }] = await Promise.all([
       supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('equipment_types').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('equipment_units').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
@@ -594,7 +583,7 @@ function WorkspaceTab({
 
     let demoEmployees: Array<{ id: string; first_name: string; last_name: string }> = [];
 
-    if ((employeeCount ?? 0) < 3) {
+    if (storeEmployees.length < 3) {
       const employeeRows = demoEmployeesSeed.map((employee) => ({
         id: crypto.randomUUID(),
         org_id: orgId,
@@ -618,20 +607,11 @@ function WorkspaceTab({
       }
       demoEmployees = (insertedEmployees ?? []) as Array<{ id: string; first_name: string; last_name: string }>;
     } else {
-      const { data: existingEmployees, error: existingError } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name')
-        .eq('org_id', orgId)
-        .eq('status', 'active')
-        .order('last_name', { ascending: true })
-        .limit(4);
-      if (existingError) {
-        setLoadingDemoData(false);
-        setError(existingError.message);
-        toast.error(`Failed to read employees for demo seed: ${existingError.message}`);
-        return;
-      }
-      demoEmployees = (existingEmployees ?? []) as Array<{ id: string; first_name: string; last_name: string }>;
+      demoEmployees = storeEmployees
+        .filter((employee) => employee.active && employee.status === 'active')
+        .sort((left, right) => left.last_name.localeCompare(right.last_name))
+        .slice(0, 4)
+        .map(({ id, first_name, last_name }) => ({ id, first_name, last_name }));
     }
 
     const taskSeed = [
@@ -1361,7 +1341,16 @@ function WorkspaceTab({
 
 function WorkforceTab({ orgId }: { orgId: string | null }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
-  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+  const storeDepartments = useAppStore((state) => state.departments);
+  const hydrateStore = useAppStore((state) => state.hydrate);
+  const departments = useMemo(
+    () =>
+      storeDepartments
+        .filter((department) => department.active)
+        .map(({ id, name }) => ({ id, name }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [storeDepartments],
+  );
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
   const [newDepartmentName, setNewDepartmentName] = useState('');
   const [newRoleName, setNewRoleName] = useState('');
@@ -1376,16 +1365,17 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     if (!supabase || !orgId) return;
     setLoading(true);
     setError(null);
-    const [departmentResult, rolesResult] = await Promise.all([
-      supabase.from('departments').select('id, name').eq('org_id', orgId).eq('active', true).order('name', { ascending: true }),
-      supabase.from('workforce_roles').select('id, name').eq('org_id', orgId).eq('active', true).order('name', { ascending: true }),
-    ]);
-    if (departmentResult.error || rolesResult.error) {
-      setError(departmentResult.error?.message ?? rolesResult.error?.message ?? 'Failed to load workforce data');
+    const rolesResult = await supabase
+      .from('workforce_roles')
+      .select('id, name')
+      .eq('org_id', orgId)
+      .eq('active', true)
+      .order('name', { ascending: true });
+    if (rolesResult.error) {
+      setError(rolesResult.error.message);
       setLoading(false);
       return;
     }
-    setDepartments((departmentResult.data ?? []) as Array<{ id: string; name: string }>);
     setRoles(((rolesResult.data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()));
     setLoading(false);
   }, [orgId]);
@@ -1411,8 +1401,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     }
     toast.success(`Department added: ${newDepartmentName.trim()}`);
     setNewDepartmentName('');
-    await fetchWorkforceSummary();
-  }, [fetchWorkforceSummary, newDepartmentName, orgId]);
+    await hydrateStore(orgId);
+  }, [hydrateStore, newDepartmentName, orgId]);
 
   const saveDepartmentEdit = useCallback(async () => {
     if (!supabase || !orgId || !editingDepartmentId || !editingDepartmentName.trim()) return;
@@ -1429,8 +1419,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     toast.success(`Department updated: ${editingDepartmentName.trim()}`);
     setEditingDepartmentId(null);
     setEditingDepartmentName('');
-    await fetchWorkforceSummary();
-  }, [editingDepartmentId, editingDepartmentName, fetchWorkforceSummary, orgId]);
+    await hydrateStore(orgId);
+  }, [editingDepartmentId, editingDepartmentName, hydrateStore, orgId]);
 
   const deactivateDepartment = useCallback(async (departmentId: string, departmentName: string) => {
     if (!supabase || !orgId) return;
@@ -1447,8 +1437,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
       return;
     }
     toast.success(`Department deactivated: ${departmentName}`);
-    await fetchWorkforceSummary();
-  }, [fetchWorkforceSummary, orgId]);
+    await hydrateStore(orgId);
+  }, [hydrateStore, orgId]);
 
   const addRole = useCallback(async () => {
     if (!supabase || !orgId || !newRoleName.trim()) return;
@@ -1570,8 +1560,15 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
 
 function WeatherTab({ orgId }: { orgId: string | null }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeProperties = useAppStore((state) => state.properties);
   const [locations, setLocations] = useState<WeatherLocationItem[]>([]);
-  const [properties, setProperties] = useState<Array<{ id: string; name: string }>>([]);
+  const properties = useMemo(
+    () =>
+      storeProperties
+        .map(({ id, name }) => ({ id, name }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [storeProperties],
+  );
   const [prefs, setPrefs] = useState<{ show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }>({
     show_hourly: true,
     show_forecast: true,
@@ -1608,7 +1605,7 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
     if (!supabase || !orgId) return;
     setLoading(true);
     setError(null);
-    const [{ data: locationData, error: locationError }, { data: prefsData, error: prefsError }, { data: propertyData, error: propertyError }] = await Promise.all([
+    const [{ data: locationData, error: locationError }, { data: prefsData, error: prefsError }] = await Promise.all([
       supabase
         .from('weather_locations')
         .select('id, name, property, area, latitude, longitude, org_id, is_active')
@@ -1619,21 +1616,15 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
         .select('id, org_id, enabled_widgets')
         .eq('org_id', orgId)
         .maybeSingle(),
-      supabase
-        .from('properties')
-        .select('id, name')
-        .eq('org_id', orgId)
-        .order('name', { ascending: true }),
     ]);
 
-    if (locationError || prefsError || propertyError) {
-      setError(locationError?.message ?? prefsError?.message ?? propertyError?.message ?? 'Unable to load weather settings');
+    if (locationError || prefsError) {
+      setError(locationError?.message ?? prefsError?.message ?? 'Unable to load weather settings');
       setLoading(false);
       return;
     }
 
     setLocations((locationData ?? []) as WeatherLocationItem[]);
-    setProperties(((propertyData ?? []) as Array<{ id: string; name: string }>));
     const enabledWidgets = ((prefsData as WeatherDisplayPrefsRow | null)?.enabled_widgets ?? []) as string[];
     const hasWidgets = enabledWidgets.length > 0;
     setPrefs({
@@ -1641,11 +1632,11 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
       show_forecast: hasWidgets ? enabledWidgets.includes('daily-forecast') || enabledWidgets.includes('7day_forecast') : true,
       show_rainfall: hasWidgets ? enabledWidgets.includes('rain') || enabledWidgets.includes('precipitation') : true,
     });
-    if (!stationPropertyId && propertyData && propertyData.length > 0) {
-      setStationPropertyId(String(propertyData[0].id));
+    if (!stationPropertyId && properties.length > 0) {
+      setStationPropertyId(properties[0].id);
     }
     setLoading(false);
-  }, [orgId, stationPropertyId]);
+  }, [orgId, properties, stationPropertyId]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -2012,9 +2003,12 @@ function AccessTab({
   employeeName: string;
 }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeOrg = useAppStore((state) => state.org);
+  const storeProperties = useAppStore((state) => state.properties);
+  const storeEmployees = useAppStore((state) => state.employees);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [organizationName, setOrganizationName] = useState<string>('');
+  const organizationName = storeOrg?.name ?? '';
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'Manager' | 'Field Staff'>('Manager');
@@ -2045,18 +2039,7 @@ function AccessTab({
     sunday.setDate(monday.getDate() + 6);
     const weekEndKey = sunday.toISOString().slice(0, 10);
 
-    const [
-      orgResult,
-      propertiesCountResult,
-      employeesCountResult,
-      tasksCountResult,
-      scheduleCountResult,
-      assignmentsCountResult,
-      equipmentCountResult,
-    ] = await Promise.all([
-      supabase.from('organizations').select('name').eq('id', orgId).single(),
-      supabase.from('properties').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
-      supabase.from('employees').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+    const [tasksCountResult, scheduleCountResult, assignmentsCountResult, equipmentCountResult] = await Promise.all([
       supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase
         .from('schedule_entries')
@@ -2073,9 +2056,6 @@ function AccessTab({
     ]);
 
     const fetchError =
-      orgResult.error ??
-      propertiesCountResult.error ??
-      employeesCountResult.error ??
       tasksCountResult.error ??
       scheduleCountResult.error ??
       assignmentsCountResult.error ??
@@ -2087,17 +2067,16 @@ function AccessTab({
       return;
     }
 
-    setOrganizationName(String(orgResult.data?.name ?? ''));
     setSystemInfo({
-      propertyCount: propertiesCountResult.count ?? 0,
-      employeeCount: employeesCountResult.count ?? 0,
+      propertyCount: storeProperties.length,
+      employeeCount: storeEmployees.length,
       taskCount: tasksCountResult.count ?? 0,
       scheduleEntriesThisWeek: scheduleCountResult.count ?? 0,
       assignmentsToday: assignmentsCountResult.count ?? 0,
       equipmentUnits: equipmentCountResult.count ?? 0,
     });
     setLoading(false);
-  }, [orgId]);
+  }, [orgId, storeEmployees.length, storeProperties.length]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -2354,6 +2333,7 @@ function HelpTab() {
 
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const storeEmployees = useAppStore((state) => state.employees);
   const taskCategoryOptions = [
     'Mowing',
     'Irrigation',
@@ -2367,7 +2347,14 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     'Other',
   ] as const;
   const [tasks, setTasks] = useState<TaskLibraryItem[]>([]);
-  const [employees, setEmployees] = useState<Array<{ id: string; first_name: string; last_name: string; status: string | null }>>([]);
+  const employees = useMemo(
+    () =>
+      storeEmployees
+        .filter((employee) => employee.active)
+        .map(({ id, first_name, last_name, status }) => ({ id, first_name, last_name, status }))
+        .sort((left, right) => left.last_name.localeCompare(right.last_name)),
+    [storeEmployees],
+  );
   const [recurringRules, setRecurringRules] = useState<RecurringTaskRule[]>([]);
   const [recurringDrafts, setRecurringDrafts] = useState<Record<string, { enabled: boolean; days: string[]; assignMode: 'all' | 'specific'; employeeId: string }>>({});
   const [loading, setLoading] = useState(true);
@@ -2408,7 +2395,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
 
     setLoading(true);
     setError(null);
-    const [tasksResult, recurringResult, employeesResult] = await Promise.all([
+    const [tasksResult, recurringResult] = await Promise.all([
       supabase
         .from('tasks')
         .select('id, org_id, property_id, name, category, priority, estimated_hours')
@@ -2420,25 +2407,17 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
         .select('id, org_id, property_id, task_id, employee_id, days_of_week, active')
         .eq('org_id', orgId)
         .eq('active', true),
-      supabase
-        .from('employees')
-        .select('id, first_name, last_name, status')
-        .eq('org_id', orgId)
-        .eq('active', true)
-        .order('last_name', { ascending: true }),
     ]);
 
-    if (tasksResult.error || recurringResult.error || employeesResult.error) {
-      setError(tasksResult.error?.message ?? recurringResult.error?.message ?? employeesResult.error?.message ?? 'Failed to load task settings');
+    if (tasksResult.error || recurringResult.error) {
+      setError(tasksResult.error?.message ?? recurringResult.error?.message ?? 'Failed to load task settings');
       setLoading(false);
       return;
     }
     const nextTasks = (tasksResult.data as TaskLibraryItem[]) ?? [];
     const nextRules = (recurringResult.data as RecurringTaskRule[]) ?? [];
-    const nextEmployees = (employeesResult.data as Array<{ id: string; first_name: string; last_name: string; status: string | null }>) ?? [];
     setTasks(nextTasks);
     setRecurringRules(nextRules);
-    setEmployees(nextEmployees);
     setRecurringDrafts(() => {
       const byTask = new Map<string, RecurringTaskRule>();
       for (const rule of nextRules) {
