@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
 import { createEvents, type EventAttributes } from 'ics';
-import { Loader2 } from 'lucide-react';
+import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
@@ -99,10 +100,9 @@ type FieldSyncQueueItem =
         employee_id: string;
         property_id: string;
         org_id: string;
-        event_type: 'clock_in' | 'clock_out';
-        timestamp: string;
-        location_lat: null;
-        location_lng: null;
+        event_type: 'clock_in' | 'clock_out' | 'break';
+        location_lat: number;
+        location_lng: number;
       };
     };
 
@@ -156,7 +156,108 @@ function statusBadgeClass(status: AssignmentStatus) {
 
 const QUICK_HOURS_OPTIONS = ['1', '1.5', '2', '2.5', '3', '4'];
 
+function getCurrentPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Location services are not supported on this device.'));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 30_000,
+    });
+  });
+}
+
+function formatElapsedTime(startTimestamp: string | null, now: Date): string {
+  if (!startTimestamp) return '00:00:00';
+  const elapsedSeconds = Math.max(Math.floor((now.getTime() - new Date(startTimestamp).getTime()) / 1000), 0);
+  const hours = Math.floor(elapsedSeconds / 3600);
+  const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+  const seconds = elapsedSeconds % 60;
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+}
+
+function ClockInCard({
+  isClockedIn,
+  isOnBreak,
+  elapsedLabel,
+  propertyName,
+  saving,
+  onClockIn,
+  onClockOut,
+  onBreak,
+}: {
+  isClockedIn: boolean;
+  isOnBreak: boolean;
+  elapsedLabel: string;
+  propertyName: string;
+  saving: boolean;
+  onClockIn: () => void;
+  onClockOut: () => void;
+  onBreak: () => void;
+}) {
+  return (
+    <section className="mb-4 rounded-lg border border-surface-border bg-surface-card p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase text-text-muted">Time Clock</p>
+          <div className="mt-2 flex items-center gap-2 text-sm text-text-secondary">
+            <MapPin className="h-4 w-4 text-brand-bright" />
+            <span>{propertyName}</span>
+          </div>
+        </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-elevated">
+          <Clock3 className="h-5 w-5 text-brand-bright" />
+        </div>
+      </div>
+
+      {isClockedIn ? (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-surface-border bg-surface-elevated px-4 py-3 text-center">
+            <p className="text-xs uppercase text-text-muted">{isOnBreak ? 'On break' : 'Elapsed time'}</p>
+            <p className="mt-1 font-mono text-3xl font-bold text-text-primary">{elapsedLabel}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={saving || isOnBreak}
+              onClick={onBreak}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-status-pending/30 bg-status-pending/10 px-3 text-sm font-semibold text-status-pending disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coffee className="h-4 w-4" />}
+              Break
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={onClockOut}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-status-warning px-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+              Clock Out
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onClockIn}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-bright px-4 py-3 text-base font-bold text-text-inverse disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogIn className="h-5 w-5" />}
+          Clock In
+        </button>
+      )}
+    </section>
+  );
+}
+
 export default function MobileFieldWorkspacePage() {
+  const queryClient = useQueryClient();
   const LANG_STORAGE_KEY = 'ground-crew-field-lang';
   const { currentUser } = useAuth();
   const isHydrated = useAppStore((state) => state.isHydrated);
@@ -195,8 +296,9 @@ export default function MobileFieldWorkspacePage() {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!isHydrated) return;
     document.title = 'Field — Ground Crew HQ';
-  }, []);
+  }, [isHydrated]);
 
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
@@ -208,11 +310,13 @@ export default function MobileFieldWorkspacePage() {
   const onboardedKey = 'ground-crew-field-onboarded';
 
   useEffect(() => {
+    if (!isHydrated) return;
     const onboarded = window.localStorage.getItem(onboardedKey) === 'true';
     setShowWelcomeBanner(!onboarded);
-  }, [onboardedKey]);
+  }, [isHydrated, onboardedKey]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     const media = window.matchMedia('(display-mode: standalone)');
     const checkStandalone = () => {
       const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
@@ -221,9 +325,10 @@ export default function MobileFieldWorkspacePage() {
     checkStandalone();
     media.addEventListener('change', checkStandalone);
     return () => media.removeEventListener('change', checkStandalone);
-  }, []);
+  }, [isHydrated]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       const dismissedAtRaw = window.localStorage.getItem(installDismissKey);
@@ -240,7 +345,7 @@ export default function MobileFieldWorkspacePage() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, [isStandalone, installDismissKey]);
+  }, [isHydrated, isStandalone, installDismissKey]);
 
   const loadSyncQueue = useCallback((): FieldSyncQueueItem[] => {
     try {
@@ -294,7 +399,7 @@ export default function MobileFieldWorkspacePage() {
   }, []);
 
   const syncQueue = useCallback(async () => {
-    if (!supabase || !navigator.onLine) return;
+    if (!supabase || !navigator.onLine || !orgId) return;
     const queue = loadSyncQueue();
     if (queue.length === 0) return;
 
@@ -303,7 +408,11 @@ export default function MobileFieldWorkspacePage() {
 
     for (const item of queue) {
       if (item.type === 'assignment_status') {
-        const { error } = await supabase.from('assignments').update(item.payload).eq('id', item.assignmentId);
+        const { error } = await supabase
+          .from('assignments')
+          .update(item.payload)
+          .eq('id', item.assignmentId)
+          .eq('org_id', orgId);
         if (error) {
           remaining.push(item);
         } else {
@@ -322,15 +431,19 @@ export default function MobileFieldWorkspacePage() {
     saveSyncQueue(remaining);
     if (synced > 0) {
       window.dispatchEvent(new CustomEvent('ground-crew-sync-complete', { detail: { synced } }));
+      await queryClient.invalidateQueries({
+        queryKey: ['employee-mobile-clock-status', orgId, employeeId],
+      });
       toast.success(`Synced ${synced} offline change${synced === 1 ? '' : 's'}`);
       setIsOfflineData(false);
     }
-  }, [loadSyncQueue, saveSyncQueue]);
+  }, [employeeId, loadSyncQueue, orgId, queryClient, saveSyncQueue]);
 
   useEffect(() => {
-    const timerId = window.setInterval(() => setLiveNow(new Date()), 60_000);
+    if (!isHydrated) return;
+    const timerId = window.setInterval(() => setLiveNow(new Date()), 1_000);
     return () => window.clearInterval(timerId);
-  }, []);
+  }, [isHydrated]);
 
   const fetchFieldData = useCallback(async () => {
     if (!supabase || !employeeId || !orgId) {
@@ -353,9 +466,6 @@ export default function MobileFieldWorkspacePage() {
       setLoading(false);
       return;
     }
-
-    const startOfDayIso = new Date(`${boardDate}T00:00:00`).toISOString();
-    const endOfDayIso = new Date(`${boardDate}T23:59:59`).toISOString();
 
     const employeeRow = storeEmployees.find((employee) => employee.id === employeeId) ?? null;
     const [{ data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: clockRows, error: clockError }] = await Promise.all([
@@ -382,9 +492,8 @@ export default function MobileFieldWorkspacePage() {
         .select('id, event_type, timestamp')
         .eq('org_id', orgId)
         .eq('employee_id', employeeId)
-        .gte('timestamp', startOfDayIso)
-        .lte('timestamp', endOfDayIso)
-        .order('timestamp', { ascending: true }),
+        .order('timestamp', { ascending: false })
+        .limit(50),
     ]);
 
     if (shiftError || assignmentsError || tasksError || clockError) {
@@ -665,7 +774,11 @@ export default function MobileFieldWorkspacePage() {
       return;
     }
 
-    const { error: updateError } = await supabase.from('assignments').update(payload).eq('id', assignment.id);
+    const { error: updateError } = await supabase
+      .from('assignments')
+      .update(payload)
+      .eq('id', assignment.id)
+      .eq('org_id', orgId);
     setSaving(assignment.id, false);
 
     if (updateError) {
@@ -720,35 +833,26 @@ export default function MobileFieldWorkspacePage() {
     year: 'numeric',
   });
 
+  const latestClockEvent = clockEvents[0] ?? null;
   const latestClockIn = useMemo(
-    () => [...clockEvents].reverse().find((event) => event.eventType === 'clock_in') ?? null,
+    () => clockEvents.find((event) => event.eventType === 'clock_in') ?? null,
     [clockEvents],
   );
   const latestClockOut = useMemo(
-    () => [...clockEvents].reverse().find((event) => event.eventType === 'clock_out') ?? null,
+    () => clockEvents.find((event) => event.eventType === 'clock_out') ?? null,
     [clockEvents],
   );
 
-  const isShiftComplete = Boolean(
+  const isClockedIn = Boolean(
     latestClockIn &&
-      latestClockOut &&
-      new Date(latestClockOut.timestamp).getTime() >= new Date(latestClockIn.timestamp).getTime(),
+      latestClockEvent &&
+      (latestClockEvent.eventType === 'clock_in' || latestClockEvent.eventType === 'break'),
   );
-
-  const isClockedIn = Boolean(latestClockIn && !isShiftComplete);
-
-  const elapsedMinutes = useMemo(() => {
-    if (!latestClockIn || !isClockedIn) return 0;
-    const start = new Date(latestClockIn.timestamp).getTime();
-    const now = liveNow.getTime();
-    return Math.max(Math.round((now - start) / 60000), 0);
-  }, [isClockedIn, latestClockIn, liveNow]);
-
-  const elapsedLabel = useMemo(() => {
-    const hours = Math.floor(elapsedMinutes / 60);
-    const minutes = elapsedMinutes % 60;
-    return `${hours}h ${minutes}m`;
-  }, [elapsedMinutes]);
+  const isOnBreak = latestClockEvent?.eventType === 'break';
+  const elapsedLabel = useMemo(
+    () => formatElapsedTime(isClockedIn ? latestClockIn?.timestamp ?? null : null, liveNow),
+    [isClockedIn, latestClockIn?.timestamp, liveNow],
+  );
 
   const shiftCompleteLabel = useMemo(() => {
     if (!latestClockIn || !latestClockOut) return '';
@@ -763,26 +867,28 @@ export default function MobileFieldWorkspacePage() {
   }, [latestClockIn, latestClockOut, t.shiftComplete]);
 
   const handleClockEvent = useCallback(
-    async (eventType: 'clock_in' | 'clock_out') => {
+    async (eventType: 'clock_in' | 'clock_out' | 'break') => {
       if (!supabase || !employeeId || !orgId) return;
       const propertyId = shift?.propertyId ?? currentUser?.propertyId ?? null;
       if (!propertyId) {
         toast.error('Property is not available for clock event.');
         return;
       }
-      // employee?.id is fetched directly from the employees table during page load
-      // and is the authoritative employees.id that satisfies the RLS policy.
-      // employeeId (from currentUser) is the same FK but using employee?.id avoids
-      // any stale-cache mismatch between appUser.employee_id and the live employees row.
-      const resolvedEmployeeId = employee?.id ?? employeeId;
+      const storeEmployee = storeEmployees.find((entry) => entry.id === employeeId);
+      const resolvedEmployeeId = storeEmployee?.id ?? employee?.id ?? employeeId;
 
-      console.log('[CLOCK_EVENT_PAYLOAD]', {
-        'employee?.id': employee?.id,
-        employeeId,
-        resolvedEmployeeId,
-        propertyId,
-        orgId,
-      });
+      let position: GeolocationPosition;
+      try {
+        position = await getCurrentPosition();
+      } catch (locationError) {
+        const message = locationError instanceof GeolocationPositionError
+          ? 'Location permission is required to use the time clock.'
+          : locationError instanceof Error
+            ? locationError.message
+            : 'Unable to get your current location.';
+        toast.error(message);
+        return;
+      }
 
       setClockActionSaving(true);
       const optimisticEvent: ClockEventRecord = {
@@ -790,7 +896,7 @@ export default function MobileFieldWorkspacePage() {
         eventType,
         timestamp: new Date().toISOString(),
       };
-      setClockEvents((current) => [...current, optimisticEvent]);
+      setClockEvents((current) => [optimisticEvent, ...current]);
 
       if (!navigator.onLine) {
         enqueueSyncAction({
@@ -800,14 +906,23 @@ export default function MobileFieldWorkspacePage() {
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
-            timestamp: optimisticEvent.timestamp,
-            location_lat: null,
-            location_lng: null,
+            location_lat: position.coords.latitude,
+            location_lng: position.coords.longitude,
           },
         });
+        queryClient.setQueryData(
+          ['employee-mobile-clock-status', orgId, employeeId],
+          eventType,
+        );
         setClockActionSaving(false);
         setIsOfflineData(true);
-        toast.success(eventType === 'clock_in' ? 'Clock in saved offline' : 'Clock out saved offline');
+        toast.success(
+          eventType === 'clock_in'
+            ? 'Clock in saved offline'
+            : eventType === 'clock_out'
+              ? 'Clock out saved offline'
+              : 'Break saved offline',
+        );
         return;
       }
 
@@ -818,21 +933,15 @@ export default function MobileFieldWorkspacePage() {
           property_id: propertyId,
           org_id: orgId,
           event_type: eventType,
+          location_lat: position.coords.latitude,
+          location_lng: position.coords.longitude,
         })
         .select('id, event_type, timestamp')
         .single();
 
       setClockActionSaving(false);
       if (insertError) {
-        console.error('[CLOCK_EVENT_ERROR]', {
-          error: insertError,
-          payload: {
-            employee_id: resolvedEmployeeId,
-            property_id: propertyId,
-            org_id: orgId,
-            event_type: eventType,
-          },
-        });
+        console.error('[CLOCK_EVENT_ERROR]', insertError);
         enqueueSyncAction({
           type: 'clock_event',
           payload: {
@@ -840,13 +949,22 @@ export default function MobileFieldWorkspacePage() {
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
-            timestamp: optimisticEvent.timestamp,
-            location_lat: null,
-            location_lng: null,
+            location_lat: position.coords.latitude,
+            location_lng: position.coords.longitude,
           },
         });
+        queryClient.setQueryData(
+          ['employee-mobile-clock-status', orgId, employeeId],
+          eventType,
+        );
         setIsOfflineData(true);
-        toast.success(eventType === 'clock_in' ? 'Clock in queued for sync' : 'Clock out queued for sync');
+        toast.success(
+          eventType === 'clock_in'
+            ? 'Clock in queued for sync'
+            : eventType === 'clock_out'
+              ? 'Clock out queued for sync'
+              : 'Break queued for sync',
+        );
         return;
       }
 
@@ -862,10 +980,32 @@ export default function MobileFieldWorkspacePage() {
         ),
       );
 
+      queryClient.setQueryData(
+        ['employee-mobile-clock-status', orgId, employeeId],
+        eventType,
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ['employee-mobile-clock-status', orgId, employeeId],
+      });
       const successTime = formatTime(String(data?.timestamp ?? optimisticEvent.timestamp).slice(11, 16));
-      toast.success(eventType === 'clock_in' ? `Clocked in at ${successTime}` : `Clocked out at ${successTime}`);
+      toast.success(
+        eventType === 'clock_in'
+          ? `Clocked in at ${successTime}`
+          : eventType === 'clock_out'
+            ? `Clocked out at ${successTime}`
+            : `Break started at ${successTime}`,
+      );
     },
-    [currentUser?.propertyId, employee, employeeId, enqueueSyncAction, orgId, shift?.propertyId],
+    [
+      currentUser?.propertyId,
+      employee,
+      employeeId,
+      enqueueSyncAction,
+      orgId,
+      queryClient,
+      shift?.propertyId,
+      storeEmployees,
+    ],
   );
 
   const resetNeedsForm = () => {
@@ -1103,6 +1243,17 @@ export default function MobileFieldWorkspacePage() {
       onTouchMove={handlePullRefreshMove}
       onTouchEnd={() => void handlePullRefreshEnd()}
     >
+      <ClockInCard
+        isClockedIn={isClockedIn}
+        isOnBreak={isOnBreak}
+        elapsedLabel={elapsedLabel}
+        propertyName={propertyName}
+        saving={clockActionSaving}
+        onClockIn={() => void handleClockEvent('clock_in')}
+        onClockOut={() => void handleClockEvent('clock_out')}
+        onBreak={() => void handleClockEvent('break')}
+      />
+
       {pullDistance > 0 ? (
         <div className="mb-2 flex h-8 items-center justify-center text-xs text-slate-500">
           {refreshing ? 'Refreshing…' : pullDistance >= 64 ? 'Release to refresh' : 'Pull to refresh'}
@@ -1193,28 +1344,6 @@ export default function MobileFieldWorkspacePage() {
         </div>
       </div>
 
-      {/* Clock-in/out FAB */}
-      <button
-        type="button"
-        disabled={clockActionSaving}
-        onClick={() => void handleClockEvent(isClockedIn ? 'clock_out' : 'clock_in')}
-        className={`fixed bottom-6 right-6 z-50 flex h-16 w-16 flex-col items-center justify-center rounded-full shadow-[0_0_24px_rgba(163,230,53,0.35)] transition-all duration-200 active:scale-95 disabled:opacity-60 ${
-          isClockedIn
-            ? 'bg-slate-700 text-white shadow-none ring-1 ring-white/20'
-            : 'animate-pulse-glow bg-lime-400 text-black'
-        }`}
-        aria-label={isClockedIn ? 'Clock out' : 'Clock in'}
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      >
-        {clockActionSaving ? (
-          <Loader2 className="h-6 w-6 animate-spin" />
-        ) : (
-          <>
-            <span className="text-[10px] font-bold leading-tight">{isClockedIn ? 'CLOCK' : 'CLOCK'}</span>
-            <span className="text-[10px] font-bold leading-tight">{isClockedIn ? 'OUT' : 'IN'}</span>
-          </>
-        )}
-      </button>
     </div>
   );
 
