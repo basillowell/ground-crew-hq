@@ -1,16 +1,16 @@
 import {
-  LayoutDashboard,
-  Calendar,
-  ClipboardList,
-  Users,
-  Wrench,
-  Shield,
-  ShieldCheck,
   BarChart3,
-  Settings,
-  Mail,
-  CloudSun,
-  MapPin,
+  CalendarDays,
+  ClipboardList,
+  HelpCircle,
+  LayoutDashboard,
+  Receipt,
+  Settings2,
+  Shield,
+  ShieldAlert,
+  UsersRound,
+  Wrench,
+  type LucideIcon,
 } from 'lucide-react';
 import { memo } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -18,112 +18,115 @@ import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarHeader,
   SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProgramSettings, usePropertyClassOptions } from '@/lib/supabase-queries';
+import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/constants/version';
 import { useAppStore } from '@/store/appStore';
 
 interface AppSidebarRefinedProps {
   onNavigate?: () => void;
-  hasSevereWeatherAlert?: boolean;
   taskBoardBadgeCount?: number;
   chemicalLogsBadgeCount?: number;
 }
 
 type NavRole = 'employee' | 'admin';
 
-type NavSection = {
-  title: string;
-  items: {
-    title: string;
-    url: string;
-    icon: typeof Calendar;
-    moduleId: string;
-  }[];
+type NavItemConfig = {
+  label: string;
+  href?: string;
+  icon: LucideIcon;
+  moduleId?: string;
+  badge?: number;
+  disabled?: boolean;
 };
 
-const adminNavSections: NavSection[] = [
-  {
-    title: 'Command Center',
-    items: [
-      { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
-    ],
-  },
-  {
-    title: 'Field Ops',
-    items: [
-      { title: 'Scheduler', url: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
-      { title: 'Workflow', url: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
-      { title: 'Field View', url: '/app/field', icon: MapPin, moduleId: 'field' },
-    ],
-  },
-  {
-    title: 'Crew & Assets',
-    items: [
-      { title: 'Team', url: '/app/employees', icon: Users, moduleId: 'workflow' },
-      { title: 'Equipment', url: '/app/equipment', icon: Wrench, moduleId: 'equipment' },
-    ],
-  },
-  {
-    title: 'Compliance',
-    items: [
-      { title: 'Chemical Logs', url: '/app/applications', icon: ShieldCheck, moduleId: 'applications' },
-      { title: 'Safety', url: '/app/safety', icon: Shield, moduleId: 'workflow' },
-      { title: 'Reports', url: '/app/reports', icon: BarChart3, moduleId: 'reports' },
-    ],
-  },
-  {
-    title: 'Weather',
-    items: [
-      { title: 'Weather', url: '/app/weather', icon: CloudSun, moduleId: 'weather' },
-    ],
-  },
-  {
-    title: 'Communication',
-    items: [
-      { title: 'Breakroom', url: '/app/breakroom', icon: LayoutDashboard, moduleId: 'breakroom' },
-      { title: 'Messaging', url: '/app/messaging', icon: Mail, moduleId: 'workflow' },
-    ],
-  },
-  {
-    title: 'Configure',
-    items: [
-      { title: 'Settings', url: '/app/settings', icon: Settings, moduleId: 'command-center' },
-    ],
-  },
+type NavItemProps = NavItemConfig & {
+  collapsed: boolean;
+  isActive: boolean;
+  onNavigate?: () => void;
+};
+
+const primaryOperations: NavItemConfig[] = [
+  { label: 'Command Center', href: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
+  { label: 'Dispatch', href: '/app/scheduler', icon: CalendarDays, moduleId: 'workflow' },
+  { label: 'Workflow', href: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
 ];
 
-const employeeNavSections: NavSection[] = [
-  {
-    title: 'My Work',
-    items: [
-      { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
-      { title: 'Scheduler', url: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
-      { title: 'Workflow', url: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
-      { title: 'Field View', url: '/app/field', icon: MapPin, moduleId: 'field' },
-    ],
-  },
-  {
-    title: 'Connect',
-    items: [
-      { title: 'Breakroom', url: '/app/breakroom', icon: LayoutDashboard, moduleId: 'breakroom' },
-      { title: 'Messaging', url: '/app/messaging', icon: Mail, moduleId: 'workflow' },
-    ],
-  },
+const management: NavItemConfig[] = [
+  { label: 'Team', href: '/app/employees', icon: UsersRound, moduleId: 'workflow' },
+  { label: 'Equipment', href: '/app/equipment', icon: Wrench, moduleId: 'equipment' },
+  { label: 'Invoicing', icon: Receipt, disabled: true },
+  { label: 'Reports', href: '/app/reports', icon: BarChart3, moduleId: 'reports' },
 ];
+
+const complianceAndSettings: NavItemConfig[] = [
+  { label: 'Chemical Logs', href: '/app/applications', icon: Shield, moduleId: 'applications' },
+  { label: 'Safety', href: '/app/safety', icon: ShieldAlert, moduleId: 'workflow' },
+  { label: 'Settings', href: '/app/settings', icon: Settings2, moduleId: 'command-center' },
+  { label: 'Help', icon: HelpCircle, disabled: true },
+];
+
+function NavItem({
+  icon: Icon,
+  label,
+  href,
+  badge,
+  disabled = false,
+  collapsed,
+  isActive,
+  onNavigate,
+}: NavItemProps) {
+  const content = (
+    <>
+      <Icon className="h-4 w-4 shrink-0" />
+      {!collapsed ? <span>{label}</span> : null}
+      {!collapsed && badge ? (
+        <span className="ml-auto rounded-full bg-status-pending px-1.5 py-0.5 text-xs text-text-inverse">
+          {badge}
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (disabled || !href) {
+    return (
+      <button
+        type="button"
+        disabled
+        title={`${label} coming soon`}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted opacity-60"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <NavLink
+      to={href}
+      onClick={onNavigate}
+      title={collapsed ? label : undefined}
+      className={cn(
+        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
+        isActive
+          ? 'border-l-2 border-brand bg-surface-hover font-medium text-brand'
+          : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+      )}
+    >
+      {content}
+    </NavLink>
+  );
+}
 
 export const AppSidebarRefined = memo(function AppSidebarRefined({
   onNavigate,
-  hasSevereWeatherAlert = false,
   taskBoardBadgeCount = 0,
   chemicalLogsBadgeCount = 0,
 }: AppSidebarRefinedProps) {
@@ -136,118 +139,111 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
   const logoUrl = programSetting?.logoUrl;
-  const properties = useAppStore((state) => state.properties);
+  const properties = useAppStore((store) => store.properties);
   const propertyClasses = usePropertyClassOptions().data ?? [];
   const currentProperty = properties.find((property) => property.id === currentPropertyId);
   const currentPropertyClassId = (currentProperty as { property_class_id?: string } | undefined)?.property_class_id;
   const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentPropertyClassId);
   const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];
   const navRole: NavRole = currentRole === 'admin' || currentRole === 'manager' ? 'admin' : 'employee';
-  const baseSections = navRole === 'admin' ? adminNavSections : employeeNavSections;
-  const visibleSections = baseSections
-    .map((section) => ({
-      ...section,
-      items: activePropertyClass
-        ? section.items.filter((item) => item.title === 'Settings' || enabledModules.includes(item.moduleId))
-        : [...section.items],
-    }))
-    .filter((section) => section.items.length > 0);
 
+  const withVisibility = (items: NavItemConfig[]) =>
+    items
+      .filter((item) => {
+        if (navRole === 'employee' && management.includes(item)) return false;
+        if (!activePropertyClass || item.disabled || item.label === 'Settings') return true;
+        return item.moduleId ? enabledModules.includes(item.moduleId) : true;
+      })
+      .map((item) => ({
+        ...item,
+        badge:
+          item.label === 'Workflow'
+            ? taskBoardBadgeCount
+            : item.label === 'Chemical Logs'
+              ? chemicalLogsBadgeCount
+              : undefined,
+      }));
+
+  const primaryItems = withVisibility(primaryOperations);
+  const managementItems = withVisibility(management);
+  const footerItems = withVisibility(complianceAndSettings);
   const roleBadgeLabel = currentRole === 'admin' ? 'Admin' : currentRole === 'manager' ? 'Supervisor' : 'Field Crew';
-  const roleBadgeClass = currentRole === 'employee'
-    ? 'bg-slate-400/10 text-slate-400'
-    : 'bg-lime-400/10 text-lime-400';
+
+  const renderItems = (items: NavItemConfig[]) => (
+    <SidebarMenu>
+      {items.map((item) => (
+        <SidebarMenuItem key={item.label}>
+          <NavItem
+            {...item}
+            collapsed={collapsed}
+            isActive={Boolean(item.href && location.pathname.startsWith(item.href))}
+            onNavigate={onNavigate}
+          />
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
+  );
 
   return (
-    <Sidebar collapsible="icon" className="border-r-0 bg-[#0f1a14]">
-      <SidebarHeader className="border-b border-white/[0.06] bg-[#0f1a14] p-4">
+    <Sidebar collapsible="icon" className="border-r border-surface-border bg-surface-base">
+      <SidebarHeader className="border-b border-surface-border bg-surface-base p-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lime-400/10 ring-1 ring-lime-400/20">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-ghost ring-1 ring-brand-dim">
             {logoUrl ? (
               <img src={logoUrl} alt={`${navigationTitle} logo`} className="h-7 w-7 rounded-md object-contain" />
             ) : collapsed ? (
-              <span className="text-xs font-bold text-lime-400">{logoInitials.slice(0, 2)}</span>
+              <span className="text-xs font-bold text-brand-bright">{logoInitials.slice(0, 2)}</span>
             ) : (
-              <span className="text-sm font-extrabold tracking-tight text-lime-400">HQ</span>
+              <span className="text-sm font-extrabold text-brand-bright">HQ</span>
             )}
           </div>
           {!collapsed ? (
-            <div>
-              <h1 className="text-sm font-bold text-slate-100">{navigationTitle}</h1>
-              <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">{navigationSubtitle}</p>
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-bold text-text-primary">{navigationTitle}</h1>
+              <p className="truncate text-xs uppercase text-text-muted">{navigationSubtitle}</p>
             </div>
           ) : null}
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="bg-[#0f1a14] pt-2">
-        {visibleSections.map((section) => (
-          <SidebarGroup key={section.title}>
+      <SidebarContent className="gap-0 bg-surface-base px-2 py-3">
+        <section className="pb-3">
+          {!collapsed ? (
+            <div className="px-3 pb-2 text-xs font-medium uppercase text-text-muted">Primary Operations</div>
+          ) : null}
+          {renderItems(primaryItems)}
+        </section>
+
+        {managementItems.length > 0 ? (
+          <section className="border-t border-surface-border pt-3">
             {!collapsed ? (
-              <div className="mb-1 mt-4 px-3 text-[10px] uppercase tracking-widest text-slate-600">
-                {section.title}
-              </div>
+              <div className="px-3 pb-2 text-xs font-medium uppercase text-text-muted">Management</div>
             ) : null}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {section.items.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={location.pathname === item.url} tooltip={item.title}>
-                      <NavLink
-                        to={item.url}
-                        end
-                        onClick={onNavigate}
-                        className="relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-slate-400 transition-colors duration-200 hover:bg-white/5 hover:text-slate-100"
-                        activeClassName="border-l-2 border-lime-400 bg-lime-400/10 !text-lime-400 font-medium"
-                      >
-                        <item.icon className="h-4 w-4 shrink-0" />
-                        {!collapsed ? (
-                          <span className="inline-flex items-center gap-2">
-                            <span>{item.title}</span>
-                            {item.title === 'Workflow' && taskBoardBadgeCount > 0 ? (
-                              <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
-                                {taskBoardBadgeCount}
-                              </span>
-                            ) : null}
-                            {item.title === 'Chemical Logs' && chemicalLogsBadgeCount > 0 ? (
-                              <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
-                                {chemicalLogsBadgeCount}
-                              </span>
-                            ) : null}
-                            {item.title === 'Weather' && hasSevereWeatherAlert ? (
-                              <span className="h-2 w-2 rounded-full bg-red-500" aria-label="Severe weather alert active" />
-                            ) : null}
-                          </span>
-                        ) : null}
-                        {collapsed && item.title === 'Weather' && hasSevereWeatherAlert ? (
-                          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" aria-label="Severe weather alert active" />
-                        ) : null}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+            {renderItems(managementItems)}
+          </section>
+        ) : null}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-white/[0.06] bg-[#0f1a14] p-4">
+      <SidebarFooter className="border-t border-surface-border bg-surface-base p-2">
         {!collapsed ? (
-          <div className="mb-2">
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${roleBadgeClass}`}>
+          <div className="px-3 pb-1 pt-2 text-xs font-medium uppercase text-text-muted">Settings & Compliance</div>
+        ) : null}
+        {renderItems(footerItems)}
+        <div className="mt-2 border-t border-surface-border px-3 pt-3">
+          {!collapsed ? (
+            <span className="rounded-full bg-brand-ghost px-2.5 py-1 text-xs font-semibold uppercase text-brand-bright">
               {roleBadgeLabel}
             </span>
+          ) : (
+            <div className="flex justify-center">
+              <span className={cn('h-2 w-2 rounded-full', currentRole === 'employee' ? 'bg-text-muted' : 'bg-brand')} />
+            </div>
+          )}
+          <div className="mt-3 text-xs text-text-muted">
+            {collapsed ? `v${APP_VERSION}` : `Ground Crew HQ · v${APP_VERSION}`}
           </div>
-        ) : (
-          <div className="mb-2 flex justify-center">
-            <span className={`h-2 w-2 rounded-full ${currentRole === 'employee' ? 'bg-slate-500' : 'bg-lime-400'}`} />
-          </div>
-        )}
-        <div className="text-[11px] text-slate-600">
-          {collapsed ? `v${APP_VERSION}` : `Ground Crew HQ · v${APP_VERSION}`}
+          {!collapsed ? <div className="mt-1 text-xs text-text-muted">© 2026 Ground Crew HQ</div> : null}
         </div>
-        {!collapsed ? <div className="mt-1 text-[10px] text-slate-700">© 2026 Ground Crew HQ</div> : null}
       </SidebarFooter>
     </Sidebar>
   );

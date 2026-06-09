@@ -1,7 +1,25 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Calendar, ClipboardList, CloudSun, Mail, MapPin, Menu, Settings, Shield, ShieldCheck, BarChart3, Wrench, Users, LayoutDashboard } from 'lucide-react';
+import {
+  BarChart3,
+  Calendar,
+  ClipboardList,
+  Clock,
+  CloudSun,
+  Home,
+  LayoutDashboard,
+  Mail,
+  MapPin,
+  Menu,
+  MessageSquare,
+  Settings,
+  Shield,
+  ShieldCheck,
+  User,
+  Users,
+  Wrench,
+} from 'lucide-react';
 import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { FeedbackWidget } from './FeedbackWidget';
@@ -19,6 +37,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { OperationsProvider } from '@/contexts/OperationsContext';
 import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 import { isPro } from '@/utils/planGating';
 import { useAppStore, type Property as StoreProperty } from '@/store/appStore';
 
@@ -144,7 +163,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
-  const { currentUser, currentPropertyId, setCurrentPropertyId, orgId } = useAuth();
+  const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId } = useAuth();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
@@ -152,7 +171,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncFlashActive, setSyncFlashActive] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
-  const [hasSevereWeatherAlert, setHasSevereWeatherAlert] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const programSettingQuery = useProgramSettings(orgId);
@@ -163,6 +181,24 @@ export function AppLayout({ children }: AppLayoutProps) {
   const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
   const assignmentsQuery = useAssignments(todayKey, currentPropertyId, orgId);
   const equipmentQuery = useEquipmentUnits(currentPropertyId, orgId);
+  const latestClockEventQuery = useQuery({
+    queryKey: ['employee-mobile-clock-status', orgId, currentUser?.employeeId],
+    enabled: currentRole === 'employee' && Boolean(orgId && currentUser?.employeeId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clock_events')
+        .select('event_type')
+        .eq('org_id', orgId!)
+        .eq('employee_id', currentUser!.employeeId)
+        .order('timestamp', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data?.event_type ?? null;
+    },
+  });
+  const isEmployeeClockedIn = latestClockEventQuery.data === 'clock_in';
 
   const programSetting = programSettingQuery.data ?? null;
   const properties = useMemo(
@@ -393,25 +429,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [queryClient]);
 
   useEffect(() => {
-    const readSevereAlertFlag = () => window.sessionStorage.getItem('ground-crew-severe-weather-alert') === 'true';
-    setHasSevereWeatherAlert(readSevereAlertFlag());
-
-    const onWeatherAlertChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ hasSevere?: boolean }>).detail;
-      if (typeof detail?.hasSevere === 'boolean') {
-        setHasSevereWeatherAlert(detail.hasSevere);
-      } else {
-        setHasSevereWeatherAlert(readSevereAlertFlag());
-      }
-    };
-
-    window.addEventListener('ground-crew-weather-alert-changed', onWeatherAlertChanged as EventListener);
-    return () => {
-      window.removeEventListener('ground-crew-weather-alert-changed', onWeatherAlertChanged as EventListener);
-    };
-  }, []);
-
-  useEffect(() => {
     const fetchSubscriptionStatus = async () => {
       if (!supabase || !orgId) return;
       const { data } = await supabase
@@ -466,6 +483,13 @@ export function AppLayout({ children }: AppLayoutProps) {
     { label: 'Workflow', route: '/app/workboard', icon: ClipboardList },
     { label: 'Team', route: '/app/employees', icon: Users },
     { label: 'Weather', route: '/app/weather', icon: CloudSun },
+  ];
+  const employeeTabs = [
+    { label: 'Today', icon: Home, href: '/app/field' },
+    { label: 'My Jobs', icon: ClipboardList, href: '/app/scheduler' },
+    { label: 'Clock', icon: Clock, href: '/app/field?tab=clock' },
+    { label: 'Messages', icon: MessageSquare, href: '/app/breakroom' },
+    { label: 'Profile', icon: User, href: '/app/settings?tab=profile' },
   ];
   const mobileMoreItems = [
     { label: 'Dashboard', route: '/app/dashboard', icon: LayoutDashboard },
@@ -542,7 +566,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-[#0f1a14]">
+      <div className="flex h-screen w-full overflow-hidden bg-surface-base">
         {isReadOnlyDemo && showDemoBanner ? (
           <div className="fixed inset-x-0 top-0 z-50 h-9 bg-blue-600 text-white">
             <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-3 text-xs md:px-4">
@@ -566,7 +590,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </div>
         ) : null}
-        {mobileSidebarOpen ? (
+        {mobileSidebarOpen && currentRole !== 'employee' ? (
           <button
             type="button"
             aria-label="Close menu backdrop"
@@ -594,16 +618,17 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         ) : null}
         <div
-          className={`fixed top-0 left-0 h-screen w-60 overflow-y-hidden z-40 bg-[#0f1a14] border-r border-white/[0.06] flex flex-col transform transition-transform duration-200 ease-in-out ${
+          className={`fixed left-0 top-0 z-40 h-screen w-60 flex-col overflow-y-hidden border-r border-surface-border bg-surface-base transition-transform duration-200 ease-in-out ${
+            currentRole === 'employee' ? 'hidden md:flex' : 'flex'
+          } ${
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           }`}
         >
-          <AppSidebarRefined
-            onNavigate={closeMobileSidebar}
-            hasSevereWeatherAlert={hasSevereWeatherAlert}
-            taskBoardBadgeCount={openTaskBoardCount}
-            chemicalLogsBadgeCount={chemicalLogsPendingCount}
-          />
+            <AppSidebarRefined
+              onNavigate={closeMobileSidebar}
+              taskBoardBadgeCount={openTaskBoardCount}
+              chemicalLogsBadgeCount={chemicalLogsPendingCount}
+            />
         </div>
         <div className={`ml-0 md:ml-60 overflow-y-auto overflow-x-hidden flex min-w-0 flex-1 flex-col ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
           <WorkflowTopBar
@@ -636,13 +661,13 @@ export function AppLayout({ children }: AppLayoutProps) {
               setDepartment,
             }}
           >
-            <main className="flex-1 bg-[#0f1a14] pb-20 md:pb-0">
+            <main className="flex-1 bg-surface-base pb-20 md:pb-0">
               {isOffline ? (
                 <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-900">
                   ⚡ You're offline — changes will sync when connected
                 </div>
               ) : null}
-              <div className="border-b border-white/[0.05] bg-[#0f1a14]/60 px-4 py-2 md:hidden">
+              <div className="border-b border-surface-border bg-surface-base/60 px-4 py-2 md:hidden">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-slate-600">Workflow Date</div>
                 <div className="text-sm font-medium text-slate-300">
                   {currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
@@ -658,43 +683,79 @@ export function AppLayout({ children }: AppLayoutProps) {
               currentPropertyId={currentPropertyId}
             />
             <nav
-              className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.06] bg-[#0f1a14]/95 backdrop-blur-md md:hidden"
+              className="fixed inset-x-0 bottom-0 z-50 border-t border-surface-border bg-surface-base/95 backdrop-blur-md md:hidden"
               style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
             >
-              <div className="grid h-16 grid-cols-5">
-                {mobilePrimaryTabs.map((tab) => {
-                  const isActive = location.pathname === tab.route;
-                  return (
-                    <button
-                      key={tab.route}
-                      type="button"
-                      onClick={() => navigate(tab.route)}
-                      className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] transition-colors duration-200 ${
-                        isActive ? 'text-lime-400' : 'text-slate-500 hover:text-slate-300'
-                      }`}
-                    >
-                      {isActive ? (
-                        <span className="absolute top-1.5 h-0.5 w-5 rounded-full bg-lime-400" />
-                      ) : null}
-                      <tab.icon className="h-4 w-4" />
-                      <span>{tab.label}</span>
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => setMobileMoreOpen(true)}
-                  className="flex flex-col items-center justify-center gap-0.5 text-[10px] text-slate-500 transition-colors duration-200 hover:text-slate-300"
-                >
-                  <Menu className="h-4 w-4" />
-                  <span>More</span>
-                </button>
-              </div>
+              {currentRole === 'employee' ? (
+                <div className="grid h-16 grid-cols-5">
+                  {employeeTabs.map((tab) => {
+                    const [tabPath, tabSearch = ''] = tab.href.split('?');
+                    const requiredSearch = new URLSearchParams(tabSearch);
+                    const currentSearch = new URLSearchParams(location.search);
+                    const hasRequiredSearch = [...requiredSearch.entries()].every(
+                      ([key, value]) => currentSearch.get(key) === value,
+                    );
+                    const isActive = location.pathname === tabPath
+                      && (tabSearch ? hasRequiredSearch : !currentSearch.has('tab'));
+                    const isClockTab = tab.label === 'Clock';
+
+                    return (
+                      <button
+                        key={tab.href}
+                        type="button"
+                        onClick={() => navigate(tab.href)}
+                        className={cn(
+                          'relative flex min-h-11 flex-col items-center justify-center gap-0.5 text-xs transition-colors',
+                          isActive ? 'text-brand' : 'text-text-muted hover:text-text-primary',
+                        )}
+                      >
+                        {isActive ? <span className="absolute top-1 h-0.5 w-5 rounded-full bg-brand" /> : null}
+                        <tab.icon
+                          className={cn(
+                            'h-5 w-5',
+                            isClockTab && isEmployeeClockedIn ? 'text-brand-bright' : undefined,
+                          )}
+                        />
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid h-16 grid-cols-5">
+                  {mobilePrimaryTabs.map((tab) => {
+                    const isActive = location.pathname === tab.route;
+                    return (
+                      <button
+                        key={tab.route}
+                        type="button"
+                        onClick={() => navigate(tab.route)}
+                        className={cn(
+                          'relative flex min-h-11 flex-col items-center justify-center gap-0.5 text-xs transition-colors',
+                          isActive ? 'text-brand' : 'text-text-muted hover:text-text-primary',
+                        )}
+                      >
+                        {isActive ? <span className="absolute top-1 h-0.5 w-5 rounded-full bg-brand" /> : null}
+                        <tab.icon className="h-5 w-5" />
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => setMobileMoreOpen(true)}
+                    className="flex min-h-11 flex-col items-center justify-center gap-0.5 text-xs text-text-muted transition-colors hover:text-text-primary"
+                  >
+                    <Menu className="h-5 w-5" />
+                    <span>More</span>
+                  </button>
+                </div>
+              )}
             </nav>
-            <Sheet open={mobileMoreOpen} onOpenChange={setMobileMoreOpen}>
-              <SheetContent side="bottom" className="max-h-[75vh] rounded-t-2xl border-white/[0.08] bg-[#1a2d1f]">
+            <Sheet open={currentRole !== 'employee' && mobileMoreOpen} onOpenChange={setMobileMoreOpen}>
+              <SheetContent side="bottom" className="max-h-[75vh] rounded-t-lg border-surface-border bg-surface-elevated">
                 <SheetHeader>
-                  <SheetTitle className="text-slate-100">More</SheetTitle>
+                  <SheetTitle className="text-text-primary">More</SheetTitle>
                 </SheetHeader>
                 <div className="mt-4 grid gap-2 pb-4">
                   {mobileMoreItems.map((item) => (
@@ -707,14 +768,14 @@ export function AppLayout({ children }: AppLayoutProps) {
                       }}
                       className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
                         location.pathname === item.route
-                          ? 'border-lime-400/30 bg-lime-400/10 text-lime-400'
-                          : 'border-white/[0.06] text-slate-300 hover:border-white/10 hover:bg-white/5'
+                          ? 'border-brand-dim bg-brand-ghost text-brand'
+                          : 'border-surface-border text-text-secondary hover:bg-surface-hover hover:text-text-primary'
                       }`}
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
                       <span>{item.label}</span>
                       {item.label === 'Workflow' && openTaskBoardCount > 0 ? (
-                        <span className="ml-auto rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                        <span className="ml-auto rounded-full bg-status-pending px-1.5 py-0.5 text-xs font-semibold text-text-inverse">
                           {openTaskBoardCount}
                         </span>
                       ) : null}
