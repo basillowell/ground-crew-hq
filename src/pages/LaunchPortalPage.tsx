@@ -117,7 +117,7 @@ function DarkInput(props: React.ComponentProps<typeof Input>) {
   return (
     <Input
       {...props}
-      className={`border-white/[0.10] bg-surface-base text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30 ${props.className ?? ''}`}
+      className={`border-white/[0.10] bg-surface-base text-slate-100 placeholder:text-slate-500 focus-visible:border-brand/50 focus-visible:ring-brand/30 ${props.className ?? ''}`}
     />
   );
 }
@@ -140,8 +140,8 @@ function ErrorBanner({ message }: { message: string }) {
 
 function SuccessBanner({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-2 rounded-xl border border-lime-400/30 bg-lime-400/10 px-3 py-3 text-xs text-lime-300">
-      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-lime-400" />
+    <div className="flex items-start gap-2 rounded-xl border border-brand/30 bg-brand/10 px-3 py-3 text-xs text-brand-bright">
+      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-bright" />
       {message}
     </div>
   );
@@ -152,7 +152,7 @@ function PanelLink({ onClick, children }: { onClick: () => void; children: React
     <button
       type="button"
       onClick={onClick}
-      className="text-lime-400 underline-offset-2 hover:underline"
+      className="text-brand-bright underline-offset-2 hover:underline"
     >
       {children}
     </button>
@@ -358,7 +358,7 @@ export default function LaunchPortalPage() {
                   Sign In
                 </button>
                 <button
-                  className="rounded-full bg-brand-bright px-5 py-2 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.4)]"
+                  className="rounded-full bg-brand-bright px-5 py-2 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
                   onClick={() => openDialog('sign-up')}
                 >
                   Start Free — No Credit Card
@@ -373,7 +373,7 @@ export default function LaunchPortalPage() {
         {/* ── Hero ── */}
         <section className="grid items-center gap-10 lg:grid-cols-2">
           <div className="animate-[hero-enter_600ms_ease-out_forwards] opacity-0 [animation-delay:120ms]">
-            <h1 className="bg-gradient-to-br from-text-primary to-brand-bright bg-clip-text text-[clamp(2.5rem,6vw,4.5rem)] font-extrabold leading-[1.05] tracking-tight text-transparent">
+            <h1 className="text-[clamp(2.5rem,6vw,4.5rem)] font-extrabold leading-[1.05] tracking-tight text-text-primary">
               The Operations Brain for Your Grounds Crew
             </h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-text-secondary md:text-lg">
@@ -384,20 +384,20 @@ export default function LaunchPortalPage() {
               {currentUser ? (
                 <Link
                   to="/app/scheduler"
-                  className="rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
+                  className="rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
                 >
                   Go to App →
                 </Link>
               ) : (
                 <>
                   <button
-                    className="rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
+                    className="rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
                     onClick={() => openDialog('sign-up')}
                   >
                     Start Free — No Credit Card
                   </button>
                   <button
-                    className="rounded-full border border-brand/40 px-8 py-3 text-sm font-semibold text-brand transition-all duration-200 hover:border-brand hover:bg-brand-ghost"
+                    className="rounded-full border border-brand bg-transparent px-8 py-3 text-sm font-semibold text-brand transition-all duration-200 hover:-translate-y-0.5 hover:bg-brand-ghost"
                     onClick={() => void handleDemoLogin()}
                   >
                     Try Live Demo
@@ -407,10 +407,10 @@ export default function LaunchPortalPage() {
             </div>
             <p className="mt-4 text-sm text-text-muted">Join 50+ facilities already running smarter crews</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-secondary">GPS Clock In/Out</span>
-              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-secondary">Bilingual Crews</span>
-              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-secondary">Mobile-First</span>
-              <span className="rounded-full border border-surface-border px-3 py-1 text-xs font-medium text-text-secondary">EPA Compliant</span>
+              <span className="rounded-full border border-surface-border bg-surface-elevated px-3 py-1 text-xs font-medium text-text-secondary">GPS Clock In/Out</span>
+              <span className="rounded-full border border-surface-border bg-surface-elevated px-3 py-1 text-xs font-medium text-text-secondary">Bilingual Crews</span>
+              <span className="rounded-full border border-surface-border bg-surface-elevated px-3 py-1 text-xs font-medium text-text-secondary">Mobile-First</span>
+              <span className="rounded-full border border-surface-border bg-surface-elevated px-3 py-1 text-xs font-medium text-text-secondary">EPA Compliant</span>
             </div>
           </div>
 
@@ -492,8 +492,8 @@ export default function LaunchPortalPage() {
               const sizeClass = feature.size === 'large' ? 'md:col-span-2' : '';
               return (
                 <ScrollReveal key={feature.title} className={sizeClass}>
-                  <div className="group h-full rounded-2xl border border-white/[0.06] bg-surface-card p-6 transition-all duration-[250ms] hover:-translate-y-1 hover:border-lime-400/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] active:scale-[0.98]">
-                    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated text-lime-400 transition-colors duration-200 group-hover:bg-lime-400/[0.12]">
+                  <div className="group h-full rounded-2xl border border-surface-border bg-surface-card p-6 transition-all duration-[250ms] hover:-translate-y-1 hover:border-brand/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] active:scale-[0.98]">
+                    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated text-brand transition-colors duration-200 group-hover:bg-brand/10">
                       <Icon className="h-6 w-6" />
                     </div>
                     <h3 className="text-[18px] font-semibold leading-snug text-slate-100">{feature.title}</h3>
@@ -591,9 +591,9 @@ export default function LaunchPortalPage() {
             {TESTIMONIALS.map((item) => (
               <div
                 key={item.quote}
-                className="rounded-2xl border border-white/[0.06] bg-surface-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-lime-400/10"
+                className="rounded-2xl border border-surface-border bg-surface-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/10"
               >
-                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-elevated text-sm font-semibold text-lime-400">
+                <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-elevated text-sm font-semibold text-brand-bright">
                   {item.initials}
                 </div>
                 <p className="text-sm leading-6 text-slate-300">"{item.quote}"</p>
@@ -621,13 +621,13 @@ export default function LaunchPortalPage() {
             {currentUser ? (
               <Link
                 to="/app/scheduler"
-                className="mt-5 inline-block rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
+                className="mt-5 inline-block rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
               >
                 Go to App →
               </Link>
             ) : (
               <button
-                className="mt-5 rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_0_20px_rgba(163,230,53,0.4)]"
+                className="mt-5 rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
                 onClick={() => openDialog('sign-up')}
               >
                 Start Free — No Credit Card
@@ -662,7 +662,7 @@ export default function LaunchPortalPage() {
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base text-slate-100">
-              <ShieldCheck className="h-4 w-4 text-lime-400" />
+              <ShieldCheck className="h-4 w-4 text-brand-bright" />
               {dialogTitles[authPanel]}
             </DialogTitle>
             <DialogDescription id="dialog-desc" className="sr-only">
@@ -716,7 +716,7 @@ export default function LaunchPortalPage() {
               ) : null}
 
               <Button
-                className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
+                className="w-full gap-2 rounded-full bg-brand-bright font-semibold text-text-inverse transition-all duration-200 hover:brightness-110 disabled:opacity-50"
                 disabled={isSubmitting || !email || !password || !hasSupabaseConfig}
                 type="submit"
               >
@@ -800,7 +800,7 @@ export default function LaunchPortalPage() {
                   {signUpError ? <ErrorBanner message={signUpError} /> : null}
 
                   <Button
-                    className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
+                    className="w-full gap-2 rounded-full bg-brand-bright font-semibold text-text-inverse transition-all duration-200 hover:brightness-110 disabled:opacity-50"
                     disabled={isSigningUp || !signUpEmail || !signUpPassword || !hasSupabaseConfig}
                     type="submit"
                   >
@@ -846,7 +846,7 @@ export default function LaunchPortalPage() {
                   {forgotError ? <ErrorBanner message={forgotError} /> : null}
 
                   <Button
-                    className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
+                    className="w-full gap-2 rounded-full bg-brand-bright font-semibold text-text-inverse transition-all duration-200 hover:brightness-110 disabled:opacity-50"
                     disabled={isSendingReset || !forgotEmail || !hasSupabaseConfig}
                     type="submit"
                   >
