@@ -20,6 +20,7 @@ const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
 const PricingPage = lazy(() => import("./pages/PricingPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
+const DispatchBoardPage = lazy(() => import("./pages/DispatchBoardPage"));
 const WorkboardPage = lazy(() => import("./pages/WorkboardShell"));
 const EmployeesPage = lazy(() => import("./pages/EmployeesPage"));
 const SchedulerPage = lazy(() => import("./pages/SchedulerPage"));
@@ -275,6 +276,7 @@ function AppRoutes() {
       <Routes>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><CommandCenterPage /></Suspense></RouteElementBoundary>} />
+        <Route path="dispatch" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><DispatchBoardPage /></Suspense></RouteElementBoundary>} />
         <Route path="workboard" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><WorkboardPage /></Suspense></RouteElementBoundary>} />
         <Route path="employees" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><EmployeesPage /></Suspense></RouteElementBoundary>} />
         <Route path="scheduler" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><SchedulerPage key="scheduler-route" /></Suspense></RouteElementBoundary>} />

@@ -55,7 +55,7 @@ type NavItemProps = NavItemConfig & {
 
 const primaryOperations: NavItemConfig[] = [
   { label: 'Command Center', href: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
-  { label: 'Dispatch', href: '/app/scheduler', icon: CalendarDays, moduleId: 'workflow' },
+  { label: 'Dispatch', href: '/app/dispatch', icon: CalendarDays, moduleId: 'workflow' },
   { label: 'Workflow', href: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
 ];
 
