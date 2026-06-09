@@ -63,7 +63,7 @@ const primaryOperations: NavItemConfig[] = [
 const management: NavItemConfig[] = [
   { label: 'Team', href: '/app/employees', icon: UsersRound, moduleId: 'workflow' },
   { label: 'Equipment', href: '/app/equipment', icon: Wrench, moduleId: 'equipment' },
-  { label: 'Invoicing', icon: Receipt, disabled: true },
+  { label: 'Invoicing', href: '/app/invoicing', icon: Receipt, moduleId: 'workflow' },
   { label: 'Reports', href: '/app/reports', icon: BarChart3, moduleId: 'reports' },
   { label: 'Job Costing', href: '/app/job-costing', icon: TrendingUp, moduleId: 'reports' },
 ];

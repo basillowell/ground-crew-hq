@@ -34,6 +34,7 @@ const WeatherPage = lazy(() => import("./pages/WeatherPage"));
 const ApplicationsPage = lazy(() => import("./pages/ApplicationsPage"));
 const MobileFieldPage = lazy(() => import("./pages/MobileFieldWorkspacePage"));
 const JobCostingPage = lazy(() => import("./pages/JobCostingPage"));
+const InvoicingPage = lazy(() => import("./pages/InvoicingPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -291,6 +292,7 @@ function AppRoutes() {
         <Route path="settings" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><SettingsPage /></Suspense></RouteElementBoundary>} />
         <Route path="field" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><MobileFieldPage /></Suspense></RouteElementBoundary>} />
         <Route path="job-costing" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><JobCostingPage /></Suspense></RouteElementBoundary>} />
+        <Route path="invoicing" element={<RouteElementBoundary><Suspense fallback={<PageRouteFallback />}><InvoicingPage /></Suspense></RouteElementBoundary>} />
       </Routes>
     </AppLayout>
   );
