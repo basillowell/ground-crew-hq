@@ -8,6 +8,7 @@ import {
   Settings2,
   Shield,
   ShieldAlert,
+  TrendingUp,
   UsersRound,
   Wrench,
   type LucideIcon,
@@ -64,6 +65,7 @@ const management: NavItemConfig[] = [
   { label: 'Equipment', href: '/app/equipment', icon: Wrench, moduleId: 'equipment' },
   { label: 'Invoicing', icon: Receipt, disabled: true },
   { label: 'Reports', href: '/app/reports', icon: BarChart3, moduleId: 'reports' },
+  { label: 'Job Costing', href: '/app/job-costing', icon: TrendingUp, moduleId: 'reports' },
 ];
 
 const complianceAndSettings: NavItemConfig[] = [
