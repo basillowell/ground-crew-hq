@@ -532,7 +532,7 @@ const SOP_ITEMS: SopItem[] = [
   {
     id: 'bunker-maintenance',
     title: 'Bunker Maintenance',
-    icon: <ListChecks className="h-4 w-4 text-slate-600" />,
+    icon: <ListChecks className="h-4 w-4 text-text-muted" />,
     checklist: [
       'Rake all bunkers',
       'Check drainage',
@@ -5314,7 +5314,7 @@ export default function WorkboardContent() {
                           ? 'bg-red-100 text-red-700'
                           : alert.severity === 'warning'
                             ? 'bg-amber-100 text-amber-700'
-                            : 'bg-slate-100 text-slate-700'
+                            : 'bg-surface-elevated text-text-muted'
                       }
                     >
                       {alert.severity}

@@ -168,7 +168,7 @@ function tempClass(tempF: number) {
 function daySeverityBorder(code: number) {
   if (code === 0) return "border-l-4 border-emerald-400";
   if (code === 1 || code === 2) return "border-l-4 border-sky-400";
-  if (code === 3 || code === 45 || code === 48) return "border-l-4 border-slate-400";
+  if (code === 3 || code === 45 || code === 48) return "border-l-4 border-surface-border";
   if (code >= 51 && code <= 63) return "border-l-4 border-amber-400";
   if (code >= 65 || code >= 95) return "border-l-4 border-red-500";
   return "border-l-4 border-sky-400";
@@ -723,7 +723,7 @@ export default function WeatherPage() {
                                 </span>
                               ) : null}
                               {activeOverlays.has("wind") ? (
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">{Math.round(day.windMax)} mph</span>
+                                <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-[10px] text-text-muted">{Math.round(day.windMax)} mph</span>
                               ) : null}
                               <ChevronDown className={`h-4 w-4 transition-all duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                             </div>
@@ -734,7 +734,7 @@ export default function WeatherPage() {
                             <div className="flex gap-2 overflow-x-auto pb-1">
                               {dayHours.map((hour) => {
                                 const bg =
-                                  hour.rainPct > 70 ? "bg-red-50" : hour.rainPct > 40 ? "bg-amber-50" : hour.code === 0 ? "bg-sky-50" : "bg-slate-50";
+                                  hour.rainPct > 70 ? "bg-status-warning/10" : hour.rainPct > 40 ? "bg-status-pending/10" : hour.code === 0 ? "bg-sky-500/10" : "bg-surface-elevated";
                                 return (
                                   <div key={hour.time} className={`min-w-[72px] rounded-lg border p-2 text-center ${bg}`}>
                                     <div className="text-xs font-medium">{formatTimeForStation(hour.time)}</div>
@@ -744,7 +744,7 @@ export default function WeatherPage() {
                                     ) : null}
                                     {activeOverlays.has("rain") ? (
                                       <div className="mt-1 space-y-1">
-                                        <div className="h-1 rounded bg-slate-200">
+                                        <div className="h-1 rounded bg-surface-border">
                                           <div className="h-1 rounded bg-sky-500" style={{ width: `${Math.min(100, Math.max(0, hour.rainPct))}%` }} />
                                         </div>
                                         <div className="text-[10px] text-muted-foreground">{Math.round(hour.rainPct)}%</div>
@@ -787,7 +787,7 @@ export default function WeatherPage() {
                     </div>
                     {nowIndex >= 0 ? (
                       <div className="absolute bottom-0 top-0 w-0.5 bg-white" style={{ left: `${(nowIndex / Math.max(1, todaySpraySegments.length)) * 100}%` }}>
-                        <span className="absolute -top-4 -translate-x-1/2 rounded bg-white px-1 text-[10px] text-slate-700">Now</span>
+                        <span className="absolute -top-4 -translate-x-1/2 rounded bg-surface-elevated px-1 text-[10px] text-text-muted">Now</span>
                       </div>
                     ) : null}
                   </div>
@@ -864,13 +864,13 @@ export default function WeatherPage() {
                         </Button>
                       </div>
                     </div>
-                    <div className="overflow-x-auto rounded-md border border-slate-300">
+                    <div className="overflow-x-auto rounded-md border border-surface-border">
                       <table className="min-w-[980px] border-collapse text-[11px]">
                         <thead>
                           <tr className="bg-muted/40">
-                            <th className="sticky left-0 z-10 border-b border-r border-slate-300 bg-muted/50 px-2 py-1 text-left">Day</th>
+                            <th className="sticky left-0 z-10 border-b border-r border-surface-border bg-muted/50 px-2 py-1 text-left">Day</th>
                             {["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"].map((month) => (
-                              <th key={month} className="border-b border-r border-slate-300 px-2 py-1 text-center font-semibold">
+                              <th key={month} className="border-b border-r border-surface-border px-2 py-1 text-center font-semibold">
                                 {month}
                               </th>
                             ))}
@@ -881,16 +881,16 @@ export default function WeatherPage() {
                             const day = dayIndex + 1;
                             return (
                               <tr key={`day-${day}`} className={dayIndex % 3 === 2 ? "bg-muted/15" : ""}>
-                                <td className="sticky left-0 z-10 border-r border-slate-300 bg-background px-2 py-0.5 font-medium">{day}</td>
+                                <td className="sticky left-0 z-10 border-r border-surface-border bg-background px-2 py-0.5 font-medium">{day}</td>
                                 {Array.from({ length: 12 }, (_, monthIndex) => {
                                   const daysInMonth = new Date(rainfallYear, monthIndex + 1, 0).getDate();
                                   if (day > daysInMonth) {
-                                    return <td key={`${monthIndex}-${day}`} className="border-r border-slate-300 bg-muted/20 px-2 py-0.5" />;
+                                    return <td key={`${monthIndex}-${day}`} className="border-r border-surface-border bg-muted/20 px-2 py-0.5" />;
                                   }
                                   const hasValue = annualRainGrid.monthDayHasValue[monthIndex][dayIndex];
                                   const value = annualRainGrid.monthDayValues[monthIndex][dayIndex];
                                   return (
-                                    <td key={`${monthIndex}-${day}`} className="border-r border-slate-300 px-2 py-0.5 text-center">
+                                    <td key={`${monthIndex}-${day}`} className="border-r border-surface-border px-2 py-0.5 text-center">
                                       <button
                                         type="button"
                                         onClick={() => handleRainCellClick(monthIndex, day)}
@@ -905,17 +905,17 @@ export default function WeatherPage() {
                             );
                           })}
                           <tr className="sticky bottom-6 z-10 bg-muted/20 font-semibold">
-                            <td className="sticky left-0 z-20 border-r border-t border-slate-400 bg-muted/30 px-2 py-1">Monthly Total</td>
+                            <td className="sticky left-0 z-20 border-r border-t border-surface-border bg-muted/30 px-2 py-1">Monthly Total</td>
                             {annualRainGrid.monthTotals.map((total, monthIndex) => (
-                              <td key={`total-${monthIndex}`} className="border-r border-t border-slate-400 bg-muted/30 px-2 py-1 text-center">
+                              <td key={`total-${monthIndex}`} className="border-r border-t border-surface-border bg-muted/30 px-2 py-1 text-center">
                                 {total > 0 ? total.toFixed(2) : "0.00"}
                               </td>
                             ))}
                           </tr>
                           <tr className="sticky bottom-0 z-10 bg-muted/30 font-semibold">
-                            <td className="sticky left-0 z-20 border-r border-t border-slate-500 bg-muted/40 px-2 py-1">Yearly Running Total</td>
+                            <td className="sticky left-0 z-20 border-r border-t border-surface-border bg-muted/40 px-2 py-1">Yearly Running Total</td>
                             {annualRainGrid.runningTotals.map((total, monthIndex) => (
-                              <td key={`running-${monthIndex}`} className="border-r border-t border-slate-500 bg-muted/40 px-2 py-1 text-center">
+                              <td key={`running-${monthIndex}`} className="border-r border-t border-surface-border bg-muted/40 px-2 py-1 text-center">
                                 {total > 0 ? total.toFixed(2) : "0.00"}
                               </td>
                             ))}

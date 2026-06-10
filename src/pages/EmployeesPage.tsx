@@ -348,8 +348,8 @@ export default function EmployeesPage() {
     if (normalized === 'scheduled') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
     if (normalized === 'vacation') return 'bg-amber-100 text-amber-800 border-amber-200';
     if (normalized === 'sick') return 'bg-red-100 text-red-800 border-red-200';
-    if (normalized === 'off' || normalized === 'day_off') return 'bg-slate-200 text-slate-700 border-slate-300';
-    return 'bg-slate-100 text-slate-600 border-slate-200';
+    if (normalized === 'off' || normalized === 'day_off') return 'bg-surface-elevated text-text-muted border-surface-border';
+    return 'bg-surface-card text-text-muted border-surface-border';
   };
 
   const saveAvailabilityEntry = useCallback(async () => {

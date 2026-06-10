@@ -60,24 +60,24 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0f1a14] px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-surface-base px-4 py-12">
       {/* Brand mark */}
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-400/10 ring-1 ring-lime-400/30">
-            <ShieldCheck className="h-6 w-6 text-lime-400" />
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 ring-1 ring-brand/30">
+            <ShieldCheck className="h-6 w-6 text-brand-bright" />
           </div>
-          <div className="mt-3 text-base font-semibold tracking-tight text-slate-100">Ground Crew HQ</div>
-          <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Secure account recovery</div>
+          <div className="mt-3 text-base font-semibold tracking-tight text-text-primary">Ground Crew HQ</div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-text-muted">Secure account recovery</div>
         </div>
 
-        <div className="rounded-2xl border border-white/[0.08] bg-[#1a2d1f] p-6 shadow-2xl backdrop-blur-xl">
+        <div className="rounded-2xl border border-surface-border bg-surface-card p-6 shadow-2xl backdrop-blur-xl">
 
           {/* Waiting: token not yet processed */}
           {resetState === 'waiting' && (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
-              <Loader2 className="h-6 w-6 animate-spin text-lime-400" />
-              <p className="text-sm text-slate-400">Verifying your reset link…</p>
+              <Loader2 className="h-6 w-6 animate-spin text-brand-bright" />
+              <p className="text-sm text-text-secondary">Verifying your reset link…</p>
             </div>
           )}
 
@@ -89,7 +89,7 @@ export default function ResetPasswordPage() {
               </div>
               <button
                 type="button"
-                className="w-full rounded-full border border-white/10 py-2.5 text-sm text-slate-300 transition-all duration-200 hover:bg-white/5 hover:text-slate-100"
+                className="w-full rounded-full border border-surface-border py-2.5 text-sm text-text-secondary transition-all duration-200 hover:bg-surface-hover hover:text-text-primary"
                 onClick={() => navigate('/')}
               >
                 Back to sign in
@@ -101,12 +101,12 @@ export default function ResetPasswordPage() {
           {resetState === 'ready' && (
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
-                <h2 className="text-base font-semibold text-slate-100">Set a new password</h2>
-                <p className="mt-1 text-xs text-slate-500">Must be at least 8 characters.</p>
+                <h2 className="text-base font-semibold text-text-primary">Set a new password</h2>
+                <p className="mt-1 text-xs text-text-muted">Must be at least 8 characters.</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="new-password" className="text-sm text-slate-300">New password</Label>
+                <Label htmlFor="new-password" className="text-sm text-text-secondary">New password</Label>
                 <Input
                   id="new-password"
                   type="password"
@@ -114,12 +114,12 @@ export default function ResetPasswordPage() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Min. 8 characters"
                   autoComplete="new-password"
-                  className="border-white/[0.10] bg-[#0f1a14] text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30"
+                  className="border-surface-border bg-surface-base text-text-primary placeholder:text-text-muted focus-visible:border-brand/50 focus-visible:ring-brand/30"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirm-password" className="text-sm text-slate-300">Confirm new password</Label>
+                <Label htmlFor="confirm-password" className="text-sm text-text-secondary">Confirm new password</Label>
                 <Input
                   id="confirm-password"
                   type="password"
@@ -127,7 +127,7 @@ export default function ResetPasswordPage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Repeat password"
                   autoComplete="new-password"
-                  className="border-white/[0.10] bg-[#0f1a14] text-slate-100 placeholder:text-slate-500 focus-visible:border-lime-400/50 focus-visible:ring-lime-400/30"
+                  className="border-surface-border bg-surface-base text-text-primary placeholder:text-text-muted focus-visible:border-brand/50 focus-visible:ring-brand/30"
                 />
               </div>
 
@@ -139,7 +139,7 @@ export default function ResetPasswordPage() {
 
               <Button
                 type="submit"
-                className="w-full gap-2 rounded-full bg-lime-400 font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)] disabled:opacity-50"
+                className="w-full gap-2 rounded-full bg-brand-bright font-semibold text-text-inverse transition-all duration-200 hover:brightness-110 disabled:opacity-50"
                 disabled={isSubmitting || !newPassword || !confirmPassword || !hasSupabaseConfig}
               >
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -151,13 +151,13 @@ export default function ResetPasswordPage() {
           {/* Success */}
           {resetState === 'success' && (
             <div className="space-y-4">
-              <div className="flex items-start gap-2 rounded-xl border border-lime-400/30 bg-lime-400/10 px-3 py-3 text-xs text-lime-300">
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-lime-400" />
+              <div className="flex items-start gap-2 rounded-xl border border-brand/30 bg-brand/10 px-3 py-3 text-xs text-brand-bright">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-bright" />
                 Password updated successfully. You can now sign in with your new password.
               </div>
               <button
                 type="button"
-                className="w-full rounded-full bg-lime-400 py-2.5 text-sm font-semibold text-black transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.3)]"
+                className="w-full rounded-full bg-brand-bright py-2.5 text-sm font-semibold text-text-inverse transition-all duration-200 hover:brightness-110"
                 onClick={() => navigate('/')}
               >
                 Go to sign in
@@ -166,7 +166,7 @@ export default function ResetPasswordPage() {
           )}
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-600">
+        <p className="mt-6 text-center text-xs text-text-muted">
           © 2026 Ground Crew HQ
         </p>
       </div>

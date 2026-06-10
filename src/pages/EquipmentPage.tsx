@@ -74,7 +74,7 @@ function statusBadgeClass(status: EquipmentStatus) {
   if (status === 'available') return 'border-emerald-200 text-emerald-700';
   if (status === 'in_use') return 'border-blue-200 text-blue-700';
   if (status === 'maintenance') return 'border-amber-200 text-amber-700';
-  return 'border-slate-300 text-slate-700';
+  return 'border-surface-border text-text-muted';
 }
 
 function statusLaneClass(status: EquipmentStatus) {

@@ -91,10 +91,10 @@ const featureRows = [
 function renderFeatureValue(value: boolean | string) {
   if (typeof value === 'boolean') {
     return value
-      ? <Check className="mx-auto h-4 w-4 text-lime-400" />
-      : <span className="text-slate-600">—</span>;
+      ? <Check className="mx-auto h-4 w-4 text-brand-bright" />
+      : <span className="text-text-muted">—</span>;
   }
-  return <span className="text-slate-300">{value}</span>;
+  return <span className="text-text-secondary">{value}</span>;
 }
 
 export default function PricingPage() {
@@ -111,14 +111,14 @@ export default function PricingPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0f1a14] text-slate-100">
+    <div className="min-h-screen bg-surface-base text-text-primary">
       {/* Navbar */}
-      <header className="border-b border-white/[0.06] bg-[#0f1a14]/90 backdrop-blur-md">
+      <header className="border-b border-surface-border bg-surface-base/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
-          <div className="text-base font-semibold tracking-tight text-slate-100">Ground Crew HQ</div>
+          <div className="text-base font-semibold tracking-tight text-text-primary">Ground Crew HQ</div>
           <Link
             to="/"
-            className="text-sm font-medium text-lime-400 transition-colors hover:text-lime-300"
+            className="text-sm font-medium text-brand transition-colors hover:text-brand-bright"
           >
             ← Back to Home
           </Link>
@@ -128,21 +128,21 @@ export default function PricingPage() {
       <main className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6">
         {/* Header */}
         <div className="mx-auto max-w-2xl text-center">
-          <h1 className="bg-gradient-to-br from-slate-100 to-lime-400 bg-clip-text text-4xl font-extrabold tracking-tight text-transparent md:text-5xl">
+          <h1 className="text-4xl font-extrabold tracking-tight text-text-primary md:text-5xl">
             Simple Pricing for Every Operation
           </h1>
-          <p className="mt-3 text-sm text-slate-400 md:text-base">
+          <p className="mt-3 text-sm text-text-secondary md:text-base">
             All plans include a 14-day free trial. No credit card required.
           </p>
 
           {/* Billing toggle */}
-          <div className="mt-5 inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-[#1a2d1f] p-1 text-xs">
+          <div className="mt-5 inline-flex items-center gap-1 rounded-full border border-surface-border bg-surface-card p-1 text-xs">
             <button
               type="button"
               className={`rounded-full px-4 py-1.5 font-medium transition-all duration-200 ${
                 billingCycle === 'monthly'
-                  ? 'bg-lime-400 text-black'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-brand-bright text-text-inverse'
+                  : 'text-text-muted hover:text-text-primary'
               }`}
               onClick={() => setBillingCycle('monthly')}
             >
@@ -152,8 +152,8 @@ export default function PricingPage() {
               type="button"
               className={`rounded-full px-4 py-1.5 font-medium transition-all duration-200 ${
                 billingCycle === 'annual'
-                  ? 'bg-lime-400 text-black'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-brand-bright text-text-inverse'
+                  : 'text-text-muted hover:text-text-primary'
               }`}
               onClick={() => setBillingCycle('annual')}
             >
@@ -161,7 +161,7 @@ export default function PricingPage() {
             </button>
           </div>
           {billingCycle === 'annual' ? (
-            <p className="mt-2 text-xs text-lime-400">Professional annual plan: $150/mo (save $300/year).</p>
+            <p className="mt-2 text-xs text-brand-bright">Professional annual plan: $150/mo (save $300/year).</p>
           ) : null}
         </div>
 
@@ -172,24 +172,24 @@ export default function PricingPage() {
               key={tier.name}
               className={`relative rounded-2xl border p-6 transition-all duration-200 ${
                 tier.highlighted
-                  ? 'scale-[1.02] border-lime-400/30 bg-[#243828] shadow-[0_0_30px_rgba(163,230,53,0.08)]'
-                  : 'border-white/[0.06] bg-[#1a2d1f] hover:-translate-y-0.5'
+                  ? 'scale-[1.02] border-brand/30 bg-surface-elevated'
+                  : 'border-surface-border bg-surface-card hover:-translate-y-0.5'
               }`}
             >
               {tier.highlighted ? (
-                <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-lime-400 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-black">
+                <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-brand-bright px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-inverse">
                   <Star className="h-3 w-3" />
                   Most Popular
                 </div>
               ) : null}
-              <h2 className="text-xl font-semibold text-slate-100">{tier.name}</h2>
-              <div className="mt-2 text-3xl font-bold tracking-tight text-slate-100">{tier.price}</div>
-              <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">{tier.subtitle}</p>
+              <h2 className="text-xl font-semibold text-text-primary">{tier.name}</h2>
+              <div className="mt-2 text-3xl font-bold tracking-tight text-text-primary">{tier.price}</div>
+              <p className="mt-1 text-xs uppercase tracking-wide text-text-muted">{tier.subtitle}</p>
 
               <ul className="mt-5 space-y-2">
                 {tier.features.map((feature) => (
-                  <li key={`${tier.name}-${feature}`} className="flex items-start gap-2 text-sm text-slate-300">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-lime-400" />
+                  <li key={`${tier.name}-${feature}`} className="flex items-start gap-2 text-sm text-text-secondary">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-bright" />
                     <span>{feature}</span>
                   </li>
                 ))}
@@ -201,8 +201,8 @@ export default function PricingPage() {
                     href={tier.ctaHref}
                     className={`block w-full rounded-full py-2.5 text-center text-sm font-semibold transition-all duration-200 ${
                       tier.highlighted
-                        ? 'bg-lime-400 text-black hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.35)]'
-                        : 'border border-white/[0.12] text-slate-300 hover:border-white/20 hover:bg-white/5'
+                        ? 'bg-brand-bright text-text-inverse hover:brightness-110'
+                        : 'border border-surface-border text-text-secondary hover:border-brand/30 hover:bg-surface-hover'
                     }`}
                   >
                     {tier.ctaLabel}
@@ -212,8 +212,8 @@ export default function PricingPage() {
                     to={tier.ctaHref}
                     className={`block w-full rounded-full py-2.5 text-center text-sm font-semibold transition-all duration-200 ${
                       tier.highlighted
-                        ? 'bg-lime-400 text-black hover:brightness-110 hover:shadow-[0_0_16px_rgba(163,230,53,0.35)]'
-                        : 'border border-white/[0.12] text-slate-300 hover:border-white/20 hover:bg-white/5'
+                        ? 'bg-brand-bright text-text-inverse hover:brightness-110'
+                        : 'border border-surface-border text-text-secondary hover:border-brand/30 hover:bg-surface-hover'
                     }`}
                   >
                     {tier.ctaLabel}
@@ -226,36 +226,36 @@ export default function PricingPage() {
 
         {/* Feature comparison table */}
         <section className="mt-10">
-          <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#1a2d1f]">
+          <div className="overflow-hidden rounded-2xl border border-surface-border bg-surface-card">
             <div className="overflow-x-auto">
               <table className="min-w-[760px] w-full text-sm">
-                <thead className="border-b border-white/[0.06] bg-[#243828]">
+                <thead className="border-b border-surface-border bg-surface-elevated">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-slate-200">Features</th>
-                    <th className="px-4 py-3 text-center font-semibold text-slate-200">Starter</th>
-                    <th className="px-4 py-3 text-center font-semibold text-lime-400">Pro</th>
-                    <th className="px-4 py-3 text-center font-semibold text-slate-200">Enterprise</th>
+                    <th className="px-4 py-3 text-left font-semibold text-text-primary">Features</th>
+                    <th className="px-4 py-3 text-center font-semibold text-text-primary">Starter</th>
+                    <th className="px-4 py-3 text-center font-semibold text-brand-bright">Pro</th>
+                    <th className="px-4 py-3 text-center font-semibold text-text-primary">Enterprise</th>
                   </tr>
                 </thead>
                 <tbody>
                   {featureRows.map((row, i) => (
                     <tr
                       key={row.label}
-                      className={`border-t border-white/[0.04] ${i % 2 === 0 ? '' : 'bg-white/[0.015]'}`}
+                      className={`border-t border-surface-border/40 ${i % 2 === 0 ? '' : 'bg-surface-elevated/30'}`}
                     >
-                      <td className="px-4 py-3 text-left text-slate-300">{row.label}</td>
-                      <td className="px-4 py-3 text-center text-slate-400">{renderFeatureValue(row.starter)}</td>
-                      <td className="px-4 py-3 text-center text-slate-300">{renderFeatureValue(row.pro)}</td>
-                      <td className="px-4 py-3 text-center text-slate-300">{renderFeatureValue(row.enterprise)}</td>
+                      <td className="px-4 py-3 text-left text-text-secondary">{row.label}</td>
+                      <td className="px-4 py-3 text-center text-text-muted">{renderFeatureValue(row.starter)}</td>
+                      <td className="px-4 py-3 text-center text-text-secondary">{renderFeatureValue(row.pro)}</td>
+                      <td className="px-4 py-3 text-center text-text-secondary">{renderFeatureValue(row.enterprise)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
-          <p className="mt-4 text-center text-sm text-slate-500">
+          <p className="mt-4 text-center text-sm text-text-muted">
             Questions?{' '}
-            <a href="mailto:support@groundcrewhq.com" className="text-lime-400 hover:text-lime-300">
+            <a href="mailto:support@groundcrewhq.com" className="text-brand hover:text-brand-bright">
               support@groundcrewhq.com
             </a>
           </p>

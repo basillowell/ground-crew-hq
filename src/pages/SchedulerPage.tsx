@@ -471,7 +471,7 @@ export default function SchedulerPage() {
     }
     return {
       cell: 'bg-card border border-l-4 border-l-slate-400 text-foreground hover:bg-muted/30',
-      badge: 'border-slate-200 text-slate-700',
+      badge: 'border-surface-border text-text-muted',
       label: employee.department?.trim() || 'General',
     };
   };
@@ -1308,7 +1308,7 @@ export default function SchedulerPage() {
                       ) : (
                         <button
                           type="button"
-                          className="min-h-11 w-full rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                          className="min-h-11 w-full rounded-lg border border-dashed border-surface-border px-3 py-2 text-sm text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                           onClick={() => selectedMobileDay && openAddShift(emp.id, selectedMobileDay.date)}
                         >
                           + Add Shift
@@ -1413,7 +1413,7 @@ export default function SchedulerPage() {
                                 <button
                                   type="button"
                                   disabled={isReadOnly}
-                                  className="h-11 w-full rounded-lg border border-dashed border-slate-200 text-[10px] text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                                  className="h-11 w-full rounded-lg border border-dashed border-surface-border text-[10px] text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                                   onClick={() => openAddShift(emp.id, day.date)}
                                   data-testid={`button-add-shift-${emp.id}-${day.date}`}
                                 >

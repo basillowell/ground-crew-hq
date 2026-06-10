@@ -149,9 +149,9 @@ function statusBadgeLabel(status: AssignmentStatus) {
 
 function statusBadgeClass(status: AssignmentStatus) {
   const normalized = displayStatus(status);
-  if (normalized === 'done') return 'bg-lime-400/10 text-lime-400';
+  if (normalized === 'done') return 'bg-brand/10 text-brand';
   if (normalized === 'in_progress') return 'bg-sky-400/10 text-sky-400';
-  return 'bg-white/[0.06] text-slate-400';
+  return 'bg-surface-elevated text-text-secondary';
 }
 
 const QUICK_HOURS_OPTIONS = ['1', '1.5', '2', '2.5', '3', '4'];
@@ -1238,7 +1238,7 @@ export default function MobileFieldWorkspacePage() {
 
   const displayOnlyLayout = (
     <div
-      className="relative mx-auto w-full max-w-[520px] bg-[#0f1a14] px-4 pb-28 pt-4 font-sans"
+      className="relative mx-auto w-full max-w-[520px] bg-surface-base px-4 pb-28 pt-4 font-sans"
       onTouchStart={handlePullRefreshStart}
       onTouchMove={handlePullRefreshMove}
       onTouchEnd={() => void handlePullRefreshEnd()}
@@ -1255,39 +1255,39 @@ export default function MobileFieldWorkspacePage() {
       />
 
       {pullDistance > 0 ? (
-        <div className="mb-2 flex h-8 items-center justify-center text-xs text-slate-500">
+        <div className="mb-2 flex h-8 items-center justify-center text-xs text-text-muted">
           {refreshing ? 'Refreshing…' : pullDistance >= 64 ? 'Release to refresh' : 'Pull to refresh'}
         </div>
       ) : null}
 
-      <div className="mb-4 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-4">
+      <div className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">My Tasks</p>
-          <p className="text-xs text-slate-500">{new Date().toLocaleDateString()}</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">My Tasks</p>
+          <p className="text-xs text-text-muted">{new Date().toLocaleDateString()}</p>
         </div>
         <div className="space-y-2">
           {loading
             ? Array.from({ length: 4 }).map((_, idx) => (
-                <div key={`my-task-skeleton-${idx}`} className="h-[48px] animate-pulse rounded-xl bg-white/[0.04]" />
+                <div key={`my-task-skeleton-${idx}`} className="h-[48px] animate-pulse rounded-xl bg-surface-elevated" />
               ))
             : assignments.length === 0
-              ? <p className="text-sm text-slate-500">No tasks assigned for today.</p>
+              ? <p className="text-sm text-text-muted">No tasks assigned for today.</p>
               : assignments
                   .sort((a, b) => a.orderIndex - b.orderIndex)
                   .map((assignment) => (
-                    <div key={assignment.id} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3">
-                      <span className="truncate text-sm font-medium text-slate-200">{assignment.title}</span>
-                      <span className="shrink-0 rounded-full border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-slate-400">{assignment.location || 'Area'}</span>
-                      <span className="shrink-0 text-xs text-slate-500">{assignment.estimatedHours.toFixed(1)}h</span>
+                    <div key={assignment.id} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-surface-border bg-surface-elevated/30 px-3">
+                      <span className="truncate text-sm font-medium text-text-primary">{assignment.title}</span>
+                      <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{assignment.location || 'Area'}</span>
+                      <span className="shrink-0 text-xs text-text-muted">{assignment.estimatedHours.toFixed(1)}h</span>
                       <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(assignment.status)}`}>{statusBadgeLabel(assignment.status)}</span>
                       {displayStatus(assignment.status) === 'done' ? (
-                        <button type="button" disabled className="ml-auto rounded-full border border-white/[0.06] px-3 py-1 text-xs text-slate-600">
+                        <button type="button" disabled className="ml-auto rounded-full border border-surface-border px-3 py-1 text-xs text-text-muted">
                           Done
                         </button>
                       ) : (
                         <button
                           type="button"
-                          className="ml-auto flex items-center gap-1 rounded-full border border-white/[0.10] px-3 py-1 text-xs text-slate-300 transition-colors hover:border-lime-400/40 hover:text-lime-400 disabled:opacity-50"
+                          className="ml-auto flex items-center gap-1 rounded-full border border-surface-border px-3 py-1 text-xs text-text-secondary transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-50"
                           disabled={Boolean(savingIds[assignment.id])}
                           onClick={() => void handleMyTaskStatusAction(assignment, displayStatus(assignment.status) === 'planned' ? 'start' : 'complete')}
                         >
@@ -1300,40 +1300,40 @@ export default function MobileFieldWorkspacePage() {
         </div>
       </div>
 
-      <div className="my-4 border-t border-white/[0.06]" />
+      <div className="my-4 border-t border-surface-border" />
 
-      <div className="mb-4 rounded-2xl border border-white/[0.06] bg-[#1a2d1f] p-4">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Teammates</p>
+      <div className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
+        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Teammates</p>
         <div className="space-y-3">
           {loading
             ? Array.from({ length: 3 }).map((_, idx) => (
-                <div key={`teammate-skeleton-${idx}`} className="rounded-xl border border-white/[0.06] p-3">
-                  <div className="h-6 w-40 animate-pulse rounded bg-white/[0.04]" />
-                  <div className="mt-2 h-[48px] animate-pulse rounded-xl bg-white/[0.04]" />
+                <div key={`teammate-skeleton-${idx}`} className="rounded-xl border border-surface-border p-3">
+                  <div className="h-6 w-40 animate-pulse rounded bg-surface-elevated" />
+                  <div className="mt-2 h-[48px] animate-pulse rounded-xl bg-surface-elevated" />
                 </div>
               ))
             : teammates.length === 0
-              ? <p className="text-sm text-slate-500">No teammates scheduled today.</p>
+              ? <p className="text-sm text-text-muted">No teammates scheduled today.</p>
               : teammates.map((teammate) => (
-                  <div key={teammate.employeeId} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                  <div key={teammate.employeeId} className="rounded-xl border border-surface-border bg-surface-elevated/30 p-3">
                     <div className="mb-2 flex items-center justify-between">
                       <div>
-                        <p className="text-base font-semibold text-slate-100">{`${teammate.firstName} ${teammate.lastName}`.trim()}</p>
-                        <p className="text-xs text-slate-500">{teammate.role || 'Crew'}</p>
+                        <p className="text-base font-semibold text-text-primary">{`${teammate.firstName} ${teammate.lastName}`.trim()}</p>
+                        <p className="text-xs text-text-muted">{teammate.role || 'Crew'}</p>
                       </div>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-text-muted">
                         {teammate.shiftStart && teammate.shiftEnd ? `${formatTime(teammate.shiftStart)}–${formatTime(teammate.shiftEnd)}` : 'No shift'}
                       </p>
                     </div>
                     <div className="space-y-2">
                       {teammate.tasks.length === 0 ? (
-                        <p className="text-xs text-slate-500">No tasks assigned.</p>
+                        <p className="text-xs text-text-muted">No tasks assigned.</p>
                       ) : (
                         teammate.tasks.map((task) => (
-                          <div key={task.id} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-white/[0.06] px-3">
-                            <span className="truncate text-sm font-medium text-slate-300">{task.title}</span>
-                            <span className="shrink-0 rounded-full border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-slate-400">{task.location || 'Area'}</span>
-                            <span className="shrink-0 text-xs text-slate-500">{task.estimatedHours.toFixed(1)}h</span>
+                          <div key={task.id} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-surface-border px-3">
+                            <span className="truncate text-sm font-medium text-text-secondary">{task.title}</span>
+                            <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{task.location || 'Area'}</span>
+                            <span className="shrink-0 text-xs text-text-muted">{task.estimatedHours.toFixed(1)}h</span>
                             <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(task.status)}`}>{statusBadgeLabel(task.status)}</span>
                           </div>
                         ))
@@ -1464,7 +1464,7 @@ export default function MobileFieldWorkspacePage() {
               <p className="text-base font-semibold">Task Progress</p>
               <p className="text-base font-medium">{doneCount}/{assignments.length} {t.tasksDone}</p>
             </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+            <div className="h-3 w-full overflow-hidden rounded-full bg-surface-border">
               <div
                 className="h-full rounded-full bg-green-600 transition-all duration-300"
                 style={{ width: `${completionPct}%` }}

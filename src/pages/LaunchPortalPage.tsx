@@ -117,14 +117,14 @@ function DarkInput(props: React.ComponentProps<typeof Input>) {
   return (
     <Input
       {...props}
-      className={`border-white/[0.10] bg-surface-base text-slate-100 placeholder:text-slate-500 focus-visible:border-brand/50 focus-visible:ring-brand/30 ${props.className ?? ''}`}
+      className={`border-surface-border bg-surface-base text-text-primary placeholder:text-text-muted focus-visible:border-brand/50 focus-visible:ring-brand/30 ${props.className ?? ''}`}
     />
   );
 }
 
 function DarkLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor: string }) {
   return (
-    <Label htmlFor={htmlFor} className="text-sm text-slate-300">
+    <Label htmlFor={htmlFor} className="text-sm text-text-secondary">
       {children}
     </Label>
   );
@@ -333,13 +333,13 @@ export default function LaunchPortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-base text-slate-100">
+    <div className="min-h-screen bg-surface-base text-text-primary">
       {/* ── Navbar ── */}
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-surface-base/90 backdrop-blur-md">
+      <header className="sticky top-0 z-20 border-b border-surface-border bg-surface-base/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <div>
-            <div className="text-base font-semibold tracking-tight text-slate-100">{appName}</div>
-            <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{clientName}</div>
+            <div className="text-base font-semibold tracking-tight text-text-primary">{appName}</div>
+            <div className="text-[10px] uppercase tracking-[0.16em] text-text-muted">{clientName}</div>
           </div>
           <div className="flex items-center gap-2">
             {currentUser ? (
@@ -415,46 +415,46 @@ export default function LaunchPortalPage() {
           </div>
 
           {/* Dashboard mockup */}
-          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-surface-card shadow-2xl">
-            <div className="flex h-8 items-center gap-2 border-b border-white/[0.06] bg-black/20 px-3">
+          <div className="overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-2xl">
+            <div className="flex h-8 items-center gap-2 border-b border-surface-border bg-surface-elevated/50 px-3">
               <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
               <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
               <span className="h-2.5 w-2.5 rounded-full bg-lime-400/70" />
-              <span className="ml-2 text-[11px] text-slate-500">ground-crew-hq.vercel.app/dashboard</span>
+              <span className="ml-2 text-[11px] text-text-muted">ground-crew-hq.vercel.app/dashboard</span>
             </div>
             <div className="grid grid-cols-[80px_1fr]">
-              <div className="space-y-2 bg-[#0d1f14] p-3">
+              <div className="space-y-2 bg-surface-base p-3">
                 {['Dashboard', 'Workboard', 'Scheduler', 'Weather'].map((item) => (
-                  <div key={item} className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] text-slate-400">
+                  <div key={item} className="rounded-md bg-surface-elevated px-2 py-1 text-[10px] text-text-secondary">
                     {item}
                   </div>
                 ))}
               </div>
               <div className="space-y-3 p-3">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
-                    <div className="text-[10px] text-slate-500">Crew</div>
-                    <div className="text-sm font-semibold text-slate-100">3 Scheduled</div>
+                  <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
+                    <div className="text-[10px] text-text-muted">Crew</div>
+                    <div className="text-sm font-semibold text-text-primary">3 Scheduled</div>
                   </div>
-                  <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
-                    <div className="text-[10px] text-slate-500">Tasks</div>
-                    <div className="text-sm font-semibold text-slate-100">8 Assigned</div>
+                  <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
+                    <div className="text-[10px] text-text-muted">Tasks</div>
+                    <div className="text-sm font-semibold text-text-primary">8 Assigned</div>
                   </div>
-                  <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
-                    <div className="text-[10px] text-slate-500">Weather</div>
-                    <div className="text-sm font-semibold text-slate-100">84°F</div>
+                  <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
+                    <div className="text-[10px] text-text-muted">Weather</div>
+                    <div className="text-sm font-semibold text-text-primary">84°F</div>
                   </div>
                 </div>
-                <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
-                  <div className="mb-2 text-[10px] text-slate-500">Schedule Grid</div>
+                <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
+                  <div className="mb-2 text-[10px] text-text-muted">Schedule Grid</div>
                   <div className="space-y-1">
                     <div className="h-5 rounded bg-lime-400/25" />
                     <div className="h-5 rounded bg-sky-400/25" />
                     <div className="h-5 rounded bg-amber-400/25" />
                   </div>
                 </div>
-                <div className="rounded-lg border border-white/[0.06] bg-surface-elevated p-2">
-                  <div className="mb-2 text-[10px] text-slate-500">Spray Window Timeline</div>
+                <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
+                  <div className="mb-2 text-[10px] text-text-muted">Spray Window Timeline</div>
                   <div className="flex h-3 overflow-hidden rounded-full">
                     <div className="w-1/2 bg-lime-400/60" />
                     <div className="w-1/4 bg-amber-400/60" />
@@ -496,8 +496,8 @@ export default function LaunchPortalPage() {
                     <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated text-brand transition-colors duration-200 group-hover:bg-brand/10">
                       <Icon className="h-6 w-6" />
                     </div>
-                    <h3 className="text-[18px] font-semibold leading-snug text-slate-100">{feature.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-400">{feature.description}</p>
+                    <h3 className="text-[18px] font-semibold leading-snug text-text-primary">{feature.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-text-secondary">{feature.description}</p>
                   </div>
                 </ScrollReveal>
               );
@@ -583,8 +583,8 @@ export default function LaunchPortalPage() {
 
         {/* ── Testimonials ── */}
         <section className="mt-16">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Trusted by Grounds Teams Across the Country</h2>
-          <div className="mt-4 rounded-xl border border-white/[0.06] bg-surface-card px-4 py-3 text-center text-sm font-medium text-slate-300">
+          <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Trusted by Grounds Teams Across the Country</h2>
+          <div className="mt-4 rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-center text-sm font-medium text-text-secondary">
             500+ tasks dispatched · 2,000+ hours tracked · 50+ facilities
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -596,8 +596,8 @@ export default function LaunchPortalPage() {
                 <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-elevated text-sm font-semibold text-brand-bright">
                   {item.initials}
                 </div>
-                <p className="text-sm leading-6 text-slate-300">"{item.quote}"</p>
-                <p className="mt-3 text-xs font-medium text-slate-500">— {item.byline}</p>
+                <p className="text-sm leading-6 text-text-secondary">"{item.quote}"</p>
+                <p className="mt-3 text-xs font-medium text-text-muted">— {item.byline}</p>
               </div>
             ))}
           </div>
@@ -605,9 +605,9 @@ export default function LaunchPortalPage() {
 
         {/* ── About ── */}
         <section className="mt-16">
-          <div className="rounded-2xl border border-white/[0.06] bg-surface-card p-6 md:p-8">
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-100">Built by People Who Know the Course</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-6 md:p-8">
+            <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Built by People Who Know the Course</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
               Ground Crew HQ was designed by turf professionals who&apos;ve walked the course at 5 AM, managed crews in
               95° heat, and dealt with weather cancellations. We built the tool we wished we had.
             </p>
@@ -639,17 +639,17 @@ export default function LaunchPortalPage() {
       </main>
 
       {/* ── Footer ── */}
-      <footer className="border-t border-white/[0.06] bg-surface-base">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-slate-500 md:flex-row md:px-6">
+      <footer className="border-t border-surface-border bg-surface-base">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-text-muted md:flex-row md:px-6">
           <div>
-            <div className="font-semibold text-slate-300">Ground Crew HQ</div>
+            <div className="font-semibold text-text-secondary">Ground Crew HQ</div>
             <div>© 2026 Ground Crew HQ · Built for the people who keep courses perfect.</div>
           </div>
           <div className="flex items-center gap-4">
-            <a href="#" className="transition-colors hover:text-slate-300">Features</a>
-            <Link to="/pricing" className="transition-colors hover:text-slate-300">Pricing</Link>
-            <button type="button" className="transition-colors hover:text-slate-300" onClick={() => openDialog('sign-in')}>Login</button>
-            <a href="mailto:support@groundcrewhq.com" className="transition-colors hover:text-slate-300">Contact</a>
+            <a href="#" className="transition-colors hover:text-text-secondary">Features</a>
+            <Link to="/pricing" className="transition-colors hover:text-text-secondary">Pricing</Link>
+            <button type="button" className="transition-colors hover:text-text-secondary" onClick={() => openDialog('sign-in')}>Login</button>
+            <a href="mailto:support@groundcrewhq.com" className="transition-colors hover:text-text-secondary">Contact</a>
           </div>
         </div>
       </footer>
@@ -658,10 +658,10 @@ export default function LaunchPortalPage() {
       <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
         <DialogContent
           aria-describedby="dialog-desc"
-          className="max-w-md border-white/[0.08] bg-surface-card text-slate-100 backdrop-blur-xl"
+          className="max-w-md border-surface-border bg-surface-card text-text-primary backdrop-blur-xl"
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base text-slate-100">
+            <DialogTitle className="flex items-center gap-2 text-base text-text-primary">
               <ShieldCheck className="h-4 w-4 text-brand-bright" />
               {dialogTitles[authPanel]}
             </DialogTitle>
@@ -707,7 +707,7 @@ export default function LaunchPortalPage() {
                   {authDebugMessage}
                   {hasSession && (authState === 'network-timeout' || authState === 'profile-error' || authState === 'profile-missing') ? (
                     <div className="mt-2">
-                      <Button type="button" size="sm" variant="outline" className="border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100" onClick={() => void retryAuthHydration()}>
+                      <Button type="button" size="sm" variant="outline" className="border-surface-border text-text-secondary hover:bg-surface-hover hover:text-text-primary" onClick={() => void retryAuthHydration()}>
                         Retry profile load
                       </Button>
                     </div>
@@ -726,13 +726,13 @@ export default function LaunchPortalPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100"
+                className="w-full border-surface-border text-text-secondary hover:bg-surface-hover hover:text-text-primary"
                 disabled={isSubmitting || !hasSupabaseConfig}
                 onClick={() => void handleDemoLogin()}
               >
                 Try Demo
               </Button>
-              <p className="text-center text-xs text-slate-500">
+              <p className="text-center text-xs text-text-muted">
                 Don't have an account?{' '}
                 <PanelLink onClick={() => switchPanel('sign-up')}>Create one</PanelLink>
               </p>
@@ -745,7 +745,7 @@ export default function LaunchPortalPage() {
               {signUpSuccess ? (
                 <div className="space-y-4">
                   <SuccessBanner message="Check your email to confirm your account. You'll receive a verification link within a few minutes." />
-                  <p className="text-center text-xs text-slate-500">
+                  <p className="text-center text-xs text-text-muted">
                     Already have an account?{' '}
                     <PanelLink onClick={() => switchPanel('sign-in')}>Sign in</PanelLink>
                   </p>
@@ -807,7 +807,7 @@ export default function LaunchPortalPage() {
                     {isSigningUp ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     {isSigningUp ? 'Creating account...' : 'Create account'}
                   </Button>
-                  <p className="text-center text-xs text-slate-500">
+                  <p className="text-center text-xs text-text-muted">
                     Already have an account?{' '}
                     <PanelLink onClick={() => switchPanel('sign-in')}>Sign in</PanelLink>
                   </p>
@@ -822,13 +822,13 @@ export default function LaunchPortalPage() {
               {forgotSuccess ? (
                 <div className="space-y-4">
                   <SuccessBanner message="Password reset link sent. Check your inbox — the link expires in 1 hour." />
-                  <p className="text-center text-xs text-slate-500">
+                  <p className="text-center text-xs text-text-muted">
                     <PanelLink onClick={() => switchPanel('sign-in')}>Back to sign in</PanelLink>
                   </p>
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-text-secondary">
                     Enter the email address on your account and we'll send you a reset link.
                   </p>
                   <div className="space-y-2">
@@ -853,7 +853,7 @@ export default function LaunchPortalPage() {
                     {isSendingReset ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     {isSendingReset ? 'Sending...' : 'Send reset link'}
                   </Button>
-                  <p className="text-center text-xs text-slate-500">
+                  <p className="text-center text-xs text-text-muted">
                     Remembered it?{' '}
                     <PanelLink onClick={() => switchPanel('sign-in')}>Back to sign in</PanelLink>
                   </p>
