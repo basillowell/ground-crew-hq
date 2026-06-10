@@ -399,6 +399,10 @@
 | org_id                 | uuid        | YES      |              |
 | weather_location_label | text        | YES      |              |
 
+RLS:
+- INSERT uses an `org_id` membership check only because a new row has no existing property `id`.
+- SELECT/UPDATE/DELETE use `can_manage_property(id)`.
+
 ---
 
 ## property_class_options

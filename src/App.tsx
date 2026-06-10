@@ -363,17 +363,9 @@ function AppWithNotificationSetup() {
           const assignmentTitle = next.title?.trim() || "Task";
           const dispatcherName = next.assigned_by_name?.trim() || next.created_by_name?.trim() || "Supervisor";
           const startLabel = formatTime(next.start_time).trim() || "Not set";
-          let propertyName = "Property not set";
-          if (next.property_id) {
-            const { data: property } = await supabase
-              .from("properties")
-              .select("name")
-              .eq("id", next.property_id)
-              .maybeSingle();
-            if (property?.name) {
-              propertyName = property.name;
-            }
-          }
+          const propertyName = next.property_id
+            ? useAppStore.getState().properties.find((property) => property.id === next.property_id)?.name ?? "Property not set"
+            : "Property not set";
 
           const notificationBody = `Assigned by ${dispatcherName} · Start: ${startLabel} · ${propertyName}`;
           sendNotification(`New Task: ${assignmentTitle}`, notificationBody, "/app/workboard");

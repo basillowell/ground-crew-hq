@@ -31,7 +31,6 @@ import {
   useAssignments,
   useDepartmentOptions,
   useEquipmentUnits,
-  useProgramSettings,
   useScheduleEntries,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
@@ -40,6 +39,7 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { isPro } from '@/utils/planGating';
 import { useAppStore, type Property as StoreProperty } from '@/store/appStore';
+import { toProgramSettingsView } from '@/store/programSettingsView';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -170,12 +170,12 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncFlashActive, setSyncFlashActive] = useState(false);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
-  const programSettingQuery = useProgramSettings(orgId);
   const storeProperties = useAppStore((state) => state.properties);
   const storeEmployees = useAppStore((state) => state.employees);
+  const storeOrg = useAppStore((state) => state.org);
+  const storeProgramSettings = useAppStore((state) => state.programSettings);
   const deptQuery = useDepartmentOptions(orgId);
   const todayKey = currentDate.toISOString().slice(0, 10);
   const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
@@ -200,7 +200,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   });
   const isEmployeeClockedIn = latestClockEventQuery.data === 'clock_in';
 
-  const programSetting = programSettingQuery.data ?? null;
+  const programSetting = useMemo(
+    () => toProgramSettingsView(storeProgramSettings, storeOrg),
+    [storeOrg, storeProgramSettings],
+  );
   const properties = useMemo(
     () => storeProperties.map(toLayoutProperty),
     [storeProperties],
@@ -336,7 +339,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       read: true,
     }];
   }, [inAppNotifications]);
-  const planTier: 'FREE' | 'PRO' = isPro(subscriptionStatus) ? 'PRO' : 'FREE';
+  const planTier: 'FREE' | 'PRO' = isPro(storeOrg?.subscription_status ?? null) ? 'PRO' : 'FREE';
 
   const unreadNotificationCount = useMemo(
     () => inAppNotifications.filter((entry) => !entry.read).length,
@@ -427,19 +430,6 @@ export function AppLayout({ children }: AppLayoutProps) {
       window.removeEventListener('offline', onOffline);
     };
   }, [queryClient]);
-
-  useEffect(() => {
-    const fetchSubscriptionStatus = async () => {
-      if (!supabase || !orgId) return;
-      const { data } = await supabase
-        .from('organizations')
-        .select('subscription_status')
-        .eq('id', orgId)
-        .maybeSingle();
-      setSubscriptionStatus(data?.subscription_status ? String(data.subscription_status) : null);
-    };
-    void fetchSubscriptionStatus();
-  }, [orgId]);
 
   const handleSelectProperty = (propertyId: string) => {
     setCurrentPropertyId(propertyId);

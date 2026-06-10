@@ -372,7 +372,7 @@ export default function LaunchPortalPage() {
       <main className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6 md:py-16">
         {/* ── Hero ── */}
         <section className="grid items-center gap-10 lg:grid-cols-2">
-          <div className="animate-[hero-enter_600ms_ease-out_forwards] opacity-0 [animation-delay:120ms]">
+          <div>
             <h1 className="text-[clamp(2.5rem,6vw,4.5rem)] font-extrabold leading-[1.05] tracking-tight text-text-primary">
               The Operations Brain for Your Grounds Crew
             </h1>
@@ -864,12 +864,6 @@ export default function LaunchPortalPage() {
         </DialogContent>
       </Dialog>
 
-      <style>{`
-        @keyframes hero-enter {
-          from { opacity: 0; transform: translateY(20px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }

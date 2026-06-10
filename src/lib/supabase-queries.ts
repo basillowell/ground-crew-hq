@@ -738,26 +738,6 @@ async function fetchOptionalRows<T>(table: string, orderBy?: string) {
   return (data ?? []) as T[];
 }
 
-async function fetchProperties(orgId?: string): Promise<Property[]> {
-  const client = ensureSupabase();
-  let query = client.from('properties').select('*').order('name');
-  if (orgId) query = query.eq('org_id', orgId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data as DbProperty[]).map(toProperty);
-}
-
-async function fetchEmployees(propertyId?: string, orgId?: string): Promise<Employee[]> {
-  const client = ensureSupabase();
-  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let query = client.from('employees').select('*').order('last_name').order('first_name');
-  if (orgId) query = query.eq('org_id', orgId);
-  if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data as DbEmployee[]).map(toEmployee);
-}
-
 async function fetchScheduleEntries(date: string, propertyId?: string, orgId?: string): Promise<ScheduleEntry[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
@@ -845,28 +825,6 @@ async function fetchNotes(propertyId?: string, orgId?: string): Promise<Note[]> 
   const { data, error } = await query;
   if (error) throw error;
   return (data as DbNote[]).map(toNote);
-}
-
-async function fetchProgramSettings(orgId?: string): Promise<ProgramSettings | null> {
-  const client = ensureSupabase();
-  let query = client.from('program_settings').select('*').order('created_at').limit(1);
-  if (orgId) query = query.eq('org_id', orgId);
-  const { data, error } = await query.maybeSingle();
-  if (error) throw error;
-  return data ? toProgramSettings(data as DbProgramSettings) : null;
-}
-
-async function fetchAppUsers(orgId?: string): Promise<AppUser[]> {
-  const client = ensureSupabase();
-  const programSettings = await fetchProgramSettings(orgId);
-  let query = client
-    .from('app_users')
-    .select('*, employees (*)')
-    .order('created_at');
-  if (orgId) query = query.eq('org_id', orgId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data as DbAppUser[]).map((row) => toAppUser(row, programSettings?.clientLabel ?? 'Client profile'));
 }
 
 async function fetchWeatherStations(): Promise<WeatherStationSummary[]> {
@@ -1102,12 +1060,6 @@ export async function fetchChemicalApplicationLogs(startDate: string, endDate: s
   try {
     const client = ensureSupabase();
     const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-    let applicatorIds: string[] | undefined;
-    if (scopedPropertyId) {
-      const employees = await fetchEmployees(scopedPropertyId, orgId);
-      applicatorIds = employees.map((e) => e.id);
-      if (applicatorIds.length === 0) return [];
-    }
     let query = client
       .from('chemical_application_logs')
       .select('*')
@@ -1115,9 +1067,7 @@ export async function fetchChemicalApplicationLogs(startDate: string, endDate: s
       .lte('application_date', endDate)
       .order('application_date');
     if (orgId) query = query.eq('org_id', orgId);
-    if (applicatorIds) {
-      query = query.in('applicator_id', applicatorIds);
-    }
+    if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
     const { data, error } = await query;
     if (error) return [];
     return ((data as DbChemicalApplicationLog[]) ?? []).map(toChemicalApplicationLog);
@@ -1209,24 +1159,6 @@ async function fetchClockEventsRange(startDate: string, endDate: string, propert
   return (data as DbClockEvent[]).map(toClockEvent);
 }
 
-export function useProperties(orgId?: string) {
-  return useQuery({
-    queryKey: ['properties', orgId ?? 'all-orgs'],
-    queryFn: () => fetchProperties(orgId),
-    enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 5,
-  });
-}
-
-export function useEmployees(propertyId?: string, orgId?: string) {
-  return useQuery({
-    queryKey: ['employees', propertyId ?? 'all', orgId ?? 'all-orgs'],
-    queryFn: () => fetchEmployees(propertyId, orgId),
-    enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 5,
-  });
-}
-
 export function useScheduleEntries(date: string, propertyId?: string, orgId?: string) {
   return useQuery({
     queryKey: ['schedule-entries', date, propertyId ?? 'all', orgId ?? 'all-orgs'],
@@ -1280,24 +1212,6 @@ export function useEquipmentUnits(propertyId?: string, orgId?: string) {
   return useQuery({
     queryKey: ['equipment-units', propertyId ?? 'all', orgId ?? 'all-orgs'],
     queryFn: () => fetchEquipmentUnits(propertyId, orgId),
-    enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 5,
-  });
-}
-
-export function useProgramSettings(orgId?: string) {
-  return useQuery({
-    queryKey: ['program-settings', orgId ?? 'all-orgs'],
-    queryFn: () => fetchProgramSettings(orgId),
-    enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 10,
-  });
-}
-
-export function useAppUsers(orgId?: string) {
-  return useQuery({
-    queryKey: ['app-users', orgId ?? 'all-orgs'],
-    queryFn: () => fetchAppUsers(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
   });

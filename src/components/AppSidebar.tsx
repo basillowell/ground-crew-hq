@@ -9,9 +9,9 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader,
   SidebarFooter, useSidebar,
 } from '@/components/ui/sidebar';
-import { useProgramSettings } from '@/lib/supabase-queries';
-import { useAuth } from '@/contexts/AuthContext';
 import { APP_VERSION } from '@/constants/version';
+import { useAppStore } from '@/store/appStore';
+import { toProgramSettingsView } from '@/store/programSettingsView';
 
 const navItems = [
   { title: 'Workboard', url: '/app/workboard', icon: LayoutDashboard },
@@ -31,8 +31,9 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { currentUser } = useAuth();
-  const { data: programSetting } = useProgramSettings(currentUser?.orgId);
+  const storeProgramSettings = useAppStore((store) => store.programSettings);
+  const storeOrg = useAppStore((store) => store.org);
+  const programSetting = toProgramSettingsView(storeProgramSettings, storeOrg);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();

@@ -243,13 +243,14 @@ useEffect(() => {
 | LCP (cold load) | 645–824ms | <400ms |
 | TTFB | 6ms | ✓ healthy |
 | Supabase calls/session | 88–91 | <35 |
-| Store leaks | 11 | 0 |
+| Store leaks | 0 | 0 |
+| Properties INSERT RLS | Fix documented; Claude migration pending | Fixed |
 | Post-nav long tasks >50ms | 3–5 | 0 |
 | JS chunks | 48 | ✓ healthy |
 | Failed requests | 5 | 0 |
 
 ### Remaining Performance Work
-1. Complete store Prompt 3 — eliminate 11 remaining reference table leaks
+1. Apply and verify the documented `properties` INSERT RLS migration with Claude Code
 2. React.lazy() — CommandCenter + Scheduler + WorkboardShell still eager at startup
 3. Equipment page CLS 0.24 — add min-height to async data containers
 4. Disable Google Docs Offline Chrome extension before recording traces

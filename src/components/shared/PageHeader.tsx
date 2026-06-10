@@ -2,9 +2,9 @@ import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus } from 'lucide-react';
-import { useProgramSettings } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppStore } from '@/store/appStore';
+import { toProgramSettingsView } from '@/store/programSettingsView';
 
 interface PageHeaderProps {
   title: string;
@@ -19,8 +19,10 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, badge, action, children }: PageHeaderProps) {
-  const { currentUser, currentPropertyId } = useAuth();
-  const programSetting = useProgramSettings(currentUser?.orgId).data ?? undefined;
+  const { currentPropertyId } = useAuth();
+  const storeProgramSettings = useAppStore((state) => state.programSettings);
+  const storeOrg = useAppStore((state) => state.org);
+  const programSetting = toProgramSettingsView(storeProgramSettings, storeOrg) ?? undefined;
   const properties = useAppStore((state) => state.properties);
   const selectedPropertyName =
     currentPropertyId && currentPropertyId !== 'all'

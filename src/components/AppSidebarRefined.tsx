@@ -26,10 +26,11 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProgramSettings, usePropertyClassOptions } from '@/lib/supabase-queries';
+import { usePropertyClassOptions } from '@/lib/supabase-queries';
 import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/constants/version';
 import { useAppStore } from '@/store/appStore';
+import { toProgramSettingsView } from '@/store/programSettingsView';
 
 interface AppSidebarRefinedProps {
   onNavigate?: () => void;
@@ -135,8 +136,10 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { currentRole, currentPropertyId, currentUser } = useAuth();
-  const { data: programSetting } = useProgramSettings(currentUser?.orgId);
+  const { currentRole, currentPropertyId } = useAuth();
+  const storeProgramSettings = useAppStore((store) => store.programSettings);
+  const storeOrg = useAppStore((store) => store.org);
+  const programSetting = toProgramSettingsView(storeProgramSettings, storeOrg);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
