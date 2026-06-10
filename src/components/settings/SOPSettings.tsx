@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Pencil, RotateCcw, Trash2, Plus, X, GripVertical } from 'lucide-react';
+import { useAppStore } from '@/store/appStore';
+import { DndContext, PointerSensor, closestCenter, type DragEndEvent, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const SOP_CATEGORIES = [
   'Aeration',
@@ -54,12 +58,29 @@ const EMPTY_FORM: SopFormState = {
   category: 'General',
   procedure_body: '',
   estimated_hours: '1',
-  color: '#166534',
+  color: '',
   checklist: [],
 };
 
+function SortableChecklistRow({ id, children }: { id: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className="flex items-center gap-2 rounded-md border border-surface-border bg-surface-base px-2 py-1.5"
+    >
+      <button type="button" className="cursor-grab text-text-muted active:cursor-grabbing" {...attributes} {...listeners}>
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
 export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: string | null }) {
   const { currentUser } = useAuth();
+  const isHydrated = useAppStore((state) => state.isHydrated);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +88,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<SopFormState>(EMPTY_FORM);
+  const checklistSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const fetchSops = useCallback(async () => {
     if (!orgId) {
@@ -95,8 +117,9 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
   }, [orgId]);
 
   useEffect(() => {
+    if (!isHydrated) return;
     void fetchSops();
-  }, [fetchSops]);
+  }, [fetchSops, isHydrated]);
 
   const activeSops = useMemo(() => sops.filter((s) => s.is_active), [sops]);
   const inactiveSops = useMemo(() => sops.filter((s) => !s.is_active), [sops]);
@@ -118,6 +141,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
       .from('sop_checklist_items')
       .select('id, label, order_index, is_required')
       .eq('sop_id', sop.id)
+      .eq('org_id', sop.org_id)
       .order('order_index', { ascending: true });
 
     setForm({
@@ -126,7 +150,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
       category: sop.category ?? 'General',
       procedure_body: sop.procedure_body ?? '',
       estimated_hours: String(sop.estimated_hours ?? 1),
-      color: sop.color ?? '#166534',
+      color: sop.color ?? '',
       checklist: (items ?? []).map((item) => ({
         id: item.id as string,
         label: item.label as string,
@@ -171,6 +195,23 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
       if (target < 0 || target >= next.length) return current;
       [next[index], next[target]] = [next[target], next[index]];
       return { ...current, checklist: next.map((item, i) => ({ ...item, order_index: i })) };
+    });
+  }, []);
+
+  const handleChecklistDragEnd = useCallback(({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    setForm((current) => {
+      const ids = current.checklist.map((item, index) => item.id ?? `draft-${index}`);
+      const oldIndex = ids.indexOf(String(active.id));
+      const newIndex = ids.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return current;
+      return {
+        ...current,
+        checklist: arrayMove(current.checklist, oldIndex, newIndex).map((item, index) => ({
+          ...item,
+          order_index: index,
+        })),
+      };
     });
   }, []);
 
@@ -372,18 +413,6 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                   className="mt-1 h-9 w-full rounded-md border border-surface-border bg-surface-base px-2 text-sm text-text-primary"
                 />
               </label>
-              <label className="text-xs text-text-muted">
-                Color
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={form.color}
-                    onChange={(e) => setForm((c) => ({ ...c, color: e.target.value }))}
-                    className="h-9 w-12 cursor-pointer rounded-md border border-surface-border bg-surface-base"
-                  />
-                  <span className="text-xs text-text-muted">{form.color}</span>
-                </div>
-              </label>
             </div>
 
             <label className="block text-xs text-text-muted">
@@ -422,10 +451,14 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
               {form.checklist.length === 0 ? (
                 <p className="text-xs text-text-muted">No checklist items yet.</p>
               ) : (
+                <DndContext sensors={checklistSensors} collisionDetection={closestCenter} onDragEnd={handleChecklistDragEnd}>
+                  <SortableContext
+                    items={form.checklist.map((item, index) => item.id ?? `draft-${index}`)}
+                    strategy={verticalListSortingStrategy}
+                  >
                 <div className="space-y-1.5">
                   {form.checklist.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2 rounded-md border border-surface-border bg-surface-base px-2 py-1.5">
-                      <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+                    <SortableChecklistRow key={item.id ?? `draft-${index}`} id={item.id ?? `draft-${index}`}>
                       <div className="flex flex-1 items-center gap-2">
                         <input
                           value={item.label}
@@ -471,9 +504,11 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                           <X className="mx-auto h-3 w-3" />
                         </button>
                       </div>
-                    </div>
+                    </SortableChecklistRow>
                   ))}
                 </div>
+                  </SortableContext>
+                </DndContext>
               )}
             </div>
 

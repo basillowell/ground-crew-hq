@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarDays, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { CalendarDays, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/appStore';
 import { toast } from '@/components/ui/sonner';
+import { Switch } from '@/components/ui/switch';
 
 // columns from docs/dev/live-db-state.md — recurring_task_rules
 interface RecurringRule {
@@ -123,13 +124,18 @@ export function RecurringTasksSection({ orgId }: Props) {
     const { error: err } = await supabase
       .from('recurring_task_rules')
       .update({ active: !rule.active })
-      .eq('id', rule.id);
+      .eq('id', rule.id)
+      .eq('org_id', orgId);
     if (err) { toast.error(err.message); return; }
     setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, active: !r.active } : r));
   };
 
   const deleteRule = async (id: string) => {
-    const { error: err } = await supabase.from('recurring_task_rules').delete().eq('id', id);
+    const { error: err } = await supabase
+      .from('recurring_task_rules')
+      .delete()
+      .eq('id', id)
+      .eq('org_id', orgId);
     if (err) { toast.error(err.message); return; }
     setRules((prev) => prev.filter((r) => r.id !== id));
     toast.success('Rule deleted');
@@ -245,20 +251,12 @@ export function RecurringTasksSection({ orgId }: Props) {
               <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">
                 Status
               </label>
-              <button
-                type="button"
-                onClick={() => setFormActive((v) => !v)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  formActive ? 'text-status-active' : 'text-text-muted'
-                }`}
-              >
-                {formActive ? (
-                  <ToggleRight className="h-5 w-5" />
-                ) : (
-                  <ToggleLeft className="h-5 w-5" />
-                )}
-                {formActive ? 'Active' : 'Inactive'}
-              </button>
+              <div className="flex min-h-9 items-center gap-3">
+                <Switch checked={formActive} onCheckedChange={setFormActive} aria-label="Rule active" />
+                <span className={formActive ? 'text-sm text-status-active' : 'text-sm text-text-muted'}>
+                  {formActive ? 'Active' : 'Inactive'}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -357,30 +355,27 @@ export function RecurringTasksSection({ orgId }: Props) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
-                      {(rule.days_of_week ?? []).map((day) => (
+                      {DAY_OPTIONS.map((day) => {
+                        const active = (rule.days_of_week ?? []).includes(day);
+                        return (
                         <span
                           key={day}
-                          className="rounded bg-brand-ghost px-1.5 py-0.5 text-xs text-brand"
+                          className={`rounded px-1.5 py-0.5 text-xs ${
+                            active ? 'bg-brand-ghost text-brand' : 'bg-surface-elevated text-text-muted'
+                          }`}
                         >
                           {DAY_LABELS[day] ?? day}
                         </span>
-                      ))}
+                        );
+                      })}
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => void toggleActive(rule)}
-                      className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
-                        rule.active ? 'text-status-active' : 'text-text-muted'
-                      }`}
-                    >
-                      {rule.active ? (
-                        <ToggleRight className="h-4 w-4" />
-                      ) : (
-                        <ToggleLeft className="h-4 w-4" />
-                      )}
-                      {rule.active ? 'Active' : 'Off'}
-                    </button>
+                    <Switch
+                      checked={rule.active}
+                      onCheckedChange={() => void toggleActive(rule)}
+                      aria-label={`${getTaskName(rule.task_id)} active`}
+                    />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button

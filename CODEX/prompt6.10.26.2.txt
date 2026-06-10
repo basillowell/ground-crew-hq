@@ -1,0 +1,155 @@
+Before starting, read these files in order:
+1. https://raw.githubusercontent.com/basillowell/ground-crew-hq/main/CODERULES.md
+2. https://raw.githubusercontent.com/basillowell/ground-crew-hq/main/CLAUDE.md
+3. https://raw.githubusercontent.com/basillowell/ground-crew-hq/main/CODEX6.9.26.md
+4. https://raw.githubusercontent.com/basillowell/ground-crew-hq/main/ARCHITECTURE.md
+
+Confirm: rule count, build gate rule, app version, table count.
+Do not proceed until confirmed.
+
+---
+
+TASK: Settings page full UI rebuild — match Dispatch Board visual quality
+URL: /app/settings
+VISUAL REFERENCE: DispatchBoardPage.tsx — this is the design standard
+
+CONTEXT:
+  - Settings page has correct data but poor visual flow
+  - Tabs exist (Workspace, Workforce, Tasks, SOPs, Recurring Tasks, 
+    Weather, Access, Help) but each tab interior feels flat and inconsistent
+  - Dispatch Board has the right feel: dark cards, crew rows, status badges,
+    hover states, clean typography hierarchy
+  - 34 post-nav long tasks in trace caused by CSS animations on Settings — 
+    remove all transition animations heavier than transition-colors
+  - Store leaks regressed to 11 — audit Settings fetches and ensure any 
+    employees/properties/departments/organizations/program_settings reads 
+    come from useAppStore(), not direct Supabase calls
+
+---
+
+SECTION 1 — AUDIT AND FIX STORE LEAKS IN SETTINGS
+FILE: src/pages/SettingsPage.tsx + all sub-components in src/pages/settings/
+
+  - grep 'supabase.from..employees\|supabase.from..properties\|
+    supabase.from..departments\|supabase.from..organizations\|
+    supabase.from..program_settings' across all settings files
+  - For each match: remove the fetch, replace with useAppStore() read
+  - All 5 reference tables must come from store — zero direct fetches
+  - npm run build — must pass before Section 2
+
+---
+
+SECTION 2 — REMOVE HEAVY CSS ANIMATIONS
+FILES: src/pages/SettingsPage.tsx + all settings sub-components
+
+  - grep for 'animate-\|transition-all\|duration-[2-9][0-9][0-9]\|
+    duration-1[0-9][0-9][0-9]' in settings files
+  - Remove animate-* classes entirely from any non-skeleton element
+  - Replace transition-all with transition-colors where needed
+  - Keep: transition-colors duration-150 on hover states only
+  - Remove: any transform, scale, translate, opacity animations on data content
+  - Skeleton loaders may keep animate-pulse — that is intentional
+  - npm run build — must pass before Section 3
+
+---
+
+SECTION 3 — REBUILD EACH SETTINGS TAB TO DISPATCH QUALITY
+
+Read DispatchBoardPage.tsx first to internalize the visual pattern.
+Then apply to each tab below.
+
+DESIGN RULES (from Dispatch Board):
+  Card:     bg-surface-card border border-surface-border rounded-xl p-5
+  Header:   text-text-primary font-semibold text-base + text-text-muted text-sm subtitle
+  Row:      flex items-center justify-between px-4 py-3 hover:bg-surface-hover 
+            transition-colors cursor-pointer border-b border-surface-border last:border-0
+  Name:     text-text-primary font-medium text-sm
+  Meta:     text-text-muted text-xs
+  Badge:    StatusBadge pattern from CODEX6.9.26.md Section 6
+  Add btn:  border border-surface-border text-text-secondary hover:bg-surface-hover
+            rounded-lg px-3 py-1.5 text-sm
+  Save btn: bg-brand text-text-inverse rounded-lg px-4 py-2 text-sm font-medium
+  Input:    bg-surface-base border border-surface-border text-text-primary rounded-lg
+            px-3 py-2 placeholder:text-text-muted focus:border-brand
+  Section divider: border-t border-surface-border my-6
+  No animations on content — transition-colors only
+
+TAB 1 — Workspace (scheduler settings):
+  - Operational Day card: clean form inputs, Save button bg-brand
+  - Shift Templates: each template as a row card with name, time range, 
+    days chips, edit/delete actions — draggable to reorder 
+    (use @dnd-kit/sortable — already installed)
+  - Active Days: styled checkbox group, not plain HTML checkboxes
+  - All inputs match the Input design rule above
+
+TAB 2 — Tasks (Task Library):
+  - Task cards in a 2-column grid on desktop, 1-column mobile
+  - Each card: task name (text-text-primary font-medium), category chip 
+    (StatusBadge), estimated hours badge, edit/delete actions
+  - "Add Task" button top-right of section — bg-brand text-text-inverse
+  - Add/Edit form as a slide-over panel (not a blocking modal)
+  - Draggable task cards using @dnd-kit/sortable for priority reorder
+    (update tasks.priority on drop)
+  - Empty state: EmptyState pattern from CODEX6.9.26.md Section 6
+
+TAB 3 — Recurring Tasks:
+  - List view: each rule as a card row
+  - Show: task name, assigned employee, property, days of week chips, 
+    active toggle
+  - Days chips: Mon Tue Wed Thu Fri Sat Sun — highlight active days 
+    with bg-brand-ghost text-brand, inactive with bg-surface-elevated text-text-muted
+  - Active toggle: use a proper toggle switch component
+  - Edit inline or slide-over panel
+  - Empty state if no rules
+
+TAB 4 — SOPs:
+  - SOP cards: title, category chip, estimated_hours badge, 
+    checklist item count
+  - Expandable row to show checklist items inline
+  - Each checklist item: checkbox + label text, draggable to reorder
+    (update sop_checklist_items.order_index on drop)
+  - Add SOP: slide-over form
+
+TAB 5 — Workforce (departments, roles, worker types):
+  - Three sub-sections: Departments, Roles, Worker Types
+  - Each as a card with list of items
+  - Each item: name, active badge, edit/delete icon buttons
+  - "Add" button per section
+  - Inline edit on click
+
+TAB 6 — Scheduler (shift templates + operational config):
+  - Already covered in Workspace tab — merge if duplicate
+
+TAB 7 — Access (app_users / role management):
+  - Table of users: name, email, role chip, status badge
+  - Role chip: Admin = bg-brand/10 text-brand, 
+               Manager = bg-status-complete/10 text-status-complete,
+               Field Staff = bg-surface-elevated text-text-muted
+  - Edit role inline via select dropdown
+
+TAB 8 — Help:
+  - Clean info cards with keyboard shortcuts and support links
+  - No data fetches needed
+
+PROCESS:
+  - Read each tab component file before editing
+  - Apply design rules — do not change any data logic
+  - npm run build every 2 tabs
+  - All queries org-scoped, column names from live-db-state.md
+
+---
+
+SECTION 4 — FINAL VERIFICATION
+  - grep remaining hardcoded colors in settings files
+  - Confirm zero store leaks in settings
+  - Confirm no heavy animations remain
+  - npm run build — zero errors
+  - git add -A
+  - git commit -m "feat: Settings page full UI rebuild — dispatch quality, 
+    drag-drop reorder, slide-over forms, store leak fix, animation cleanup"
+  - git push origin main
+
+RULES: edit only listed files · no table renames · org-scoped queries ·
+       typed · isHydrated guard on all page effects ·
+       column names from live-db-state.md only · no hardcoded hex ·
+       no animate-* on content elements · return files+SQL+tests

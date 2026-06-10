@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
@@ -9,11 +9,50 @@ import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { HelpCircle } from 'lucide-react';
+import {
+  CalendarDays,
+  ChevronRight,
+  CircleHelp,
+  ExternalLink,
+  GripVertical,
+  HelpCircle,
+  Mail,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  Users,
+  Wrench,
+} from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
 import { RecurringTasksSection } from '@/components/settings/RecurringTasksSection';
 import { useAppStore } from '@/store/appStore';
 import { type ThemeMode, useTheme } from '@/hooks/useTheme';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'SOPs', 'Recurring Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -74,6 +113,13 @@ interface RecurringTaskRule {
   employee_id: string | null;
   days_of_week: string[];
   active: boolean;
+}
+
+interface AppUserRow {
+  id: string;
+  employee_id: string;
+  role: string;
+  status: string;
 }
 
 interface OrganizationInfo {
@@ -138,6 +184,114 @@ function PlaceholderCard({ text }: { text: string }) {
     <div className="rounded-xl border border-surface-border bg-surface-card p-4">
       <p className="text-sm text-text-muted">{text}</p>
     </div>
+  );
+}
+
+const settingsInputClass =
+  'w-full rounded-lg border border-surface-border bg-surface-base px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand';
+
+function SettingsCard({
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-surface-border bg-surface-card p-5">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">{title}</h2>
+          {subtitle ? <p className="mt-1 text-sm text-text-muted">{subtitle}</p> : null}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SortableShiftTemplateRow({
+  template,
+  onDelete,
+}: {
+  template: ShiftTemplate;
+  onDelete: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: template.id,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 ${
+        isDragging ? 'bg-surface-hover' : 'hover:bg-surface-hover'
+      }`}
+    >
+      <button
+        type="button"
+        className="flex min-h-11 min-w-11 cursor-grab items-center justify-center rounded-lg text-text-muted hover:bg-surface-elevated hover:text-text-primary active:cursor-grabbing"
+        aria-label={`Reorder ${template.name}`}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-text-primary">{template.name}</p>
+        <p className="mt-0.5 text-xs text-text-muted">
+          {formatTime(template.start)}-{formatTime(template.end)}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {(template.days ?? []).map((day) => (
+            <span key={`${template.id}-${day}`} className="rounded-full bg-brand-ghost px-2 py-0.5 text-xs text-brand">
+              {day.slice(0, 3).toUpperCase()}
+            </span>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => onDelete(template.id)}
+        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-status-warning/10 hover:text-status-warning"
+        aria-label={`Delete ${template.name}`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function SortableTaskRow({ id, children }: { id: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`grid rounded-xl border border-surface-border bg-surface-card p-4 ${
+        isDragging ? 'bg-surface-hover' : 'hover:bg-surface-hover'
+      }`}
+    >
+      <td className="flex items-center gap-2 pb-2">
+        <button
+          type="button"
+          className="flex min-h-11 min-w-11 cursor-grab items-center justify-center rounded-lg text-text-muted hover:bg-surface-elevated active:cursor-grabbing"
+          aria-label="Reorder task"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <span className="text-xs text-text-muted">Drag to set priority</span>
+      </td>
+      {children}
+    </tr>
   );
 }
 
@@ -603,17 +757,20 @@ function WorkspaceTab({
         status: 'active',
         active: true,
       }));
-      const { data: insertedEmployees, error: employeeError } = await supabase
+      const { error: employeeError } = await supabase
         .from('employees')
-        .insert(employeeRows)
-        .select('id, first_name, last_name');
+        .insert(employeeRows);
       if (employeeError) {
         setLoadingDemoData(false);
         setError(employeeError.message);
         toast.error(`Failed to seed demo employees: ${employeeError.message}`);
         return;
       }
-      demoEmployees = (insertedEmployees ?? []) as Array<{ id: string; first_name: string; last_name: string }>;
+      demoEmployees = employeeRows.map(({ id, first_name, last_name }) => ({
+        id,
+        first_name,
+        last_name,
+      }));
     } else {
       demoEmployees = storeEmployees
         .filter((employee) => employee.active && employee.status === 'active')
@@ -882,9 +1039,9 @@ function WorkspaceTab({
   const setupComplete = setupChecklist.every((item) => item.done);
 
   const usageTone = (ratio: number) => {
-    if (ratio >= 0.9) return '#dc2626';
-    if (ratio >= 0.75) return '#d97706';
-    return '#16a34a';
+    if (ratio >= 0.9) return 'rgb(var(--status-warning))';
+    if (ratio >= 0.75) return 'rgb(var(--status-pending))';
+    return 'rgb(var(--status-active))';
   };
 
   useEffect(() => {
@@ -990,20 +1147,20 @@ function WorkspaceTab({
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Setup Checklist</h3>
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" aria-label="Setup checklist help" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
-                <HelpCircle size={14} color="#6b7280" />
+                <HelpCircle size={14} color="rgb(var(--text-muted))" />
               </button>
             </TooltipTrigger>
             <TooltipContent>Complete these steps to fully configure your operation.</TooltipContent>
           </Tooltip>
         </div>
         {setupComplete ? (
-          <p style={{ margin: 0, color: '#166534', fontSize: '13px', fontWeight: 600 }}>Setup complete ✓</p>
+          <p style={{ margin: 0, color: 'rgb(var(--brand-default))', fontSize: '13px', fontWeight: 600 }}>Setup complete ✓</p>
         ) : (
           <div style={{ display: 'grid', gap: '6px' }}>
             {setupChecklist.map((item) => (
@@ -1013,12 +1170,12 @@ function WorkspaceTab({
                 onClick={() => navigate(item.href)}
                 style={{
                   textAlign: 'left',
-                  border: '1px solid #e5e7eb',
+                  border: '1px solid rgb(var(--surface-border))',
                   borderRadius: '8px',
-                  background: '#fff',
+                  background: 'rgb(var(--surface-card))',
                   padding: '8px 10px',
                   cursor: 'pointer',
-                  color: item.done ? '#166534' : '#111827',
+                  color: item.done ? 'rgb(var(--brand-default))' : 'rgb(var(--text-primary))',
                 }}
               >
                 {item.done ? '☑' : '☐'} {item.label}
@@ -1028,22 +1185,22 @@ function WorkspaceTab({
         )}
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px', display: 'grid', gap: '8px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '12px', display: 'grid', gap: '8px' }}>
         <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Organization Info</h3>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'grid', gap: '6px', minWidth: '240px' }}>
-            <label style={{ color: '#6b7280', fontSize: '12px' }}>Organization name</label>
+            <label style={{ color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Organization name</label>
             <input value={orgNameDraft} onChange={(event) => setOrgNameDraft(event.target.value)} style={{ height: '36px', fontSize: '14px' }} />
           </div>
           <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ color: '#6b7280', fontSize: '12px' }}>Plan</label>
-            <span style={{ border: '1px solid #e5e7eb', borderRadius: '999px', padding: '4px 10px', fontSize: '12px', width: 'fit-content' }}>
+            <label style={{ color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Plan</label>
+            <span style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '999px', padding: '4px 10px', fontSize: '12px', width: 'fit-content' }}>
               {(orgInfo?.plan ?? 'starter').toString()}
             </span>
           </div>
           <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ color: '#6b7280', fontSize: '12px' }}>Created</label>
-            <span style={{ fontSize: '12px', color: '#374151' }}>
+            <label style={{ color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Created</label>
+            <span style={{ fontSize: '12px', color: 'rgb(var(--text-secondary))' }}>
               {orgInfo?.created_at ? new Date(orgInfo.created_at).toLocaleDateString() : '—'}
             </span>
           </div>
@@ -1051,7 +1208,7 @@ function WorkspaceTab({
         <button
           onClick={() => void saveOrganization()}
           disabled={savingOrg}
-          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '6px 12px', cursor: 'pointer', height: '32px', fontSize: '14px' }}
+          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '6px 12px', cursor: 'pointer', height: '32px', fontSize: '14px' }}
         >
           {savingOrg ? 'Saving...' : 'Save'}
         </button>
@@ -1061,10 +1218,10 @@ function WorkspaceTab({
             disabled={loadingDemoData}
             style={{
               width: 'fit-content',
-              border: '1px solid #e5e7eb',
+              border: '1px solid rgb(var(--surface-border))',
               borderRadius: '8px',
-              color: '#111827',
-              background: '#ffffff',
+              color: 'rgb(var(--text-primary))',
+              background: 'rgb(var(--surface-card))',
               padding: '8px 14px',
               cursor: 'pointer',
             }}
@@ -1074,7 +1231,7 @@ function WorkspaceTab({
         ) : null}
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Usage</h3>
         {usageRows.map((row) => {
           const ratio = row.limit ? Math.min(1, row.value / row.limit) : 0;
@@ -1084,16 +1241,16 @@ function WorkspaceTab({
             <div key={`usage-${row.key}`} style={{ display: 'grid', gap: '6px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                 <span>{row.label}</span>
-                <span style={{ color: '#6b7280' }}>
+                <span style={{ color: 'rgb(var(--text-muted))' }}>
                   {row.value} / {limitLabel}
                 </span>
               </div>
-              <div style={{ height: '8px', width: '100%', borderRadius: '999px', background: '#e5e7eb', overflow: 'hidden' }}>
+              <div style={{ height: '8px', width: '100%', borderRadius: '999px', background: 'rgb(var(--surface-border))', overflow: 'hidden' }}>
                 <div
                   style={{
                     width: row.limit == null ? '20%' : `${Math.min(100, Math.max(2, ratio * 100))}%`,
                     height: '100%',
-                    background: row.limit == null ? '#16a34a' : barColor,
+                    background: row.limit == null ? 'rgb(var(--status-active))' : barColor,
                   }}
                 />
               </div>
@@ -1104,29 +1261,29 @@ function WorkspaceTab({
           <button
             type="button"
             onClick={() => navigate('/app/settings?tab=Access')}
-            style={{ width: 'fit-content', border: 'none', background: 'transparent', color: '#166534', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: '13px' }}
+            style={{ width: 'fit-content', border: 'none', background: 'transparent', color: 'rgb(var(--brand-default))', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: '13px' }}
           >
             Usage limit reached. Review workspace access settings.
           </button>
         ) : null}
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Properties ({properties.length})</h3>
         {properties.length === 0 ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No properties yet. Add your first property below.</p>
+          <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No properties yet. Add your first property below.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', textAlign: 'left' }}>
+                <tr style={{ borderBottom: '1px solid rgb(var(--surface-border))', color: 'rgb(var(--text-muted))', textAlign: 'left' }}>
                   <th style={{ padding: '8px' }}>Name</th>
                   <th style={{ padding: '8px' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {properties.map((property) => (
-                  <tr key={property.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <tr key={property.id} style={{ borderBottom: '1px solid rgb(var(--surface-border))' }}>
                     <td style={{ padding: '8px' }}>
                       {editingPropertyId === property.id ? (
                         <input value={editingPropertyName} onChange={(event) => setEditingPropertyName(event.target.value)} />
@@ -1137,13 +1294,13 @@ function WorkspaceTab({
                     <td style={{ padding: '8px' }}>
                       {editingPropertyId === property.id ? (
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => void savePropertyEdit(property.id)} style={{ color: '#166534' }}>Save</button>
+                          <button onClick={() => void savePropertyEdit(property.id)} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
                           <button onClick={cancelPropertyEdit}>Cancel</button>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => startPropertyEdit(property)}>Edit</button>
-                          <button onClick={() => void deleteProperty(property.id)} style={{ color: '#dc2626' }}>Delete</button>
+                          <button onClick={() => void deleteProperty(property.id)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
                         </div>
                       )}
                     </td>
@@ -1154,7 +1311,7 @@ function WorkspaceTab({
           </div>
         )}
         <div style={{ marginTop: '8px', display: 'grid', gap: '8px', maxWidth: '420px' }}>
-          <label style={{ color: '#6b7280', fontSize: '12px' }}>Add property</label>
+          <label style={{ color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Add property</label>
           <div style={{ display: 'grid', gap: '8px' }}>
             <input placeholder="Property name" value={newPropertyName} onChange={(event) => setNewPropertyName(event.target.value)} style={{ flex: 1 }} />
             <input placeholder="Address (optional)" value={newPropertyAddress} onChange={(event) => setNewPropertyAddress(event.target.value)} style={{ flex: 1 }} />
@@ -1171,7 +1328,7 @@ function WorkspaceTab({
             </select>
             <button
               onClick={() => void addProperty()}
-              style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+              style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
             >
               Add
             </button>
@@ -1179,24 +1336,24 @@ function WorkspaceTab({
         </div>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Equipment Types</h3>
         {equipmentTypes.length === 0 ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No equipment types yet.</p>
+          <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No equipment types yet.</p>
         ) : null}
         {equipmentTypes.map((type) => (
           <div key={type.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {editingEquipmentTypeId === type.id ? (
               <>
                 <input value={editingEquipmentTypeName} onChange={(event) => setEditingEquipmentTypeName(event.target.value)} />
-                <button onClick={() => void saveEquipmentTypeEdit(type.id)} style={{ color: '#166534' }}>Save</button>
+                <button onClick={() => void saveEquipmentTypeEdit(type.id)} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
                 <button onClick={() => { setEditingEquipmentTypeId(null); setEditingEquipmentTypeName(''); }}>Cancel</button>
               </>
             ) : (
               <>
-                <span style={{ flex: 1 }}>{type.name} <span style={{ color: '#6b7280' }}>({type.category ?? 'General'})</span></span>
+                <span style={{ flex: 1 }}>{type.name} <span style={{ color: 'rgb(var(--text-muted))' }}>({type.category ?? 'General'})</span></span>
                 <button onClick={() => { setEditingEquipmentTypeId(type.id); setEditingEquipmentTypeName(type.name); }}>Edit</button>
-                <button onClick={() => void deactivateEquipmentType(type.id, type.name)} style={{ color: '#dc2626' }}>Delete</button>
+                <button onClick={() => void deactivateEquipmentType(type.id, type.name)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
               </>
             )}
           </div>
@@ -1216,21 +1373,21 @@ function WorkspaceTab({
           </select>
           <button
             onClick={() => void addEquipmentType()}
-            style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
+            style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
           >
             Add
           </button>
         </div>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Standard Operating Procedures</h3>
         {sops.length === 0 ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No SOPs yet. Add your first SOP below.</p>
+          <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No SOPs yet. Add your first SOP below.</p>
         ) : (
           <div style={{ display: 'grid', gap: '8px' }}>
             {sops.map((sop) => (
-              <div key={sop.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '10px', display: 'grid', gap: '8px' }}>
+              <div key={sop.id} style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '10px', padding: '10px', display: 'grid', gap: '8px' }}>
                 {editingSopId === sop.id ? (
                   <>
                     <input
@@ -1256,7 +1413,7 @@ function WorkspaceTab({
                       placeholder="One checklist item per line"
                     />
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => saveSopEdit(sop.id)} style={{ color: '#166534' }}>Save</button>
+                      <button onClick={() => saveSopEdit(sop.id)} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
                       <button
                         onClick={() => {
                           setEditingSopId(null);
@@ -1273,13 +1430,13 @@ function WorkspaceTab({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                       <div>
                         <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{sop.title}</p>
-                        <p style={{ margin: 0, fontSize: '12px', color: '#6b7280' }}>
+                        <p style={{ margin: 0, fontSize: '12px', color: 'rgb(var(--text-muted))' }}>
                           {sop.category} · {sop.items.length} item{sop.items.length === 1 ? '' : 's'}
                         </p>
                       </div>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button onClick={() => startSopEdit(sop)}>Edit</button>
-                        <button onClick={() => deleteSop(sop.id, sop.title)} style={{ color: '#dc2626' }}>Delete</button>
+                        <button onClick={() => deleteSop(sop.id, sop.title)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
                       </div>
                     </div>
                   </>
@@ -1290,8 +1447,8 @@ function WorkspaceTab({
         )}
 
         {showSopForm ? (
-          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'grid', gap: '8px', maxWidth: '540px' }}>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: '12px' }}>Add SOP</p>
+          <div style={{ borderTop: '1px solid rgb(var(--surface-border))', paddingTop: '10px', display: 'grid', gap: '8px', maxWidth: '540px' }}>
+            <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Add SOP</p>
             <input
               value={newSopTitle}
               onChange={(event) => setNewSopTitle(event.target.value)}
@@ -1317,7 +1474,7 @@ function WorkspaceTab({
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={addSop}
-                style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
+                style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
               >
                 Save
               </button>
@@ -1328,7 +1485,7 @@ function WorkspaceTab({
                   setNewSopCategory('General');
                   setNewSopChecklist('');
                 }}
-                style={{ border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+                style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
               >
                 Cancel
               </button>
@@ -1337,7 +1494,7 @@ function WorkspaceTab({
         ) : (
           <button
             onClick={() => setShowSopForm(true)}
-            style={{ width: 'fit-content', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+            style={{ width: 'fit-content', border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
           >
             + Add SOP
           </button>
@@ -1356,7 +1513,7 @@ function WorkspaceTab({
               key={mode}
               type="button"
               onClick={() => void setTheme(mode)}
-              className={`min-h-[36px] rounded-full border px-4 py-1.5 text-sm font-medium capitalize transition-all duration-150 ${
+              className={`min-h-[36px] rounded-full border px-4 py-1.5 text-sm font-medium capitalize transition-colors duration-150 ${
                 theme === mode
                   ? 'border-brand bg-brand text-text-inverse'
                   : 'border-surface-border bg-surface-elevated text-text-secondary hover:border-brand/40 hover:text-text-primary'
@@ -1384,12 +1541,16 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     [storeDepartments],
   );
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
+  const [workerTypes, setWorkerTypes] = useState<Array<{ id: string; name: string }>>([]);
   const [newDepartmentName, setNewDepartmentName] = useState('');
   const [newRoleName, setNewRoleName] = useState('');
+  const [newWorkerTypeName, setNewWorkerTypeName] = useState('');
   const [editingDepartmentId, setEditingDepartmentId] = useState<string | null>(null);
   const [editingDepartmentName, setEditingDepartmentName] = useState('');
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [editingRoleName, setEditingRoleName] = useState('');
+  const [editingWorkerTypeId, setEditingWorkerTypeId] = useState<string | null>(null);
+  const [editingWorkerTypeName, setEditingWorkerTypeName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1397,18 +1558,27 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     if (!supabase || !orgId) return;
     setLoading(true);
     setError(null);
-    const rolesResult = await supabase
-      .from('workforce_roles')
-      .select('id, name')
-      .eq('org_id', orgId)
-      .eq('active', true)
-      .order('name', { ascending: true });
-    if (rolesResult.error) {
-      setError(rolesResult.error.message);
+    const [rolesResult, workerTypesResult] = await Promise.all([
+      supabase
+        .from('workforce_roles')
+        .select('id, name')
+        .eq('org_id', orgId)
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      supabase
+        .from('worker_types')
+        .select('id, name')
+        .eq('org_id', orgId)
+        .eq('active', true)
+        .order('name', { ascending: true }),
+    ]);
+    if (rolesResult.error || workerTypesResult.error) {
+      setError(rolesResult.error?.message ?? workerTypesResult.error?.message ?? 'Unable to load workforce settings');
       setLoading(false);
       return;
     }
     setRoles(((rolesResult.data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()));
+    setWorkerTypes(((workerTypesResult.data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()));
     setLoading(false);
   }, [orgId]);
 
@@ -1526,65 +1696,145 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     await fetchWorkforceSummary();
   }, [fetchWorkforceSummary, orgId]);
 
+  const addWorkerType = useCallback(async () => {
+    if (!supabase || !orgId || !newWorkerTypeName.trim()) return;
+    const { error: insertError } = await supabase.from('worker_types').insert({
+      org_id: orgId,
+      name: newWorkerTypeName.trim(),
+      active: true,
+    });
+    if (insertError) {
+      toast.error(`Failed to add worker type: ${insertError.message}`);
+      return;
+    }
+    setNewWorkerTypeName('');
+    toast.success('Worker type added');
+    await fetchWorkforceSummary();
+  }, [fetchWorkforceSummary, newWorkerTypeName, orgId]);
+
+  const saveWorkerTypeEdit = useCallback(async () => {
+    if (!supabase || !orgId || !editingWorkerTypeId || !editingWorkerTypeName.trim()) return;
+    const { error: updateError } = await supabase
+      .from('worker_types')
+      .update({ name: editingWorkerTypeName.trim() })
+      .eq('id', editingWorkerTypeId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      toast.error(`Failed to update worker type: ${updateError.message}`);
+      return;
+    }
+    setEditingWorkerTypeId(null);
+    setEditingWorkerTypeName('');
+    toast.success('Worker type updated');
+    await fetchWorkforceSummary();
+  }, [editingWorkerTypeId, editingWorkerTypeName, fetchWorkforceSummary, orgId]);
+
+  const deactivateWorkerType = useCallback(async (workerTypeId: string, workerTypeName: string) => {
+    if (!supabase || !orgId) return;
+    if (!window.confirm(`Deactivate worker type "${workerTypeName}"?`)) return;
+    const { error: updateError } = await supabase
+      .from('worker_types')
+      .update({ active: false })
+      .eq('id', workerTypeId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      toast.error(`Failed to deactivate worker type: ${updateError.message}`);
+      return;
+    }
+    toast.success('Worker type deactivated');
+    await fetchWorkforceSummary();
+  }, [fetchWorkforceSummary, orgId]);
+
   if (!orgId || loading) return <PageSkeleton />;
   if (error) return <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkforceSummary()} />;
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Departments</h3>
-        {departments.length === 0 ? <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No active departments yet.</p> : null}
+        {departments.length === 0 ? <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No active departments yet.</p> : null}
         {departments.map((department) => (
           <div key={department.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {editingDepartmentId === department.id ? (
               <>
                 <input value={editingDepartmentName} onChange={(event) => setEditingDepartmentName(event.target.value)} />
-                <button onClick={() => void saveDepartmentEdit()} style={{ color: '#166534' }}>Save</button>
+                <button onClick={() => void saveDepartmentEdit()} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
                 <button onClick={() => { setEditingDepartmentId(null); setEditingDepartmentName(''); }}>Cancel</button>
               </>
             ) : (
               <>
                 <span style={{ flex: 1 }}>{department.name}</span>
                 <button onClick={() => { setEditingDepartmentId(department.id); setEditingDepartmentName(department.name); }}>Edit</button>
-                <button onClick={() => void deactivateDepartment(department.id, department.name)} style={{ color: '#dc2626' }}>Delete</button>
+                <button onClick={() => void deactivateDepartment(department.id, department.name)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
               </>
             )}
           </div>
         ))}
         <div style={{ display: 'flex', gap: '8px' }}>
           <input value={newDepartmentName} onChange={(event) => setNewDepartmentName(event.target.value)} placeholder="Add department" />
-          <button onClick={() => void addDepartment()} style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}>Add</button>
+          <button onClick={() => void addDepartment()} style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}>Add</button>
         </div>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Roles</h3>
-        {roles.length === 0 ? <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No active roles yet.</p> : null}
+        {roles.length === 0 ? <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No active roles yet.</p> : null}
         {roles.map((role) => (
           <div key={role.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {editingRoleId === role.id ? (
               <>
                 <input value={editingRoleName} onChange={(event) => setEditingRoleName(event.target.value)} />
-                <button onClick={() => void saveRoleEdit()} style={{ color: '#166534' }}>Save</button>
+                <button onClick={() => void saveRoleEdit()} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
                 <button onClick={() => { setEditingRoleId(null); setEditingRoleName(''); }}>Cancel</button>
               </>
             ) : (
               <>
                 <span style={{ flex: 1 }}>{role.name}</span>
                 <button onClick={() => { setEditingRoleId(role.id); setEditingRoleName(role.name); }}>Edit</button>
-                <button onClick={() => void deactivateRole(role.id, role.name)} style={{ color: '#dc2626' }}>Delete</button>
+                <button onClick={() => void deactivateRole(role.id, role.name)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
               </>
             )}
           </div>
         ))}
         <div style={{ display: 'flex', gap: '8px' }}>
           <input value={newRoleName} onChange={(event) => setNewRoleName(event.target.value)} placeholder="Add role" />
-          <button onClick={() => void addRole()} style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}>Add</button>
+          <button onClick={() => void addRole()} style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}>Add</button>
         </div>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>To change employee roles, go to the Employees page.</p>
+      <SettingsCard title="Worker Types" subtitle="Classify team members for scheduling and reporting.">
+        <div className="overflow-hidden rounded-xl border border-surface-border">
+          {workerTypes.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-text-muted">No active worker types yet.</p>
+          ) : (
+            workerTypes.map((workerType) => (
+              <div key={workerType.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
+                {editingWorkerTypeId === workerType.id ? (
+                  <>
+                    <input className={settingsInputClass} value={editingWorkerTypeName} onChange={(event) => setEditingWorkerTypeName(event.target.value)} />
+                    <button className="text-sm font-medium text-brand" onClick={() => void saveWorkerTypeEdit()}>Save</button>
+                    <button className="text-sm text-text-muted" onClick={() => setEditingWorkerTypeId(null)}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-text-primary">{workerType.name}</span>
+                    <span className="rounded-full bg-status-active/10 px-2.5 py-1 text-xs text-status-active">Active</span>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingWorkerTypeId(workerType.id); setEditingWorkerTypeName(workerType.name); }} aria-label={`Edit ${workerType.name}`}><Pencil className="h-4 w-4" /></button>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivateWorkerType(workerType.id, workerType.name)} aria-label={`Delete ${workerType.name}`}><Trash2 className="h-4 w-4" /></button>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="mt-4 flex gap-2">
+          <input className={settingsInputClass} value={newWorkerTypeName} onChange={(event) => setNewWorkerTypeName(event.target.value)} placeholder="Add worker type" />
+          <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={() => void addWorkerType()}>Add</button>
+        </div>
+      </SettingsCard>
+
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px' }}>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>To change employee roles, go to the Employees page.</p>
       </div>
     </div>
   );
@@ -1862,18 +2112,20 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Weather Stations</h3>
         {locations.length === 0 ? (
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>No weather stations configured yet.</p>
+          <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No weather stations configured yet.</p>
         ) : (
-          <div style={{ display: 'grid', gap: '10px' }}>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTemplateDragEnd}>
+            <SortableContext items={templates.map((template) => template.id)} strategy={verticalListSortingStrategy}>
+          <div className="overflow-hidden rounded-xl border border-surface-border">
             {locations.map((location) => (
-              <div key={location.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '10px', display: 'grid', gap: '8px' }}>
+              <div key={location.id} style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '10px', padding: '10px', display: 'grid', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                   <div>
                     <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{location.name}</p>
-                    <p style={{ margin: '2px 0 0', color: '#6b7280', fontSize: '12px' }}>
+                    <p style={{ margin: '2px 0 0', color: 'rgb(var(--text-muted))', fontSize: '12px' }}>
                       {(location as WeatherLocationItem & { property?: string }).property ?? 'No property'} · {location.area ?? 'General'}
                     </p>
                   </div>
@@ -1886,19 +2138,19 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
                     {location.is_active ? 'Active' : 'Inactive'}
                   </label>
                 </div>
-                <p style={{ margin: 0, color: '#6b7280', fontSize: '12px' }}>
+                <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '12px' }}>
                   Coordinates: {location.latitude ?? '—'}, {location.longitude ?? '—'}
                 </p>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     onClick={() => beginEdit(location)}
-                    style={{ border: '1px solid #d1d5db', borderRadius: '8px', background: '#fff', color: '#374151', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                    style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', color: 'rgb(var(--text-secondary))', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => void deleteLocation(location.id)}
-                    style={{ border: '1px solid #fecaca', borderRadius: '8px', background: '#fff', color: '#b91c1c', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                    style={{ border: '1px solid rgb(var(--status-warning))', borderRadius: '8px', background: 'rgb(var(--surface-card))', color: 'rgb(var(--status-warning))', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
                   >
                     Delete
                   </button>
@@ -1906,17 +2158,19 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
               </div>
             ))}
           </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>{editingLocationId ? 'Edit Station' : 'Add Station'}</h3>
         <div className="grid gap-[10px] md:grid-cols-2">
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
             Station name
             <input value={stationName} onChange={(event) => setStationName(event.target.value)} placeholder="Sarasota Polo Club" />
           </label>
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
             Area
             <select value={stationArea} onChange={(event) => setStationArea(event.target.value)}>
               {areaOptions.map((area) => (
@@ -1924,7 +2178,7 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
               ))}
             </select>
           </label>
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
             Property
             <select value={stationPropertyId} onChange={(event) => setStationPropertyId(event.target.value)}>
               <option value="">Select property</option>
@@ -1935,7 +2189,7 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
           </label>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '13px', color: '#374151' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <input type="radio" checked={locationMethod === 'zip'} onChange={() => setLocationMethod('zip')} />
             Enter zip code
@@ -1955,7 +2209,7 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
             <input value={zipCode} onChange={(event) => setZipCode(event.target.value)} onBlur={() => void fillCoordinatesFromZip()} placeholder="ZIP code" />
             <button
               onClick={() => void fillCoordinatesFromZip()}
-              style={{ border: '1px solid #d1d5db', borderRadius: '8px', background: '#fff', color: '#374151', padding: '8px 12px', cursor: 'pointer' }}
+              style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', color: 'rgb(var(--text-secondary))', padding: '8px 12px', cursor: 'pointer' }}
               disabled={zipLookupLoading}
             >
               {zipLookupLoading ? 'Looking up...' : 'Lookup'}
@@ -1966,18 +2220,18 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
         {locationMethod === 'geo' ? (
           <button
             onClick={useCurrentLocation}
-            style={{ width: 'fit-content', border: '1px solid #d1d5db', borderRadius: '8px', background: '#fff', color: '#374151', padding: '8px 12px', cursor: 'pointer' }}
+            style={{ width: 'fit-content', border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', color: 'rgb(var(--text-secondary))', padding: '8px 12px', cursor: 'pointer' }}
           >
             Use My Location
           </button>
         ) : null}
 
         <div className="grid gap-[10px] md:grid-cols-2">
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
             Latitude
             <input type="number" step="0.0001" value={latitude} onChange={(event) => setLatitude(event.target.value)} />
           </label>
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: '#374151' }}>
+          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
             Longitude
             <input type="number" step="0.0001" value={longitude} onChange={(event) => setLongitude(event.target.value)} />
           </label>
@@ -1986,7 +2240,7 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={() => void saveStation()}
-            style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+            style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
             disabled={savingLocation || !stationName.trim()}
           >
             {savingLocation ? 'Saving...' : editingLocationId ? 'Save Changes' : 'Save Station'}
@@ -1994,7 +2248,7 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
           {editingLocationId ? (
             <button
               onClick={resetForm}
-              style={{ border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+              style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', color: 'rgb(var(--text-secondary))', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
             >
               Cancel Edit
             </button>
@@ -2002,19 +2256,19 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
         </div>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
           Display Preferences {savingPrefs ? '· Saving…' : ''}
         </h3>
-        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: '#374151' }}>
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
           <input type="checkbox" checked={prefs.show_hourly} onChange={(event) => updatePref('show_hourly', event.target.checked)} />
           Show hourly
         </label>
-        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: '#374151' }}>
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
           <input type="checkbox" checked={prefs.show_forecast} onChange={(event) => updatePref('show_forecast', event.target.checked)} />
           Show forecast
         </label>
-        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: '#374151' }}>
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
           <input type="checkbox" checked={prefs.show_rainfall} onChange={(event) => updatePref('show_rainfall', event.target.checked)} />
           Show rainfall
         </label>
@@ -2052,6 +2306,7 @@ function AccessTab({
     assignmentsToday: 0,
     equipmentUnits: 0,
   });
+  const [appUsers, setAppUsers] = useState<AppUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -2071,7 +2326,7 @@ function AccessTab({
     sunday.setDate(monday.getDate() + 6);
     const weekEndKey = sunday.toISOString().slice(0, 10);
 
-    const [tasksCountResult, scheduleCountResult, assignmentsCountResult, equipmentCountResult] = await Promise.all([
+    const [tasksCountResult, scheduleCountResult, assignmentsCountResult, equipmentCountResult, appUsersResult] = await Promise.all([
       supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase
         .from('schedule_entries')
@@ -2085,13 +2340,19 @@ function AccessTab({
         .eq('org_id', orgId)
         .eq('date', todayKey),
       supabase.from('equipment_units').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase
+        .from('app_users')
+        .select('id, employee_id, role, status')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true }),
     ]);
 
     const fetchError =
       tasksCountResult.error ??
       scheduleCountResult.error ??
       assignmentsCountResult.error ??
-      equipmentCountResult.error;
+      equipmentCountResult.error ??
+      appUsersResult.error;
 
     if (fetchError) {
       setError(fetchError.message);
@@ -2107,6 +2368,7 @@ function AccessTab({
       assignmentsToday: assignmentsCountResult.count ?? 0,
       equipmentUnits: equipmentCountResult.count ?? 0,
     });
+    setAppUsers((appUsersResult.data as AppUserRow[]) ?? []);
     setLoading(false);
   }, [orgId, storeEmployees.length, storeProperties.length]);
 
@@ -2137,6 +2399,21 @@ function AccessTab({
     queryClient.clear();
     window.localStorage.removeItem('ground-crew-query-cache');
     window.location.reload();
+  };
+
+  const updateUserRole = async (userId: string, role: string) => {
+    if (!orgId) return;
+    const { error: updateError } = await supabase
+      .from('app_users')
+      .update({ role })
+      .eq('id', userId)
+      .eq('org_id', orgId);
+    if (updateError) {
+      toast.error(`Unable to update role: ${updateError.message}`);
+      return;
+    }
+    setAppUsers((current) => current.map((user) => (user.id === userId ? { ...user, role } : user)));
+    toast.success('User role updated');
   };
 
   const maskedOrgId = orgId ? `${orgId.slice(0, 8)}...` : 'Not available';
@@ -2208,87 +2485,133 @@ Your role: ${inviteRole}
 
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '8px' }}>
+      <SettingsCard title="User Access" subtitle="Manage workspace roles without leaving Settings.">
+        {appUsers.length === 0 ? (
+          <p className="text-sm text-text-muted">No application users found for this organization.</p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-surface-border">
+            {appUsers.map((appUser) => {
+              const employee = storeEmployees.find((item) => item.id === appUser.employee_id);
+              const roleClass =
+                appUser.role.toLowerCase() === 'admin'
+                  ? 'bg-brand-ghost text-brand'
+                  : appUser.role.toLowerCase() === 'manager'
+                    ? 'bg-status-complete/10 text-status-complete'
+                    : 'bg-surface-elevated text-text-muted';
+              return (
+                <div
+                  key={appUser.id}
+                  className="grid gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover sm:grid-cols-[1fr_auto_auto_180px] sm:items-center"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">
+                      {employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown employee'}
+                    </p>
+                    <p className="text-xs text-text-muted">{employee?.email ?? 'No email available'}</p>
+                  </div>
+                  <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium ${roleClass}`}>
+                    {appUser.role}
+                  </span>
+                  <span className="w-fit rounded-full bg-status-active/10 px-2.5 py-1 text-xs font-medium text-status-active">
+                    {appUser.status}
+                  </span>
+                  <select
+                    className={settingsInputClass}
+                    value={appUser.role}
+                    onChange={(event) => void updateUserRole(appUser.id, event.target.value)}
+                    aria-label={`Change role for ${employee?.first_name ?? 'user'}`}
+                  >
+                    <option value="Admin">Admin</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Field Staff">Field Staff</option>
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SettingsCard>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '8px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Your Account</h3>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Email:</strong> {userEmail || 'Not available'}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Role:</strong> {userRole ?? 'Not available'}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Employee:</strong> {employeeName || 'Not available'}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Organization:</strong> {organizationName || 'Not available'}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Email:</strong> {userEmail || 'Not available'}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Role:</strong> {userRole ?? 'Not available'}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Employee:</strong> {employeeName || 'Not available'}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Organization:</strong> {organizationName || 'Not available'}</p>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Session Management</h3>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={() => void handleSignOut()}
-            style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+            style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
           >
             Sign Out
           </button>
           <button
             onClick={handleClearAppCache}
-            style={{ border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+            style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', color: 'rgb(var(--text-secondary))', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
           >
             Clear App Cache
           </button>
         </div>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Team Invitations</h3>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
           Invite managers and crew members by email link.
         </p>
         <button
           onClick={() => setShowInviteModal(true)}
-          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
         >
           Invite Team
         </button>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Workspace Status</h3>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
           <strong>Current workspace:</strong> Ground Crew HQ
         </p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
           <strong>Plan/status:</strong> Active workspace
         </p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
           Billing controls appear when workspace billing is enabled.
         </p>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Billing</h3>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
           Billing management is currently unavailable in-product.
         </p>
       </div>
 
-      <div style={{ border: '1px solid #fecaca', borderRadius: '12px', padding: '16px', background: '#fef2f2' }}>
-        <h3 style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: 600, color: '#b91c1c' }}>Danger Zone</h3>
-        <p style={{ margin: 0, color: '#7f1d1d', fontSize: '13px' }}>
+      <div style={{ border: '1px solid rgb(var(--status-warning))', borderRadius: '12px', padding: '16px', background: 'rgb(var(--surface-elevated))' }}>
+        <h3 style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: 600, color: 'rgb(var(--status-warning))' }}>Danger Zone</h3>
+        <p style={{ margin: 0, color: 'rgb(var(--status-warning))', fontSize: '13px' }}>
           To delete your account or change your email, contact support at support@groundcrewhq.com.
         </p>
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'grid', gap: '8px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '8px' }}>
         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>System</h3>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>App Version:</strong> {APP_VERSION}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Org ID:</strong> {maskedOrgId}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Property Count:</strong> {systemInfo.propertyCount}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Employee Count:</strong> {systemInfo.employeeCount}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Task Count:</strong> {systemInfo.taskCount}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Schedule Entries (this week):</strong> {systemInfo.scheduleEntriesThisWeek}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Assignments (today):</strong> {systemInfo.assignmentsToday}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Equipment Units:</strong> {systemInfo.equipmentUnits}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Browser:</strong> {browserInfo}</p>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}><strong>Supabase Project:</strong> fjqeekwisnbpxgebrnpl</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>App Version:</strong> {APP_VERSION}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Org ID:</strong> {maskedOrgId}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Property Count:</strong> {systemInfo.propertyCount}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Employee Count:</strong> {systemInfo.employeeCount}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Task Count:</strong> {systemInfo.taskCount}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Schedule Entries (this week):</strong> {systemInfo.scheduleEntriesThisWeek}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Assignments (today):</strong> {systemInfo.assignmentsToday}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Equipment Units:</strong> {systemInfo.equipmentUnits}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Browser:</strong> {browserInfo}</p>
+        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Supabase Project:</strong> fjqeekwisnbpxgebrnpl</p>
         <button
           onClick={() => void handleCopySystemInfo()}
-          style={{ width: 'fit-content', border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+          style={{ width: 'fit-content', border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', color: 'rgb(var(--text-secondary))', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
         >
           Copy System Info
         </button>
@@ -2297,10 +2620,10 @@ Your role: ${inviteRole}
       {showInviteModal ? (
         <div
           onClick={closeInviteModal}
+          className="bg-surface-base/80"
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 23, 42, 0.45)',
             zIndex: 60,
             display: 'grid',
             placeItems: 'center',
@@ -2313,8 +2636,8 @@ Your role: ${inviteRole}
               width: '100%',
               maxWidth: '420px',
               borderRadius: '12px',
-              border: '1px solid #e5e7eb',
-              background: '#fff',
+              border: '1px solid rgb(var(--surface-border))',
+              background: 'rgb(var(--surface-card))',
               padding: '16px',
               display: 'grid',
               gap: '12px',
@@ -2323,7 +2646,7 @@ Your role: ${inviteRole}
           >
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Invite a team member</h3>
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: '#6b7280' }}>Email</span>
+              <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Email</span>
               <input
                 type="email"
                 value={inviteEmail}
@@ -2332,7 +2655,7 @@ Your role: ${inviteRole}
               />
             </label>
             <label style={{ display: 'grid', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: '#6b7280' }}>Role</span>
+              <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Role</span>
               <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as 'Manager' | 'Field Staff')}>
                 <option value="Manager">Manager</option>
                 <option value="Field Staff">Field Staff</option>
@@ -2341,13 +2664,13 @@ Your role: ${inviteRole}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button
                 onClick={closeInviteModal}
-                style={{ border: '1px solid #d1d5db', borderRadius: '8px', color: '#374151', background: '#fff', padding: '8px 14px', cursor: 'pointer' }}
+                style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', color: 'rgb(var(--text-secondary))', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSendInvite}
-                style={{ border: 'none', borderRadius: '8px', color: '#fff', background: '#166534', padding: '8px 14px', cursor: 'pointer' }}
+                style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
               >
                 Send Invite
               </button>
@@ -2360,12 +2683,58 @@ Your role: ${inviteRole}
 }
 
 function HelpTab() {
-  return <PlaceholderCard text="Need help? Contact support at support@groundcrewhq.com or visit our documentation at docs.groundcrewhq.com." />;
+  const helpCards = [
+    {
+      icon: CircleHelp,
+      title: 'Documentation',
+      description: 'Review setup guidance and operating workflows for every Ground Crew HQ module.',
+      action: 'Open docs',
+      href: 'https://docs.groundcrewhq.com',
+    },
+    {
+      icon: Mail,
+      title: 'Support',
+      description: 'Send the support team a concise description of the issue and the affected workspace.',
+      action: 'Email support',
+      href: 'mailto:support@groundcrewhq.com',
+    },
+    {
+      icon: Wrench,
+      title: 'Keyboard Shortcuts',
+      description: 'Use Tab to move between controls, Enter to activate actions, and Escape to close panels.',
+      action: null,
+      href: null,
+    },
+  ];
+
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      {helpCards.map(({ icon: Icon, title, description, action, href }) => (
+        <section key={title} className="rounded-xl border border-surface-border bg-surface-card p-5">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-ghost text-brand">
+            <Icon className="h-5 w-5" />
+          </div>
+          <h2 className="text-base font-semibold text-text-primary">{title}</h2>
+          <p className="mt-2 text-sm text-text-muted">{description}</p>
+          {action && href ? (
+            <a className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-bright" href={href}>
+              {action}
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          ) : null}
+        </section>
+      ))}
+    </div>
+  );
 }
 
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
   const storeEmployees = useAppStore((state) => state.employees);
+  const taskSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const taskCategoryOptions = [
     'Mowing',
     'Irrigation',
@@ -2396,6 +2765,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   const [newPriority, setNewPriority] = useState<'1' | '2' | '3'>('2');
   const [newEstimatedHours, setNewEstimatedHours] = useState('1');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [editDraft, setEditDraft] = useState({
     name: '',
     category: '',
@@ -2504,6 +2874,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     setNewCategory('General Maintenance');
     setNewPriority('2');
     setNewEstimatedHours('1');
+    setTaskPanelOpen(false);
     signalTaskLibraryUpdate();
     toast.success(`Task added: ${newName.trim()}`);
   };
@@ -2532,11 +2903,13 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       priority: task.priority ?? 2,
       estimated_hours: Number(task.estimated_hours ?? 0),
     });
+    setTaskPanelOpen(true);
   };
 
   const cancelEditTask = () => {
     setEditingTaskId(null);
     setEditDraft({ name: '', category: '', priority: 2, estimated_hours: 0 });
+    setTaskPanelOpen(false);
   };
 
   const saveEditTask = async (taskId: string) => {
@@ -2572,6 +2945,35 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     signalTaskLibraryUpdate();
     toast.success(`Task updated: ${editDraft.name.trim()}`);
     cancelEditTask();
+  };
+
+  const handleTaskDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (!supabase || !orgId || !over || active.id === over.id) return;
+    const oldIndex = tasks.findIndex((task) => task.id === active.id);
+    const newIndex = tasks.findIndex((task) => task.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const reordered = arrayMove(tasks, oldIndex, newIndex).map((task, index) => ({
+      ...task,
+      priority: index + 1,
+    }));
+    setTasks(reordered);
+    const results = await Promise.all(
+      reordered.map((task) =>
+        supabase
+          .from('tasks')
+          .update({ priority: task.priority })
+          .eq('id', task.id)
+          .eq('org_id', orgId),
+      ),
+    );
+    const updateError = results.find((result) => result.error)?.error;
+    if (updateError) {
+      toast.error(`Unable to save task order: ${updateError.message}`);
+      await fetchTasks();
+      return;
+    }
+    signalTaskLibraryUpdate();
+    toast.success('Task priority order saved');
   };
 
   const setRecurringEnabled = (taskId: string, enabled: boolean) => {
@@ -2657,22 +3059,35 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
 
   return (
     <div style={{ display: 'grid', gap: '10px' }}>
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px' }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 600 }}>Task Library</h3>
-        <p style={{ margin: '0 0 4px', color: '#6b7280', fontSize: '13px' }}>Reusable tasks for daily workflow planning.</p>
-        <p style={{ margin: '0 0 10px', color: '#6b7280', fontSize: '12px' }}>Tasks created here feed the Workboard assignment dropdown.</p>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '12px' }}>
+        <div className="mb-1 flex items-start justify-between gap-4">
+          <h3 className="text-base font-semibold text-text-primary">Task Library</h3>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingTaskId(null);
+              setTaskPanelOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
+          >
+            <Plus className="h-4 w-4" />
+            Add Task
+          </button>
+        </div>
+        <p style={{ margin: '0 0 4px', color: 'rgb(var(--text-muted))', fontSize: '13px' }}>Reusable tasks for daily workflow planning.</p>
+        <p style={{ margin: '0 0 10px', color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Tasks created here feed the Workboard assignment dropdown.</p>
 
         {!orgId || loading ? (
           <PageSkeleton />
         ) : error ? (
           <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchTasks()} />
         ) : tasks.length === 0 ? (
-          <p style={{ color: '#6b7280', fontSize: '13px' }}>No tasks yet. Add your first task below.</p>
+          <p style={{ color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No tasks yet. Add your first task below.</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280', textAlign: 'left' }}>
+          <div>
+            <table className="block w-full text-sm">
+              <thead className="hidden">
+                <tr style={{ borderBottom: '1px solid rgb(var(--surface-border))', color: 'rgb(var(--text-muted))', textAlign: 'left' }}>
                   <th style={{ padding: '8px' }}>Task name</th>
                   <th style={{ padding: '8px' }}>Category</th>
                   <th style={{ padding: '8px' }}>Priority</th>
@@ -2681,9 +3096,11 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                   <th style={{ padding: '8px' }}>Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="grid gap-3 md:grid-cols-2">
+                <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
+                  <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
                 {tasks.map((task) => (
-                  <tr key={task.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <SortableTaskRow key={task.id} id={task.id}>
                     <td style={{ padding: '8px' }}>
                       {editingTaskId === task.id ? (
                         <input
@@ -2798,7 +3215,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                             ) : null}
                             <button
                               onClick={() => void saveRecurringRule(task.id)}
-                              style={{ width: 'fit-content', borderRadius: '6px', border: '1px solid #d1d5db', padding: '4px 10px', background: '#fff' }}
+                              style={{ width: 'fit-content', borderRadius: '6px', border: '1px solid rgb(var(--surface-border))', padding: '4px 10px', background: 'rgb(var(--surface-card))' }}
                               disabled={savingRecurringTaskId === task.id}
                             >
                               {savingRecurringTaskId === task.id ? 'Saving...' : 'Apply schedule'}
@@ -2810,63 +3227,98 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                     <td style={{ padding: '8px' }}>
                       {editingTaskId === task.id ? (
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => void saveEditTask(task.id)} style={{ color: '#166534' }}>Save</button>
+                          <button onClick={() => void saveEditTask(task.id)} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
                           <button onClick={cancelEditTask}>Cancel</button>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => startEditTask(task)}>Edit</button>
-                          <button onClick={() => void removeTask(task.id)} style={{ color: '#dc2626' }}>Delete</button>
+                          <button onClick={() => void removeTask(task.id)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
                         </div>
                       )}
                     </td>
-                  </tr>
+                  </SortableTaskRow>
                 ))}
+                  </SortableContext>
+                </DndContext>
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px', display: 'grid', gap: '8px' }}>
-        <strong>Add task</strong>
-        <input placeholder="Task name" value={newName} onChange={(event) => setNewName(event.target.value)} />
-        <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr 1fr' }}>
-          <select value={newCategory} onChange={(event) => setNewCategory(event.target.value)}>
+      <Sheet open={taskPanelOpen} onOpenChange={(open) => (open ? setTaskPanelOpen(true) : cancelEditTask())}>
+        <SheetContent className="overflow-y-auto border-surface-border bg-surface-card">
+          <SheetHeader>
+            <SheetTitle>{editingTaskId ? 'Edit Task' : 'Add Task'}</SheetTitle>
+            <SheetDescription>
+              {editingTaskId ? 'Update the task library details.' : 'Create a reusable task for workboard planning.'}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 grid gap-4">
+        <input
+          className={settingsInputClass}
+          placeholder="Task name"
+          value={editingTaskId ? editDraft.name : newName}
+          onChange={(event) => editingTaskId
+            ? setEditDraft((current) => ({ ...current, name: event.target.value }))
+            : setNewName(event.target.value)}
+        />
+        <div className="grid gap-4">
+          <select
+            className={settingsInputClass}
+            value={editingTaskId ? editDraft.category : newCategory}
+            onChange={(event) => editingTaskId
+              ? setEditDraft((current) => ({ ...current, category: event.target.value }))
+              : setNewCategory(event.target.value)}
+          >
             {taskCategoryOptions.map((category) => (
               <option key={`new-task-category-${category}`} value={category}>
                 {category}
               </option>
             ))}
           </select>
-          <select value={newPriority} onChange={(event) => setNewPriority(event.target.value as '1' | '2' | '3')}>
+          <select
+            className={settingsInputClass}
+            value={editingTaskId ? String(editDraft.priority) : newPriority}
+            onChange={(event) => editingTaskId
+              ? setEditDraft((current) => ({ ...current, priority: Number(event.target.value) }))
+              : setNewPriority(event.target.value as '1' | '2' | '3')}
+          >
             <option value="1">1 (High)</option>
             <option value="2">2 (Med)</option>
             <option value="3">3 (Low)</option>
           </select>
-          <input type="number" step="0.25" placeholder="Est. hours" value={newEstimatedHours} onChange={(event) => setNewEstimatedHours(event.target.value)} />
+          <input
+            className={settingsInputClass}
+            type="number"
+            step="0.25"
+            placeholder="Est. hours"
+            value={editingTaskId ? String(editDraft.estimated_hours) : newEstimatedHours}
+            onChange={(event) => editingTaskId
+              ? setEditDraft((current) => ({ ...current, estimated_hours: Number(event.target.value || '0') }))
+              : setNewEstimatedHours(event.target.value)}
+          />
         </div>
         <button
-          onClick={() => void addTask()}
-          style={{
-            width: 'fit-content',
-            border: 'none',
-            borderRadius: '8px',
-            color: '#ffffff',
-            background: '#166534',
-            padding: '8px 14px',
-            cursor: 'pointer',
-          }}
+          onClick={() => editingTaskId ? void saveEditTask(editingTaskId) : void addTask()}
+          className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
         >
-          Save task
+          {editingTaskId ? 'Save Changes' : 'Save Task'}
         </button>
-      </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
 function SchedulerTab({ orgId }: { orgId: string | null }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const [settings, setSettings] = useState<SchedulerSettings | null>(null);
   const [alertsConfig, setAlertsConfig] = useState<EscalationThresholds>(DEFAULT_ESCALATION_THRESHOLDS);
   const [loading, setLoading] = useState(true);
@@ -3025,13 +3477,13 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
   };
 
   const deleteTemplate = async (templateId: string) => {
-    if (!supabase) return;
+    if (!supabase || !orgId) return;
     const templateName = templates.find((template) => template.id === templateId)?.name ?? 'template';
     const { error: deleteError } = await supabase
       .from('shift_templates')
       .delete()
       .eq('id', templateId)
-      .eq('org_id', currentUser?.orgId ?? '');
+      .eq('org_id', orgId);
     if (deleteError) {
       setTemplatesError(deleteError.message);
       toast.error(`Failed to delete shift template: ${deleteError.message}`);
@@ -3068,117 +3520,127 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
     setNewDays(['mon', 'tue', 'wed', 'thu', 'fri']);
   };
 
+  const handleTemplateDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    setTemplates((current) => {
+      const oldIndex = current.findIndex((template) => template.id === active.id);
+      const newIndex = current.findIndex((template) => template.id === over.id);
+      return oldIndex >= 0 && newIndex >= 0 ? arrayMove(current, oldIndex, newIndex) : current;
+    });
+  };
+
   return (
-    <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 600 }}>Operational Day</h3>
-        <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>Define your property's standard operating window</p>
+    <div className="space-y-5">
+      <section className="rounded-xl border border-surface-border bg-surface-card p-5">
+        <h3 className="text-base font-semibold text-text-primary">Operational Day</h3>
+        <p className="mb-4 mt-1 text-sm text-text-muted">Define the standard operating window and active work days.</p>
 
         {loading ? (
           <PageSkeleton />
         ) : error ? (
           <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchSettings()} />
         ) : settings ? (
-          <div style={{ display: 'grid', gap: '14px' }}>
-            <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr' }}>
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>Operations Start</span>
+          <div className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                Operations Start
                 <input
                   type="time"
                   value={settings.operational_day_start.slice(0, 5)}
                   onChange={(event) => setSettings((cur) => (cur ? { ...cur, operational_day_start: `${event.target.value}:00` } : cur))}
+                  className={`${settingsInputClass} mt-1.5`}
                 />
               </label>
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>Operations End</span>
+              <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                Operations End
                 <input
                   type="time"
                   value={settings.operational_day_end.slice(0, 5)}
                   onChange={(event) => setSettings((cur) => (cur ? { ...cur, operational_day_end: `${event.target.value}:00` } : cur))}
+                  className={`${settingsInputClass} mt-1.5`}
                 />
               </label>
             </div>
-            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+            <div style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>
               Display window: {formatTime(settings.operational_day_start)}–{formatTime(settings.operational_day_end)}
             </div>
 
-            <div style={{ display: 'grid', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: '#6b7280' }}>Active Days</span>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                {dayOptions.map((day) => (
-                  <label key={day.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-                    <input
-                      type="checkbox"
-                      checked={settings.operational_days.includes(day.key)}
-                      onChange={() =>
+            <div>
+              <span className="mb-2 block text-xs font-medium uppercase tracking-widest text-text-muted">Active Days</span>
+              <div className="flex flex-wrap gap-2">
+                {dayOptions.map((day) => {
+                  const active = settings.operational_days.includes(day.key);
+                  return (
+                    <button
+                      key={day.key}
+                      type="button"
+                      onClick={() =>
                         setSettings((cur) => (cur ? { ...cur, operational_days: toggleDayValue(cur.operational_days ?? [], day.key) } : cur))
                       }
-                    />
-                    {day.label}
-                  </label>
-                ))}
+                      className={`min-h-11 min-w-11 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                        active
+                          ? 'border-brand bg-brand-ghost text-brand'
+                          : 'border-surface-border bg-surface-elevated text-text-muted hover:bg-surface-hover hover:text-text-primary'
+                      }`}
+                      aria-pressed={active}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr 1fr' }}>
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>Min Shift Hours</span>
-                <input type="number" value={settings.min_shift_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, min_shift_hours: Number(event.target.value) } : cur))} />
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                Min Shift Hours
+                <input className={`${settingsInputClass} mt-1.5`} type="number" value={settings.min_shift_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, min_shift_hours: Number(event.target.value) } : cur))} />
               </label>
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>Max Shift Hours</span>
-                <input type="number" value={settings.max_shift_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, max_shift_hours: Number(event.target.value) } : cur))} />
+              <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                Max Shift Hours
+                <input className={`${settingsInputClass} mt-1.5`} type="number" value={settings.max_shift_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, max_shift_hours: Number(event.target.value) } : cur))} />
               </label>
-              <label style={{ display: 'grid', gap: '4px' }}>
-                <span style={{ fontSize: '12px', color: '#6b7280' }}>Overtime Threshold (hrs/wk)</span>
-                <input type="number" value={settings.overtime_threshold_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, overtime_threshold_hours: Number(event.target.value) } : cur))} />
+              <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                Overtime Threshold
+                <input className={`${settingsInputClass} mt-1.5`} type="number" value={settings.overtime_threshold_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, overtime_threshold_hours: Number(event.target.value) } : cur))} />
               </label>
             </div>
 
             <button
               onClick={() => void saveSettings()}
-              style={{
-                width: 'fit-content',
-                border: 'none',
-                borderRadius: '8px',
-                color: '#ffffff',
-                background: saved ? '#15803d' : '#166534',
-                padding: '8px 14px',
-                cursor: 'pointer',
-              }}
+              disabled={saving}
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-brand-bright disabled:opacity-60"
             >
               {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save'}
             </button>
           </div>
         ) : null}
-      </div>
+      </section>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Shift Templates</h3>
+      <section className="rounded-xl border border-surface-border bg-surface-card p-5">
+        <h3 className="text-base font-semibold text-text-primary">Shift Templates</h3>
+        <p className="mb-4 mt-1 text-sm text-text-muted">Drag templates to arrange the order shown to schedulers.</p>
         {templatesLoading ? (
           <PageSkeleton />
         ) : templatesError ? (
           <ErrorRetry message={`Failed to load: ${templatesError}`} onRetry={() => void fetchTemplates()} />
         ) : (
-          <div style={{ display: 'grid', gap: '10px' }}>
-            {templates.map((template) => (
-              <div key={template.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px', display: 'grid', gap: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                  <strong>{template.name}</strong>
-                  <button onClick={() => void deleteTemplate(template.id)} style={{ color: '#dc2626', border: 'none', background: 'transparent', cursor: 'pointer' }}>×</button>
-                </div>
-                <span style={{ color: '#6b7280', fontSize: '13px' }}>{formatTime(template.start)}–{formatTime(template.end)}</span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {(template.days ?? []).map((day) => (
-                    <span key={`${template.id}-${day}`} style={{ border: '1px solid #e5e7eb', borderRadius: '999px', padding: '2px 8px', fontSize: '12px' }}>{day}</span>
-                  ))}
-                </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTemplateDragEnd}>
+            <SortableContext items={templates.map((template) => template.id)} strategy={verticalListSortingStrategy}>
+              <div className="overflow-hidden rounded-xl border border-surface-border">
+                {templates.map((template) => (
+                  <SortableShiftTemplateRow
+                    key={template.id}
+                    template={template}
+                    onDelete={(id) => void deleteTemplate(id)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         )}
 
-        <div style={{ marginTop: '14px', borderTop: '1px dashed #d1d5db', paddingTop: '12px', display: 'grid', gap: '10px' }}>
+        <div style={{ marginTop: '14px', borderTop: '1px dashed rgb(var(--surface-border))', paddingTop: '12px', display: 'grid', gap: '10px' }}>
           <strong>Add template</strong>
           <input placeholder="Template name" value={newName} onChange={(event) => setNewName(event.target.value)} />
           <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr' }}>
@@ -3199,8 +3661,8 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
               width: 'fit-content',
               border: 'none',
               borderRadius: '8px',
-              color: '#ffffff',
-              background: '#166534',
+              color: 'rgb(var(--surface-card))',
+              background: 'rgb(var(--brand-default))',
               padding: '8px 14px',
               cursor: 'pointer',
             }}
@@ -3208,26 +3670,26 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
             Save template
           </button>
         </div>
-      </div>
+      </section>
 
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Alerts</h3>
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" aria-label="Escalation settings help" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
-                <HelpCircle size={14} color="#6b7280" />
+                <HelpCircle size={14} color="rgb(var(--text-muted))" />
               </button>
             </TooltipTrigger>
             <TooltipContent>Set thresholds for weather and equipment alerts on the workboard.</TooltipContent>
           </Tooltip>
         </div>
-        <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px' }}>
+        <p style={{ margin: '0 0 14px', color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
           Configure escalation thresholds used by the Workboard escalation center.
         </p>
         <div style={{ display: 'grid', gap: '12px' }}>
           <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>Alert when equipment not serviced for X days</span>
+            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Alert when equipment not serviced for X days</span>
             <input
               type="number"
               min={1}
@@ -3241,7 +3703,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
             />
           </label>
           <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>Warn when crew coverage drops below X%</span>
+            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Warn when crew coverage drops below X%</span>
             <input
               type="number"
               min={1}
@@ -3256,7 +3718,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
             />
           </label>
           <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>Flag spray tasks when wind exceeds X mph</span>
+            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Flag spray tasks when wind exceeds X mph</span>
             <input
               type="number"
               min={1}
@@ -3270,7 +3732,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
             />
           </label>
           <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>Flag spray tasks when rain chance exceeds X%</span>
+            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Flag spray tasks when rain chance exceeds X%</span>
             <input
               type="number"
               min={1}
@@ -3285,7 +3747,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
             />
           </label>
           <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>Show heat advisory above X°F</span>
+            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Show heat advisory above X°F</span>
             <input
               type="number"
               min={1}
@@ -3304,8 +3766,8 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
               width: 'fit-content',
               border: 'none',
               borderRadius: '8px',
-              color: '#ffffff',
-              background: alertsSaved ? '#15803d' : '#166534',
+              color: 'rgb(var(--surface-card))',
+              background: alertsSaved ? 'rgb(var(--status-active))' : 'rgb(var(--brand-default))',
               padding: '8px 14px',
               cursor: 'pointer',
             }}
