@@ -85,6 +85,7 @@ export type ProgramSettings = {
   weather_default_longitude: number | null;
   weather_preferred_provider: string | null;
   weather_enabled_panels: string[] | null;
+  theme_preference?: string | null;
 };
 
 type AppStoreState = {

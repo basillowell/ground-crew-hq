@@ -14,6 +14,7 @@ import { requestNotificationPermission, sendNotification } from "@/lib/notificat
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/appStore";
+import { initThemeFromStorage, useTheme } from "@/hooks/useTheme";
 import { formatTime } from "@/utils/formatTime";
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
@@ -37,6 +38,14 @@ const JobCostingPage = lazy(() => import("./pages/JobCostingPage"));
 const InvoicingPage = lazy(() => import("./pages/InvoicingPage"));
 const ClientPortalPage = lazy(() => import("./pages/ClientPortalPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Apply stored theme immediately (before React hydrates) to prevent flash
+initThemeFromStorage();
+
+function ThemeInitializer() {
+  useTheme(); // Syncs DB preference into DOM once programSettings loads
+  return null;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -389,6 +398,7 @@ function AppWithNotificationSetup() {
 
   return (
     <TooltipProvider>
+      <ThemeInitializer />
       <Toaster />
       <Sonner />
       <BrowserRouter>

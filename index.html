@@ -132,6 +132,13 @@
   </head>
 
   <body>
+    <script>
+      try {
+        var t = localStorage.getItem('gchq-theme');
+        var dark = t === 'dark' || (t !== 'light' && (t !== 'system' || window.matchMedia('(prefers-color-scheme: dark)').matches));
+        if (!dark) document.documentElement.classList.add('light');
+      } catch(e) {}
+    </script>
     <div id="root">
       <div class="boot-shell" aria-hidden="true">
         <aside class="boot-sidebar"></aside>

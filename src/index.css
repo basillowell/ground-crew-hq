@@ -6,6 +6,50 @@
 All colors MUST be HSL.
 */
 
+/* ── Design token CSS variables (dark defaults; overridden by html.light) ── */
+:root {
+  --surface-base: 10 15 12;       /* #0a0f0c */
+  --surface-card: 20 31 24;       /* #141f18 */
+  --surface-elevated: 28 45 34;   /* #1c2d22 */
+  --surface-border: 38 61 45;     /* #263d2d */
+  --surface-hover: 31 48 39;      /* #1f3027 */
+  --brand-default: 132 204 22;    /* #84cc16 */
+  --brand-bright: 163 230 53;     /* #a3e635 */
+  --brand-dim: 77 124 15;         /* #4d7c0f */
+  --brand-ghost: 26 46 16;        /* #1a2e10 */
+  --text-primary: 240 244 240;    /* #f0f4f0 */
+  --text-secondary: 143 169 143;  /* #8fa98f */
+  --text-muted: 85 107 85;        /* #556b55 */
+  --text-inverse: 10 15 12;       /* #0a0f0c */
+}
+
+html.light {
+  --surface-base: 248 250 248;    /* #f8faf8 */
+  --surface-card: 255 255 255;    /* #ffffff */
+  --surface-elevated: 240 244 240; /* #f0f4f0 */
+  --surface-border: 212 224 212;  /* #d4e0d4 */
+  --surface-hover: 232 240 232;   /* #e8f0e8 */
+  --text-primary: 10 15 12;       /* #0a0f0c */
+  --text-secondary: 61 92 61;     /* #3d5c3d */
+  --text-muted: 107 140 107;      /* #6b8c6b */
+  --text-inverse: 240 244 240;    /* #f0f4f0 */
+  --brand-ghost: 240 249 218;     /* #f0f9da — light lime tint */
+  /* shadcn/ui overrides for light mode */
+  --background: 120 15% 97%;
+  --foreground: 147 27% 8%;
+  --card: 0 0% 100%;
+  --card-foreground: 147 27% 8%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 147 27% 8%;
+  --muted: 120 10% 94%;
+  --muted-foreground: 147 20% 35%;
+  --border: 120 20% 83%;
+  --input: 120 20% 83%;
+  --sidebar-background: 120 15% 97%;
+  --sidebar-foreground: 147 20% 35%;
+  --sidebar-border: 120 20% 83%;
+}
+
 @layer base {
   :root {
     --hq-green-900: #0B2F1F;

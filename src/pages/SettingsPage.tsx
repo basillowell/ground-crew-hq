@@ -13,6 +13,7 @@ import { HelpCircle } from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
 import { RecurringTasksSection } from '@/components/settings/RecurringTasksSection';
 import { useAppStore } from '@/store/appStore';
+import { type ThemeMode, useTheme } from '@/hooks/useTheme';
 
 const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'SOPs', 'Recurring Tasks', 'Weather', 'Access', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -247,6 +248,7 @@ function WorkspaceTab({
   const storeEmployees = useAppStore((state) => state.employees);
   const storeDepartments = useAppStore((state) => state.departments);
   const hydrateStore = useAppStore((state) => state.hydrate);
+  const { theme, setTheme } = useTheme();
   const SOP_STORAGE_KEY = 'ground-crew-sops';
   const sopCategoryOptions: StandardOperatingProcedure['category'][] = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
   const defaultSops: StandardOperatingProcedure[] = [
@@ -1336,6 +1338,30 @@ function WorkspaceTab({
             + Add SOP
           </button>
         )}
+      </div>
+
+      {/* ── Appearance ── */}
+      <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-text-primary">Appearance</h3>
+          <p className="mt-0.5 text-xs text-text-muted">Choose how Ground Crew HQ looks on this device.</p>
+        </div>
+        <div className="flex gap-2">
+          {(['dark', 'light', 'system'] as ThemeMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => void setTheme(mode)}
+              className={`min-h-[36px] rounded-full border px-4 py-1.5 text-sm font-medium capitalize transition-all duration-150 ${
+                theme === mode
+                  ? 'border-brand bg-brand text-text-inverse'
+                  : 'border-surface-border bg-surface-elevated text-text-secondary hover:border-brand/40 hover:text-text-primary'
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
