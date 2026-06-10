@@ -189,6 +189,7 @@ function PlaceholderCard({ text }: { text: string }) {
 
 const settingsInputClass =
   'w-full rounded-lg border border-surface-border bg-surface-base px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand';
+const DEFAULT_PROPERTY_COLOR = '#166534';
 
 function SettingsCard({
   title,
@@ -591,8 +592,12 @@ function WorkspaceTab({
   const [inviteRole, setInviteRole] = useState<'Manager' | 'Field Staff'>('Manager');
   const [savingOrg, setSavingOrg] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
-  const [newPropertyAddress, setNewPropertyAddress] = useState('');
-  const [newPropertyTimezone, setNewPropertyTimezone] = useState('America/New_York');
+  const [newPropertyShortName, setNewPropertyShortName] = useState('');
+  const [newPropertyLogoInitials, setNewPropertyLogoInitials] = useState('GC');
+  const [newPropertyColor, setNewPropertyColor] = useState(DEFAULT_PROPERTY_COLOR);
+  const [newPropertyCity, setNewPropertyCity] = useState('');
+  const [newPropertyState, setNewPropertyState] = useState('');
+  const [newPropertyAcreage, setNewPropertyAcreage] = useState('0');
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [editingPropertyName, setEditingPropertyName] = useState('');
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string; category: string | null }>>([]);
@@ -619,12 +624,6 @@ function WorkspaceTab({
     departments: 0,
     shiftTemplates: 0,
   });
-  const timezoneOptions = [
-    { label: 'Eastern', value: 'America/New_York' },
-    { label: 'Central', value: 'America/Chicago' },
-    { label: 'Mountain', value: 'America/Denver' },
-    { label: 'Pacific', value: 'America/Los_Angeles' },
-  ] as const;
   const equipmentTypeCategoryOptions = ['Mowing', 'Transport', 'Chemical', 'Trimming', 'Maintenance', 'General'] as const;
 
   const fetchWorkspaceData = useCallback(async () => {
@@ -719,24 +718,50 @@ function WorkspaceTab({
   };
 
   const addProperty = async () => {
-    if (!supabase || !orgId || !newPropertyName.trim()) return;
+    const storeOrgId = storeOrg?.id;
+    const name = newPropertyName.trim();
+    const shortName = newPropertyShortName.trim();
+    if (!name || !shortName) {
+      toast.error('Property name and short name are required.');
+      return;
+    }
+    if (!supabase || !storeOrgId) {
+      toast.error('Organization context is unavailable.');
+      return;
+    }
+    const acreage = Number(newPropertyAcreage || '0');
+    if (!Number.isFinite(acreage) || acreage < 0) {
+      toast.error('Acreage must be 0 or greater.');
+      return;
+    }
     setError(null);
     const { error: insertError } = await supabase
       .from('properties')
       .insert({
-        name: newPropertyName.trim(),
-        org_id: orgId,
+        name,
+        short_name: shortName,
+        logo_initials: newPropertyLogoInitials.trim().slice(0, 3).toUpperCase() || 'GC',
+        color: newPropertyColor || DEFAULT_PROPERTY_COLOR,
+        city: newPropertyCity.trim(),
+        state: newPropertyState.trim().slice(0, 2).toUpperCase(),
+        acreage,
+        status: 'active',
+        org_id: storeOrgId,
       });
     if (insertError) {
       setError(insertError.message);
       toast.error(`Failed to add property: ${insertError.message}`);
       return;
     }
-    await hydrateStore(orgId);
-    toast.success(`Property added: ${newPropertyName.trim()}`);
+    await hydrateStore(storeOrgId);
+    toast.success(`Property added: ${name}`);
     setNewPropertyName('');
-    setNewPropertyAddress('');
-    setNewPropertyTimezone('America/New_York');
+    setNewPropertyShortName('');
+    setNewPropertyLogoInitials('GC');
+    setNewPropertyColor(DEFAULT_PROPERTY_COLOR);
+    setNewPropertyCity('');
+    setNewPropertyState('');
+    setNewPropertyAcreage('0');
   };
 
   const startPropertyEdit = (property: PropertyItem) => {
@@ -1418,13 +1443,66 @@ function WorkspaceTab({
         )}
         <div className="mt-4 grid max-w-lg gap-3">
           <label className="text-xs font-medium uppercase tracking-widest text-text-muted">Add property</label>
-          <input className={settingsInputClass} placeholder="Property name" value={newPropertyName} onChange={(event) => setNewPropertyName(event.target.value)} />
-          <input className={settingsInputClass} placeholder="Address (optional)" value={newPropertyAddress} onChange={(event) => setNewPropertyAddress(event.target.value)} />
-          <select className={settingsInputClass} value={newPropertyTimezone} onChange={(event) => setNewPropertyTimezone(event.target.value)}>
-            {timezoneOptions.map((timezoneOption) => (
-              <option key={timezoneOption.value} value={timezoneOption.value}>{timezoneOption.label}</option>
-            ))}
-          </select>
+          <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+            Property name *
+            <input className={settingsInputClass} placeholder="Springfield Park Course" value={newPropertyName} onChange={(event) => setNewPropertyName(event.target.value)} />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+              Short name *
+              <input className={settingsInputClass} placeholder="SPC" value={newPropertyShortName} onChange={(event) => setNewPropertyShortName(event.target.value)} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+              Logo initials *
+              <input
+                className={settingsInputClass}
+                maxLength={3}
+                placeholder="GC"
+                value={newPropertyLogoInitials}
+                onChange={(event) => setNewPropertyLogoInitials(event.target.value.toUpperCase())}
+              />
+            </label>
+          </div>
+          <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+            Brand color *
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                className="h-10 w-14 cursor-pointer rounded-lg border border-surface-border bg-surface-base p-1"
+                value={newPropertyColor}
+                onChange={(event) => setNewPropertyColor(event.target.value)}
+                aria-label="Property brand color"
+              />
+              <span className="text-sm uppercase text-text-secondary">{newPropertyColor}</span>
+            </div>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-[1fr_100px]">
+            <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+              City
+              <input className={settingsInputClass} placeholder="Springfield" value={newPropertyCity} onChange={(event) => setNewPropertyCity(event.target.value)} />
+            </label>
+            <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+              State
+              <input
+                className={settingsInputClass}
+                maxLength={2}
+                placeholder="OH"
+                value={newPropertyState}
+                onChange={(event) => setNewPropertyState(event.target.value.toUpperCase())}
+              />
+            </label>
+          </div>
+          <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+            Acreage
+            <input
+              className={settingsInputClass}
+              type="number"
+              min={0}
+              step="0.1"
+              value={newPropertyAcreage}
+              onChange={(event) => setNewPropertyAcreage(event.target.value)}
+            />
+          </label>
           <button
             onClick={() => void addProperty()}
             className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
