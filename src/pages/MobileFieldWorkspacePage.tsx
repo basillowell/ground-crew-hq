@@ -1371,7 +1371,7 @@ export default function MobileFieldWorkspacePage() {
         </div>
       ) : null}
       {isStandalone ? (
-        <div className="mb-3 -mx-4 bg-emerald-600 px-4 py-2 text-sm font-medium text-white">
+        <div className="mb-3 -mx-4 bg-status-active px-4 py-2 text-sm font-medium text-text-inverse">
           <div className="mx-auto flex w-full max-w-[520px] items-center justify-between">
             <span>{employeeName}</span>
             <span>{new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>

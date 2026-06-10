@@ -786,7 +786,7 @@ export default function WeatherPage() {
                       ))}
                     </div>
                     {nowIndex >= 0 ? (
-                      <div className="absolute bottom-0 top-0 w-0.5 bg-white" style={{ left: `${(nowIndex / Math.max(1, todaySpraySegments.length)) * 100}%` }}>
+                      <div className="absolute bottom-0 top-0 w-0.5 bg-text-primary" style={{ left: `${(nowIndex / Math.max(1, todaySpraySegments.length)) * 100}%` }}>
                         <span className="absolute -top-4 -translate-x-1/2 rounded bg-surface-elevated px-1 text-[10px] text-text-muted">Now</span>
                       </div>
                     ) : null}
@@ -975,7 +975,7 @@ export default function WeatherPage() {
                     key={key}
                     type="button"
                     className={`rounded-md px-2 py-1 text-xs transition-all duration-200 ${
-                      activeOverlays.has(key) ? "bg-green-600 text-white" : "border bg-background text-muted-foreground"
+                      activeOverlays.has(key) ? "bg-status-active text-text-inverse" : "border bg-background text-muted-foreground"
                     }`}
                     onClick={() => toggleOverlay(key)}
                   >

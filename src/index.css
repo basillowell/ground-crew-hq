@@ -8,11 +8,11 @@ All colors MUST be HSL.
 
 /* ── Design token CSS variables (dark defaults; overridden by html.light) ── */
 :root {
-  --surface-base: 10 15 12;       /* #0a0f0c */
-  --surface-card: 20 31 24;       /* #141f18 */
-  --surface-elevated: 28 45 34;   /* #1c2d22 */
-  --surface-border: 38 61 45;     /* #263d2d */
-  --surface-hover: 31 48 39;      /* #1f3027 */
+  --surface-base: 12 15 13;       /* #0c0f0d */
+  --surface-card: 19 26 21;       /* #131a15 */
+  --surface-elevated: 26 37 32;   /* #1a2520 */
+  --surface-border: 36 48 41;     /* #243029 */
+  --surface-hover: 30 44 36;      /* #1e2c24 */
   --brand-default: 132 204 22;    /* #84cc16 */
   --brand-bright: 163 230 53;     /* #a3e635 */
   --brand-dim: 77 124 15;         /* #4d7c0f */
@@ -70,33 +70,33 @@ html.light {
     --status-info: #3b82f6;
     --status-muted: #94a3b8;
 
-    --background: 147 27% 8%;
-    --foreground: 210 40% 98%;
+    --background: 144 20% 5%;
+    --foreground: 120 15% 95%;
 
-    --card: 136 27% 14%;
-    --card-foreground: 210 40% 98%;
+    --card: 135 22% 10%;
+    --card-foreground: 120 15% 95%;
 
-    --popover: 136 27% 14%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 137 23% 14%;
+    --popover-foreground: 120 15% 95%;
 
-    --primary: 83 78% 56%;
-    --primary-foreground: 0 0% 0%;
+    --primary: 84 81% 43%;
+    --primary-foreground: 144 20% 5%;
 
-    --secondary: 132 22% 18%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 137 23% 14%;
+    --secondary-foreground: 120 15% 95%;
 
-    --muted: 132 22% 18%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 137 23% 14%;
+    --muted-foreground: 120 14% 61%;
 
-    --accent: 136 27% 14%;
-    --accent-foreground: 83 78% 56%;
+    --accent: 147 22% 15%;
+    --accent-foreground: 120 15% 95%;
 
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 100% / 0.08;
-    --input: 0 0% 100% / 0.10;
-    --ring: 83 78% 56%;
+    --border: 138 23% 19%;
+    --input: 138 23% 19%;
+    --ring: 84 81% 43%;
 
     --radius: 0.75rem;
 
@@ -174,12 +174,24 @@ html.light {
   input,
   select,
   textarea {
-    @apply text-gray-900;
+    @apply text-foreground;
   }
 
   input::placeholder,
   textarea::placeholder {
-    @apply text-gray-400;
+    @apply text-muted-foreground;
+  }
+
+  [data-radix-select-content],
+  [data-radix-popover-content],
+  [data-radix-dropdown-menu-content],
+  [data-radix-dialog-content] {
+    @apply bg-surface-elevated border-surface-border text-text-primary;
+  }
+
+  [data-radix-select-item][data-highlighted],
+  [data-radix-dropdown-menu-item][data-highlighted] {
+    @apply bg-surface-hover text-text-primary;
   }
 
   h1, h2, h3, h4, .brand-heading {

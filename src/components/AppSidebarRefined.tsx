@@ -211,7 +211,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
       <SidebarContent className="gap-0 bg-surface-base px-2 py-3">
         <section className="pb-3">
           {!collapsed ? (
-            <div className="px-3 pb-2 text-xs font-medium uppercase text-text-muted">Primary Operations</div>
+            <div className="px-3 pb-2 text-[10px] font-medium uppercase tracking-widest text-text-muted">Primary Operations</div>
           ) : null}
           {renderItems(primaryItems)}
         </section>
@@ -219,7 +219,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
         {managementItems.length > 0 ? (
           <section className="border-t border-surface-border pt-3">
             {!collapsed ? (
-              <div className="px-3 pb-2 text-xs font-medium uppercase text-text-muted">Management</div>
+              <div className="px-3 pb-2 text-[10px] font-medium uppercase tracking-widest text-text-muted">Management</div>
             ) : null}
             {renderItems(managementItems)}
           </section>
@@ -228,7 +228,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
 
       <SidebarFooter className="border-t border-surface-border bg-surface-base p-2">
         {!collapsed ? (
-          <div className="px-3 pb-1 pt-2 text-xs font-medium uppercase text-text-muted">Settings & Compliance</div>
+          <div className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-widest text-text-muted">Settings & Compliance</div>
         ) : null}
         {renderItems(footerItems)}
         <div className="mt-2 border-t border-surface-border px-3 pt-3">

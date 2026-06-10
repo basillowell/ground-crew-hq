@@ -108,10 +108,10 @@ export function GanttTimeline({
               </div>
               {showNow ? (
                 <div
-                  className="pointer-events-none absolute bottom-0 top-0 z-20 border-l-2 border-dotted border-red-500"
+                  className="pointer-events-none absolute bottom-0 top-0 z-20 border-l-2 border-dotted border-status-warning"
                   style={{ left: `${clamp(nowLeftPct, 0, 100)}%` }}
                 >
-                  <span className="absolute -top-5 -translate-x-1/2 rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                  <span className="absolute -top-5 -translate-x-1/2 rounded bg-status-warning px-1.5 py-0.5 text-[10px] font-medium text-text-primary">
                     Now
                   </span>
                 </div>

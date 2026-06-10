@@ -1567,7 +1567,7 @@ export default function SchedulerPage() {
           aria-describedby="dialog-desc"
           role="dialog"
           aria-modal="true"
-          className="sm:max-w-md max-h-[85vh] overflow-y-auto"
+          className="max-h-[85vh] overflow-y-auto border-surface-border bg-surface-elevated sm:max-w-md"
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             addShiftFirstFieldRef.current?.focus();
@@ -1578,7 +1578,7 @@ export default function SchedulerPage() {
           }}
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-text-primary">
               <CalendarDays className="h-4 w-4 text-primary" />
               {isEditing ? 'Edit Shift' : 'Add Shift'}
             </DialogTitle>
@@ -1590,7 +1590,7 @@ export default function SchedulerPage() {
           <div className="grid grid-cols-2 gap-3">
             {/* Employee */}
             <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Crew member</label>
+              <label className="text-xs text-text-secondary">Crew member</label>
               <select
                 ref={addShiftFirstFieldRef}
                 value={draft.employeeId}
@@ -1598,7 +1598,7 @@ export default function SchedulerPage() {
                   setIsShiftModalDirty(true);
                   setDraft({ ...draft, employeeId: e.target.value });
                 }}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                className="mt-1 h-10 w-full rounded-md border border-surface-border bg-surface-base px-3 text-sm text-text-primary focus:border-brand focus:outline-none"
                 data-testid="select-shift-employee"
               >
                 {activeEmployees.length === 0 && <option value="">No active crew</option>}
@@ -1612,14 +1612,14 @@ export default function SchedulerPage() {
 
             {/* Date */}
             <div>
-              <label className="text-xs text-muted-foreground">Date</label>
+              <label className="text-xs text-text-secondary">Date</label>
               <select
                 value={draft.date}
                 onChange={(e) => {
                   setIsShiftModalDirty(true);
                   setDraft({ ...draft, date: e.target.value });
                 }}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                className="mt-1 h-10 w-full rounded-md border border-surface-border bg-surface-base px-3 text-sm text-text-primary focus:border-brand focus:outline-none"
                 data-testid="select-shift-date"
               >
                 {weekDays.map((day) => (
@@ -1630,14 +1630,14 @@ export default function SchedulerPage() {
 
             {/* Status */}
             <div>
-              <label className="text-xs text-muted-foreground">Status</label>
+              <label className="text-xs text-text-secondary">Status</label>
               <select
                 value={draft.status}
                 onChange={(e) => {
                   setIsShiftModalDirty(true);
                   setDraft({ ...draft, status: e.target.value as ScheduleEntry['status'] });
                 }}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                className="mt-1 h-10 w-full rounded-md border border-surface-border bg-surface-base px-3 text-sm text-text-primary focus:border-brand focus:outline-none"
                 data-testid="select-shift-status"
               >
                 <option value="scheduled">Scheduled</option>
@@ -1651,7 +1651,7 @@ export default function SchedulerPage() {
             {draft.status === 'scheduled' && (
               <>
                 <div className="col-span-2">
-                  <label className="text-xs text-muted-foreground">Use template (optional)</label>
+                  <label className="text-xs text-text-secondary">Use template (optional)</label>
                   <select
                     value={selectedTemplateId}
                     onChange={(e) => {
@@ -1667,7 +1667,7 @@ export default function SchedulerPage() {
                         }));
                       }
                     }}
-                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    className="mt-1 h-10 w-full rounded-md border border-surface-border bg-surface-base px-3 text-sm text-text-primary focus:border-brand focus:outline-none"
                   >
                     <option value="">Select a template (optional)</option>
                     {shiftTemplates.map((template) => (
@@ -1678,7 +1678,7 @@ export default function SchedulerPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground">Shift start</label>
+                  <label className="text-xs text-text-secondary">Shift start</label>
                   <Input
                     type="time"
                     value={draft.shiftStart}
@@ -1686,13 +1686,13 @@ export default function SchedulerPage() {
                       setIsShiftModalDirty(true);
                       setDraft({ ...draft, shiftStart: e.target.value });
                     }}
-                    className="mt-1"
+                    className="mt-1 border-surface-border bg-surface-base text-text-primary placeholder:text-text-muted focus-visible:border-brand"
                     disabled={schedulerDefaultsLoading && !schedulerDefaults.start}
                     data-testid="input-shift-start"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground">Shift end</label>
+                  <label className="text-xs text-text-secondary">Shift end</label>
                   <Input
                     type="time"
                     value={draft.shiftEnd}
@@ -1700,7 +1700,7 @@ export default function SchedulerPage() {
                       setIsShiftModalDirty(true);
                       setDraft({ ...draft, shiftEnd: e.target.value });
                     }}
-                    className="mt-1"
+                    className="mt-1 border-surface-border bg-surface-base text-text-primary placeholder:text-text-muted focus-visible:border-brand"
                     disabled={schedulerDefaultsLoading && !schedulerDefaults.start}
                     data-testid="input-shift-end"
                   />
@@ -1723,7 +1723,7 @@ export default function SchedulerPage() {
               </>
             )}
             <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Notes</label>
+              <label className="text-xs text-text-secondary">Notes</label>
               <Textarea
                 value={draft.notes}
                 onChange={(e) => {
@@ -1731,7 +1731,7 @@ export default function SchedulerPage() {
                   setDraft({ ...draft, notes: e.target.value });
                 }}
                 placeholder="Optional shift note"
-                className="mt-1 min-h-20 resize-y"
+                className="mt-1 min-h-20 resize-y border-surface-border bg-surface-base text-text-primary placeholder:text-text-muted focus-visible:border-brand"
                 data-testid="input-shift-notes"
               />
             </div>
@@ -1746,8 +1746,19 @@ export default function SchedulerPage() {
               <span />
             )}
             <div className="flex gap-2">
-              <Button variant="outline" className="h-10 rounded-lg" onClick={() => handleCloseModal()}>Cancel</Button>
-              <Button className="h-10 rounded-lg" onClick={() => void handleSaveShift()} disabled={isSaving} data-testid="button-save-shift">
+              <Button
+                variant="outline"
+                className="h-10 rounded-lg border-surface-border text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                onClick={() => handleCloseModal()}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="h-10 rounded-lg bg-brand text-text-inverse hover:bg-brand/90"
+                onClick={() => void handleSaveShift()}
+                disabled={isSaving}
+                data-testid="button-save-shift"
+              >
                 {isSaving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Shift'}
               </Button>
             </div>

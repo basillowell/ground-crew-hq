@@ -749,7 +749,7 @@ export default function DispatchBoardPage() {
                 type="button"
                 onClick={() => void handleCreateSave()}
                 disabled={isSaving}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-surface-base hover:bg-brand-bright disabled:opacity-60"
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-text-inverse hover:bg-brand-bright disabled:opacity-60"
               >
                 {isSaving ? (
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />

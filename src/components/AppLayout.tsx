@@ -568,7 +568,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden bg-surface-base">
         {isReadOnlyDemo && showDemoBanner ? (
-          <div className="fixed inset-x-0 top-0 z-50 h-9 bg-blue-600 text-white">
+          <div className="fixed inset-x-0 top-0 z-50 h-9 bg-status-complete text-text-primary">
             <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-3 text-xs md:px-4">
               <div>
                 Demo Mode — Viewing sample data (read-only).{' '}
@@ -578,7 +578,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
               <button
                 type="button"
-                className="ml-3 rounded px-2 py-0.5 hover:bg-white/20"
+                className="ml-3 rounded px-2 py-0.5 hover:bg-text-primary/20"
                 onClick={() => {
                   sessionStorage.setItem('gchq-demo-banner-dismissed', 'true');
                   setShowDemoBanner(false);

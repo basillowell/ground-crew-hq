@@ -510,8 +510,8 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                 <div className="text-muted-foreground">{sop.estimated_hours ?? '—'}</div>
                 <div className="flex items-center gap-1.5">
                   <span
-                    className="inline-block h-4 w-4 rounded-full border border-white/10"
-                    style={{ backgroundColor: sop.color ?? '#9ca3af' }}
+                    className="inline-block h-4 w-4 rounded-full border border-text-primary/10"
+                    style={{ backgroundColor: sop.color ?? 'rgb(var(--text-muted))' }}
                   />
                 </div>
                 <div className="flex items-center justify-end gap-1">
