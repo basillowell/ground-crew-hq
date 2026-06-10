@@ -4276,74 +4276,6 @@ export default function WorkboardContent() {
 
         {/* Crew board */}
         <div className="flex-1 overflow-auto p-4">
-          <div className="mb-4 rounded-xl border bg-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CloudSun className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold">Suggested Tasks</h3>
-                <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                  {suggestedTasks.length}
-                </Badge>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-[11px]"
-                onClick={() => setSuggestedTasksCollapsed((current) => !current)}
-              >
-                {suggestedTasksCollapsed ? (
-                  <>
-                    <ChevronDown className="mr-1 h-3.5 w-3.5" /> Show
-                  </>
-                ) : (
-                  <>
-                    <ChevronUp className="mr-1 h-3.5 w-3.5" /> Hide
-                  </>
-                )}
-              </Button>
-            </div>
-            {suggestedTasksCollapsed ? (
-              <p className="text-xs text-muted-foreground">Collapsed. Click Show to view suggestions.</p>
-            ) : suggestedTasks.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No suggestions right now. Your daily plan looks balanced.</p>
-            ) : (
-              <div className="space-y-2">
-                {suggestedTasks.map((item) => {
-                  const toneClass =
-                    item.tone === 'urgent'
-                      ? 'border-l-red-500 bg-card'
-                      : item.tone === 'warning'
-                        ? 'border-l-amber-500 bg-card'
-                        : 'border-l-emerald-500 bg-card';
-                  return (
-                    <div key={item.id} className={`rounded-xl border border-border border-l-4 p-3 ${toneClass}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{item.title}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
-                          {item.actionLabel && item.onAction ? (
-                            <Button size="sm" variant="outline" className="mt-2 h-7 text-[11px]" onClick={item.onAction}>
-                              {item.actionLabel}
-                            </Button>
-                          ) : null}
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => dismissSuggestedTask(item.id)}
-                        >
-                          Dismiss
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
 
           <div className="mb-4 rounded-xl border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -5020,38 +4952,6 @@ export default function WorkboardContent() {
             <button
               type="button"
               className="flex min-h-11 w-full items-center justify-between px-3 py-2"
-              onClick={() => toggleMobileSection('weather')}
-            >
-              <span className="text-sm font-semibold">Weather</span>
-              {mobileSectionsOpen.weather ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-            {mobileSectionsOpen.weather ? (
-              <div className="border-t px-3 py-2">
-                {hourlyWeatherStripQuery.isLoading ? (
-                  <div className="h-16 animate-pulse rounded-lg bg-muted/30" />
-                ) : hourlyWeatherStripQuery.data && hourlyWeatherStripQuery.data.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <div className="flex min-w-max gap-1">
-                      {hourlyWeatherStripQuery.data.map((entry) => (
-                        <div key={`mobile-weather-${entry.hour}`} className={`w-14 rounded-md border px-1 py-1 text-center text-[12px] ${weatherCellTone(entry.precip, entry.weatherCode)}`}>
-                          <div>{formatTime(`${entry.hour.toString().padStart(2, '0')}:00`).replace(':00', '')}</div>
-                          <div>{Math.round(entry.temp)}°</div>
-                          <div>{Math.round(entry.wind)}mph</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Forecast unavailable for this date.</p>
-                )}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-2xl border">
-            <button
-              type="button"
-              className="flex min-h-11 w-full items-center justify-between px-3 py-2"
               onClick={() => toggleMobileSection('notes')}
             >
               <span className="text-sm font-semibold">Notes</span>
@@ -5071,31 +4971,6 @@ export default function WorkboardContent() {
             ) : null}
           </div>
 
-          <div className="rounded-2xl border">
-            <button
-              type="button"
-              className="flex min-h-11 w-full items-center justify-between px-3 py-2"
-              onClick={() => toggleMobileSection('escalations')}
-            >
-              <span className="text-sm font-semibold">Escalation Center ({escalationAlerts.length})</span>
-              {mobileSectionsOpen.escalations ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-            {mobileSectionsOpen.escalations ? (
-              <div className="space-y-2 border-t px-3 py-2">
-                {escalationAlerts.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No active escalations right now.</p>
-                ) : escalationAlerts.map((alert) => (
-                  <div key={`mobile-escalation-${alert.id}`} className="rounded-lg border bg-muted/20 p-2">
-                    <div className="mb-1 flex items-center justify-between">
-                      <Badge variant="outline" className="text-[10px]">{alert.severity}</Badge>
-                      <button type="button" className="text-xs" onClick={() => dismissEscalation(alert.id)}>Dismiss</button>
-                    </div>
-                    <p className="text-xs">{alert.message}</p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
         </div>
       </div>
 
@@ -5244,43 +5119,6 @@ export default function WorkboardContent() {
           )}
         </div>
 
-        {/* Weather */}
-        <div className="border-b p-4 flex-shrink-0">
-          <div className="flex items-center gap-2 mb-3">
-            <CloudSun className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Weather</h3>
-          </div>
-          {hourlyWeatherStripQuery.isLoading ? (
-            <div className="space-y-2">
-              <div className="h-16 rounded-lg bg-muted/30 animate-pulse" />
-            </div>
-          ) : hourlyWeatherStripQuery.data && hourlyWeatherStripQuery.data.length > 0 ? (
-            <div className="space-y-2">
-              <div className="overflow-x-auto">
-                <div className="flex min-w-max gap-1 pr-1">
-                  {hourlyWeatherStripQuery.data.map((entry) => {
-                    const hourLabel = formatTime(`${entry.hour.toString().padStart(2, '0')}:00`);
-                    const isCurrentHour = boardDate === new Date().toISOString().slice(0, 10) && entry.hour === new Date().getHours();
-                    return (
-                      <div
-                        key={`weather-hour-${entry.hour}`}
-                        className={`w-16 rounded-md border px-1 py-1 text-center text-[12px] ${weatherCellTone(entry.precip, entry.weatherCode)} ${isCurrentHour ? 'ring-2 ring-primary ring-offset-1' : ''}`}
-                        title={`${hourLabel} · ${Math.round(entry.temp)}°F · Wind ${Math.round(entry.wind)} mph`}
-                      >
-                        <div className="text-[11px] leading-tight">{hourLabel.replace(':00', '')}</div>
-                        <div className="text-base leading-tight">{weatherCellIcon(entry.weatherCode)}</div>
-                        <div className="font-semibold leading-tight">{Math.round(entry.temp)}°</div>
-                        <div className="leading-tight">{Math.round(entry.wind)}mph</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Forecast unavailable for this date.</p>
-          )}
-        </div>
         <div className="border-b bg-muted/30 px-3 py-2 text-sm md:hidden">
           <div className="overflow-x-auto">
             <div className="min-w-max whitespace-nowrap font-medium text-muted-foreground">
@@ -5291,48 +5129,6 @@ export default function WorkboardContent() {
               <span className="text-foreground">{totalOpenMinutes} min covered</span>
             </div>
           </div>
-        </div>
-
-        {/* Escalations */}
-        <div className="border-b p-4 flex-shrink-0">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold">Escalation Center</h3>
-            <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-              {escalationAlerts.length}
-            </Badge>
-          </div>
-          {escalationAlerts.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No active escalations right now.</p>
-          ) : (
-            <div className="space-y-2">
-              {escalationAlerts.map((alert) => (
-                <div key={alert.id} className="rounded-lg border bg-muted/20 p-2.5">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <Badge
-                      className={
-                        alert.severity === 'critical'
-                          ? 'bg-red-100 text-red-700'
-                          : alert.severity === 'warning'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-surface-elevated text-text-muted'
-                      }
-                    >
-                      {alert.severity}
-                    </Badge>
-                    <button
-                      type="button"
-                      className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                      onClick={() => dismissEscalation(alert.id)}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                  <p className="text-xs text-foreground">{alert.message}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">{formatRelativeTime(alert.timestamp)}</p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Notes */}

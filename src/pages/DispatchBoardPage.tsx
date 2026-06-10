@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -14,6 +14,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import {
+  AlertTriangle,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -24,6 +25,7 @@ import {
   Plus,
   UserRound,
 } from 'lucide-react';
+import { isUSCoordinates } from '@/lib/weather/providers';
 import { toast } from '@/components/ui/sonner';
 import {
   Sheet,
@@ -187,10 +189,12 @@ function AssignmentCard({
           <GripVertical className="h-4 w-4" />
         </button>
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
-          <p className="truncate text-sm font-medium text-text-primary">
-            {task?.name ?? assignment.title ?? 'General assignment'}
-          </p>
-          <p className="mt-1 truncate text-xs text-text-secondary">{propertyName(property)}</p>
+          <p className="truncate text-sm font-medium text-text-primary">{propertyName(property)}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            <span className="rounded-full border border-brand-dim/30 bg-brand-ghost px-2 py-0.5 text-xs font-medium text-brand">
+              {task?.name ?? assignment.title ?? 'Untyped'}
+            </span>
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StatusBadge status={assignment.status} />
             <span className="text-xs text-text-muted">
@@ -278,13 +282,14 @@ export default function DispatchBoardPage() {
 
   // Create-assignment slide-over state
   const [createCell, setCreateCell] = useState<{ employeeId: string; date: string } | null>(null);
-  const [newTaskId, setNewTaskId] = useState('');
+  const [newTaskIds, setNewTaskIds] = useState<string[]>([]);
   const [newPropertyId, setNewPropertyId] = useState<string | null>(
     () => properties[0]?.id ?? null,
   );
   const [newStartTime, setNewStartTime] = useState('');
   const [newEstimatedHours, setNewEstimatedHours] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [nwsAlertBadge, setNwsAlertBadge] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -345,6 +350,38 @@ export default function DispatchBoardPage() {
       cancelled = true;
     };
   }, [isHydrated, orgId, weekEndKey, weekStartKey, refreshTick]);
+
+  const fetchNwsAlert = useCallback(async () => {
+    if (!orgId || !supabase) return;
+    const { data } = await supabase
+      .from('weather_locations')
+      .select('latitude, longitude')
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .limit(1);
+    const loc = data?.[0];
+    if (!loc?.latitude || !loc?.longitude) return;
+    if (!isUSCoordinates(Number(loc.latitude), Number(loc.longitude))) return;
+    try {
+      const res = await fetch(
+        `https://api.weather.gov/alerts/active?point=${loc.latitude},${loc.longitude}`,
+        { headers: { Accept: 'application/geo+json' } },
+      );
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        features?: Array<{ properties?: { headline?: string; event?: string } }>;
+      };
+      const first = json.features?.[0]?.properties;
+      if (first) setNwsAlertBadge(first.headline ?? first.event ?? 'Weather alert active');
+    } catch {
+      // silent — this is a passive indicator
+    }
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    void fetchNwsAlert();
+  }, [isHydrated, fetchNwsAlert]);
 
   // All employees rendered as rows — no active/status filter per dispatch spec
   const sortedEmployees = useMemo(
@@ -408,7 +445,7 @@ export default function DispatchBoardPage() {
   };
 
   const openCreateSheet = (employeeId: string, date: string) => {
-    setNewTaskId('');
+    setNewTaskIds([]);
     setNewPropertyId(properties[0]?.id ?? null);
     setNewStartTime('');
     setNewEstimatedHours('');
@@ -423,16 +460,19 @@ export default function DispatchBoardPage() {
     }
     setIsSaving(true);
 
-    const { error } = await supabase.from('assignments').insert({
+    const taskIdsToCreate = newTaskIds.length > 0 ? newTaskIds : [null as string | null];
+    const inserts = taskIdsToCreate.map((taskId) => ({
       employee_id: createCell.employeeId,
       date: createCell.date,
-      task_id: newTaskId || null,
+      task_id: taskId,
       property_id: newPropertyId,
       org_id: orgId,
       status: 'planned',
       start_time: newStartTime || null,
       estimated_hours: newEstimatedHours ? parseFloat(newEstimatedHours) : null,
-    });
+    }));
+
+    const { error } = await supabase.from('assignments').insert(inserts);
 
     setIsSaving(false);
 
@@ -442,7 +482,7 @@ export default function DispatchBoardPage() {
       return;
     }
 
-    toast.success('Assignment created');
+    toast.success(inserts.length > 1 ? `${inserts.length} assignments created` : 'Assignment created');
     setCreateCell(null);
     setRefreshTick((t) => t + 1);
   };
@@ -472,7 +512,13 @@ export default function DispatchBoardPage() {
               Drag assignments between crew members and days to update the weekly plan.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {nwsAlertBadge ? (
+              <div className="flex items-center gap-1.5 rounded-full border border-status-pending/30 bg-status-pending/10 px-3 py-1.5 text-xs font-medium text-status-pending">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <span className="max-w-xs truncate">{nwsAlertBadge}</span>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={() => setWeekStart((current) => addDays(current, -7))}
@@ -676,22 +722,43 @@ export default function DispatchBoardPage() {
 
           <div className="mt-6 space-y-5">
             <div>
-              <label className="label-field block" htmlFor="new-task">
-                Task
-              </label>
-              <select
-                id="new-task"
-                value={newTaskId}
-                onChange={(e) => setNewTaskId(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-              >
-                <option value="">— Select task —</option>
-                {tasks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between">
+                <label className="label-field block">Tasks</label>
+                {newTaskIds.length > 0 && (
+                  <span className="text-xs text-brand">{newTaskIds.length} selected</span>
+                )}
+              </div>
+              <div className="mt-1.5 max-h-52 overflow-y-auto rounded-lg border border-surface-border bg-surface-card">
+                {tasks.length === 0 ? (
+                  <p className="px-3 py-4 text-center text-sm text-text-muted">No tasks in library.</p>
+                ) : (
+                  tasks.map((t) => (
+                    <label
+                      key={t.id}
+                      className="flex min-h-[44px] cursor-pointer items-center gap-3 border-b border-surface-border px-3 py-2 last:border-0 hover:bg-surface-hover"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={newTaskIds.includes(t.id)}
+                        onChange={(e) =>
+                          setNewTaskIds((current) =>
+                            e.target.checked
+                              ? [...current, t.id]
+                              : current.filter((id) => id !== t.id),
+                          )
+                        }
+                        className="h-4 w-4 rounded accent-brand"
+                      />
+                      <span className="flex-1 text-sm text-text-primary">{t.name}</span>
+                      {t.category ? (
+                        <span className="rounded-full bg-brand-ghost px-2 py-0.5 text-xs text-brand">
+                          {t.category}
+                        </span>
+                      ) : null}
+                    </label>
+                  ))
+                )}
+              </div>
             </div>
 
             <div>

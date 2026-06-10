@@ -489,7 +489,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { label: 'My Jobs', icon: ClipboardList, href: '/app/scheduler' },
     { label: 'Clock', icon: Clock, href: '/app/field?tab=clock' },
     { label: 'Messages', icon: MessageSquare, href: '/app/breakroom' },
-    { label: 'Profile', icon: User, href: '/app/settings?tab=profile' },
+    { label: 'Profile', icon: User, href: '/app/settings?tab=Account' },
   ];
   const mobileMoreItems = [
     { label: 'Dashboard', route: '/app/dashboard', icon: LayoutDashboard },

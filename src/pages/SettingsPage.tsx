@@ -54,7 +54,7 @@ import {
 } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 
-const TABS = ['Workspace', 'Workforce', 'Scheduler', 'Tasks', 'SOPs', 'Recurring Tasks', 'Weather', 'Access', 'Help'] as const;
+const TABS = ['Operations', 'Tasks', 'Equipment', 'Workforce', 'SOPs', 'Account', 'Help'] as const;
 type Tab = (typeof TABS)[number];
 
 interface SchedulerSettings {
@@ -294,11 +294,35 @@ function SortableTaskRow({ id, children }: { id: string; children: ReactNode }) 
   );
 }
 
+function SortableTaskRowCompact({ id, children }: { id: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex min-h-[44px] items-center gap-2 border-b border-surface-border last:border-0 transition-opacity ${
+        isDragging ? 'opacity-50 bg-surface-hover' : ''
+      }`}
+    >
+      <button
+        type="button"
+        className="flex min-h-[44px] min-w-8 cursor-grab items-center justify-center rounded-lg text-text-muted hover:bg-surface-elevated active:cursor-grabbing"
+        aria-label="Reorder task"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { orgId, user, userRole, currentUser, currentPropertyId } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const location = useLocation();
-  const [tab, setTab] = useState<Tab>('Scheduler');
+  const [tab, setTab] = useState<Tab>('Operations');
   const taskPropertyId =
     (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null) ??
     currentUser?.propertyId ??
@@ -361,24 +385,22 @@ export default function SettingsPage() {
       ) : null}
 
       <fieldset disabled={isReadOnly} style={{ border: 'none', margin: 0, padding: 0 }}>
-        {tab === 'Workspace' && (
-          <WorkspaceTab
-            key="workspace"
+        {tab === 'Operations' && (
+          <OperationsTab
+            key="operations"
             orgId={orgId}
             userRole={userRole}
             currentPropertyId={currentPropertyId}
           />
         )}
         {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
-        {tab === 'Scheduler' && <SchedulerTab key="scheduler" orgId={orgId} />}
         {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
+        {tab === 'Equipment' && <EquipmentTab key="equipment" orgId={orgId} />}
         {tab === 'SOPs' && <SOPSettings key="sops" orgId={orgId} propertyId={taskPropertyId} />}
-        {tab === 'Recurring Tasks' && <RecurringTasksSection key="recurring-tasks" orgId={orgId} />}
-        {tab === 'Weather' && <WeatherTab key="weather" orgId={orgId} />}
       </fieldset>
-      {tab === 'Access' && (
+      {tab === 'Account' && (
         <AccessTab
-          key="access"
+          key="account"
           userEmail={user?.email ?? ''}
           userRole={userRole}
           orgId={orgId}
@@ -386,6 +408,128 @@ export default function SettingsPage() {
         />
       )}
       {tab === 'Help' && <HelpTab key="help" />}
+    </div>
+  );
+}
+
+function OperationsTab({
+  orgId,
+  userRole,
+  currentPropertyId,
+}: {
+  orgId: string | null;
+  userRole: string | null;
+  currentPropertyId: string;
+}) {
+  return (
+    <div className="space-y-8">
+      <WorkspaceTab orgId={orgId} userRole={userRole} currentPropertyId={currentPropertyId} />
+      <div className="border-t border-dashed border-surface-border pt-6">
+        <SchedulerTab orgId={orgId} />
+      </div>
+    </div>
+  );
+}
+
+function EquipmentTab({ orgId }: { orgId: string | null }) {
+  const isHydrated = useAppStore((state) => state.isHydrated);
+  const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string; category: string | null }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newCategory, setNewCategory] = useState('General');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const categoryOptions = ['Mowing', 'Transport', 'Chemical', 'Trimming', 'Maintenance', 'General'] as const;
+
+  const fetchTypes = useCallback(async () => {
+    if (!supabase || !orgId) return;
+    setLoading(true);
+    setError(null);
+    const { data, error: fetchError } = await supabase
+      .from('equipment_types')
+      .select('id, name, category')
+      .eq('org_id', orgId)
+      .eq('active', true)
+      .order('name', { ascending: true });
+    if (fetchError) { setError(fetchError.message); setLoading(false); return; }
+    setEquipmentTypes((data ?? []) as Array<{ id: string; name: string; category: string | null }>);
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    void fetchTypes();
+  }, [fetchTypes, isHydrated]);
+
+  const addType = async () => {
+    if (!supabase || !orgId || !newName.trim()) return;
+    const { error: insertError } = await supabase.from('equipment_types').insert({
+      org_id: orgId, name: newName.trim(), category: newCategory, active: true,
+    });
+    if (insertError) { toast.error(`Failed to add: ${insertError.message}`); return; }
+    setNewName('');
+    toast.success('Equipment type added');
+    void fetchTypes();
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!supabase || !orgId || !editingName.trim()) return;
+    const { error: updateError } = await supabase
+      .from('equipment_types').update({ name: editingName.trim() }).eq('id', id).eq('org_id', orgId);
+    if (updateError) { toast.error(`Failed to update: ${updateError.message}`); return; }
+    setEditingId(null); setEditingName('');
+    toast.success('Updated');
+    void fetchTypes();
+  };
+
+  const deactivate = async (id: string, name: string) => {
+    if (!supabase || !orgId) return;
+    const { error: updateError } = await supabase
+      .from('equipment_types').update({ active: false }).eq('id', id).eq('org_id', orgId);
+    if (updateError) { toast.error(`Failed to remove: ${updateError.message}`); return; }
+    toast.success(`Removed ${name}`);
+    void fetchTypes();
+  };
+
+  if (loading) return <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />;
+  if (error) return <ErrorRetry message={error} onRetry={() => void fetchTypes()} />;
+
+  return (
+    <div className="space-y-4">
+      <SettingsCard title="Equipment Types" subtitle="Define the types of equipment your crew uses.">
+        <div className="overflow-hidden rounded-xl border border-surface-border">
+          {equipmentTypes.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-text-muted">No equipment types yet.</p>
+          ) : (
+            equipmentTypes.map((type) => (
+              <div key={type.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
+                {editingId === type.id ? (
+                  <>
+                    <input className={`${settingsInputClass} flex-1`} value={editingName} onChange={(e) => setEditingName(e.target.value)} />
+                    <button className="text-sm font-medium text-brand" onClick={() => void saveEdit(type.id)}>Save</button>
+                    <button className="text-sm text-text-muted" onClick={() => { setEditingId(null); setEditingName(''); }}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-text-primary">{type.name}</span>
+                    <span className="rounded-full bg-surface-elevated px-2.5 py-1 text-xs text-text-muted">{type.category ?? 'General'}</span>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingId(type.id); setEditingName(type.name); }} aria-label={`Edit ${type.name}`}><Pencil className="h-4 w-4" /></button>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivate(type.id, type.name)} aria-label={`Remove ${type.name}`}><Trash2 className="h-4 w-4" /></button>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <input className={`${settingsInputClass} flex-1`} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Type name" />
+          <select className={`${settingsInputClass} w-40`} value={newCategory} onChange={(e) => setNewCategory(e.target.value)}>
+            {categoryOptions.map((c) => <option key={`eq-cat-${c}`} value={c}>{c}</option>)}
+          </select>
+          <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={() => void addType()}>Add</button>
+        </div>
+      </SettingsCard>
     </div>
   );
 }
@@ -1026,10 +1170,10 @@ function WorkspaceTab({
     {
       label: 'Organization name',
       done: Boolean(orgNameDraft.trim() && orgNameDraft.trim().toLowerCase() !== 'ground crew hq'),
-      href: '/app/settings?tab=Workspace',
+      href: '/app/settings?tab=Operations',
     },
-    { label: 'Add property', done: usageStats.properties > 0, href: '/app/settings?tab=Workspace' },
-    { label: 'Configure weather', done: usageStats.weatherLocations > 0, href: '/app/settings?tab=Weather' },
+    { label: 'Add property', done: usageStats.properties > 0, href: '/app/settings?tab=Operations' },
+    { label: 'Configure weather', done: usageStats.weatherLocations > 0, href: '/app/settings?tab=Operations' },
     { label: 'Add departments', done: usageStats.departments > 0, href: '/app/settings?tab=Workforce' },
     { label: 'Add employees', done: usageStats.employees > 0, href: '/app/employees' },
     { label: 'Create shift templates', done: usageStats.shiftTemplates > 0, href: '/app/scheduler' },
@@ -1239,7 +1383,7 @@ function WorkspaceTab({
           {usageAtLimit && !isProPlan ? (
             <button
               type="button"
-              onClick={() => navigate('/app/settings?tab=Access')}
+              onClick={() => navigate('/app/settings?tab=Account')}
               className="w-fit text-sm text-brand underline hover:text-brand-bright"
             >
               Usage limit reached. Review workspace access settings.
@@ -1290,46 +1434,6 @@ function WorkspaceTab({
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Equipment Types">
-        <div className="overflow-hidden rounded-xl border border-surface-border">
-          {equipmentTypes.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-text-muted">No equipment types yet.</p>
-          ) : (
-            equipmentTypes.map((type) => (
-              <div key={type.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
-                {editingEquipmentTypeId === type.id ? (
-                  <>
-                    <input className={`${settingsInputClass} flex-1`} value={editingEquipmentTypeName} onChange={(event) => setEditingEquipmentTypeName(event.target.value)} />
-                    <button className="text-sm font-medium text-brand" onClick={() => void saveEquipmentTypeEdit(type.id)}>Save</button>
-                    <button className="text-sm text-text-muted" onClick={() => { setEditingEquipmentTypeId(null); setEditingEquipmentTypeName(''); }}>Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1 text-sm font-medium text-text-primary">{type.name}</span>
-                    <span className="rounded-full bg-surface-elevated px-2.5 py-1 text-xs text-text-muted">{type.category ?? 'General'}</span>
-                    <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingEquipmentTypeId(type.id); setEditingEquipmentTypeName(type.name); }} aria-label={`Edit ${type.name}`}><Pencil className="h-4 w-4" /></button>
-                    <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivateEquipmentType(type.id, type.name)} aria-label={`Delete ${type.name}`}><Trash2 className="h-4 w-4" /></button>
-                  </>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-        <div className="mt-4 grid max-w-lg gap-3">
-          <input className={settingsInputClass} value={newEquipmentTypeName} onChange={(event) => setNewEquipmentTypeName(event.target.value)} placeholder="Type name" />
-          <select className={settingsInputClass} value={newEquipmentTypeCategory} onChange={(event) => setNewEquipmentTypeCategory(event.target.value)}>
-            {equipmentTypeCategoryOptions.map((category) => (
-              <option key={`equipment-type-category-${category}`} value={category}>{category}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => void addEquipmentType()}
-            className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
-          >
-            Add Equipment Type
-          </button>
-        </div>
-      </SettingsCard>
 
       <SettingsCard
         title="Standard Operating Procedures"
@@ -2926,67 +3030,87 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       <SettingsCard
         title="Task Library"
         subtitle="Reusable tasks for daily workflow planning. Drag to reorder priority."
-        action={
-          <button
-            type="button"
-            onClick={() => { setEditingTaskId(null); setTaskPanelOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
-          >
-            <Plus className="h-4 w-4" />
-            Add Task
-          </button>
-        }
       >
         {!orgId || loading ? (
           <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />
         ) : error ? (
           <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchTasks()} />
-        ) : tasks.length === 0 ? (
-          <p className="text-sm text-text-muted">No tasks yet. Add your first task above.</p>
         ) : (
-          <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
-            <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-              <div className="grid gap-3 md:grid-cols-2">
-                {tasks.map((task) => (
-                  <SortableTaskRow key={task.id} id={task.id}>
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-text-primary">{task.name}</p>
-                      <div className="flex shrink-0 gap-1">
+          <>
+            <div className="overflow-hidden rounded-xl border border-surface-border">
+              {tasks.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-text-muted">No tasks yet. Add one below.</p>
+              ) : (
+                <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
+                  <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+                    {tasks.map((task) => (
+                      <SortableTaskRowCompact key={task.id} id={task.id}>
+                        <span className="flex-1 truncate pr-1 text-sm font-medium text-text-primary">{task.name}</span>
+                        <span className="shrink-0 rounded-full bg-brand-ghost px-2 py-0.5 text-xs text-brand">
+                          {task.category ?? 'General'}
+                        </span>
+                        <span className="shrink-0 text-xs text-text-muted">
+                          {Number(task.estimated_hours ?? 0).toFixed(1)}h
+                        </span>
+                        {recurringDrafts[task.id]?.enabled ? (
+                          <span className="shrink-0 rounded-full bg-status-active/10 px-1.5 py-0.5 text-xs text-status-active">Rec</span>
+                        ) : null}
                         <button
+                          type="button"
                           onClick={() => startEditTask(task)}
-                          className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
+                          className="shrink-0 rounded-lg p-1.5 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
                           aria-label={`Edit ${task.name}`}
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => void removeTask(task.id)}
-                          className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
+                          className="mr-2 shrink-0 rounded-lg p-1.5 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
                           aria-label={`Delete ${task.name}`}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <span className="rounded-full bg-brand-ghost px-2 py-0.5 text-xs text-brand">
-                        {task.category ?? 'General Maintenance'}
-                      </span>
-                      <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">
-                        {task.priority === 1 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
-                      </span>
-                      <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">
-                        {Number(task.estimated_hours ?? 0).toFixed(1)}h
-                      </span>
-                      {recurringDrafts[task.id]?.enabled ? (
-                        <span className="rounded-full bg-status-active/10 px-2 py-0.5 text-xs text-status-active">Recurring</span>
-                      ) : null}
-                    </div>
-                  </SortableTaskRow>
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+                      </SortableTaskRowCompact>
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-dashed border-surface-border pt-3">
+              <input
+                className={`${settingsInputClass} min-w-[140px] flex-1`}
+                placeholder="New task name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) void addTask(); }}
+              />
+              <select
+                className={`${settingsInputClass} w-44`}
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+              >
+                {taskCategoryOptions.map((c) => <option key={`inline-cat-${c}`} value={c}>{c}</option>)}
+              </select>
+              <input
+                type="number"
+                step="0.25"
+                min="0.25"
+                className={`${settingsInputClass} w-20`}
+                placeholder="hrs"
+                value={newEstimatedHours}
+                onChange={(e) => setNewEstimatedHours(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => void addTask()}
+                disabled={!newName.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" /> Add
+              </button>
+            </div>
+          </>
         )}
       </SettingsCard>
 
