@@ -271,14 +271,14 @@ function SortableShiftTemplateRow({
 function SortableTaskRow({ id, children }: { id: string; children: ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   return (
-    <tr
+    <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`grid rounded-xl border border-surface-border bg-surface-card p-4 ${
-        isDragging ? 'bg-surface-hover' : 'hover:bg-surface-hover'
+      className={`rounded-xl border border-surface-border bg-surface-card p-4 transition-opacity ${
+        isDragging ? 'opacity-50' : ''
       }`}
     >
-      <td className="flex items-center gap-2 pb-2">
+      <div className="mb-2 flex items-center gap-2">
         <button
           type="button"
           className="flex min-h-11 min-w-11 cursor-grab items-center justify-center rounded-lg text-text-muted hover:bg-surface-elevated active:cursor-grabbing"
@@ -288,10 +288,9 @@ function SortableTaskRow({ id, children }: { id: string; children: ReactNode }) 
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        <span className="text-xs text-text-muted">Drag to set priority</span>
-      </td>
+      </div>
       {children}
-    </tr>
+    </div>
   );
 }
 
@@ -1038,11 +1037,6 @@ function WorkspaceTab({
   ];
   const setupComplete = setupChecklist.every((item) => item.done);
 
-  const usageTone = (ratio: number) => {
-    if (ratio >= 0.9) return 'rgb(var(--status-warning))';
-    if (ratio >= 0.75) return 'rgb(var(--status-pending))';
-    return 'rgb(var(--status-active))';
-  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1146,360 +1140,263 @@ function WorkspaceTab({
   }
 
   return (
-    <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Setup Checklist</h3>
+    <div className="space-y-4">
+      <SettingsCard
+        title="Setup Checklist"
+        action={
           <Tooltip>
             <TooltipTrigger asChild>
-              <button type="button" aria-label="Setup checklist help" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
-                <HelpCircle size={14} color="rgb(var(--text-muted))" />
+              <button type="button" aria-label="Setup checklist help" className="rounded p-0.5 text-text-muted hover:text-text-secondary">
+                <HelpCircle className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent>Complete these steps to fully configure your operation.</TooltipContent>
           </Tooltip>
-        </div>
+        }
+      >
         {setupComplete ? (
-          <p style={{ margin: 0, color: 'rgb(var(--brand-default))', fontSize: '13px', fontWeight: 600 }}>Setup complete ✓</p>
+          <p className="text-sm font-semibold text-brand">Setup complete ✓</p>
         ) : (
-          <div style={{ display: 'grid', gap: '6px' }}>
+          <div className="grid gap-2">
             {setupChecklist.map((item) => (
               <button
                 key={item.label}
                 type="button"
                 onClick={() => navigate(item.href)}
-                style={{
-                  textAlign: 'left',
-                  border: '1px solid rgb(var(--surface-border))',
-                  borderRadius: '8px',
-                  background: 'rgb(var(--surface-card))',
-                  padding: '8px 10px',
-                  cursor: 'pointer',
-                  color: item.done ? 'rgb(var(--brand-default))' : 'rgb(var(--text-primary))',
-                }}
+                className={`flex items-center gap-3 rounded-lg border border-surface-border bg-surface-elevated px-4 py-3 text-left text-sm transition-colors hover:bg-surface-hover ${
+                  item.done ? 'text-brand' : 'text-text-primary'
+                }`}
               >
-                {item.done ? '☑' : '☐'} {item.label}
+                <span>{item.done ? '☑' : '☐'}</span>
+                <span className="flex-1">{item.label}</span>
+                {!item.done ? <ChevronRight className="h-4 w-4 text-text-muted" /> : null}
               </button>
             ))}
           </div>
         )}
-      </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '12px', display: 'grid', gap: '8px' }}>
-        <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Organization Info</h3>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: '6px', minWidth: '240px' }}>
-            <label style={{ color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Organization name</label>
-            <input value={orgNameDraft} onChange={(event) => setOrgNameDraft(event.target.value)} style={{ height: '36px', fontSize: '14px' }} />
+      <SettingsCard title="Organization Info">
+        <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto]">
+          <div className="grid gap-1.5">
+            <label className="text-xs font-medium uppercase tracking-widest text-text-muted">Organization name</label>
+            <input className={settingsInputClass} value={orgNameDraft} onChange={(event) => setOrgNameDraft(event.target.value)} />
           </div>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Plan</label>
-            <span style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '999px', padding: '4px 10px', fontSize: '12px', width: 'fit-content' }}>
+          <div className="grid gap-1.5">
+            <label className="text-xs font-medium uppercase tracking-widest text-text-muted">Plan</label>
+            <span className="w-fit rounded-full border border-surface-border px-3 py-1 text-xs text-text-secondary">
               {(orgInfo?.plan ?? 'starter').toString()}
             </span>
           </div>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <label style={{ color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Created</label>
-            <span style={{ fontSize: '12px', color: 'rgb(var(--text-secondary))' }}>
+          <div className="grid gap-1.5">
+            <label className="text-xs font-medium uppercase tracking-widest text-text-muted">Created</label>
+            <span className="text-xs text-text-secondary">
               {orgInfo?.created_at ? new Date(orgInfo.created_at).toLocaleDateString() : '—'}
             </span>
           </div>
         </div>
-        <button
-          onClick={() => void saveOrganization()}
-          disabled={savingOrg}
-          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '6px 12px', cursor: 'pointer', height: '32px', fontSize: '14px' }}
-        >
-          {savingOrg ? 'Saving...' : 'Save'}
-        </button>
-        {userRole === 'admin' ? (
+        <div className="mt-4 flex gap-2">
           <button
-            onClick={() => void loadDemoData()}
-            disabled={loadingDemoData}
-            style={{
-              width: 'fit-content',
-              border: '1px solid rgb(var(--surface-border))',
-              borderRadius: '8px',
-              color: 'rgb(var(--text-primary))',
-              background: 'rgb(var(--surface-card))',
-              padding: '8px 14px',
-              cursor: 'pointer',
-            }}
+            onClick={() => void saveOrganization()}
+            disabled={savingOrg}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright disabled:opacity-60"
           >
-            {loadingDemoData ? 'Loading Demo Data...' : 'Load Demo Data'}
+            {savingOrg ? 'Saving...' : 'Save'}
           </button>
-        ) : null}
-      </div>
-
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Usage</h3>
-        {usageRows.map((row) => {
-          const ratio = row.limit ? Math.min(1, row.value / row.limit) : 0;
-          const barColor = usageTone(ratio);
-          const limitLabel = row.limit == null ? 'Unlimited' : row.limit;
-          return (
-            <div key={`usage-${row.key}`} style={{ display: 'grid', gap: '6px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span>{row.label}</span>
-                <span style={{ color: 'rgb(var(--text-muted))' }}>
-                  {row.value} / {limitLabel}
-                </span>
-              </div>
-              <div style={{ height: '8px', width: '100%', borderRadius: '999px', background: 'rgb(var(--surface-border))', overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: row.limit == null ? '20%' : `${Math.min(100, Math.max(2, ratio * 100))}%`,
-                    height: '100%',
-                    background: row.limit == null ? 'rgb(var(--status-active))' : barColor,
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-        {usageAtLimit && !isProPlan ? (
-          <button
-            type="button"
-            onClick={() => navigate('/app/settings?tab=Access')}
-            style={{ width: 'fit-content', border: 'none', background: 'transparent', color: 'rgb(var(--brand-default))', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: '13px' }}
-          >
-            Usage limit reached. Review workspace access settings.
-          </button>
-        ) : null}
-      </div>
-
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Properties ({properties.length})</h3>
-        {properties.length === 0 ? (
-          <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No properties yet. Add your first property below.</p>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid rgb(var(--surface-border))', color: 'rgb(var(--text-muted))', textAlign: 'left' }}>
-                  <th style={{ padding: '8px' }}>Name</th>
-                  <th style={{ padding: '8px' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {properties.map((property) => (
-                  <tr key={property.id} style={{ borderBottom: '1px solid rgb(var(--surface-border))' }}>
-                    <td style={{ padding: '8px' }}>
-                      {editingPropertyId === property.id ? (
-                        <input value={editingPropertyName} onChange={(event) => setEditingPropertyName(event.target.value)} />
-                      ) : (
-                        property.name
-                      )}
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      {editingPropertyId === property.id ? (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => void savePropertyEdit(property.id)} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
-                          <button onClick={cancelPropertyEdit}>Cancel</button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => startPropertyEdit(property)}>Edit</button>
-                          <button onClick={() => void deleteProperty(property.id)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div style={{ marginTop: '8px', display: 'grid', gap: '8px', maxWidth: '420px' }}>
-          <label style={{ color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Add property</label>
-          <div style={{ display: 'grid', gap: '8px' }}>
-            <input placeholder="Property name" value={newPropertyName} onChange={(event) => setNewPropertyName(event.target.value)} style={{ flex: 1 }} />
-            <input placeholder="Address (optional)" value={newPropertyAddress} onChange={(event) => setNewPropertyAddress(event.target.value)} style={{ flex: 1 }} />
-            <select
-              value={newPropertyTimezone}
-              onChange={(event) => setNewPropertyTimezone(event.target.value)}
-              style={{ height: '40px' }}
-            >
-              {timezoneOptions.map((timezoneOption) => (
-                <option key={timezoneOption.value} value={timezoneOption.value}>
-                  {timezoneOption.label}
-                </option>
-              ))}
-            </select>
+          {userRole === 'admin' ? (
             <button
-              onClick={() => void addProperty()}
-              style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
+              onClick={() => void loadDemoData()}
+              disabled={loadingDemoData}
+              className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover disabled:opacity-60"
             >
-              Add
+              {loadingDemoData ? 'Loading Demo Data...' : 'Load Demo Data'}
             </button>
-          </div>
+          ) : null}
         </div>
-      </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Equipment Types</h3>
-        {equipmentTypes.length === 0 ? (
-          <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No equipment types yet.</p>
-        ) : null}
-        {equipmentTypes.map((type) => (
-          <div key={type.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {editingEquipmentTypeId === type.id ? (
-              <>
-                <input value={editingEquipmentTypeName} onChange={(event) => setEditingEquipmentTypeName(event.target.value)} />
-                <button onClick={() => void saveEquipmentTypeEdit(type.id)} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
-                <button onClick={() => { setEditingEquipmentTypeId(null); setEditingEquipmentTypeName(''); }}>Cancel</button>
-              </>
-            ) : (
-              <>
-                <span style={{ flex: 1 }}>{type.name} <span style={{ color: 'rgb(var(--text-muted))' }}>({type.category ?? 'General'})</span></span>
-                <button onClick={() => { setEditingEquipmentTypeId(type.id); setEditingEquipmentTypeName(type.name); }}>Edit</button>
-                <button onClick={() => void deactivateEquipmentType(type.id, type.name)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
-              </>
-            )}
-          </div>
-        ))}
-        <div style={{ display: 'grid', gap: '8px', maxWidth: '420px' }}>
-          <input
-            value={newEquipmentTypeName}
-            onChange={(event) => setNewEquipmentTypeName(event.target.value)}
-            placeholder="Type name"
-          />
-          <select value={newEquipmentTypeCategory} onChange={(event) => setNewEquipmentTypeCategory(event.target.value)} style={{ height: '40px' }}>
-            {equipmentTypeCategoryOptions.map((category) => (
-              <option key={`equipment-type-category-${category}`} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => void addEquipmentType()}
-            style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
-          >
-            Add
-          </button>
+      <SettingsCard title="Usage">
+        <div className="grid gap-4">
+          {usageRows.map((row) => {
+            const ratio = row.limit ? Math.min(1, row.value / row.limit) : 0;
+            const barColorClass = ratio >= 0.9 ? 'bg-status-warning' : ratio >= 0.75 ? 'bg-status-pending' : 'bg-status-active';
+            const limitLabel = row.limit == null ? 'Unlimited' : row.limit;
+            return (
+              <div key={`usage-${row.key}`} className="grid gap-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-text-primary">{row.label}</span>
+                  <span className="text-text-muted">{row.value} / {limitLabel}</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-border">
+                  <div
+                    className={`h-full transition-all ${barColorClass}`}
+                    style={{ width: row.limit == null ? '20%' : `${Math.min(100, Math.max(2, ratio * 100))}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+          {usageAtLimit && !isProPlan ? (
+            <button
+              type="button"
+              onClick={() => navigate('/app/settings?tab=Access')}
+              className="w-fit text-sm text-brand underline hover:text-brand-bright"
+            >
+              Usage limit reached. Review workspace access settings.
+            </button>
+          ) : null}
         </div>
-      </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Standard Operating Procedures</h3>
-        {sops.length === 0 ? (
-          <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No SOPs yet. Add your first SOP below.</p>
+      <SettingsCard title={`Properties (${properties.length})`}>
+        {properties.length === 0 ? (
+          <p className="text-sm text-text-muted">No properties yet. Add your first property below.</p>
         ) : (
-          <div style={{ display: 'grid', gap: '8px' }}>
-            {sops.map((sop) => (
-              <div key={sop.id} style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '10px', padding: '10px', display: 'grid', gap: '8px' }}>
-                {editingSopId === sop.id ? (
+          <div className="overflow-hidden rounded-xl border border-surface-border">
+            {properties.map((property) => (
+              <div key={property.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
+                {editingPropertyId === property.id ? (
                   <>
-                    <input
-                      value={editingSopTitle}
-                      onChange={(event) => setEditingSopTitle(event.target.value)}
-                      placeholder="SOP title"
-                    />
-                    <select
-                      value={editingSopCategory}
-                      onChange={(event) => setEditingSopCategory(event.target.value as StandardOperatingProcedure['category'])}
-                      style={{ height: '38px' }}
-                    >
-                      {sopCategoryOptions.map((category) => (
-                        <option key={`sop-edit-category-${category}`} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
-                    <textarea
-                      value={editingSopChecklist}
-                      onChange={(event) => setEditingSopChecklist(event.target.value)}
-                      rows={5}
-                      placeholder="One checklist item per line"
-                    />
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => saveSopEdit(sop.id)} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
-                      <button
-                        onClick={() => {
-                          setEditingSopId(null);
-                          setEditingSopTitle('');
-                          setEditingSopChecklist('');
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    <input className={`${settingsInputClass} flex-1`} value={editingPropertyName} onChange={(event) => setEditingPropertyName(event.target.value)} />
+                    <button className="text-sm font-medium text-brand" onClick={() => void savePropertyEdit(property.id)}>Save</button>
+                    <button className="text-sm text-text-muted" onClick={cancelPropertyEdit}>Cancel</button>
                   </>
                 ) : (
                   <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                      <div>
-                        <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{sop.title}</p>
-                        <p style={{ margin: 0, fontSize: '12px', color: 'rgb(var(--text-muted))' }}>
-                          {sop.category} · {sop.items.length} item{sop.items.length === 1 ? '' : 's'}
-                        </p>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => startSopEdit(sop)}>Edit</button>
-                        <button onClick={() => deleteSop(sop.id, sop.title)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
-                      </div>
-                    </div>
+                    <span className="flex-1 text-sm font-medium text-text-primary">{property.name}</span>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => startPropertyEdit(property)} aria-label={`Edit ${property.name}`}><Pencil className="h-4 w-4" /></button>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deleteProperty(property.id)} aria-label={`Delete ${property.name}`}><Trash2 className="h-4 w-4" /></button>
                   </>
                 )}
               </div>
             ))}
           </div>
         )}
+        <div className="mt-4 grid max-w-lg gap-3">
+          <label className="text-xs font-medium uppercase tracking-widest text-text-muted">Add property</label>
+          <input className={settingsInputClass} placeholder="Property name" value={newPropertyName} onChange={(event) => setNewPropertyName(event.target.value)} />
+          <input className={settingsInputClass} placeholder="Address (optional)" value={newPropertyAddress} onChange={(event) => setNewPropertyAddress(event.target.value)} />
+          <select className={settingsInputClass} value={newPropertyTimezone} onChange={(event) => setNewPropertyTimezone(event.target.value)}>
+            {timezoneOptions.map((timezoneOption) => (
+              <option key={timezoneOption.value} value={timezoneOption.value}>{timezoneOption.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => void addProperty()}
+            className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
+          >
+            Add Property
+          </button>
+        </div>
+      </SettingsCard>
 
-        {showSopForm ? (
-          <div style={{ borderTop: '1px solid rgb(var(--surface-border))', paddingTop: '10px', display: 'grid', gap: '8px', maxWidth: '540px' }}>
-            <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Add SOP</p>
-            <input
-              value={newSopTitle}
-              onChange={(event) => setNewSopTitle(event.target.value)}
-              placeholder="SOP title"
-            />
-            <select
-              value={newSopCategory}
-              onChange={(event) => setNewSopCategory(event.target.value as StandardOperatingProcedure['category'])}
-              style={{ height: '40px' }}
+      <SettingsCard title="Equipment Types">
+        <div className="overflow-hidden rounded-xl border border-surface-border">
+          {equipmentTypes.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-text-muted">No equipment types yet.</p>
+          ) : (
+            equipmentTypes.map((type) => (
+              <div key={type.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
+                {editingEquipmentTypeId === type.id ? (
+                  <>
+                    <input className={`${settingsInputClass} flex-1`} value={editingEquipmentTypeName} onChange={(event) => setEditingEquipmentTypeName(event.target.value)} />
+                    <button className="text-sm font-medium text-brand" onClick={() => void saveEquipmentTypeEdit(type.id)}>Save</button>
+                    <button className="text-sm text-text-muted" onClick={() => { setEditingEquipmentTypeId(null); setEditingEquipmentTypeName(''); }}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-text-primary">{type.name}</span>
+                    <span className="rounded-full bg-surface-elevated px-2.5 py-1 text-xs text-text-muted">{type.category ?? 'General'}</span>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingEquipmentTypeId(type.id); setEditingEquipmentTypeName(type.name); }} aria-label={`Edit ${type.name}`}><Pencil className="h-4 w-4" /></button>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivateEquipmentType(type.id, type.name)} aria-label={`Delete ${type.name}`}><Trash2 className="h-4 w-4" /></button>
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="mt-4 grid max-w-lg gap-3">
+          <input className={settingsInputClass} value={newEquipmentTypeName} onChange={(event) => setNewEquipmentTypeName(event.target.value)} placeholder="Type name" />
+          <select className={settingsInputClass} value={newEquipmentTypeCategory} onChange={(event) => setNewEquipmentTypeCategory(event.target.value)}>
+            {equipmentTypeCategoryOptions.map((category) => (
+              <option key={`equipment-type-category-${category}`} value={category}>{category}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => void addEquipmentType()}
+            className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
+          >
+            Add Equipment Type
+          </button>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Standard Operating Procedures"
+        action={
+          !showSopForm ? (
+            <button
+              onClick={() => setShowSopForm(true)}
+              className="rounded-lg border border-surface-border bg-surface-card px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover"
             >
+              + Add SOP
+            </button>
+          ) : null
+        }
+      >
+        {sops.length === 0 && !showSopForm ? (
+          <p className="text-sm text-text-muted">No SOPs yet. Add your first SOP above.</p>
+        ) : (
+          <div className="grid gap-3">
+            {sops.map((sop) => (
+              <div key={sop.id} className="rounded-xl border border-surface-border bg-surface-elevated p-4">
+                {editingSopId === sop.id ? (
+                  <div className="grid gap-3">
+                    <input className={settingsInputClass} value={editingSopTitle} onChange={(event) => setEditingSopTitle(event.target.value)} placeholder="SOP title" />
+                    <select className={settingsInputClass} value={editingSopCategory} onChange={(event) => setEditingSopCategory(event.target.value as StandardOperatingProcedure['category'])}>
+                      {sopCategoryOptions.map((category) => (
+                        <option key={`sop-edit-category-${category}`} value={category}>{category}</option>
+                      ))}
+                    </select>
+                    <textarea className={settingsInputClass} value={editingSopChecklist} onChange={(event) => setEditingSopChecklist(event.target.value)} rows={5} placeholder="One checklist item per line" />
+                    <div className="flex gap-2">
+                      <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={() => saveSopEdit(sop.id)}>Save</button>
+                      <button className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover" onClick={() => { setEditingSopId(null); setEditingSopTitle(''); setEditingSopChecklist(''); }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-text-primary">{sop.title}</p>
+                      <p className="mt-0.5 text-xs text-text-muted">{sop.category} · {sop.items.length} item{sop.items.length === 1 ? '' : 's'}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button className="rounded-lg p-2 text-text-muted hover:bg-surface-card hover:text-text-primary" onClick={() => startSopEdit(sop)} aria-label={`Edit ${sop.title}`}><Pencil className="h-4 w-4" /></button>
+                      <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => deleteSop(sop.id, sop.title)} aria-label={`Delete ${sop.title}`}><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {showSopForm ? (
+          <div className="mt-4 grid gap-3 border-t border-surface-border pt-4">
+            <p className="text-sm font-medium text-text-primary">Add SOP</p>
+            <input className={settingsInputClass} value={newSopTitle} onChange={(event) => setNewSopTitle(event.target.value)} placeholder="SOP title" />
+            <select className={settingsInputClass} value={newSopCategory} onChange={(event) => setNewSopCategory(event.target.value as StandardOperatingProcedure['category'])}>
               {sopCategoryOptions.map((category) => (
-                <option key={`sop-category-${category}`} value={category}>
-                  {category}
-                </option>
+                <option key={`sop-category-${category}`} value={category}>{category}</option>
               ))}
             </select>
-            <textarea
-              value={newSopChecklist}
-              onChange={(event) => setNewSopChecklist(event.target.value)}
-              rows={5}
-              placeholder="Checklist items (one per line)"
-            />
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={addSop}
-                style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer', width: 'fit-content' }}
-              >
-                Save
-              </button>
-              <button
-                onClick={() => {
-                  setShowSopForm(false);
-                  setNewSopTitle('');
-                  setNewSopCategory('General');
-                  setNewSopChecklist('');
-                }}
-                style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
+            <textarea className={settingsInputClass} value={newSopChecklist} onChange={(event) => setNewSopChecklist(event.target.value)} rows={5} placeholder="Checklist items (one per line)" />
+            <div className="flex gap-2">
+              <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={addSop}>Save</button>
+              <button className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover" onClick={() => { setShowSopForm(false); setNewSopTitle(''); setNewSopCategory('General'); setNewSopChecklist(''); }}>Cancel</button>
             </div>
           </div>
-        ) : (
-          <button
-            onClick={() => setShowSopForm(true)}
-            style={{ width: 'fit-content', border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
-          >
-            + Add SOP
-          </button>
-        )}
-      </div>
+        ) : null}
+      </SettingsCard>
 
       {/* ── Appearance ── */}
       <div className="rounded-xl border border-surface-border bg-surface-card p-4">
@@ -1749,58 +1646,68 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
   if (error) return <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkforceSummary()} />;
 
   return (
-    <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Departments</h3>
-        {departments.length === 0 ? <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No active departments yet.</p> : null}
-        {departments.map((department) => (
-          <div key={department.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {editingDepartmentId === department.id ? (
-              <>
-                <input value={editingDepartmentName} onChange={(event) => setEditingDepartmentName(event.target.value)} />
-                <button onClick={() => void saveDepartmentEdit()} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
-                <button onClick={() => { setEditingDepartmentId(null); setEditingDepartmentName(''); }}>Cancel</button>
-              </>
-            ) : (
-              <>
-                <span style={{ flex: 1 }}>{department.name}</span>
-                <button onClick={() => { setEditingDepartmentId(department.id); setEditingDepartmentName(department.name); }}>Edit</button>
-                <button onClick={() => void deactivateDepartment(department.id, department.name)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
-              </>
-            )}
-          </div>
-        ))}
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input value={newDepartmentName} onChange={(event) => setNewDepartmentName(event.target.value)} placeholder="Add department" />
-          <button onClick={() => void addDepartment()} style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}>Add</button>
+    <div className="space-y-4">
+      <SettingsCard title="Departments" subtitle="Organize your crew by department for scheduling and reporting.">
+        <div className="overflow-hidden rounded-xl border border-surface-border">
+          {departments.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-text-muted">No active departments yet.</p>
+          ) : (
+            departments.map((department) => (
+              <div key={department.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
+                {editingDepartmentId === department.id ? (
+                  <>
+                    <input className={`${settingsInputClass} flex-1`} value={editingDepartmentName} onChange={(event) => setEditingDepartmentName(event.target.value)} />
+                    <button className="text-sm font-medium text-brand" onClick={() => void saveDepartmentEdit()}>Save</button>
+                    <button className="text-sm text-text-muted" onClick={() => { setEditingDepartmentId(null); setEditingDepartmentName(''); }}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-text-primary">{department.name}</span>
+                    <span className="rounded-full bg-status-active/10 px-2.5 py-1 text-xs text-status-active">Active</span>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingDepartmentId(department.id); setEditingDepartmentName(department.name); }} aria-label={`Edit ${department.name}`}><Pencil className="h-4 w-4" /></button>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivateDepartment(department.id, department.name)} aria-label={`Deactivate ${department.name}`}><Trash2 className="h-4 w-4" /></button>
+                  </>
+                )}
+              </div>
+            ))
+          )}
         </div>
-      </div>
+        <div className="mt-4 flex gap-2">
+          <input className={settingsInputClass} value={newDepartmentName} onChange={(event) => setNewDepartmentName(event.target.value)} placeholder="Add department" />
+          <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={() => void addDepartment()}>Add</button>
+        </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Roles</h3>
-        {roles.length === 0 ? <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No active roles yet.</p> : null}
-        {roles.map((role) => (
-          <div key={role.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {editingRoleId === role.id ? (
-              <>
-                <input value={editingRoleName} onChange={(event) => setEditingRoleName(event.target.value)} />
-                <button onClick={() => void saveRoleEdit()} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
-                <button onClick={() => { setEditingRoleId(null); setEditingRoleName(''); }}>Cancel</button>
-              </>
-            ) : (
-              <>
-                <span style={{ flex: 1 }}>{role.name}</span>
-                <button onClick={() => { setEditingRoleId(role.id); setEditingRoleName(role.name); }}>Edit</button>
-                <button onClick={() => void deactivateRole(role.id, role.name)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
-              </>
-            )}
-          </div>
-        ))}
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input value={newRoleName} onChange={(event) => setNewRoleName(event.target.value)} placeholder="Add role" />
-          <button onClick={() => void addRole()} style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}>Add</button>
+      <SettingsCard title="Roles" subtitle="Define position labels used across the platform.">
+        <div className="overflow-hidden rounded-xl border border-surface-border">
+          {roles.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-text-muted">No active roles yet.</p>
+          ) : (
+            roles.map((role) => (
+              <div key={role.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
+                {editingRoleId === role.id ? (
+                  <>
+                    <input className={`${settingsInputClass} flex-1`} value={editingRoleName} onChange={(event) => setEditingRoleName(event.target.value)} />
+                    <button className="text-sm font-medium text-brand" onClick={() => void saveRoleEdit()}>Save</button>
+                    <button className="text-sm text-text-muted" onClick={() => { setEditingRoleId(null); setEditingRoleName(''); }}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-text-primary">{role.name}</span>
+                    <span className="rounded-full bg-status-active/10 px-2.5 py-1 text-xs text-status-active">Active</span>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingRoleId(role.id); setEditingRoleName(role.name); }} aria-label={`Edit ${role.name}`}><Pencil className="h-4 w-4" /></button>
+                    <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivateRole(role.id, role.name)} aria-label={`Deactivate ${role.name}`}><Trash2 className="h-4 w-4" /></button>
+                  </>
+                )}
+              </div>
+            ))
+          )}
         </div>
-      </div>
+        <div className="mt-4 flex gap-2">
+          <input className={settingsInputClass} value={newRoleName} onChange={(event) => setNewRoleName(event.target.value)} placeholder="Add role" />
+          <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={() => void addRole()}>Add</button>
+        </div>
+      </SettingsCard>
 
       <SettingsCard title="Worker Types" subtitle="Classify team members for scheduling and reporting.">
         <div className="overflow-hidden rounded-xl border border-surface-border">
@@ -1833,8 +1740,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
         </div>
       </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px' }}>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>To change employee roles, go to the Employees page.</p>
+      <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+        <p className="text-sm text-text-muted">To change employee roles, go to the <span className="text-brand">Employees</span> page.</p>
       </div>
     </div>
   );
@@ -2111,76 +2018,71 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
   }
 
   return (
-    <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Weather Stations</h3>
+    <div className="space-y-4">
+      <SettingsCard title="Weather Stations">
         {locations.length === 0 ? (
-          <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No weather stations configured yet.</p>
+          <p className="text-sm text-text-muted">No weather stations configured yet.</p>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTemplateDragEnd}>
-            <SortableContext items={templates.map((template) => template.id)} strategy={verticalListSortingStrategy}>
           <div className="overflow-hidden rounded-xl border border-surface-border">
             {locations.map((location) => (
-              <div key={location.id} style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '10px', padding: '10px', display: 'grid', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                  <div>
-                    <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{location.name}</p>
-                    <p style={{ margin: '2px 0 0', color: 'rgb(var(--text-muted))', fontSize: '12px' }}>
-                      {(location as WeatherLocationItem & { property?: string }).property ?? 'No property'} · {location.area ?? 'General'}
-                    </p>
-                  </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+              <div key={location.id} className="flex items-start justify-between gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-text-primary">{location.name}</p>
+                  <p className="mt-0.5 text-xs text-text-muted">
+                    {(location as WeatherLocationItem & { property?: string }).property ?? 'No property'} · {location.area ?? 'General'}
+                  </p>
+                  <p className="mt-0.5 text-xs text-text-muted">
+                    {location.latitude ?? '—'}, {location.longitude ?? '—'}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-secondary">
                     <input
                       type="checkbox"
                       checked={Boolean(location.is_active)}
                       onChange={(event) => void toggleActive(location.id, event.target.checked)}
+                      className="rounded"
                     />
                     {location.is_active ? 'Active' : 'Inactive'}
                   </label>
-                </div>
-                <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '12px' }}>
-                  Coordinates: {location.latitude ?? '—'}, {location.longitude ?? '—'}
-                </p>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     onClick={() => beginEdit(location)}
-                    style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', color: 'rgb(var(--text-secondary))', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                    className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
+                    aria-label={`Edit ${location.name}`}
                   >
-                    Edit
+                    <Pencil className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => void deleteLocation(location.id)}
-                    style={{ border: '1px solid rgb(var(--status-warning))', borderRadius: '8px', background: 'rgb(var(--surface-card))', color: 'rgb(var(--status-warning))', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                    className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
+                    aria-label={`Delete ${location.name}`}
                   >
-                    Delete
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </div>
             ))}
           </div>
-            </SortableContext>
-          </DndContext>
         )}
-      </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>{editingLocationId ? 'Edit Station' : 'Add Station'}</h3>
-        <div className="grid gap-[10px] md:grid-cols-2">
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-            Station name
-            <input value={stationName} onChange={(event) => setStationName(event.target.value)} placeholder="Sarasota Polo Club" />
+      <SettingsCard title={editingLocationId ? 'Edit Station' : 'Add Station'}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Station name</span>
+            <input className={settingsInputClass} value={stationName} onChange={(event) => setStationName(event.target.value)} placeholder="Sarasota Polo Club" />
           </label>
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-            Area
-            <select value={stationArea} onChange={(event) => setStationArea(event.target.value)}>
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Area</span>
+            <select className={settingsInputClass} value={stationArea} onChange={(event) => setStationArea(event.target.value)}>
               {areaOptions.map((area) => (
                 <option key={`area-option-${area}`} value={area}>{area}</option>
               ))}
             </select>
           </label>
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-            Property
-            <select value={stationPropertyId} onChange={(event) => setStationPropertyId(event.target.value)}>
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Property</span>
+            <select className={settingsInputClass} value={stationPropertyId} onChange={(event) => setStationPropertyId(event.target.value)}>
               <option value="">Select property</option>
               {properties.map((property) => (
                 <option key={`weather-property-${property.id}`} value={property.id}>{property.name}</option>
@@ -2189,27 +2091,21 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
           </label>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <input type="radio" checked={locationMethod === 'zip'} onChange={() => setLocationMethod('zip')} />
-            Enter zip code
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <input type="radio" checked={locationMethod === 'coords'} onChange={() => setLocationMethod('coords')} />
-            Enter coordinates
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <input type="radio" checked={locationMethod === 'geo'} onChange={() => setLocationMethod('geo')} />
-            Use my location
-          </label>
+        <div className="mt-3 flex flex-wrap gap-4">
+          {(['zip', 'coords', 'geo'] as const).map((method) => (
+            <label key={method} className="flex cursor-pointer items-center gap-1.5 text-sm text-text-secondary">
+              <input type="radio" checked={locationMethod === method} onChange={() => setLocationMethod(method)} />
+              {method === 'zip' ? 'Enter zip code' : method === 'coords' ? 'Enter coordinates' : 'Use my location'}
+            </label>
+          ))}
         </div>
 
         {locationMethod === 'zip' ? (
-          <div className="grid gap-[10px] md:grid-cols-[1fr_auto]">
-            <input value={zipCode} onChange={(event) => setZipCode(event.target.value)} onBlur={() => void fillCoordinatesFromZip()} placeholder="ZIP code" />
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+            <input className={settingsInputClass} value={zipCode} onChange={(event) => setZipCode(event.target.value)} onBlur={() => void fillCoordinatesFromZip()} placeholder="ZIP code" />
             <button
               onClick={() => void fillCoordinatesFromZip()}
-              style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', color: 'rgb(var(--text-secondary))', padding: '8px 12px', cursor: 'pointer' }}
+              className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover disabled:opacity-60"
               disabled={zipLookupLoading}
             >
               {zipLookupLoading ? 'Looking up...' : 'Lookup'}
@@ -2220,27 +2116,27 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
         {locationMethod === 'geo' ? (
           <button
             onClick={useCurrentLocation}
-            style={{ width: 'fit-content', border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', background: 'rgb(var(--surface-card))', color: 'rgb(var(--text-secondary))', padding: '8px 12px', cursor: 'pointer' }}
+            className="mt-3 w-fit rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover"
           >
             Use My Location
           </button>
         ) : null}
 
-        <div className="grid gap-[10px] md:grid-cols-2">
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-            Latitude
-            <input type="number" step="0.0001" value={latitude} onChange={(event) => setLatitude(event.target.value)} />
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Latitude</span>
+            <input className={settingsInputClass} type="number" step="0.0001" value={latitude} onChange={(event) => setLatitude(event.target.value)} />
           </label>
-          <label style={{ display: 'grid', gap: '4px', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-            Longitude
-            <input type="number" step="0.0001" value={longitude} onChange={(event) => setLongitude(event.target.value)} />
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Longitude</span>
+            <input className={settingsInputClass} type="number" step="0.0001" value={longitude} onChange={(event) => setLongitude(event.target.value)} />
           </label>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="mt-4 flex gap-2">
           <button
             onClick={() => void saveStation()}
-            style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright disabled:opacity-60"
             disabled={savingLocation || !stationName.trim()}
           >
             {savingLocation ? 'Saving...' : editingLocationId ? 'Save Changes' : 'Save Station'}
@@ -2248,31 +2144,28 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
           {editingLocationId ? (
             <button
               onClick={resetForm}
-              style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', color: 'rgb(var(--text-secondary))', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
+              className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover"
             >
               Cancel Edit
             </button>
           ) : null}
         </div>
-      </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
-          Display Preferences {savingPrefs ? '· Saving…' : ''}
-        </h3>
-        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-          <input type="checkbox" checked={prefs.show_hourly} onChange={(event) => updatePref('show_hourly', event.target.checked)} />
-          Show hourly
-        </label>
-        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-          <input type="checkbox" checked={prefs.show_forecast} onChange={(event) => updatePref('show_forecast', event.target.checked)} />
-          Show forecast
-        </label>
-        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: 'rgb(var(--text-secondary))' }}>
-          <input type="checkbox" checked={prefs.show_rainfall} onChange={(event) => updatePref('show_rainfall', event.target.checked)} />
-          Show rainfall
-        </label>
-      </div>
+      <SettingsCard title={`Display Preferences${savingPrefs ? ' · Saving…' : ''}`}>
+        <div className="space-y-3">
+          {([
+            { key: 'show_hourly' as const, label: 'Show hourly forecast' },
+            { key: 'show_forecast' as const, label: 'Show 7-day forecast' },
+            { key: 'show_rainfall' as const, label: 'Show rainfall data' },
+          ]).map(({ key, label }) => (
+            <label key={key} className="flex cursor-pointer items-center gap-3 text-sm text-text-secondary">
+              <input type="checkbox" checked={prefs[key]} onChange={(event) => updatePref(key, event.target.checked)} className="rounded" />
+              {label}
+            </label>
+          ))}
+        </div>
+      </SettingsCard>
     </div>
   );
 }
@@ -2484,7 +2377,7 @@ Your role: ${inviteRole}
   }
 
   return (
-    <div style={{ display: 'grid', gap: '8px' }}>
+    <div className="space-y-4">
       <SettingsCard title="User Access" subtitle="Manage workspace roles without leaving Settings.">
         {appUsers.length === 0 ? (
           <p className="text-sm text-text-muted">No application users found for this organization.</p>
@@ -2531,149 +2424,120 @@ Your role: ${inviteRole}
           </div>
         )}
       </SettingsCard>
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '8px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Your Account</h3>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Email:</strong> {userEmail || 'Not available'}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Role:</strong> {userRole ?? 'Not available'}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Employee:</strong> {employeeName || 'Not available'}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Organization:</strong> {organizationName || 'Not available'}</p>
-      </div>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Session Management</h3>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <SettingsCard title="Your Account">
+        <div className="space-y-2">
+          {[
+            { label: 'Email', value: userEmail || 'Not available' },
+            { label: 'Role', value: userRole ?? 'Not available' },
+            { label: 'Employee', value: employeeName || 'Not available' },
+            { label: 'Organization', value: organizationName || 'Not available' },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex items-center gap-2 text-sm">
+              <span className="w-28 shrink-0 text-text-muted">{label}</span>
+              <span className="text-text-primary">{value}</span>
+            </div>
+          ))}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="Session Management">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => void handleSignOut()}
-            style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
           >
             Sign Out
           </button>
           <button
             onClick={handleClearAppCache}
-            style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', color: 'rgb(var(--text-secondary))', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
+            className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover"
           >
             Clear App Cache
           </button>
         </div>
-      </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Team Invitations</h3>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
-          Invite managers and crew members by email link.
-        </p>
+      <SettingsCard title="Team Invitations" subtitle="Invite managers and crew members by email link.">
         <button
           onClick={() => setShowInviteModal(true)}
-          style={{ width: 'fit-content', border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
+          className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
         >
-          Invite Team
+          <span className="flex items-center gap-2"><Mail className="h-4 w-4" /> Invite Team</span>
         </button>
-      </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Workspace Status</h3>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
-          <strong>Current workspace:</strong> Ground Crew HQ
-        </p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
-          <strong>Plan/status:</strong> Active workspace
-        </p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
-          Billing controls appear when workspace billing is enabled.
-        </p>
-      </div>
+      <SettingsCard title="Workspace Status">
+        <div className="space-y-2 text-sm">
+          <p className="text-text-muted"><span className="font-medium text-text-primary">Current workspace:</span> Ground Crew HQ</p>
+          <p className="text-text-muted"><span className="font-medium text-text-primary">Plan/status:</span> Active workspace</p>
+          <p className="text-text-muted">Billing controls appear when workspace billing is enabled.</p>
+        </div>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Billing</h3>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
-          Billing management is currently unavailable in-product.
-        </p>
-      </div>
+      <SettingsCard title="Billing">
+        <p className="text-sm text-text-muted">Billing management is currently unavailable in-product.</p>
+      </SettingsCard>
 
-      <div style={{ border: '1px solid rgb(var(--status-warning))', borderRadius: '12px', padding: '16px', background: 'rgb(var(--surface-elevated))' }}>
-        <h3 style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: 600, color: 'rgb(var(--status-warning))' }}>Danger Zone</h3>
-        <p style={{ margin: 0, color: 'rgb(var(--status-warning))', fontSize: '13px' }}>
+      <section className="rounded-xl border border-status-warning/30 bg-surface-elevated p-5">
+        <h2 className="mb-2 text-base font-semibold text-status-warning">Danger Zone</h2>
+        <p className="text-sm text-status-warning/80">
           To delete your account or change your email, contact support at support@groundcrewhq.com.
         </p>
-      </div>
+      </section>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px', display: 'grid', gap: '8px' }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>System</h3>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>App Version:</strong> {APP_VERSION}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Org ID:</strong> {maskedOrgId}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Property Count:</strong> {systemInfo.propertyCount}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Employee Count:</strong> {systemInfo.employeeCount}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Task Count:</strong> {systemInfo.taskCount}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Schedule Entries (this week):</strong> {systemInfo.scheduleEntriesThisWeek}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Assignments (today):</strong> {systemInfo.assignmentsToday}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Equipment Units:</strong> {systemInfo.equipmentUnits}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Browser:</strong> {browserInfo}</p>
-        <p style={{ margin: 0, color: 'rgb(var(--text-muted))', fontSize: '13px' }}><strong>Supabase Project:</strong> fjqeekwisnbpxgebrnpl</p>
+      <SettingsCard title="System">
+        <div className="grid gap-1.5 text-sm">
+          {[
+            ['App Version', APP_VERSION],
+            ['Org ID', maskedOrgId],
+            ['Properties', String(systemInfo.propertyCount)],
+            ['Employees', String(systemInfo.employeeCount)],
+            ['Tasks', String(systemInfo.taskCount)],
+            ['Schedule entries (this week)', String(systemInfo.scheduleEntriesThisWeek)],
+            ['Assignments (today)', String(systemInfo.assignmentsToday)],
+            ['Equipment units', String(systemInfo.equipmentUnits)],
+            ['Browser', browserInfo],
+            ['Supabase project', 'fjqeekwisnbpxgebrnpl'],
+          ].map(([label, value]) => (
+            <div key={label} className="flex gap-2">
+              <span className="w-44 shrink-0 text-text-muted">{label}</span>
+              <span className="truncate text-text-primary">{value}</span>
+            </div>
+          ))}
+        </div>
         <button
           onClick={() => void handleCopySystemInfo()}
-          style={{ width: 'fit-content', border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', color: 'rgb(var(--text-secondary))', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
+          className="mt-4 rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover"
         >
           Copy System Info
         </button>
-      </div>
+      </SettingsCard>
 
       {showInviteModal ? (
         <div
           onClick={closeInviteModal}
-          className="bg-surface-base/80"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 60,
-            display: 'grid',
-            placeItems: 'center',
-            padding: '16px',
-          }}
+          className="fixed inset-0 z-60 grid place-items-center bg-surface-base/80 p-4"
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: '420px',
-              borderRadius: '12px',
-              border: '1px solid rgb(var(--surface-border))',
-              background: 'rgb(var(--surface-card))',
-              padding: '16px',
-              display: 'grid',
-              gap: '12px',
-              zIndex: 70,
-            }}
+            className="z-70 grid w-full max-w-md gap-4 rounded-xl border border-surface-border bg-surface-card p-5"
           >
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Invite a team member</h3>
-            <label style={{ display: 'grid', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Email</span>
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(event) => setInviteEmail(event.target.value)}
-                placeholder="name@company.com"
-              />
+            <h3 className="text-base font-semibold text-text-primary">Invite a team member</h3>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Email</span>
+              <input className={settingsInputClass} type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" />
             </label>
-            <label style={{ display: 'grid', gap: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Role</span>
-              <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as 'Manager' | 'Field Staff')}>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Role</span>
+              <select className={settingsInputClass} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as 'Manager' | 'Field Staff')}>
                 <option value="Manager">Manager</option>
                 <option value="Field Staff">Field Staff</option>
               </select>
             </label>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                onClick={closeInviteModal}
-                style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '8px', color: 'rgb(var(--text-secondary))', background: 'rgb(var(--surface-card))', padding: '8px 14px', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSendInvite}
-                style={{ border: 'none', borderRadius: '8px', color: 'rgb(var(--surface-card))', background: 'rgb(var(--brand-default))', padding: '8px 14px', cursor: 'pointer' }}
-              >
-                Send Invite
-              </button>
+            <div className="flex justify-end gap-2">
+              <button onClick={closeInviteModal} className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover">Cancel</button>
+              <button onClick={handleSendInvite} className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright">Send Invite</button>
             </div>
           </div>
         </div>
@@ -3058,254 +2922,217 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   };
 
   return (
-    <div style={{ display: 'grid', gap: '10px' }}>
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '12px' }}>
-        <div className="mb-1 flex items-start justify-between gap-4">
-          <h3 className="text-base font-semibold text-text-primary">Task Library</h3>
+    <div className="space-y-4">
+      <SettingsCard
+        title="Task Library"
+        subtitle="Reusable tasks for daily workflow planning. Drag to reorder priority."
+        action={
           <button
             type="button"
-            onClick={() => {
-              setEditingTaskId(null);
-              setTaskPanelOpen(true);
-            }}
+            onClick={() => { setEditingTaskId(null); setTaskPanelOpen(true); }}
             className="inline-flex items-center gap-2 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
           >
             <Plus className="h-4 w-4" />
             Add Task
           </button>
-        </div>
-        <p style={{ margin: '0 0 4px', color: 'rgb(var(--text-muted))', fontSize: '13px' }}>Reusable tasks for daily workflow planning.</p>
-        <p style={{ margin: '0 0 10px', color: 'rgb(var(--text-muted))', fontSize: '12px' }}>Tasks created here feed the Workboard assignment dropdown.</p>
-
+        }
+      >
         {!orgId || loading ? (
-          <PageSkeleton />
+          <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />
         ) : error ? (
           <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchTasks()} />
         ) : tasks.length === 0 ? (
-          <p style={{ color: 'rgb(var(--text-muted))', fontSize: '13px' }}>No tasks yet. Add your first task below.</p>
+          <p className="text-sm text-text-muted">No tasks yet. Add your first task above.</p>
         ) : (
-          <div>
-            <table className="block w-full text-sm">
-              <thead className="hidden">
-                <tr style={{ borderBottom: '1px solid rgb(var(--surface-border))', color: 'rgb(var(--text-muted))', textAlign: 'left' }}>
-                  <th style={{ padding: '8px' }}>Task name</th>
-                  <th style={{ padding: '8px' }}>Category</th>
-                  <th style={{ padding: '8px' }}>Priority</th>
-                  <th style={{ padding: '8px' }}>Est. Hours</th>
-                  <th style={{ padding: '8px' }}>Recurring</th>
-                  <th style={{ padding: '8px' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody className="grid gap-3 md:grid-cols-2">
-                <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
-                  <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+          <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
+            <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+              <div className="grid gap-3 md:grid-cols-2">
                 {tasks.map((task) => (
                   <SortableTaskRow key={task.id} id={task.id}>
-                    <td style={{ padding: '8px' }}>
-                      {editingTaskId === task.id ? (
-                        <input
-                          value={editDraft.name}
-                          onChange={(event) => setEditDraft((cur) => ({ ...cur, name: event.target.value }))}
-                        />
-                      ) : (
-                        task.name
-                      )}
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      {editingTaskId === task.id ? (
-                        <select
-                          value={editDraft.category}
-                          onChange={(event) => setEditDraft((cur) => ({ ...cur, category: event.target.value }))}
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-text-primary">{task.name}</p>
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          onClick={() => startEditTask(task)}
+                          className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
+                          aria-label={`Edit ${task.name}`}
                         >
-                          {taskCategoryOptions.map((category) => (
-                            <option key={`edit-task-category-${category}`} value={category}>
-                              {category}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        task.category ?? 'General Maintenance'
-                      )}
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      {editingTaskId === task.id ? (
-                        <select
-                          value={String(editDraft.priority)}
-                          onChange={(event) => setEditDraft((cur) => ({ ...cur, priority: Number(event.target.value) }))}
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => void removeTask(task.id)}
+                          className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
+                          aria-label={`Delete ${task.name}`}
                         >
-                          <option value="1">High</option>
-                          <option value="2">Med</option>
-                          <option value="3">Low</option>
-                        </select>
-                      ) : task.priority === 1 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      {editingTaskId === task.id ? (
-                        <input
-                          type="number"
-                          step="0.25"
-                          value={String(editDraft.estimated_hours)}
-                          onChange={(event) =>
-                            setEditDraft((cur) => ({ ...cur, estimated_hours: Number(event.target.value || '0') }))
-                          }
-                        />
-                      ) : (
-                        Number(task.estimated_hours ?? 0).toFixed(1)
-                      )}
-                    </td>
-                    <td style={{ padding: '8px', minWidth: '260px' }}>
-                      <div style={{ display: 'grid', gap: '8px' }}>
-                        <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(recurringDrafts[task.id]?.enabled)}
-                            onChange={(event) => setRecurringEnabled(task.id, event.target.checked)}
-                          />
-                          <span>Recurring: {recurringDrafts[task.id]?.enabled ? 'On' : 'Off'}</span>
-                        </label>
-                        {recurringDrafts[task.id]?.enabled ? (
-                          <>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {dayOptions.map((day) => (
-                                <label key={`${task.id}-${day.key}`} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '12px' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(recurringDrafts[task.id]?.days.includes(day.key))}
-                                    onChange={() => toggleRecurringDay(task.id, day.key)}
-                                  />
-                                  {day.label}
-                                </label>
-                              ))}
-                            </div>
-                            <select
-                              value={recurringDrafts[task.id]?.assignMode ?? 'all'}
-                              onChange={(event) =>
-                                setRecurringDrafts((current) => ({
-                                  ...current,
-                                  [task.id]: {
-                                    ...(current[task.id] ?? { enabled: true, days: ['mon', 'tue', 'wed', 'thu', 'fri'], employeeId: '' }),
-                                    assignMode: event.target.value as 'all' | 'specific',
-                                  },
-                                }))
-                              }
-                            >
-                              <option value="all">All scheduled crew</option>
-                              <option value="specific">Specific employee</option>
-                            </select>
-                            {recurringDrafts[task.id]?.assignMode === 'specific' ? (
-                              <select
-                                value={recurringDrafts[task.id]?.employeeId ?? ''}
-                                onChange={(event) =>
-                                  setRecurringDrafts((current) => ({
-                                    ...current,
-                                    [task.id]: {
-                                      ...(current[task.id] ?? { enabled: true, days: ['mon', 'tue', 'wed', 'thu', 'fri'], assignMode: 'specific' }),
-                                      employeeId: event.target.value,
-                                    },
-                                  }))
-                                }
-                              >
-                                <option value="">Select employee</option>
-                                {employees.map((employee) => (
-                                  <option key={`${task.id}-${employee.id}`} value={employee.id}>
-                                    {employee.first_name} {employee.last_name}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : null}
-                            <button
-                              onClick={() => void saveRecurringRule(task.id)}
-                              style={{ width: 'fit-content', borderRadius: '6px', border: '1px solid rgb(var(--surface-border))', padding: '4px 10px', background: 'rgb(var(--surface-card))' }}
-                              disabled={savingRecurringTaskId === task.id}
-                            >
-                              {savingRecurringTaskId === task.id ? 'Saving...' : 'Apply schedule'}
-                            </button>
-                          </>
-                        ) : null}
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
-                    </td>
-                    <td style={{ padding: '8px' }}>
-                      {editingTaskId === task.id ? (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => void saveEditTask(task.id)} style={{ color: 'rgb(var(--brand-default))' }}>Save</button>
-                          <button onClick={cancelEditTask}>Cancel</button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => startEditTask(task)}>Edit</button>
-                          <button onClick={() => void removeTask(task.id)} style={{ color: 'rgb(var(--status-warning))' }}>Delete</button>
-                        </div>
-                      )}
-                    </td>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="rounded-full bg-brand-ghost px-2 py-0.5 text-xs text-brand">
+                        {task.category ?? 'General Maintenance'}
+                      </span>
+                      <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">
+                        {task.priority === 1 ? 'High' : task.priority === 2 ? 'Med' : 'Low'}
+                      </span>
+                      <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">
+                        {Number(task.estimated_hours ?? 0).toFixed(1)}h
+                      </span>
+                      {recurringDrafts[task.id]?.enabled ? (
+                        <span className="rounded-full bg-status-active/10 px-2 py-0.5 text-xs text-status-active">Recurring</span>
+                      ) : null}
+                    </div>
                   </SortableTaskRow>
                 ))}
-                  </SortableContext>
-                </DndContext>
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
-      </div>
+      </SettingsCard>
 
       <Sheet open={taskPanelOpen} onOpenChange={(open) => (open ? setTaskPanelOpen(true) : cancelEditTask())}>
-        <SheetContent className="overflow-y-auto border-surface-border bg-surface-card">
+        <SheetContent className="overflow-y-auto border-surface-border bg-surface-elevated text-text-primary sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>{editingTaskId ? 'Edit Task' : 'Add Task'}</SheetTitle>
-            <SheetDescription>
-              {editingTaskId ? 'Update the task library details.' : 'Create a reusable task for workboard planning.'}
+            <SheetTitle className="text-text-primary">{editingTaskId ? 'Edit Task' : 'Add Task'}</SheetTitle>
+            <SheetDescription className="text-text-muted">
+              {editingTaskId ? 'Update task details and recurring schedule.' : 'Create a reusable task for workboard planning.'}
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 grid gap-4">
-        <input
-          className={settingsInputClass}
-          placeholder="Task name"
-          value={editingTaskId ? editDraft.name : newName}
-          onChange={(event) => editingTaskId
-            ? setEditDraft((current) => ({ ...current, name: event.target.value }))
-            : setNewName(event.target.value)}
-        />
-        <div className="grid gap-4">
-          <select
-            className={settingsInputClass}
-            value={editingTaskId ? editDraft.category : newCategory}
-            onChange={(event) => editingTaskId
-              ? setEditDraft((current) => ({ ...current, category: event.target.value }))
-              : setNewCategory(event.target.value)}
-          >
-            {taskCategoryOptions.map((category) => (
-              <option key={`new-task-category-${category}`} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-          <select
-            className={settingsInputClass}
-            value={editingTaskId ? String(editDraft.priority) : newPriority}
-            onChange={(event) => editingTaskId
-              ? setEditDraft((current) => ({ ...current, priority: Number(event.target.value) }))
-              : setNewPriority(event.target.value as '1' | '2' | '3')}
-          >
-            <option value="1">1 (High)</option>
-            <option value="2">2 (Med)</option>
-            <option value="3">3 (Low)</option>
-          </select>
-          <input
-            className={settingsInputClass}
-            type="number"
-            step="0.25"
-            placeholder="Est. hours"
-            value={editingTaskId ? String(editDraft.estimated_hours) : newEstimatedHours}
-            onChange={(event) => editingTaskId
-              ? setEditDraft((current) => ({ ...current, estimated_hours: Number(event.target.value || '0') }))
-              : setNewEstimatedHours(event.target.value)}
-          />
-        </div>
-        <button
-          onClick={() => editingTaskId ? void saveEditTask(editingTaskId) : void addTask()}
-          className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
-        >
-          {editingTaskId ? 'Save Changes' : 'Save Task'}
-        </button>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Task name</span>
+              <input
+                className={settingsInputClass}
+                placeholder="Task name"
+                value={editingTaskId ? editDraft.name : newName}
+                onChange={(event) => editingTaskId
+                  ? setEditDraft((current) => ({ ...current, name: event.target.value }))
+                  : setNewName(event.target.value)}
+              />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Category</span>
+              <select
+                className={settingsInputClass}
+                value={editingTaskId ? editDraft.category : newCategory}
+                onChange={(event) => editingTaskId
+                  ? setEditDraft((current) => ({ ...current, category: event.target.value }))
+                  : setNewCategory(event.target.value)}
+              >
+                {taskCategoryOptions.map((category) => (
+                  <option key={`new-task-category-${category}`} value={category}>{category}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Priority</span>
+              <select
+                className={settingsInputClass}
+                value={editingTaskId ? String(editDraft.priority) : newPriority}
+                onChange={(event) => editingTaskId
+                  ? setEditDraft((current) => ({ ...current, priority: Number(event.target.value) }))
+                  : setNewPriority(event.target.value as '1' | '2' | '3')}
+              >
+                <option value="1">1 (High)</option>
+                <option value="2">2 (Med)</option>
+                <option value="3">3 (Low)</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Est. hours</span>
+              <input
+                className={settingsInputClass}
+                type="number"
+                step="0.25"
+                placeholder="Est. hours"
+                value={editingTaskId ? String(editDraft.estimated_hours) : newEstimatedHours}
+                onChange={(event) => editingTaskId
+                  ? setEditDraft((current) => ({ ...current, estimated_hours: Number(event.target.value || '0') }))
+                  : setNewEstimatedHours(event.target.value)}
+              />
+            </label>
+
+            {editingTaskId ? (
+              <div className="rounded-xl border border-surface-border bg-surface-base p-4">
+                <p className="mb-3 text-sm font-medium text-text-primary">Recurring Schedule</p>
+                <label className="flex cursor-pointer items-center gap-3 text-sm text-text-secondary">
+                  <Switch
+                    checked={Boolean(recurringDrafts[editingTaskId]?.enabled)}
+                    onCheckedChange={(checked) => setRecurringEnabled(editingTaskId, checked)}
+                  />
+                  <span>{recurringDrafts[editingTaskId]?.enabled ? 'Enabled' : 'Disabled'}</span>
+                </label>
+                {recurringDrafts[editingTaskId]?.enabled ? (
+                  <div className="mt-3 grid gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      {dayOptions.map((day) => (
+                        <label key={`${editingTaskId}-${day.key}`} className="flex cursor-pointer items-center gap-1 text-xs text-text-secondary">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(recurringDrafts[editingTaskId]?.days.includes(day.key))}
+                            onChange={() => toggleRecurringDay(editingTaskId, day.key)}
+                            className="rounded"
+                          />
+                          {day.label}
+                        </label>
+                      ))}
+                    </div>
+                    <select
+                      className={settingsInputClass}
+                      value={recurringDrafts[editingTaskId]?.assignMode ?? 'all'}
+                      onChange={(event) =>
+                        setRecurringDrafts((current) => ({
+                          ...current,
+                          [editingTaskId]: {
+                            ...(current[editingTaskId] ?? { enabled: true, days: ['mon', 'tue', 'wed', 'thu', 'fri'], employeeId: '' }),
+                            assignMode: event.target.value as 'all' | 'specific',
+                          },
+                        }))
+                      }
+                    >
+                      <option value="all">All scheduled crew</option>
+                      <option value="specific">Specific employee</option>
+                    </select>
+                    {recurringDrafts[editingTaskId]?.assignMode === 'specific' ? (
+                      <select
+                        className={settingsInputClass}
+                        value={recurringDrafts[editingTaskId]?.employeeId ?? ''}
+                        onChange={(event) =>
+                          setRecurringDrafts((current) => ({
+                            ...current,
+                            [editingTaskId]: {
+                              ...(current[editingTaskId] ?? { enabled: true, days: ['mon', 'tue', 'wed', 'thu', 'fri'], assignMode: 'specific' }),
+                              employeeId: event.target.value,
+                            },
+                          }))
+                        }
+                      >
+                        <option value="">Select employee</option>
+                        {employees.map((employee) => (
+                          <option key={`${editingTaskId}-${employee.id}`} value={employee.id}>
+                            {employee.first_name} {employee.last_name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                    <button
+                      onClick={() => void saveRecurringRule(editingTaskId)}
+                      className="w-fit rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover disabled:opacity-60"
+                      disabled={savingRecurringTaskId === editingTaskId}
+                    >
+                      {savingRecurringTaskId === editingTaskId ? 'Saving...' : 'Apply schedule'}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <button
+              onClick={() => editingTaskId ? void saveEditTask(editingTaskId) : void addTask()}
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
+            >
+              {editingTaskId ? 'Save Changes' : 'Save Task'}
+            </button>
           </div>
         </SheetContent>
       </Sheet>
@@ -3561,7 +3388,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
                 />
               </label>
             </div>
-            <div style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>
+            <div className="text-xs text-text-muted">
               Display window: {formatTime(settings.operational_day_start)}–{formatTime(settings.operational_day_end)}
             </div>
 
@@ -3640,142 +3467,71 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
           </DndContext>
         )}
 
-        <div style={{ marginTop: '14px', borderTop: '1px dashed rgb(var(--surface-border))', paddingTop: '12px', display: 'grid', gap: '10px' }}>
-          <strong>Add template</strong>
-          <input placeholder="Template name" value={newName} onChange={(event) => setNewName(event.target.value)} />
-          <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr' }}>
-            <input type="time" value={newStart} onChange={(event) => setNewStart(event.target.value)} />
-            <input type="time" value={newEnd} onChange={(event) => setNewEnd(event.target.value)} />
+        <div className="mt-4 grid gap-3 border-t border-dashed border-surface-border pt-4">
+          <p className="text-sm font-medium text-text-primary">Add template</p>
+          <input className={settingsInputClass} placeholder="Template name" value={newName} onChange={(event) => setNewName(event.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <input className={settingsInputClass} type="time" value={newStart} onChange={(event) => setNewStart(event.target.value)} />
+            <input className={settingsInputClass} type="time" value={newEnd} onChange={(event) => setNewEnd(event.target.value)} />
           </div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="flex flex-wrap gap-2">
             {dayOptions.map((day) => (
-              <label key={`new-${day.key}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-                <input type="checkbox" checked={newDays.includes(day.key)} onChange={() => setNewDays((cur) => toggleDayValue(cur, day.key))} />
+              <label key={`new-${day.key}`} className="flex cursor-pointer items-center gap-1.5 text-sm text-text-secondary">
+                <input type="checkbox" checked={newDays.includes(day.key)} onChange={() => setNewDays((cur) => toggleDayValue(cur, day.key))} className="rounded" />
                 {day.label}
               </label>
             ))}
           </div>
           <button
             onClick={() => void addTemplate()}
-            style={{
-              width: 'fit-content',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'rgb(var(--surface-card))',
-              background: 'rgb(var(--brand-default))',
-              padding: '8px 14px',
-              cursor: 'pointer',
-            }}
+            className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
           >
             Save template
           </button>
         </div>
       </section>
 
-      <div style={{ border: '1px solid rgb(var(--surface-border))', borderRadius: '12px', padding: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Alerts</h3>
+      <section className="rounded-xl border border-surface-border bg-surface-card p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-text-primary">Alerts</h3>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button type="button" aria-label="Escalation settings help" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
-                <HelpCircle size={14} color="rgb(var(--text-muted))" />
+              <button type="button" aria-label="Escalation settings help" className="rounded p-0.5 text-text-muted hover:text-text-secondary">
+                <HelpCircle className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent>Set thresholds for weather and equipment alerts on the workboard.</TooltipContent>
           </Tooltip>
         </div>
-        <p style={{ margin: '0 0 14px', color: 'rgb(var(--text-muted))', fontSize: '13px' }}>
-          Configure escalation thresholds used by the Workboard escalation center.
-        </p>
-        <div style={{ display: 'grid', gap: '12px' }}>
-          <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Alert when equipment not serviced for X days</span>
-            <input
-              type="number"
-              min={1}
-              value={alertsConfig.equipment_service_overdue_days}
-              onChange={(event) =>
-                setAlertsConfig((current) => ({
-                  ...current,
-                  equipment_service_overdue_days: Number(event.target.value || '0'),
-                }))
-              }
-            />
-          </label>
-          <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Warn when crew coverage drops below X%</span>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={alertsConfig.shift_coverage_warning_pct}
-              onChange={(event) =>
-                setAlertsConfig((current) => ({
-                  ...current,
-                  shift_coverage_warning_pct: Number(event.target.value || '0'),
-                }))
-              }
-            />
-          </label>
-          <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Flag spray tasks when wind exceeds X mph</span>
-            <input
-              type="number"
-              min={1}
-              value={alertsConfig.wind_speed_spray_cutoff_mph}
-              onChange={(event) =>
-                setAlertsConfig((current) => ({
-                  ...current,
-                  wind_speed_spray_cutoff_mph: Number(event.target.value || '0'),
-                }))
-              }
-            />
-          </label>
-          <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Flag spray tasks when rain chance exceeds X%</span>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={alertsConfig.rain_probability_spray_cutoff_pct}
-              onChange={(event) =>
-                setAlertsConfig((current) => ({
-                  ...current,
-                  rain_probability_spray_cutoff_pct: Number(event.target.value || '0'),
-                }))
-              }
-            />
-          </label>
-          <label style={{ display: 'grid', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'rgb(var(--text-muted))' }}>Show heat advisory above X°F</span>
-            <input
-              type="number"
-              min={1}
-              value={alertsConfig.heat_advisory_temp_f}
-              onChange={(event) =>
-                setAlertsConfig((current) => ({
-                  ...current,
-                  heat_advisory_temp_f: Number(event.target.value || '0'),
-                }))
-              }
-            />
-          </label>
+        <p className="mb-4 mt-1 text-sm text-text-muted">Configure escalation thresholds used by the Workboard escalation center.</p>
+        <div className="grid gap-4">
+          {[
+            { field: 'equipment_service_overdue_days' as const, label: 'Alert when equipment not serviced for X days', min: 1, max: undefined },
+            { field: 'shift_coverage_warning_pct' as const, label: 'Warn when crew coverage drops below X%', min: 1, max: 100 },
+            { field: 'wind_speed_spray_cutoff_mph' as const, label: 'Flag spray tasks when wind exceeds X mph', min: 1, max: undefined },
+            { field: 'rain_probability_spray_cutoff_pct' as const, label: 'Flag spray tasks when rain chance exceeds X%', min: 1, max: 100 },
+            { field: 'heat_advisory_temp_f' as const, label: 'Show heat advisory above X°F', min: 1, max: undefined },
+          ].map(({ field, label, min, max }) => (
+            <label key={field} className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">{label}</span>
+              <input
+                className={settingsInputClass}
+                type="number"
+                min={min}
+                max={max}
+                value={alertsConfig[field]}
+                onChange={(event) => setAlertsConfig((current) => ({ ...current, [field]: Number(event.target.value || '0') }))}
+              />
+            </label>
+          ))}
           <button
             onClick={() => void saveAlertsConfig()}
-            style={{
-              width: 'fit-content',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'rgb(var(--surface-card))',
-              background: alertsSaved ? 'rgb(var(--status-active))' : 'rgb(var(--brand-default))',
-              padding: '8px 14px',
-              cursor: 'pointer',
-            }}
+            className={`w-fit rounded-lg px-4 py-2 text-sm font-medium text-text-inverse transition-colors ${alertsSaved ? 'bg-status-active' : 'bg-brand hover:bg-brand-bright'}`}
           >
             {alertsSaving ? 'Saving...' : alertsSaved ? 'Saved ✓' : 'Save alerts'}
           </button>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
