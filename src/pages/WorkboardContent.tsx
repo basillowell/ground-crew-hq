@@ -111,9 +111,9 @@ function normalizeAssignmentStatus(status?: string) {
 }
 
 function coverageBadgeClass(coveragePercent: number) {
-  if (coveragePercent >= 80) return 'bg-green-100 text-green-700 border-green-200';
-  if (coveragePercent >= 50) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-  return 'bg-red-100 text-red-700 border-red-200';
+  if (coveragePercent >= 80) return 'border-status-active/20 bg-status-active/10 text-status-active';
+  if (coveragePercent >= 50) return 'border-status-pending/20 bg-status-pending/10 text-status-pending';
+  return 'border-status-warning/20 bg-status-warning/10 text-status-warning';
 }
 
 function getEstimatedHoursForAssignment(assignment: Assignment) {
@@ -124,11 +124,11 @@ function getEstimatedHoursForAssignment(assignment: Assignment) {
 }
 
 function getActualHoursTone(actualHours: number, estimatedHours: number) {
-  if (actualHours <= 0 || estimatedHours <= 0) return 'text-muted-foreground';
+  if (actualHours <= 0 || estimatedHours <= 0) return 'text-text-muted';
   const ratio = actualHours / estimatedHours;
-  if (ratio <= 1) return 'text-emerald-700';
-  if (ratio < 1.25) return 'text-amber-700';
-  return 'text-red-700';
+  if (ratio <= 1) return 'text-status-active';
+  if (ratio < 1.25) return 'text-status-pending';
+  return 'text-status-warning';
 }
 
 type AssignmentTimelineMeta = {
@@ -155,9 +155,9 @@ function toTimeInputValue(value: string | null | undefined, timezone: string) {
 
 function taskRowClass(status: string) {
   const normalized = normalizeAssignmentStatus(status);
-  if (normalized === 'in-progress') return 'border-l-[3px] border-l-blue-500 bg-blue-50';
-  if (normalized === 'done') return 'border-l-[3px] border-l-green-500 bg-green-50';
-  return 'border-l-[3px] border-l-gray-400 bg-card';
+  if (normalized === 'in-progress') return 'border-l-[3px] border-l-status-complete bg-status-complete/5';
+  if (normalized === 'done') return 'border-l-[3px] border-l-status-active bg-status-active/5';
+  return 'border-l-[3px] border-l-text-muted bg-surface-card';
 }
 
 function makeId() {
@@ -4093,16 +4093,16 @@ export default function WorkboardContent() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header bar */}
-        <div className="border-b bg-card px-3 py-3 md:px-5">
+        <div className="border-b border-surface-border bg-surface-card px-3 py-3 md:px-5">
           <div className="flex items-center gap-3 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
             <div className="flex min-w-max items-center gap-3">
-          <div className="flex items-center gap-2 rounded-xl border bg-muted/20 px-3 py-1.5">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Board Date</span>
+          <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-elevated px-3 py-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-text-muted">Board Date</span>
             <input
               type="date"
               value={boardDate}
               onChange={(e) => setBoardDate(e.target.value)}
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              className="h-8 rounded-md border border-surface-border bg-surface-base px-2 text-sm text-text-primary"
               data-testid="input-board-date"
             />
             {boardDate !== todayDateKey ? (
@@ -4113,8 +4113,8 @@ export default function WorkboardContent() {
           </div>
 
           <div className="flex flex-col flex-1 min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight">Workflow</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Assign tasks and manage daily operations.</p>
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">Workflow</h1>
+            <p className="mt-0.5 text-sm text-text-muted">Assign tasks and manage daily operations.</p>
           </div>
           <div className="flex items-center gap-2">
             {activeProperty && (
@@ -4221,7 +4221,7 @@ export default function WorkboardContent() {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" aria-label="Quick plan help" className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground">
+                <button type="button" aria-label="Quick plan help" className="h-9 w-9 rounded-md border border-surface-border text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary">
                   <HelpCircle className="mx-auto h-3.5 w-3.5" />
                 </button>
               </TooltipTrigger>
@@ -4243,7 +4243,7 @@ export default function WorkboardContent() {
         </div>
 
         {/* Stats strip */}
-        <div className="hidden border-b bg-muted/30 px-5 py-2 text-xs md:flex md:items-center md:gap-4 md:flex-wrap shrink-0">
+        <div className="hidden shrink-0 border-b border-surface-border bg-surface-elevated px-5 py-2 text-xs md:flex md:flex-wrap md:items-center md:gap-4">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Users className="h-3.5 w-3.5" />
             <span><span className="font-semibold text-foreground">{scheduledEmployees.length}</span> scheduled</span>
@@ -4261,7 +4261,7 @@ export default function WorkboardContent() {
             <span><span className="font-semibold text-foreground">{dayAssignments.length}</span> tasks assigned</span>
           </div>
           {newRequestsCount > 0 && (
-            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 ml-auto">
+            <div className="ml-auto flex items-center gap-1.5 text-status-pending">
               <AlertCircle className="h-3.5 w-3.5" />
               <span><span className="font-semibold">{newRequestsCount}</span> unhandled {newRequestsCount === 1 ? 'need' : 'needs'}</span>
             </div>

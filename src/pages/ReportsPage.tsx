@@ -1023,29 +1023,29 @@ export default function ReportsPage() {
       </div>
 
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">Reports</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Labor summaries and cost analysis.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Reports</h1>
+        <p className="mt-0.5 text-sm text-text-muted">Labor summaries and cost analysis.</p>
       </div>
 
-      <div className="no-print rounded-xl border bg-card p-4 space-y-3">
+      <div className="no-print space-y-3 rounded-xl border border-surface-border bg-surface-card p-4">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button onClick={() => applyPreset('this-week')}>This Week</button>
-          <button onClick={() => applyPreset('last-week')}>Last Week</button>
-          <button onClick={() => applyPreset('this-month')}>This Month</button>
-          <button onClick={() => applyPreset('last-month')}>Last Month</button>
+          <button className="rounded-lg border border-surface-border bg-surface-elevated px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary" onClick={() => applyPreset('this-week')}>This Week</button>
+          <button className="rounded-lg border border-surface-border bg-surface-elevated px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary" onClick={() => applyPreset('last-week')}>Last Week</button>
+          <button className="rounded-lg border border-surface-border bg-surface-elevated px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary" onClick={() => applyPreset('this-month')}>This Month</button>
+          <button className="rounded-lg border border-surface-border bg-surface-elevated px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary" onClick={() => applyPreset('last-month')}>Last Month</button>
         </div>
         <div className="grid gap-[10px] md:grid-cols-3">
           <div style={{ display: 'grid', gap: '4px' }}>
-            <label style={{ fontSize: '12px', color: '#6b7280' }}>Start Date</label>
-            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            <label className="text-xs text-text-muted">Start Date</label>
+            <input className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           </div>
           <div style={{ display: 'grid', gap: '4px' }}>
-            <label style={{ fontSize: '12px', color: '#6b7280' }}>End Date</label>
-            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            <label className="text-xs text-text-muted">End Date</label>
+            <input className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </div>
           <div style={{ display: 'grid', gap: '4px' }}>
-            <label style={{ fontSize: '12px', color: '#6b7280' }}>Property</label>
-            <select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}>
+            <label className="text-xs text-text-muted">Property</label>
+            <select className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}>
               <option value="all">All Properties</option>
               {properties.map((property) => (
                 <option key={property.id} value={property.id}>
@@ -1057,21 +1057,21 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="no-print flex flex-wrap gap-2 border-b pb-1">
-        <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'summary' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('summary')} aria-pressed={activeTab === 'summary'}>
+      <div className="no-print flex flex-wrap gap-2 border-b border-surface-border pb-1">
+        <button className={`h-9 rounded-lg px-3 text-sm transition-colors ${activeTab === 'summary' ? 'bg-brand-muted font-medium text-brand-primary' : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'}`} onClick={() => setActiveTab('summary')} aria-pressed={activeTab === 'summary'}>
           Summary
         </button>
-        <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'trends' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('trends')} aria-pressed={activeTab === 'trends'}>
+        <button className={`h-9 rounded-lg px-3 text-sm transition-colors ${activeTab === 'trends' ? 'bg-brand-muted font-medium text-brand-primary' : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'}`} onClick={() => setActiveTab('trends')} aria-pressed={activeTab === 'trends'}>
           Trends
         </button>
-        <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'gm' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('gm')} aria-pressed={activeTab === 'gm'}>
+        <button className={`h-9 rounded-lg px-3 text-sm transition-colors ${activeTab === 'gm' ? 'bg-brand-muted font-medium text-brand-primary' : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'}`} onClick={() => setActiveTab('gm')} aria-pressed={activeTab === 'gm'}>
           GM Summary
         </button>
-        <button className={`h-9 rounded-lg px-3 text-sm ${activeTab === 'timesheets' ? 'border-b-2 border-primary text-primary font-medium' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setActiveTab('timesheets')} aria-pressed={activeTab === 'timesheets'}>
+        <button className={`h-9 rounded-lg px-3 text-sm transition-colors ${activeTab === 'timesheets' ? 'bg-brand-muted font-medium text-brand-primary' : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'}`} onClick={() => setActiveTab('timesheets')} aria-pressed={activeTab === 'timesheets'}>
           Timesheets
         </button>
         <button
-          className="ml-auto h-9 rounded-lg border px-3 text-sm"
+          className="ml-auto h-9 rounded-lg bg-brand-primary px-3 text-sm font-medium text-text-inverse transition-colors hover:bg-brand-hover"
           onClick={() => {
             const printWindow = window.open(fullReportUrl, '_blank', 'noopener,noreferrer');
             if (!printWindow) {

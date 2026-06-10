@@ -197,7 +197,7 @@ export default function JobCostingPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-text-primary">Job Costing</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Job Costing</h1>
         <p className="mt-0.5 text-sm text-text-secondary">
           Labor cost and margin analysis for completed assignments.
         </p>

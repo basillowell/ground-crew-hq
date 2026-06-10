@@ -71,17 +71,17 @@ function normalizeStatus(raw: string | null | undefined): EquipmentStatus {
 }
 
 function statusBadgeClass(status: EquipmentStatus) {
-  if (status === 'available') return 'border-status-active/20 text-status-active';
-  if (status === 'in_use') return 'border-blue-200 text-blue-700';
-  if (status === 'maintenance') return 'border-amber-200 text-amber-700';
-  return 'border-surface-border text-text-muted';
+  if (status === 'available') return 'border-status-active/20 bg-status-active/10 text-status-active';
+  if (status === 'in_use') return 'border-status-complete/20 bg-status-complete/10 text-status-complete';
+  if (status === 'maintenance') return 'border-status-pending/20 bg-status-pending/10 text-status-pending';
+  return 'border-surface-border bg-surface-elevated text-text-muted';
 }
 
 function statusLaneClass(status: EquipmentStatus) {
   if (status === 'available') return 'border-l-status-active';
-  if (status === 'in_use') return 'border-l-blue-400';
-  if (status === 'maintenance') return 'border-l-amber-400';
-  return 'border-l-slate-400';
+  if (status === 'in_use') return 'border-l-status-complete';
+  if (status === 'maintenance') return 'border-l-status-pending';
+  return 'border-l-text-muted';
 }
 
 function statusLabel(status: EquipmentStatus) {
@@ -385,11 +385,11 @@ export default function EquipmentPage() {
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Equipment</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Track maintenance and availability.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">Equipment</h1>
+          <p className="mt-0.5 text-sm text-text-muted">Track maintenance and availability.</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg border p-0.5">
+          <div className="flex items-center rounded-lg border border-surface-border bg-surface-card p-0.5">
             <Button
               type="button"
               size="sm"
@@ -422,9 +422,9 @@ export default function EquipmentPage() {
 
       {viewMode === 'list' ? (
       <>
-      <div className="hidden overflow-x-auto rounded-xl border md:block">
+      <div className="hidden overflow-x-auto rounded-xl border border-surface-border bg-surface-card md:block">
         <table className="min-w-full text-sm">
-          <thead className="bg-muted/40">
+          <thead className="bg-surface-elevated text-xs uppercase tracking-wider text-text-muted">
             <tr>
               <th className="px-3 py-2 text-left font-medium">Name</th>
               <th className="px-3 py-2 text-left font-medium">Type</th>
@@ -452,7 +452,7 @@ export default function EquipmentPage() {
                 const isEditing = editingId === row.id && editDraft;
                 const overdue = isServiceOverdue(row.last_serviced);
                 return (
-                  <tr key={row.id} className="border-t align-top">
+                  <tr key={row.id} className="border-t border-surface-border align-top transition-colors hover:bg-surface-hover">
                     <td className="px-3 py-2">
                       {isEditing ? (
                         <Input
@@ -460,7 +460,7 @@ export default function EquipmentPage() {
                           onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })}
                         />
                       ) : (
-                        <span className="font-medium">{row.displayName}</span>
+                        <span className="font-medium text-text-primary">{row.displayName}</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -528,7 +528,7 @@ export default function EquipmentPage() {
                       ) : (
                         <div className="flex items-center gap-1.5">
                           <span>{row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}</span>
-                          {overdue ? <AlertTriangle className="h-4 w-4 text-amber-500" aria-label="Service overdue" /> : null}
+                          {overdue ? <AlertTriangle className="h-4 w-4 text-status-pending" aria-label="Service overdue" /> : null}
                         </div>
                       )}
                     </td>
@@ -584,9 +584,9 @@ export default function EquipmentPage() {
             const isEditing = editingId === row.id && editDraft;
             const overdue = isServiceOverdue(row.last_serviced);
             return (
-              <div key={`mobile-eq-${row.id}`} className={`rounded-xl border border-l-4 bg-card p-3 ${statusLaneClass(row.normalizedStatus)}`}>
+              <div key={`mobile-eq-${row.id}`} className={`rounded-xl border border-surface-border border-l-4 bg-surface-card p-3 transition-colors hover:bg-surface-hover ${statusLaneClass(row.normalizedStatus)}`}>
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="font-medium">{row.displayName}</p>
+                  <p className="font-medium text-text-primary">{row.displayName}</p>
                   {isEditing ? null : (
                     <Badge variant="outline" className={statusBadgeClass(row.normalizedStatus)}>{statusLabel(row.normalizedStatus)}</Badge>
                   )}
@@ -611,10 +611,10 @@ export default function EquipmentPage() {
                     <Textarea value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })} className="min-h-16" />
                   </div>
                 ) : (
-                  <div className="space-y-1 text-sm text-muted-foreground">
+                  <div className="space-y-1 text-sm text-text-muted">
                     <p>Type: {row.displayType}</p>
                     <p>Location: {row.location || '—'}</p>
-                    <p className="flex items-center gap-1">Last Serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}{overdue ? <AlertTriangle className="h-4 w-4 text-amber-500" /> : null}</p>
+                    <p className="flex items-center gap-1">Last Serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}{overdue ? <AlertTriangle className="h-4 w-4 text-status-pending" /> : null}</p>
                   </div>
                 )}
                 <div className="mt-3 flex gap-2">
@@ -663,8 +663,8 @@ export default function EquipmentPage() {
                 row.readinessLevel === 'green'
                   ? 'border-l-4 border-l-status-active'
                   : row.readinessLevel === 'yellow'
-                    ? 'border-l-4 border-l-amber-500'
-                    : 'border-l-4 border-l-red-500';
+                    ? 'border-l-4 border-l-status-pending'
+                    : 'border-l-4 border-l-status-warning';
               const badgeClasses =
                 row.readinessLevel === 'green'
                   ? 'bg-status-active/10 text-status-active border-status-active/20'
@@ -672,17 +672,17 @@ export default function EquipmentPage() {
                     ? 'bg-status-pending/10 text-status-pending border-status-pending/20'
                     : 'bg-status-warning/10 text-status-warning border-status-warning/20';
               return (
-                <div key={`readiness-${row.id}`} className={`rounded-xl border bg-card p-4 ${toneClasses}`}>
+                <div key={`readiness-${row.id}`} className={`rounded-xl border border-surface-border bg-surface-card p-4 transition-colors hover:bg-surface-hover ${toneClasses}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold">{row.displayName}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{row.displayType}</p>
+                      <p className="text-sm font-semibold text-text-primary">{row.displayName}</p>
+                      <p className="mt-0.5 text-xs text-text-muted">{row.displayType}</p>
                     </div>
                     <Badge variant="outline" className={badgeClasses}>
                       {row.readinessLabel}
                     </Badge>
                   </div>
-                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                  <div className="mt-3 space-y-1 text-xs text-text-muted">
                     <p>Last serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}</p>
                     <p>{row.dueText}</p>
                     <p>Status: {statusLabel(row.normalizedStatus)}</p>
@@ -704,7 +704,7 @@ export default function EquipmentPage() {
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3">
             {activeEquipmentTypes.length === 0 ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <div className="rounded-md border border-status-pending/20 bg-status-pending/10 p-3 text-sm text-status-pending">
                 No equipment types defined. Add types in Settings → Equipment first.{" "}
                 <Link to="/app/settings?tab=Workspace" className="font-medium underline">
                   Open Settings

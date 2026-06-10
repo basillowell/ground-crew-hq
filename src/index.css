@@ -70,33 +70,33 @@ html.light {
     --status-info: #3b82f6;
     --status-muted: #94a3b8;
 
-    --background: 144 20% 5%;
-    --foreground: 120 15% 95%;
+    --background: 140 11.111% 5.294%;
+    --foreground: 120 15.385% 94.902%;
 
-    --card: 135 22% 10%;
-    --card-foreground: 120 15% 95%;
+    --card: 141.818 21.569% 10%;
+    --card-foreground: 120 15.385% 94.902%;
 
-    --popover: 137 23% 14%;
-    --popover-foreground: 120 15% 95%;
+    --popover: 141.176 23.288% 14.314%;
+    --popover-foreground: 120 15.385% 94.902%;
 
-    --primary: 84 81% 43%;
-    --primary-foreground: 144 20% 5%;
+    --primary: 83.736 80.531% 44.314%;
+    --primary-foreground: 144 20% 4.902%;
 
-    --secondary: 137 23% 14%;
-    --secondary-foreground: 120 15% 95%;
+    --secondary: 141.176 23.288% 14.314%;
+    --secondary-foreground: 120 15.385% 94.902%;
 
-    --muted: 137 23% 14%;
-    --muted-foreground: 120 14% 61%;
+    --muted: 141.176 23.288% 14.314%;
+    --muted-foreground: 120 13.131% 61.176%;
 
-    --accent: 147 22% 15%;
-    --accent-foreground: 120 15% 95%;
+    --accent: 148.235 21.519% 15.49%;
+    --accent-foreground: 120 15.385% 94.902%;
 
-    --destructive: 0 72% 55%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 84.236% 60.196%;
+    --destructive-foreground: 120 15.385% 94.902%;
 
-    --border: 138 23% 19%;
-    --input: 138 23% 19%;
-    --ring: 84 81% 43%;
+    --border: 138.261 23.232% 19.412%;
+    --input: 138.261 23.232% 19.412%;
+    --ring: 83.736 80.531% 44.314%;
 
     --radius: 0.75rem;
 
@@ -228,5 +228,47 @@ html.light {
     background: rgba(20, 31, 24, 0.85);
     backdrop-filter: blur(16px) saturate(1.4);
     border: 1px solid rgba(132, 204, 22, 0.12);
+  }
+
+  .settings-theme input,
+  .settings-theme select,
+  .settings-theme textarea {
+    @apply border-surface-border bg-surface-elevated text-text-primary placeholder:text-text-muted;
+  }
+
+  .settings-theme table {
+    @apply text-text-secondary;
+  }
+
+  .settings-theme table thead tr {
+    @apply border-surface-border bg-surface-elevated text-text-muted;
+  }
+
+  .settings-theme table tbody tr {
+    @apply border-surface-border transition-colors hover:bg-surface-hover;
+  }
+
+  .settings-theme button {
+    @apply transition-colors;
+  }
+
+  .settings-theme [style*="border: 1px solid rgb(229, 231, 235)"],
+  .settings-theme [style*="border: 1px solid rgb(209, 213, 219)"],
+  .settings-theme [style*="border-bottom: 1px solid rgb(229, 231, 235)"],
+  .settings-theme [style*="border-bottom: 1px solid rgb(241, 245, 249)"] {
+    border-color: rgb(var(--surface-border)) !important;
+  }
+
+  .settings-theme [style*="background: rgb(255, 255, 255)"] {
+    background: rgb(var(--surface-card)) !important;
+  }
+
+  .settings-theme [style*="color: rgb(17, 24, 39)"] {
+    color: rgb(var(--text-primary)) !important;
+  }
+
+  .settings-theme [style*="color: rgb(55, 65, 81)"],
+  .settings-theme [style*="color: rgb(107, 114, 128)"] {
+    color: rgb(var(--text-muted)) !important;
   }
 }

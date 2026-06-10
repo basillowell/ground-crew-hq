@@ -1,0 +1,146 @@
+Before starting, read these files in order:
+1. https://raw.githubusercontent.com/basillowell/ground-crew-hq/main/CODERULES.md
+2. https://raw.githubusercontent.com/basillowell/ground-crew-hq/main/CLAUDE.md
+3. https://raw.githubusercontent.com/basillowell/ground-crew-hq/main/CODEX6.9.26.md
+4. https://raw.githubusercontent.com/basillowell/ground-crew-hq/main/ARCHITECTURE.md
+
+Confirm: rule count, build gate rule, app version, table count.
+Do not proceed until confirmed.
+
+---
+
+TASK: Three fixes + full visual consistency pass
+Work in order. npm run build after every section. Do not proceed if build fails.
+
+---
+
+SECTION 1 — FIX: Dispatch Board assignment creation 400 error
+FILE: src/pages/DispatchBoardPage.tsx
+CONTEXT:
+  - Console error: "null value in column property_id violates not-null constraint"
+  - The New Assignment modal has a Property dropdown showing "GC HQ"
+  - On submit, property_id is being passed as null instead of the UUID
+  - assignments.property_id is NOT NULL per live-db-state.md
+DIAGNOSE:
+  - grep for the assignment insert payload in DispatchBoardPage.tsx
+  - Find where property_id is set in the insert — confirm it reads 
+    selectedPropertyId or similar state variable
+  - Find where the Property select onChange sets the property state
+  - Check: is the default value of the property state null or ''?
+  - Check: does the select value match the option value format (UUID string)?
+FIX:
+  - Default property state to useAppStore().properties[0]?.id ?? null
+  - Add null guard before insert: if (!propertyId) return — show error
+  - Confirm the Select component value and onChange wire up correctly:
+      value={selectedPropertyId}
+      onValueChange={(val) => setSelectedPropertyId(val)}
+  - Property options: useAppStore().properties.map(p => 
+      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)
+  - value must be p.id (UUID), not p.name or p.short_name
+  - After fix: verify insert payload includes valid UUID for property_id
+  - npm run build — must pass before Section 2
+
+---
+
+SECTION 2 — FIX: shadcn CSS variables to dark theme (root fix for all modals)
+FILE: src/index.css
+CONTEXT:
+  - Many modals, dropdowns, selects still render with light/white backgrounds
+  - Root cause is shadcn CSS variables still set to light theme defaults
+  - Fixing here fixes every modal/dialog/dropdown globally in one pass
+CHANGE:
+  - grep for ':root' in src/index.css — find where shadcn vars are defined
+  - Update ALL of these to dark values:
+      --background: 12 15 13;
+      --foreground: 240 244 240;
+      --card: 20 31 24;
+      --card-foreground: 240 244 240;
+      --popover: 28 45 34;
+      --popover-foreground: 240 244 240;
+      --primary: 132 204 22;
+      --primary-foreground: 10 15 12;
+      --secondary: 28 45 34;
+      --secondary-foreground: 240 244 240;
+      --muted: 28 45 34;
+      --muted-foreground: 143 169 143;
+      --accent: 31 48 39;
+      --accent-foreground: 240 244 240;
+      --destructive: 239 68 68;
+      --destructive-foreground: 240 244 240;
+      --border: 38 61 45;
+      --input: 38 61 45;
+      --ring: 132 204 22;
+  - npm run build — must pass before Section 3
+
+---
+
+SECTION 3 — STYLE: Apply Dispatch Board visual quality to all pages
+CONTEXT:
+  - Dispatch Board is the visual reference — dark cards, readable crew names,
+    status badges, clean grid, "+ Add assignment" hover states
+  - Settings page and its tabs (Tasks, SOPs, Recurring Tasks, Workforce, 
+    Scheduler, Weather, Access, Help) need the same treatment
+  - All other pages (Team, Equipment, Invoicing, Reports, Job Costing, 
+    Workboard, Scheduler) should match this standard
+
+VISUAL STANDARD (from Dispatch Board):
+  - Page header: text-text-primary font-bold text-2xl + text-text-muted subtitle
+  - Section labels: text-text-muted text-xs uppercase tracking-widest
+  - Cards/rows: bg-surface-card border border-surface-border rounded-xl
+  - Primary names: text-text-primary font-medium
+  - Secondary info (role, dept, property): text-text-muted text-sm
+  - Status badges: StatusBadge pattern from CODEX6.9.26.md Section 6
+  - Action buttons: bg-brand text-text-inverse for primary,
+                    border border-surface-border text-text-secondary for secondary
+  - Hover states: hover:bg-surface-hover transition-colors
+  - Empty cells / add actions: text-text-muted hover:text-text-primary
+  - "+ Add" hints: text-text-muted text-xs on hover only
+
+PAGES TO BRING TO THIS STANDARD:
+  Priority 1 — Settings page tabs:
+    - Workspace tab (scheduler settings)
+    - Tasks tab (task library)
+    - Recurring Tasks tab
+    - SOPs tab
+    - Workforce tab
+    - Access tab
+  Priority 2 — Other pages:
+    - TeamPage / EmployeesPage
+    - EquipmentPage
+    - InvoicingPage
+    - JobCostingPage
+    - ReportsPage
+    - WorkboardPage / WorkflowPage
+
+PROCESS:
+  - Read each file before editing
+  - Replace light card styles with surface tokens
+  - Replace hardcoded colors with text.* and status.* tokens
+  - Apply StatusBadge pattern to any status/badge elements
+  - Add hover:bg-surface-hover to all clickable rows
+  - npm run build every 3 files — catch errors early
+
+---
+
+SECTION 4 — FIX: Landing page hero gradient
+FILES: src/pages/LaunchPortalPage.tsx, src/index.css
+ISSUE: Hero h1 still renders lime/green
+  - grep for 'hero-enter' in src/index.css
+  - Remove color/background/gradient from @keyframes — keep opacity/transform only
+  - In LaunchPortalPage.tsx find h1 — remove bg-clip-text, text-transparent,
+    bg-gradient-to-* if present — replace with text-text-primary only
+  - npm run build — must pass
+
+---
+
+AFTER ALL SECTIONS:
+  - npm run build — zero errors
+  - git add -A
+  - git commit -m "fix: assignment property_id, dark theme root vars, 
+    dispatch visual standard applied to all pages, hero gradient"
+  - git push origin main
+
+RULES: edit only listed files · no table renames · org-scoped queries ·
+       typed · isHydrated guard on all page effects ·
+       column names from live-db-state.md only · no hardcoded hex ·
+       return files+SQL+tests

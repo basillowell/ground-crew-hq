@@ -279,7 +279,9 @@ export default function DispatchBoardPage() {
   // Create-assignment slide-over state
   const [createCell, setCreateCell] = useState<{ employeeId: string; date: string } | null>(null);
   const [newTaskId, setNewTaskId] = useState('');
-  const [newPropertyId, setNewPropertyId] = useState('');
+  const [newPropertyId, setNewPropertyId] = useState<string | null>(
+    () => properties[0]?.id ?? null,
+  );
   const [newStartTime, setNewStartTime] = useState('');
   const [newEstimatedHours, setNewEstimatedHours] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -407,7 +409,7 @@ export default function DispatchBoardPage() {
 
   const openCreateSheet = (employeeId: string, date: string) => {
     setNewTaskId('');
-    setNewPropertyId('');
+    setNewPropertyId(properties[0]?.id ?? null);
     setNewStartTime('');
     setNewEstimatedHours('');
     setCreateCell({ employeeId, date });
@@ -415,13 +417,17 @@ export default function DispatchBoardPage() {
 
   const handleCreateSave = async () => {
     if (!orgId || !createCell) return;
+    if (!newPropertyId) {
+      toast.error('Select a property before creating the assignment.');
+      return;
+    }
     setIsSaving(true);
 
     const { error } = await supabase.from('assignments').insert({
       employee_id: createCell.employeeId,
       date: createCell.date,
       task_id: newTaskId || null,
-      property_id: newPropertyId || null,
+      property_id: newPropertyId,
       org_id: orgId,
       status: 'planned',
       start_time: newStartTime || null,
@@ -694,7 +700,7 @@ export default function DispatchBoardPage() {
               </label>
               <select
                 id="new-property"
-                value={newPropertyId}
+                value={newPropertyId ?? ''}
                 onChange={(e) => setNewPropertyId(e.target.value)}
                 className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
               >

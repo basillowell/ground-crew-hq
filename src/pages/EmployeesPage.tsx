@@ -564,8 +564,8 @@ export default function EmployeesPage() {
     <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Team</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage your crew roster.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">Team</h1>
+          <p className="mt-0.5 text-sm text-text-muted">Manage your crew roster.</p>
         </div>
         {!isReadOnly ? (
         <Button size="sm" className="h-9 gap-1.5" onClick={openAddModal}>
@@ -588,7 +588,7 @@ export default function EmployeesPage() {
 
       {viewMode === 'availability' ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-xl border bg-card p-3">
+          <div className="flex items-center justify-between rounded-xl border border-surface-border bg-surface-card p-3">
             <Button
               variant="outline"
               size="sm"
@@ -613,9 +613,9 @@ export default function EmployeesPage() {
           {monthEntriesLoading ? (
             <TableSkeleton />
           ) : (
-            <div className="overflow-x-auto rounded-xl border">
+            <div className="overflow-x-auto rounded-xl border border-surface-border bg-surface-card">
               <table className="min-w-full text-xs">
-                <thead className="bg-muted/30">
+                <thead className="bg-surface-elevated text-text-muted">
                   <tr>
                     <th className="sticky left-0 bg-muted/30 px-2 py-2 text-left font-medium">Employee</th>
                     {monthDays.map((day) => (
@@ -627,8 +627,8 @@ export default function EmployeesPage() {
                   {visibleEmployees.map((employee) => {
                     const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed';
                     return (
-                      <tr key={`cal-${employee.id}`} className="border-t">
-                        <td className="sticky left-0 bg-background px-2 py-2 font-medium">{name}</td>
+                      <tr key={`cal-${employee.id}`} className="border-t border-surface-border transition-colors hover:bg-surface-hover">
+                        <td className="sticky left-0 bg-surface-card px-2 py-2 font-medium text-text-primary">{name}</td>
                         {monthDays.map((day) => {
                           const entry = entryByEmployeeDay.get(`${employee.id}:${day.key}`);
                           return (
@@ -651,9 +651,9 @@ export default function EmployeesPage() {
             </div>
           )}
 
-          <div className="rounded-xl border p-3">
-            <h3 className="mb-2 text-sm font-semibold">Quick stats</h3>
-            <div className="space-y-1 text-sm text-muted-foreground">
+          <div className="rounded-xl border border-surface-border bg-surface-card p-3">
+            <h3 className="mb-2 text-sm font-semibold text-text-primary">Quick stats</h3>
+            <div className="space-y-1 text-sm text-text-muted">
               {visibleEmployees.map((employee) => {
                 const stats = monthlyEmployeeStats.get(employee.id) ?? { scheduled: 0, off: 0, sick: 0, vacation: 0 };
                 const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed';
@@ -669,9 +669,9 @@ export default function EmployeesPage() {
       ) : null}
 
       {viewMode === 'roster' ? (
-      <div className="hidden overflow-x-auto rounded-xl border md:block">
+      <div className="hidden overflow-x-auto rounded-xl border border-surface-border bg-surface-card md:block">
         <table className="min-w-full text-sm">
-          <thead className="bg-muted/30">
+          <thead className="bg-surface-elevated text-xs uppercase tracking-wider text-text-muted">
             <tr>
               <th className="px-3 py-2 text-left font-medium">Name</th>
               <th className="px-3 py-2 text-left font-medium">Role</th>
@@ -694,7 +694,7 @@ export default function EmployeesPage() {
                 const isEditing = editingId === employee.id && editDraft;
                 const fullName = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee';
                 return (
-                  <tr key={employee.id} className="border-t align-top">
+                  <tr key={employee.id} className="border-t border-surface-border align-top transition-colors hover:bg-surface-hover">
                     <td className="px-3 py-2">
                       {isEditing ? (
                         <div className="grid grid-cols-2 gap-2">
@@ -702,7 +702,7 @@ export default function EmployeesPage() {
                           <Input value={editDraft.last_name} onChange={(event) => setEditDraft({ ...editDraft, last_name: event.target.value })} placeholder="Last name" />
                         </div>
                       ) : (
-                        <div className="font-medium">{fullName}</div>
+                        <div className="font-medium text-text-primary">{fullName}</div>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -830,15 +830,15 @@ export default function EmployeesPage() {
       {viewMode === 'roster' ? (
       <div className="space-y-3 md:hidden">
         {employees.length === 0 ? (
-          <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">No employees yet. Add your first crew member.</div>
+          <div className="rounded-xl border border-surface-border bg-surface-card p-4 text-sm text-text-muted">No employees yet. Add your first crew member.</div>
         ) : (
           visibleEmployees.map((employee) => {
             const fullName = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee';
             const isEditing = editingId === employee.id && editDraft;
             return (
-              <div key={`mobile-${employee.id}`} className="rounded-xl border bg-card p-3">
+              <div key={`mobile-${employee.id}`} className="rounded-xl border border-surface-border bg-surface-card p-3 transition-colors hover:bg-surface-hover">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="font-medium">{fullName}</div>
+                  <div className="font-medium text-text-primary">{fullName}</div>
                   {isEditing ? null : statusBadge(employee.status)}
                 </div>
                 {isEditing ? (

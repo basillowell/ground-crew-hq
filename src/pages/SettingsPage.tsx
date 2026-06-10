@@ -135,8 +135,8 @@ interface WeatherDisplayPrefsRow {
 
 function PlaceholderCard({ text }: { text: string }) {
   return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-      <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>{text}</p>
+    <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+      <p className="text-sm text-text-muted">{text}</p>
     </div>
   );
 }
@@ -164,18 +164,18 @@ export default function SettingsPage() {
   }, [location.search]);
 
   return (
-    <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-4">
+    <div className="settings-theme mx-auto max-w-6xl space-y-4 bg-surface-base p-4 text-text-primary md:p-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Operations Control Center</h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">{user?.email}</p>
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Operations Control Center</h1>
+        <p className="mt-1 text-sm text-text-muted">{user?.email}</p>
       </div>
 
       <div className="mb-4 md:hidden">
-        <label className="mb-1 block text-xs text-muted-foreground">Section</label>
+        <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">Section</label>
         <select
           value={tab}
           onChange={(event) => setTab(event.target.value as Tab)}
-          className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+          className="h-10 w-full rounded-lg border border-surface-border bg-surface-card px-3 text-sm text-text-primary"
         >
           {TABS.map((t) => (
             <option key={`mobile-tab-${t}`} value={t}>
@@ -185,12 +185,16 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      <div className="sticky top-0 z-10 mb-4 hidden md:flex flex-wrap items-center gap-2 border-b bg-background pb-1">
+      <div className="sticky top-0 z-10 mb-4 hidden flex-wrap items-center gap-2 border-b border-surface-border bg-surface-base/95 pb-1 backdrop-blur md:flex">
         {TABS.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`h-9 rounded-lg px-3 text-sm ${tab === t ? 'border-b-2 border-primary font-medium text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`h-9 rounded-lg px-3 text-sm transition-colors ${
+              tab === t
+                ? 'border-b-2 border-brand bg-surface-hover font-medium text-brand'
+                : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+            }`}
           >
             {t}
           </button>
@@ -198,7 +202,7 @@ export default function SettingsPage() {
       </div>
 
       {isReadOnly ? (
-        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+        <div className="mb-4 rounded-lg border border-status-complete/30 bg-status-complete/10 px-3 py-2 text-xs text-status-complete">
           Demo Mode — Viewing sample data (read-only)
         </div>
       ) : null}

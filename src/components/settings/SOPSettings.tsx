@@ -304,7 +304,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
 
   if (!orgId) {
     return (
-      <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-surface-border bg-surface-card p-4 text-sm text-text-muted">
         No organization context — cannot load SOPs.
       </div>
     );
@@ -315,40 +315,44 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border bg-card p-4">
+      <div className="rounded-xl border border-surface-border bg-surface-card p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold">Standard Operating Procedures</h3>
-            <p className="text-xs text-muted-foreground">
+            <h3 className="text-sm font-semibold text-text-primary">Standard Operating Procedures</h3>
+            <p className="text-xs text-text-muted">
               Author SOPs with written procedures and checklists. Org-wide — not property-specific.
             </p>
           </div>
           {!formOpen && (
-            <button type="button" onClick={startCreate} className="h-8 rounded-lg border px-3 text-sm hover:bg-muted">
+            <button
+              type="button"
+              onClick={startCreate}
+              className="h-8 rounded-lg bg-brand-primary px-3 text-sm font-medium text-text-inverse transition-colors hover:bg-brand-hover"
+            >
               + Add SOP
             </button>
           )}
         </div>
 
         {formOpen ? (
-          <div className="mb-4 rounded-lg border bg-muted/20 p-4 space-y-3">
+          <div className="mb-4 space-y-3 rounded-lg border border-surface-border bg-surface-elevated p-4">
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-muted-foreground">
+              <label className="text-xs text-text-muted">
                 Title *
                 <input
                   value={form.title}
                   onChange={(e) => setForm((c) => ({ ...c, title: e.target.value }))}
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+                  className="mt-1 h-9 w-full rounded-md border border-surface-border bg-surface-base px-2 text-sm text-text-primary placeholder:text-text-muted"
                   placeholder="SOP title"
                   autoFocus
                 />
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="text-xs text-text-muted">
                 Category
                 <select
                   value={form.category}
                   onChange={(e) => setForm((c) => ({ ...c, category: e.target.value }))}
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+                  className="mt-1 h-9 w-full rounded-md border border-surface-border bg-surface-base px-2 text-sm text-text-primary"
                 >
                   {SOP_CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
@@ -357,7 +361,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                   ))}
                 </select>
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="text-xs text-text-muted">
                 Estimated Hours
                 <input
                   type="number"
@@ -365,71 +369,71 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                   step="0.25"
                   value={form.estimated_hours}
                   onChange={(e) => setForm((c) => ({ ...c, estimated_hours: e.target.value }))}
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+                  className="mt-1 h-9 w-full rounded-md border border-surface-border bg-surface-base px-2 text-sm text-text-primary"
                 />
               </label>
-              <label className="text-xs text-muted-foreground">
+              <label className="text-xs text-text-muted">
                 Color
                 <div className="mt-1 flex items-center gap-2">
                   <input
                     type="color"
                     value={form.color}
                     onChange={(e) => setForm((c) => ({ ...c, color: e.target.value }))}
-                    className="h-9 w-12 cursor-pointer rounded-md border bg-background"
+                    className="h-9 w-12 cursor-pointer rounded-md border border-surface-border bg-surface-base"
                   />
-                  <span className="text-xs text-muted-foreground">{form.color}</span>
+                  <span className="text-xs text-text-muted">{form.color}</span>
                 </div>
               </label>
             </div>
 
-            <label className="block text-xs text-muted-foreground">
+            <label className="block text-xs text-text-muted">
               Description
               <textarea
                 value={form.description}
                 onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
                 rows={2}
-                className="mt-1 w-full rounded-md border bg-background px-2 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-surface-border bg-surface-base px-2 py-2 text-sm text-text-primary placeholder:text-text-muted"
                 placeholder="Brief summary of what this SOP covers"
               />
             </label>
 
-            <label className="block text-xs text-muted-foreground">
+            <label className="block text-xs text-text-muted">
               Procedure
               <textarea
                 value={form.procedure_body}
                 onChange={(e) => setForm((c) => ({ ...c, procedure_body: e.target.value }))}
                 rows={5}
-                className="mt-1 w-full rounded-md border bg-background px-2 py-2 font-mono text-sm"
+                className="mt-1 w-full rounded-md border border-surface-border bg-surface-base px-2 py-2 font-mono text-sm text-text-primary placeholder:text-text-muted"
                 placeholder="Step-by-step procedure, safety notes, required equipment..."
               />
             </label>
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Checklist Items</span>
+                <span className="text-xs font-medium text-text-muted">Checklist Items</span>
                 <button
                   type="button"
                   onClick={addChecklistItem}
-                  className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                  className="flex items-center gap-1 rounded-md border border-surface-border bg-surface-card px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
                 >
                   <Plus className="h-3 w-3" /> Add Item
                 </button>
               </div>
               {form.checklist.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No checklist items yet.</p>
+                <p className="text-xs text-text-muted">No checklist items yet.</p>
               ) : (
                 <div className="space-y-1.5">
                   {form.checklist.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2 rounded-md border bg-background px-2 py-1.5">
-                      <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <div key={index} className="flex items-center gap-2 rounded-md border border-surface-border bg-surface-base px-2 py-1.5">
+                      <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-muted" />
                       <div className="flex flex-1 items-center gap-2">
                         <input
                           value={item.label}
                           onChange={(e) => updateChecklistItem(index, { label: e.target.value })}
-                          className="h-7 flex-1 rounded border bg-muted/30 px-2 text-xs"
+                          className="h-7 flex-1 rounded border border-surface-border bg-surface-elevated px-2 text-xs text-text-primary placeholder:text-text-muted"
                           placeholder="Checklist item..."
                         />
-                        <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+                        <label className="flex shrink-0 items-center gap-1 text-[10px] text-text-muted">
                           <input
                             type="checkbox"
                             checked={item.is_required}
@@ -444,7 +448,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                           type="button"
                           onClick={() => moveChecklistItem(index, -1)}
                           disabled={index === 0}
-                          className="h-6 w-6 rounded text-xs hover:bg-muted disabled:opacity-30"
+                          className="h-6 w-6 rounded text-xs text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-30"
                           aria-label="Move up"
                         >
                           ↑
@@ -453,7 +457,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                           type="button"
                           onClick={() => moveChecklistItem(index, 1)}
                           disabled={index === form.checklist.length - 1}
-                          className="h-6 w-6 rounded text-xs hover:bg-muted disabled:opacity-30"
+                          className="h-6 w-6 rounded text-xs text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-30"
                           aria-label="Move down"
                         >
                           ↓
@@ -478,19 +482,23 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                 type="button"
                 onClick={() => void onSave()}
                 disabled={saving}
-                className="h-8 rounded-lg bg-primary px-3 text-sm text-primary-foreground disabled:opacity-60"
+                className="h-8 rounded-lg bg-brand-primary px-3 text-sm font-medium text-text-inverse transition-colors hover:bg-brand-hover disabled:opacity-60"
               >
                 {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create SOP'}
               </button>
-              <button type="button" onClick={resetForm} className="h-8 rounded-lg border px-3 text-sm hover:bg-muted">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="h-8 rounded-lg border border-surface-border bg-surface-card px-3 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+              >
                 Cancel
               </button>
             </div>
           </div>
         ) : null}
 
-        <div className="rounded-lg border">
-          <div className="grid grid-cols-[2fr_1fr_80px_80px_100px] border-b bg-muted/20 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="overflow-hidden rounded-lg border border-surface-border">
+          <div className="grid grid-cols-[2fr_1fr_80px_80px_100px] border-b border-surface-border bg-surface-elevated px-3 py-2 text-xs font-medium uppercase tracking-wider text-text-muted">
             <span>Title</span>
             <span>Category</span>
             <span>Est. Hrs</span>
@@ -498,14 +506,14 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
             <span className="text-right">Actions</span>
           </div>
           {activeSops.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-muted-foreground">No active SOPs. Add one above.</p>
+            <p className="px-3 py-3 text-sm text-text-muted">No active SOPs. Add one above.</p>
           ) : (
             activeSops.map((sop) => (
               <div
                 key={sop.id}
-                className="grid grid-cols-[2fr_1fr_80px_80px_100px] items-center border-b px-3 py-2 text-sm last:border-b-0"
+                className="grid grid-cols-[2fr_1fr_80px_80px_100px] items-center border-b border-surface-border px-3 py-2 text-sm transition-colors last:border-b-0 hover:bg-surface-hover"
               >
-                <div className="truncate font-medium">{sop.title}</div>
+                <div className="truncate font-medium text-text-primary">{sop.title}</div>
                 <div className="truncate text-muted-foreground">{sop.category ?? '—'}</div>
                 <div className="text-muted-foreground">{sop.estimated_hours ?? '—'}</div>
                 <div className="flex items-center gap-1.5">
@@ -518,7 +526,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                   <button
                     type="button"
                     onClick={() => void startEdit(sop)}
-                    className="h-7 w-7 rounded-md border hover:bg-muted"
+                    className="h-7 w-7 rounded-md border border-surface-border text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
                     aria-label={`Edit ${sop.title}`}
                   >
                     <Pencil className="mx-auto h-3.5 w-3.5" />
@@ -526,7 +534,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                   <button
                     type="button"
                     onClick={() => void setActiveStatus(sop, false)}
-                    className="h-7 w-7 rounded-md border hover:bg-muted"
+                    className="h-7 w-7 rounded-md border border-surface-border text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
                     aria-label={`Deactivate ${sop.title}`}
                   >
                     <Trash2 className="mx-auto h-3.5 w-3.5" />
@@ -539,20 +547,20 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
       </div>
 
       {inactiveSops.length > 0 && (
-        <div className="rounded-xl border bg-card p-4">
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Inactive SOPs</h3>
+        <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+          <h3 className="mb-2 text-sm font-semibold text-text-muted">Inactive SOPs</h3>
           <div className="space-y-2">
             {inactiveSops.map((sop) => (
-              <div key={sop.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <div key={sop.id} className="flex items-center justify-between rounded-lg border border-surface-border px-3 py-2 transition-colors hover:bg-surface-hover">
                 <div>
-                  <p className="text-sm font-medium">{sop.title}</p>
+                  <p className="text-sm font-medium text-text-primary">{sop.title}</p>
                   <p className="text-xs text-muted-foreground">{sop.category ?? '—'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => void setActiveStatus(sop, true)}
-                    className="h-8 rounded-lg border px-3 text-sm hover:bg-muted"
+                    className="h-8 rounded-lg border border-surface-border bg-surface-card px-3 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
                   >
                     <RotateCcw className="mr-1 inline-block h-3.5 w-3.5" />
                     Restore
