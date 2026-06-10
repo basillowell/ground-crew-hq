@@ -158,7 +158,7 @@ const STATUS_STYLES: Record<string, { cell: string; label: string; badge: string
   sick: {
     cell: 'bg-card border border-l-4 border-l-red-400 text-foreground hover:bg-muted/30',
     label: 'Sick',
-    badge: 'border-red-200 text-red-700',
+    badge: 'border-status-warning/20 text-status-warning',
   },
 };
 

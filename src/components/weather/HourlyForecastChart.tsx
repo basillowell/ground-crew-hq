@@ -88,16 +88,16 @@ export function HourlyForecastChart({
     : 0;
 
   return (
-    <div className="rounded-2xl border bg-white p-4">
+    <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#111827]">Next {hours} Hours</p>
+        <p className="text-sm font-semibold text-text-primary">Next {hours} Hours</p>
         <div className="flex flex-wrap items-center gap-2">
           {(['12h', '24h', '48h', '10d'] as const).map((nextRange) => (
             <Button
               key={nextRange}
               size="sm"
               variant={range === nextRange ? 'default' : 'outline'}
-              className={range === nextRange ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+              className={range === nextRange ? 'bg-brand-ghost text-brand-bright hover:bg-surface-hover' : ''}
               onClick={() => onRangeChange(nextRange)}
             >
               {nextRange}
@@ -106,7 +106,7 @@ export function HourlyForecastChart({
           <Button
             size="sm"
             variant={showTemp ? 'default' : 'outline'}
-            className={showTemp ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+            className={showTemp ? 'bg-brand-ghost text-brand-bright hover:bg-surface-hover' : ''}
             onClick={onToggleTemp}
           >
             Temp
@@ -114,7 +114,7 @@ export function HourlyForecastChart({
           <Button
             size="sm"
             variant={showRain ? 'default' : 'outline'}
-            className={showRain ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+            className={showRain ? 'bg-brand-ghost text-brand-bright hover:bg-surface-hover' : ''}
             onClick={onToggleRain}
           >
             Rain %
@@ -122,7 +122,7 @@ export function HourlyForecastChart({
           <Button
             size="sm"
             variant={showWind ? 'default' : 'outline'}
-            className={showWind ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+            className={showWind ? 'bg-brand-ghost text-brand-bright hover:bg-surface-hover' : ''}
             onClick={onToggleWind}
           >
             Wind
@@ -145,11 +145,11 @@ export function HourlyForecastChart({
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  borderLeft: currentHourIndex === index ? '2px solid #166534' : '2px solid transparent',
+                  borderLeft: currentHourIndex === index ? '2px solid rgb(var(--brand-default))' : '2px solid transparent',
                 }}
               >
                 {showTemp ? (
-                  <div style={{ minHeight: '18px', fontSize: '13px', fontWeight: 700, color: '#166534' }}>
+                  <div style={{ minHeight: '18px', fontSize: '13px', fontWeight: 700, color: 'rgb(var(--brand-default))' }}>
                     {`${Math.round(safe(point.temp, 0))}°`}
                   </div>
                 ) : null}
@@ -164,7 +164,7 @@ export function HourlyForecastChart({
                       alignItems: 'flex-end',
                       justifyContent: 'center',
                       borderRadius: '6px',
-                      background: '#f8fafc',
+                      background: 'rgb(var(--surface-elevated))',
                       overflow: 'hidden',
                     }}
                   >
@@ -173,7 +173,7 @@ export function HourlyForecastChart({
                         style={{
                           width: '100%',
                           height: `${barHeight}px`,
-                          background: '#bfdbfe',
+                          background: '#3b82f6',
                           borderTopLeftRadius: '6px',
                           borderTopRightRadius: '6px',
                           display: 'flex',
@@ -181,7 +181,7 @@ export function HourlyForecastChart({
                           justifyContent: 'center',
                         }}
                       >
-                        {precip > 5 ? <span style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600 }}>{precip}%</span> : null}
+                        {precip > 5 ? <span style={{ fontSize: '10px', color: 'rgb(var(--text-primary))', fontWeight: 600 }}>{precip}%</span> : null}
                       </div>
                     ) : null}
                   </div>
@@ -191,9 +191,9 @@ export function HourlyForecastChart({
                   style={{
                     marginTop: '6px',
                     paddingTop: point.isMidnight ? '4px' : '0',
-                    borderTop: point.isMidnight ? '1px solid #d1d5db' : 'none',
+                    borderTop: point.isMidnight ? '1px solid rgb(var(--surface-border))' : 'none',
                     fontSize: '11px',
-                    color: '#6b7280',
+                    color: 'rgb(var(--text-muted))',
                     fontWeight: point.isMidnight ? 600 : 400,
                     textAlign: 'center',
                     lineHeight: 1.2,
@@ -204,7 +204,7 @@ export function HourlyForecastChart({
                 </div>
 
                 {showWind ? (
-                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#9ca3af', minHeight: '16px' }}>
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: 'rgb(var(--text-muted))', minHeight: '16px' }}>
                     {`↗ ${Math.round(wind)}`}
                   </div>
                 ) : null}
@@ -215,9 +215,9 @@ export function HourlyForecastChart({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-[#e5e7eb] px-2.5 py-1 text-xs text-[#6b7280]">8h Rain {next8HourRainInches.toFixed(2)} in</span>
-        <span className="rounded-full border border-[#e5e7eb] px-2.5 py-1 text-xs text-[#6b7280]">8h Avg Wind {next8HourAvgWind} mph</span>
-        <span className="rounded-full border border-[#e5e7eb] px-2.5 py-1 text-xs text-[#6b7280]">Open-Meteo</span>
+        <span className="rounded-full border border-surface-border px-2.5 py-1 text-xs text-text-muted">8h Rain {next8HourRainInches.toFixed(2)} in</span>
+        <span className="rounded-full border border-surface-border px-2.5 py-1 text-xs text-text-muted">8h Avg Wind {next8HourAvgWind} mph</span>
+        <span className="rounded-full border border-surface-border px-2.5 py-1 text-xs text-text-muted">Open-Meteo</span>
       </div>
     </div>
   );

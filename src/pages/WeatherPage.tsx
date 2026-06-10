@@ -665,7 +665,7 @@ export default function WeatherPage() {
                       </div>
                     ) : null}
                     {!alertsLoading && alerts.length === 0 ? (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">No active alerts ✓</div>
+                      <div className="rounded-md border border-status-active/20 bg-status-active/10 p-3 text-sm text-status-active">No active alerts ✓</div>
                     ) : null}
                     {!alertsLoading &&
                       alerts.map((alert) => (

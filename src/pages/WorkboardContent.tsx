@@ -4826,7 +4826,7 @@ export default function WorkboardContent() {
                                       </label>
                                       <button
                                         type="button"
-                                        className="h-10 rounded-lg bg-primary px-4 text-sm text-white hover:bg-primary/90"
+                                        className="h-10 rounded-lg bg-primary px-4 text-sm text-text-inverse hover:bg-primary/90"
                                         onClick={() => {
                                           void saveAssignmentTimelineTimes(
                                             assignment,
@@ -4857,7 +4857,7 @@ export default function WorkboardContent() {
                                           <button
                                             key={`actual-hours-${assignment.id}-${value}`}
                                             type="button"
-                                            className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-white active:scale-95"
+                                            className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-text-inverse active:scale-95"
                                             onClick={(event) => {
                                               event.stopPropagation();
                                               void setAssignmentActualHours(assignment, value);
@@ -4874,7 +4874,7 @@ export default function WorkboardContent() {
                                         ))}
                                         <button
                                           type="button"
-                                          className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-white active:scale-95"
+                                          className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-text-inverse active:scale-95"
                                           onClick={(event) => {
                                             event.stopPropagation();
                                             setActualHoursMenuAssignmentId((current) =>
@@ -4911,7 +4911,7 @@ export default function WorkboardContent() {
                                         <button
                                           key={`actual-hours-${assignment.id}-${value}`}
                                           type="button"
-                                          className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-white active:scale-95"
+                                          className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-text-inverse active:scale-95"
                                           onClick={(event) => {
                                             event.stopPropagation();
                                             void setAssignmentActualHours(assignment, value);
@@ -4943,7 +4943,7 @@ export default function WorkboardContent() {
                                       />
                                       <button
                                         type="button"
-                                        className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-white active:scale-95"
+                                        className="h-8 min-w-[40px] rounded-full border px-3 text-sm font-medium hover:bg-primary hover:text-text-inverse active:scale-95"
                                         onClick={(event) => {
                                           event.stopPropagation();
                                           const value = actualHoursCustomInputByAssignment[assignment.id] ?? '';
@@ -5733,7 +5733,7 @@ export default function WorkboardContent() {
                   <Button
                     type="button"
                     size="sm"
-                    className="bg-yellow-600 text-white hover:bg-yellow-700"
+                    className="bg-status-pending text-text-primary hover:bg-status-pending/90"
                     onClick={() => {
                       setWeatherConflictOverride(true);
                       void saveAssignment(true);

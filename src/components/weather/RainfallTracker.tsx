@@ -258,7 +258,7 @@ export function RainfallTracker({ logs: fallbackLogs = [], loading = false }: Pr
               key={value}
               size="sm"
               variant={period === value ? 'default' : 'outline'}
-              className={period === value ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+              className={period === value ? 'bg-brand-ghost text-brand-bright hover:bg-surface-hover' : ''}
               onClick={() => setPeriod(value)}
             >
               {value[0].toUpperCase() + value.slice(1)}

@@ -654,7 +654,7 @@ export default function ApplicationsPage() {
         badge={
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{totalApplications} logs</Badge>
-            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">EPA-Compliant Record Keeping</Badge>
+            <Badge className="bg-status-active/10 text-status-active border-status-active/20">EPA-Compliant Record Keeping</Badge>
           </div>
         }
         action={

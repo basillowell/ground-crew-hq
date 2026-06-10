@@ -234,7 +234,7 @@ function ClockInCard({
               type="button"
               disabled={saving}
               onClick={onClockOut}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-status-warning px-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-status-warning px-3 text-sm font-semibold text-text-primary disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
               Clock Out

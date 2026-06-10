@@ -182,7 +182,7 @@ export function GanttTimeline({
                     </div>
 
                     <div
-                      className="absolute bottom-2 top-2 rounded-md bg-slate-200/60"
+                      className="absolute bottom-2 top-2 rounded-md bg-surface-elevated/60"
                       style={{ left: `${shiftLeftPct}%`, width: `${shiftWidthPct}%` }}
                     />
 

@@ -71,14 +71,14 @@ function normalizeStatus(raw: string | null | undefined): EquipmentStatus {
 }
 
 function statusBadgeClass(status: EquipmentStatus) {
-  if (status === 'available') return 'border-emerald-200 text-emerald-700';
+  if (status === 'available') return 'border-status-active/20 text-status-active';
   if (status === 'in_use') return 'border-blue-200 text-blue-700';
   if (status === 'maintenance') return 'border-amber-200 text-amber-700';
   return 'border-surface-border text-text-muted';
 }
 
 function statusLaneClass(status: EquipmentStatus) {
-  if (status === 'available') return 'border-l-emerald-400';
+  if (status === 'available') return 'border-l-status-active';
   if (status === 'in_use') return 'border-l-blue-400';
   if (status === 'maintenance') return 'border-l-amber-400';
   return 'border-l-slate-400';
@@ -661,16 +661,16 @@ export default function EquipmentPage() {
             readinessRows.map((row) => {
               const toneClasses =
                 row.readinessLevel === 'green'
-                  ? 'border-l-4 border-l-emerald-500'
+                  ? 'border-l-4 border-l-status-active'
                   : row.readinessLevel === 'yellow'
                     ? 'border-l-4 border-l-amber-500'
                     : 'border-l-4 border-l-red-500';
               const badgeClasses =
                 row.readinessLevel === 'green'
-                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                  ? 'bg-status-active/10 text-status-active border-status-active/20'
                   : row.readinessLevel === 'yellow'
-                    ? 'bg-amber-100 text-amber-700 border-amber-200'
-                    : 'bg-red-100 text-red-700 border-red-200';
+                    ? 'bg-status-pending/10 text-status-pending border-status-pending/20'
+                    : 'bg-status-warning/10 text-status-warning border-status-warning/20';
               return (
                 <div key={`readiness-${row.id}`} className={`rounded-xl border bg-card p-4 ${toneClasses}`}>
                   <div className="flex items-start justify-between gap-3">

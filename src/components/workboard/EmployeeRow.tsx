@@ -312,7 +312,7 @@ export function EmployeeRow({
                         <Button
                           type="button"
                           size="sm"
-                          className="h-10 rounded-lg bg-primary px-4 text-sm text-white hover:bg-primary/90"
+                          className="h-10 rounded-lg bg-primary px-4 text-sm text-text-inverse hover:bg-primary/90"
                           onClick={(event) => {
                             event.stopPropagation();
                             onSaveAssignmentTimes(assignment, sortedAssignments, timelineStartInput, timelineEndInput);

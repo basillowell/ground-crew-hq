@@ -85,16 +85,16 @@ export function DailyForecastList({ daily, hourlyData, range, onRangeChange }: D
   }, [daily, hourlyData]);
 
   return (
-    <div className="rounded-2xl border bg-white p-4">
+    <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#111827]">10-Day Forecast</p>
+        <p className="text-sm font-semibold text-text-primary">10-Day Forecast</p>
         <div className="flex flex-wrap items-center gap-2">
           {(['12h', '24h', '48h', '10d'] as const).map((nextRange) => (
             <Button
               key={nextRange}
               size="sm"
               variant={range === nextRange ? 'default' : 'outline'}
-              className={range === nextRange ? 'bg-[#166534] text-white hover:bg-[#14532d]' : ''}
+              className={range === nextRange ? 'bg-brand-ghost text-brand-bright hover:bg-surface-hover' : ''}
               onClick={() => onRangeChange(nextRange)}
             >
               {nextRange}
@@ -103,7 +103,7 @@ export function DailyForecastList({ daily, hourlyData, range, onRangeChange }: D
         </div>
       </div>
 
-      <div className="divide-y rounded-xl border">
+      <div className="divide-y divide-surface-border rounded-xl border border-surface-border">
         {daily.map((day, index) => {
           const high = typeof day.tempMax === 'number' && !Number.isNaN(day.tempMax) ? Math.round(day.tempMax) : '--';
           const low = typeof day.tempMin === 'number' && !Number.isNaN(day.tempMin) ? Math.round(day.tempMin) : '--';
@@ -118,7 +118,7 @@ export function DailyForecastList({ daily, hourlyData, range, onRangeChange }: D
           const dayHours = hourlyByDay[day.date] ?? [];
 
           return (
-            <div key={`${day.date}-${index}`} className={index === 0 ? 'bg-[#f0fdf4]' : 'bg-white'}>
+            <div key={`${day.date}-${index}`} className={index === 0 ? 'bg-surface-hover' : 'bg-surface-card'}>
               <button
                 type="button"
                 onClick={() => setExpandedDay((current) => (current === day.date ? null : day.date))}
@@ -126,25 +126,25 @@ export function DailyForecastList({ daily, hourlyData, range, onRangeChange }: D
               >
                 <div className="text-2xl leading-none">{weatherEmoji(code)}</div>
                 <div>
-                  <div className="text-sm font-semibold text-[#111827]">{dayLabel(day.date, index)}</div>
-                  <div className="text-xs text-[#6b7280]">{weatherCondition(code)}</div>
+                  <div className="text-sm font-semibold text-text-primary">{dayLabel(day.date, index)}</div>
+                  <div className="text-xs text-text-muted">{weatherCondition(code)}</div>
                 </div>
-                <div className="text-sm font-semibold text-[#111827]">
+                <div className="text-sm font-semibold text-text-primary">
                   {String(high)}° / {String(low)}°
                 </div>
                 <div>
                   {showRainBadge ? (
-                    <span className="rounded-full bg-blue-500 px-2 py-1 text-xs font-medium text-white">
+                    <span className="rounded-full bg-blue-500 px-2 py-1 text-xs font-medium text-text-primary">
                       {rainBadgeLabel(rain, rainProb)}
                     </span>
                   ) : (
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500">0%</span>
+                    <span className="rounded-full bg-surface-elevated px-2 py-1 text-xs font-medium text-text-muted">0%</span>
                   )}
                 </div>
               </button>
 
               {isExpanded ? (
-                <div className="ml-4 border-l-2 border-[#166534] px-3 pb-3">
+                <div className="ml-4 border-l-2 border-brand/40 px-3 pb-3">
                   {dayHours.length ? (
                     <div style={{ overflowX: 'auto', width: '100%' }}>
                       <div style={{ display: 'flex', minWidth: `${dayHours.length * 56}px` }}>
@@ -162,7 +162,7 @@ export function DailyForecastList({ daily, hourlyData, range, onRangeChange }: D
                                 alignItems: 'center',
                               }}
                             >
-                              <div style={{ minHeight: '16px', fontSize: '12px', fontWeight: 700, color: '#166534' }}>
+                              <div style={{ minHeight: '16px', fontSize: '12px', fontWeight: 700, color: 'rgb(var(--brand-default))' }}>
                                 {hourPoint.temp != null ? `${Math.round(hourPoint.temp)}°` : '--'}
                               </div>
                               <div
@@ -174,7 +174,7 @@ export function DailyForecastList({ daily, hourlyData, range, onRangeChange }: D
                                   alignItems: 'flex-end',
                                   justifyContent: 'center',
                                   borderRadius: '6px',
-                                  background: '#f8fafc',
+                                  background: 'rgb(var(--surface-elevated))',
                                   overflow: 'hidden',
                                 }}
                               >
@@ -183,7 +183,7 @@ export function DailyForecastList({ daily, hourlyData, range, onRangeChange }: D
                                     style={{
                                       width: '100%',
                                       height: `${barHeight}px`,
-                                      background: '#bfdbfe',
+                                      background: '#3b82f6',
                                       borderTopLeftRadius: '6px',
                                       borderTopRightRadius: '6px',
                                       display: 'flex',
@@ -191,21 +191,21 @@ export function DailyForecastList({ daily, hourlyData, range, onRangeChange }: D
                                       justifyContent: 'center',
                                     }}
                                   >
-                                    {precip > 5 ? <span style={{ fontSize: '9px', color: '#ffffff', fontWeight: 600 }}>{precip}%</span> : null}
+                                    {precip > 5 ? <span style={{ fontSize: '9px', color: 'rgb(var(--text-primary))', fontWeight: 600 }}>{precip}%</span> : null}
                                   </div>
                                 ) : null}
                               </div>
-                              <div style={{ marginTop: '4px', fontSize: '10px', color: '#9ca3af', minHeight: '14px' }}>
+                              <div style={{ marginTop: '4px', fontSize: '10px', color: 'rgb(var(--text-muted))', minHeight: '14px' }}>
                                 {hourPoint.wind != null ? `↗ ${Math.round(hourPoint.wind)}` : '--'}
                               </div>
-                              <div style={{ marginTop: '4px', fontSize: '10px', color: '#6b7280' }}>{hourPoint.label}</div>
+                              <div style={{ marginTop: '4px', fontSize: '10px', color: 'rgb(var(--text-muted))' }}>{hourPoint.label}</div>
                             </div>
                           );
                         })}
                       </div>
                     </div>
                   ) : (
-                    <p className="py-2 text-xs text-[#6b7280]">No hourly points available for this day yet.</p>
+                    <p className="py-2 text-xs text-text-muted">No hourly points available for this day yet.</p>
                   )}
                 </div>
               ) : null}

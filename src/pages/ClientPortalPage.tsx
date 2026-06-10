@@ -44,10 +44,10 @@ function fmtDate(iso: string) {
 }
 
 const invoiceStatusStyles: Record<string, { bg: string; text: string; label: string }> = {
-  draft:   { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Draft' },
-  sent:    { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Awaiting Payment' },
-  paid:    { bg: 'bg-green-50', text: 'text-green-700', label: 'Paid' },
-  void:    { bg: 'bg-red-50',   text: 'text-red-600',   label: 'Void' },
+  draft:   { bg: 'bg-surface-elevated', text: 'text-text-secondary', label: 'Draft' },
+  sent:    { bg: 'bg-status-pending/10', text: 'text-status-pending', label: 'Awaiting Payment' },
+  paid:    { bg: 'bg-status-active/10',  text: 'text-status-active',  label: 'Paid' },
+  void:    { bg: 'bg-status-warning/10', text: 'text-status-warning', label: 'Void' },
 };
 
 export default function ClientPortalPage() {
@@ -117,10 +117,10 @@ export default function ClientPortalPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="flex items-center gap-3 rounded-2xl border bg-white px-6 py-4 shadow-sm">
-          <Loader2 className="h-5 w-5 animate-spin text-green-600" />
-          <span className="text-sm font-medium text-gray-700">Loading your portal…</span>
+      <div className="flex min-h-screen items-center justify-center bg-surface-base">
+        <div className="flex items-center gap-3 rounded-2xl border border-surface-border bg-surface-card px-6 py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-brand" />
+          <span className="text-sm font-medium text-text-secondary">Loading your portal…</span>
         </div>
       </div>
     );
@@ -128,13 +128,13 @@ export default function ClientPortalPage() {
 
   if (error || !client) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-        <div className="w-full max-w-md rounded-2xl border bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
-            <FileText className="h-6 w-6 text-red-500" />
+      <div className="flex min-h-screen items-center justify-center bg-surface-base p-4">
+        <div className="w-full max-w-md rounded-2xl border border-surface-border bg-surface-card p-8 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-status-warning/10">
+            <FileText className="h-6 w-6 text-status-warning" />
           </div>
-          <h1 className="text-lg font-semibold text-gray-900">Portal unavailable</h1>
-          <p className="mt-2 text-sm text-gray-500">
+          <h1 className="text-lg font-semibold text-text-primary">Portal unavailable</h1>
+          <p className="mt-2 text-sm text-text-muted">
             {error ?? 'This portal link is invalid or has expired. Please contact your service team.'}
           </p>
         </div>
@@ -147,67 +147,67 @@ export default function ClientPortalPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-base">
       {/* Header */}
-      <header className="border-b border-gray-200 bg-white">
+      <header className="border-b border-surface-border bg-surface-card">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-600">
-              <span className="text-sm font-bold text-white">GC</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand">
+              <span className="text-sm font-bold text-text-inverse">GC</span>
             </div>
             <div>
-              <div className="text-sm font-semibold text-gray-900">Ground Crew HQ</div>
-              <div className="text-xs text-gray-500">Client Portal</div>
+              <div className="text-sm font-semibold text-text-primary">Ground Crew HQ</div>
+              <div className="text-xs text-text-muted">Client Portal</div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1">
-            <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-            <span className="text-xs font-medium text-green-700">Active Client</span>
+          <div className="flex items-center gap-1.5 rounded-full bg-status-active/10 px-3 py-1">
+            <CheckCircle2 className="h-3.5 w-3.5 text-status-active" />
+            <span className="text-xs font-medium text-status-active">Active Client</span>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl space-y-6 p-4 py-8 md:px-6">
         {/* Client card */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-bold text-gray-900">{client.name}</h1>
+        <div className="rounded-2xl border border-surface-border bg-surface-card p-6">
+          <h1 className="text-xl font-bold text-text-primary">{client.name}</h1>
           <div className="mt-3 flex flex-wrap gap-4">
             {client.email && (
               <a
                 href={`mailto:${client.email}`}
-                className="text-sm text-green-700 hover:underline"
+                className="text-sm text-brand hover:underline"
               >
                 {client.email}
               </a>
             )}
             {client.phone && (
-              <a href={`tel:${client.phone}`} className="text-sm text-gray-600 hover:underline">
+              <a href={`tel:${client.phone}`} className="text-sm text-text-secondary hover:underline">
                 {client.phone}
               </a>
             )}
             {client.address && (
-              <span className="flex items-center gap-1 text-sm text-gray-500">
+              <span className="flex items-center gap-1 text-sm text-text-muted">
                 <MapPin className="h-3.5 w-3.5" />
                 {client.address}
               </span>
             )}
           </div>
           {client.notes && (
-            <p className="mt-3 text-sm text-gray-500 italic">{client.notes}</p>
+            <p className="mt-3 text-sm text-text-muted italic">{client.notes}</p>
           )}
         </div>
 
         {/* Last invoice */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-surface-border bg-surface-card p-6">
           <div className="flex items-center gap-2 mb-4">
-            <FileText className="h-4 w-4 text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-900">Most Recent Invoice</h2>
+            <FileText className="h-4 w-4 text-text-muted" />
+            <h2 className="text-sm font-semibold text-text-primary">Most Recent Invoice</h2>
           </div>
           {lastInvoice && invoiceStyle ? (
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold text-gray-900">{fmt(lastInvoice.total)}</div>
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="text-2xl font-bold text-text-primary">{fmt(lastInvoice.total)}</div>
+                <div className="mt-1 text-xs text-text-muted">
                   Issued {fmtDate(lastInvoice.created_at)}
                 </div>
               </div>
@@ -218,33 +218,33 @@ export default function ClientPortalPage() {
               </span>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">No invoices on file yet.</p>
+            <p className="text-sm text-text-muted">No invoices on file yet.</p>
           )}
         </div>
 
         {/* Upcoming assignments */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-surface-border bg-surface-card p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Clock className="h-4 w-4 text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-900">Upcoming Scheduled Work</h2>
+            <Clock className="h-4 w-4 text-text-muted" />
+            <h2 className="text-sm font-semibold text-text-primary">Upcoming Scheduled Work</h2>
           </div>
           {assignments.length === 0 ? (
-            <p className="text-sm text-gray-500">No upcoming visits scheduled yet.</p>
+            <p className="text-sm text-text-muted">No upcoming visits scheduled yet.</p>
           ) : (
             <div className="space-y-3">
               {assignments.map((a) => (
                 <div
                   key={a.id}
-                  className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
+                  className="flex items-center justify-between rounded-xl border border-surface-border bg-surface-elevated px-4 py-3"
                 >
                   <div>
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-text-primary">
                       {a.title ?? 'Service visit'}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500">{fmtDate(a.date)}</div>
+                    <div className="mt-0.5 text-xs text-text-muted">{fmtDate(a.date)}</div>
                   </div>
                   {a.estimated_hours != null && (
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-text-muted">
                       ~{a.estimated_hours}h
                     </span>
                   )}
@@ -254,7 +254,7 @@ export default function ClientPortalPage() {
           )}
         </div>
 
-        <p className="text-center text-xs text-gray-400">
+        <p className="text-center text-xs text-text-muted">
           Powered by Ground Crew HQ · Questions? Contact your service team directly.
         </p>
       </main>

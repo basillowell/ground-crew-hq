@@ -100,9 +100,9 @@ function emptyAddDraft(): AddEmployeeDraft {
 
 function statusBadge(status: string | null) {
   if (String(status).toLowerCase() === 'active') {
-    return <Badge className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Active</Badge>;
+    return <Badge className="rounded-full border border-status-active/20 bg-status-active/10 px-2 py-0.5 text-xs text-status-active">Active</Badge>;
   }
-  return <Badge className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-700">Inactive</Badge>;
+  return <Badge className="rounded-full border border-status-warning/20 bg-status-warning/10 px-2 py-0.5 text-xs text-status-warning">Inactive</Badge>;
 }
 
 function formatHourlyRate(value: number | null) {
@@ -345,9 +345,9 @@ export default function EmployeesPage() {
 
   const statusCellClass = (status: string | null) => {
     const normalized = String(status ?? '').toLowerCase();
-    if (normalized === 'scheduled') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-    if (normalized === 'vacation') return 'bg-amber-100 text-amber-800 border-amber-200';
-    if (normalized === 'sick') return 'bg-red-100 text-red-800 border-red-200';
+    if (normalized === 'scheduled') return 'bg-status-active/10 text-status-active border-status-active/20';
+    if (normalized === 'vacation') return 'bg-status-pending/10 text-status-pending border-status-pending/20';
+    if (normalized === 'sick') return 'bg-status-warning/10 text-status-warning border-status-warning/20';
     if (normalized === 'off' || normalized === 'day_off') return 'bg-surface-elevated text-text-muted border-surface-border';
     return 'bg-surface-card text-text-muted border-surface-border';
   };

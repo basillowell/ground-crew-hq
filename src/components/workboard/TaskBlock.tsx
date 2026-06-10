@@ -146,7 +146,7 @@ export function TaskBlock({
                 ? 'border-blue-200 text-blue-700'
                 : status === 'done'
                   ? 'border-green-200 text-green-700'
-                  : 'border-slate-200 text-slate-700'
+                  : 'border-surface-border text-text-secondary'
             }
           >
             {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned'}
