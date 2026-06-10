@@ -60,6 +60,23 @@ export type Department = {
   created_at: string;
 };
 
+export type WorkforceRole = {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+export type WorkerType = {
+  id: string;
+  org_id: string;
+  name: string;
+  active: boolean;
+  created_at: string;
+};
+
 export type Organization = {
   id: string;
   name: string;
@@ -92,10 +109,16 @@ type AppStoreState = {
   employees: Employee[];
   properties: Property[];
   departments: Department[];
+  workforceRoles: WorkforceRole[];
+  workerTypes: WorkerType[];
   org: Organization | null;
   programSettings: ProgramSettings | null;
   isHydrated: boolean;
   hydrate: (orgId: string) => Promise<void>;
+  refreshProperties: (orgId: string) => Promise<void>;
+  refreshDepartments: (orgId: string) => Promise<void>;
+  refreshWorkforceRoles: (orgId: string) => Promise<void>;
+  refreshWorkerTypes: (orgId: string) => Promise<void>;
   reset: () => void;
 };
 
@@ -103,12 +126,21 @@ const initialState = {
   employees: [],
   properties: [],
   departments: [],
+  workforceRoles: [],
+  workerTypes: [],
   org: null,
   programSettings: null,
   isHydrated: false,
 } satisfies Pick<
   AppStoreState,
-  'employees' | 'properties' | 'departments' | 'org' | 'programSettings' | 'isHydrated'
+  | 'employees'
+  | 'properties'
+  | 'departments'
+  | 'workforceRoles'
+  | 'workerTypes'
+  | 'org'
+  | 'programSettings'
+  | 'isHydrated'
 >;
 
 export const useAppStore = create<AppStoreState>((set) => ({
@@ -166,6 +198,68 @@ export const useAppStore = create<AppStoreState>((set) => ({
     } catch (error) {
       console.error('[AppStore] Hydration failed:', error);
     }
+  },
+  refreshProperties: async (orgId) => {
+    if (!supabase || !orgId) return;
+
+    const { data, error } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('org_id', orgId);
+
+    if (error) {
+      console.error('[AppStore] Failed to refresh properties:', error);
+      return;
+    }
+
+    set({ properties: (data ?? []) as Property[] });
+  },
+  refreshDepartments: async (orgId) => {
+    if (!supabase || !orgId) return;
+
+    const { data, error } = await supabase
+      .from('departments')
+      .select('id, org_id, name, active, created_at')
+      .eq('org_id', orgId);
+
+    if (error) {
+      console.error('[AppStore] Failed to refresh departments:', error);
+      return;
+    }
+
+    set({ departments: (data ?? []) as Department[] });
+  },
+  refreshWorkforceRoles: async (orgId) => {
+    if (!supabase || !orgId) return;
+
+    const { data, error } = await supabase
+      .from('workforce_roles')
+      .select('id, org_id, name, description, active, created_at')
+      .eq('org_id', orgId)
+      .order('name');
+
+    if (error) {
+      console.error('[AppStore] Failed to refresh workforce roles:', error);
+      return;
+    }
+
+    set({ workforceRoles: (data ?? []) as WorkforceRole[] });
+  },
+  refreshWorkerTypes: async (orgId) => {
+    if (!supabase || !orgId) return;
+
+    const { data, error } = await supabase
+      .from('worker_types')
+      .select('id, org_id, name, active, created_at')
+      .eq('org_id', orgId)
+      .order('name');
+
+    if (error) {
+      console.error('[AppStore] Failed to refresh worker types:', error);
+      return;
+    }
+
+    set({ workerTypes: (data ?? []) as WorkerType[] });
   },
   reset: () => set(initialState),
 }));

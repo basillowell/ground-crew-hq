@@ -550,6 +550,7 @@ function WorkspaceTab({
   const storeEmployees = useAppStore((state) => state.employees);
   const storeDepartments = useAppStore((state) => state.departments);
   const hydrateStore = useAppStore((state) => state.hydrate);
+  const refreshProperties = useAppStore((state) => state.refreshProperties);
   const { theme, setTheme } = useTheme();
   const SOP_STORAGE_KEY = 'ground-crew-sops';
   const sopCategoryOptions: StandardOperatingProcedure['category'][] = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
@@ -753,8 +754,8 @@ function WorkspaceTab({
       toast.error(`Failed to add property: ${insertError.message}`);
       return;
     }
-    await hydrateStore(storeOrgId);
     toast.success(`Property added: ${name}`);
+    await refreshProperties(storeOrgId);
     setNewPropertyName('');
     setNewPropertyShortName('');
     setNewPropertyLogoInitials('GC');
@@ -782,10 +783,10 @@ function WorkspaceTab({
       toast.error(`Failed to update property: ${updateError.message}`);
       return;
     }
-    await hydrateStore(orgId);
     setEditingPropertyId(null);
     setEditingPropertyName('');
     toast.success(`Property renamed to ${editingPropertyName.trim()}`);
+    await refreshProperties(orgId);
   };
 
   const cancelPropertyEdit = () => {
@@ -804,8 +805,8 @@ function WorkspaceTab({
       toast.error(`Failed to delete property: ${deleteError.message}`);
       return;
     }
-    await hydrateStore(orgId);
     toast.success('Property deleted');
+    await refreshProperties(orgId);
   };
 
   const addEquipmentType = async () => {
@@ -1610,7 +1611,11 @@ function WorkspaceTab({
 function WorkforceTab({ orgId }: { orgId: string | null }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
   const storeDepartments = useAppStore((state) => state.departments);
-  const hydrateStore = useAppStore((state) => state.hydrate);
+  const storeWorkforceRoles = useAppStore((state) => state.workforceRoles);
+  const storeWorkerTypes = useAppStore((state) => state.workerTypes);
+  const refreshDepartments = useAppStore((state) => state.refreshDepartments);
+  const refreshWorkforceRoles = useAppStore((state) => state.refreshWorkforceRoles);
+  const refreshWorkerTypes = useAppStore((state) => state.refreshWorkerTypes);
   const departments = useMemo(
     () =>
       storeDepartments
@@ -1619,8 +1624,20 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
         .sort((left, right) => left.name.localeCompare(right.name)),
     [storeDepartments],
   );
-  const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
-  const [workerTypes, setWorkerTypes] = useState<Array<{ id: string; name: string }>>([]);
+  const roles = useMemo(
+    () =>
+      storeWorkforceRoles
+        .filter((role) => role.active && role.name.trim())
+        .map(({ id, name }) => ({ id, name })),
+    [storeWorkforceRoles],
+  );
+  const workerTypes = useMemo(
+    () =>
+      storeWorkerTypes
+        .filter((workerType) => workerType.active && workerType.name.trim())
+        .map(({ id, name }) => ({ id, name })),
+    [storeWorkerTypes],
+  );
   const [newDepartmentName, setNewDepartmentName] = useState('');
   const [newRoleName, setNewRoleName] = useState('');
   const [newWorkerTypeName, setNewWorkerTypeName] = useState('');
@@ -1634,32 +1651,15 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchWorkforceSummary = useCallback(async () => {
-    if (!supabase || !orgId) return;
+    if (!orgId) return;
     setLoading(true);
     setError(null);
-    const [rolesResult, workerTypesResult] = await Promise.all([
-      supabase
-        .from('workforce_roles')
-        .select('id, name')
-        .eq('org_id', orgId)
-        .eq('active', true)
-        .order('name', { ascending: true }),
-      supabase
-        .from('worker_types')
-        .select('id, name')
-        .eq('org_id', orgId)
-        .eq('active', true)
-        .order('name', { ascending: true }),
+    await Promise.all([
+      refreshWorkforceRoles(orgId),
+      refreshWorkerTypes(orgId),
     ]);
-    if (rolesResult.error || workerTypesResult.error) {
-      setError(rolesResult.error?.message ?? workerTypesResult.error?.message ?? 'Unable to load workforce settings');
-      setLoading(false);
-      return;
-    }
-    setRoles(((rolesResult.data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()));
-    setWorkerTypes(((workerTypesResult.data ?? []) as Array<{ id: string; name: string }>).filter((row) => row.name?.trim()));
     setLoading(false);
-  }, [orgId]);
+  }, [orgId, refreshWorkerTypes, refreshWorkforceRoles]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -1682,8 +1682,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     }
     toast.success(`Department added: ${newDepartmentName.trim()}`);
     setNewDepartmentName('');
-    await hydrateStore(orgId);
-  }, [hydrateStore, newDepartmentName, orgId]);
+    await refreshDepartments(orgId);
+  }, [newDepartmentName, orgId, refreshDepartments]);
 
   const saveDepartmentEdit = useCallback(async () => {
     if (!supabase || !orgId || !editingDepartmentId || !editingDepartmentName.trim()) return;
@@ -1700,8 +1700,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     toast.success(`Department updated: ${editingDepartmentName.trim()}`);
     setEditingDepartmentId(null);
     setEditingDepartmentName('');
-    await hydrateStore(orgId);
-  }, [editingDepartmentId, editingDepartmentName, hydrateStore, orgId]);
+    await refreshDepartments(orgId);
+  }, [editingDepartmentId, editingDepartmentName, orgId, refreshDepartments]);
 
   const deactivateDepartment = useCallback(async (departmentId: string, departmentName: string) => {
     if (!supabase || !orgId) return;
@@ -1718,8 +1718,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
       return;
     }
     toast.success(`Department deactivated: ${departmentName}`);
-    await hydrateStore(orgId);
-  }, [hydrateStore, orgId]);
+    await refreshDepartments(orgId);
+  }, [orgId, refreshDepartments]);
 
   const addRole = useCallback(async () => {
     if (!supabase || !orgId || !newRoleName.trim()) return;
@@ -1736,8 +1736,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     }
     toast.success(`Role added: ${newRoleName.trim()}`);
     setNewRoleName('');
-    await fetchWorkforceSummary();
-  }, [fetchWorkforceSummary, newRoleName, orgId]);
+    await refreshWorkforceRoles(orgId);
+  }, [newRoleName, orgId, refreshWorkforceRoles]);
 
   const saveRoleEdit = useCallback(async () => {
     if (!supabase || !orgId || !editingRoleId || !editingRoleName.trim()) return;
@@ -1754,8 +1754,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     toast.success(`Role updated: ${editingRoleName.trim()}`);
     setEditingRoleId(null);
     setEditingRoleName('');
-    await fetchWorkforceSummary();
-  }, [editingRoleId, editingRoleName, fetchWorkforceSummary, orgId]);
+    await refreshWorkforceRoles(orgId);
+  }, [editingRoleId, editingRoleName, orgId, refreshWorkforceRoles]);
 
   const deactivateRole = useCallback(async (roleId: string, roleName: string) => {
     if (!supabase || !orgId) return;
@@ -1772,8 +1772,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
       return;
     }
     toast.success(`Role deactivated: ${roleName}`);
-    await fetchWorkforceSummary();
-  }, [fetchWorkforceSummary, orgId]);
+    await refreshWorkforceRoles(orgId);
+  }, [orgId, refreshWorkforceRoles]);
 
   const addWorkerType = useCallback(async () => {
     if (!supabase || !orgId || !newWorkerTypeName.trim()) return;
@@ -1788,8 +1788,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     }
     setNewWorkerTypeName('');
     toast.success('Worker type added');
-    await fetchWorkforceSummary();
-  }, [fetchWorkforceSummary, newWorkerTypeName, orgId]);
+    await refreshWorkerTypes(orgId);
+  }, [newWorkerTypeName, orgId, refreshWorkerTypes]);
 
   const saveWorkerTypeEdit = useCallback(async () => {
     if (!supabase || !orgId || !editingWorkerTypeId || !editingWorkerTypeName.trim()) return;
@@ -1805,8 +1805,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     setEditingWorkerTypeId(null);
     setEditingWorkerTypeName('');
     toast.success('Worker type updated');
-    await fetchWorkforceSummary();
-  }, [editingWorkerTypeId, editingWorkerTypeName, fetchWorkforceSummary, orgId]);
+    await refreshWorkerTypes(orgId);
+  }, [editingWorkerTypeId, editingWorkerTypeName, orgId, refreshWorkerTypes]);
 
   const deactivateWorkerType = useCallback(async (workerTypeId: string, workerTypeName: string) => {
     if (!supabase || !orgId) return;
@@ -1821,8 +1821,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
       return;
     }
     toast.success('Worker type deactivated');
-    await fetchWorkforceSummary();
-  }, [fetchWorkforceSummary, orgId]);
+    await refreshWorkerTypes(orgId);
+  }, [orgId, refreshWorkerTypes]);
 
   if (!orgId || loading) return <PageSkeleton />;
   if (error) return <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkforceSummary()} />;
