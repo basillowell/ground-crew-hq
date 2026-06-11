@@ -165,29 +165,29 @@ export default function InvoicingPage() {
               Outstanding
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-status-pending">
+          <div className="mt-2 text-2xl font-bold text-foreground">
             {fmt(summary.outstanding)}
           </div>
         </div>
         <div className="rounded-xl border border-surface-border bg-surface-card p-4">
           <div className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-status-active" />
+            <DollarSign className="h-4 w-4 text-green-400" />
             <span className="text-xs font-medium uppercase tracking-widest text-text-muted">
               Collected This Month
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-status-active">
+          <div className="mt-2 text-2xl font-bold text-green-400">
             {fmt(summary.collected)}
           </div>
         </div>
         <div className="rounded-xl border border-surface-border bg-surface-card p-4">
           <div className="flex items-center gap-2">
-            <Receipt className="h-4 w-4 text-status-warning" />
+            <Receipt className="h-4 w-4 text-amber-400" />
             <span className="text-xs font-medium uppercase tracking-widest text-text-muted">
               Overdue (&gt;30 days)
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-status-warning">
+          <div className="mt-2 text-2xl font-bold text-amber-400">
             {summary.overdue}
           </div>
         </div>
