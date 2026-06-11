@@ -173,14 +173,16 @@ export default function ProductManager() {
       ) : null}
 
       <div ref={formRef} className="grid gap-3 md:grid-cols-2">
-        <Input placeholder="Product name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
-        <Input placeholder="Product type" value={form.productType} onChange={(event) => setForm((current) => ({ ...current, productType: event.target.value }))} />
-        <Input placeholder="Target use" value={form.targetUse} onChange={(event) => setForm((current) => ({ ...current, targetUse: event.target.value }))} />
-        <Input placeholder="Rate unit" value={form.rateUnit} onChange={(event) => setForm((current) => ({ ...current, rateUnit: event.target.value }))} />
-        <Input placeholder="EPA Registration Number" value={form.epaRegistrationNumber} onChange={(event) => setForm((current) => ({ ...current, epaRegistrationNumber: event.target.value }))} />
-        <Input placeholder="Formulation" value={form.formulation} onChange={(event) => setForm((current) => ({ ...current, formulation: event.target.value }))} />
-        <Input placeholder="Signal Word" value={form.signalWord} onChange={(event) => setForm((current) => ({ ...current, signalWord: event.target.value }))} />
+        <Input id="product-name" name="product_name" placeholder="Product name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+        <Input id="product-type" name="product_type" placeholder="Product type" value={form.productType} onChange={(event) => setForm((current) => ({ ...current, productType: event.target.value }))} />
+        <Input id="target-use" name="target_use" placeholder="Target use" value={form.targetUse} onChange={(event) => setForm((current) => ({ ...current, targetUse: event.target.value }))} />
+        <Input id="rate-unit" name="rate_unit" placeholder="Rate unit" value={form.rateUnit} onChange={(event) => setForm((current) => ({ ...current, rateUnit: event.target.value }))} />
+        <Input id="epa-reg" name="epa_registration_number" placeholder="EPA Registration Number" value={form.epaRegistrationNumber} onChange={(event) => setForm((current) => ({ ...current, epaRegistrationNumber: event.target.value }))} />
+        <Input id="formulation" name="formulation" placeholder="Formulation" value={form.formulation} onChange={(event) => setForm((current) => ({ ...current, formulation: event.target.value }))} />
+        <Input id="signal-word" name="signal_word" placeholder="Signal Word" value={form.signalWord} onChange={(event) => setForm((current) => ({ ...current, signalWord: event.target.value }))} />
         <Input
+          id="reentry-interval-hours"
+          name="reentry_interval_hours"
           type="number"
           min="0"
           placeholder="REI Hours"
@@ -188,6 +190,8 @@ export default function ProductManager() {
           onChange={(event) => setForm((current) => ({ ...current, reentryIntervalHours: event.target.value }))}
         />
         <Input
+          id="pre-harvest-interval-hours"
+          name="pre_harvest_interval_hours"
           type="number"
           min="0"
           placeholder="PHI Hours"
@@ -195,6 +199,8 @@ export default function ProductManager() {
           onChange={(event) => setForm((current) => ({ ...current, preHarvestIntervalHours: event.target.value }))}
         />
         <Input
+          id="app-method"
+          name="default_application_method"
           placeholder="Default application method"
           value={form.defaultApplicationMethod}
           onChange={(event) => setForm((current) => ({ ...current, defaultApplicationMethod: event.target.value }))}
@@ -203,6 +209,8 @@ export default function ProductManager() {
 
       <label className="flex items-center gap-2 text-sm">
         <input
+          id="restricted-use"
+          name="restricted_use"
           type="checkbox"
           checked={form.restrictedUse}
           onChange={(event) => setForm((current) => ({ ...current, restrictedUse: event.target.checked }))}

@@ -863,15 +863,15 @@ export default function ApplicationsPage() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Application Date *</label>
-                  <Input className="mt-1" type="date" value={draft.applicationDate} onChange={(e) => setDraft((current) => ({ ...current, applicationDate: e.target.value }))} />
+                  <Input id="application-date" name="application_date" className="mt-1" type="date" value={draft.applicationDate} onChange={(e) => setDraft((current) => ({ ...current, applicationDate: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Start Time *</label>
-                  <Input className="mt-1" type="time" value={draft.startTime} onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))} />
+                  <Input id="application-start-time" name="start_time" className="mt-1" type="time" value={draft.startTime} onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">End Time *</label>
-                  <Input className="mt-1" type="time" value={draft.endTime} onChange={(e) => setDraft((current) => ({ ...current, endTime: e.target.value }))} />
+                  <Input id="application-end-time" name="end_time" className="mt-1" type="time" value={draft.endTime} onChange={(e) => setDraft((current) => ({ ...current, endTime: e.target.value }))} />
                 </div>
               </div>
 
@@ -879,7 +879,7 @@ export default function ApplicationsPage() {
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Property *</label>
                   {properties.length > 0 ? (
-                    <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.propertyId} onChange={(e) => setDraft((current) => ({ ...current, propertyId: e.target.value }))}>
+                    <select id="application-property" name="property_id" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.propertyId} onChange={(e) => setDraft((current) => ({ ...current, propertyId: e.target.value }))}>
                       {properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
                     </select>
                   ) : (
@@ -890,40 +890,40 @@ export default function ApplicationsPage() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Applicator *</label>
-                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.applicatorId} onChange={(e) => setDraft((current) => ({ ...current, applicatorId: e.target.value }))}>
+                  <select id="application-applicator" name="applicator_id" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.applicatorId} onChange={(e) => setDraft((current) => ({ ...current, applicatorId: e.target.value }))}>
                     {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Target Pest</label>
-                  <Input className="mt-1" value={draft.targetPest} onChange={(e) => setDraft((current) => ({ ...current, targetPest: e.target.value }))} />
+                  <Input id="target-pest" name="target_pest" className="mt-1" value={draft.targetPest} onChange={(e) => setDraft((current) => ({ ...current, targetPest: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Agronomic Purpose</label>
-                  <Input className="mt-1" value={draft.agronomicPurpose} onChange={(e) => setDraft((current) => ({ ...current, agronomicPurpose: e.target.value }))} />
+                  <Input id="agronomic-purpose" name="agronomic_purpose" className="mt-1" value={draft.agronomicPurpose} onChange={(e) => setDraft((current) => ({ ...current, agronomicPurpose: e.target.value }))} />
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Carrier Volume</label>
-                  <Input className="mt-1" type="number" value={draft.carrierVolume} onChange={(e) => setDraft((current) => ({ ...current, carrierVolume: e.target.value }))} />
+                  <Input id="carrier-volume" name="carrier_volume" className="mt-1" type="number" value={draft.carrierVolume} onChange={(e) => setDraft((current) => ({ ...current, carrierVolume: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Total Mix Volume</label>
-                  <Input className="mt-1" type="number" value={draft.totalMixVolume} onChange={(e) => setDraft((current) => ({ ...current, totalMixVolume: e.target.value }))} />
+                  <Input id="total-mix-volume" name="total_mix_volume" className="mt-1" type="number" value={draft.totalMixVolume} onChange={(e) => setDraft((current) => ({ ...current, totalMixVolume: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Area Treated *</label>
-                  <Input className="mt-1" type="number" value={draft.areaTreated} onChange={(e) => setDraft((current) => ({ ...current, areaTreated: e.target.value }))} />
+                  <Input id="area-treated" name="area_treated" className="mt-1" type="number" value={draft.areaTreated} onChange={(e) => setDraft((current) => ({ ...current, areaTreated: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Area Unit *</label>
-                  <Input className="mt-1" value={draft.areaUnit} onChange={(e) => setDraft((current) => ({ ...current, areaUnit: e.target.value }))} />
+                  <Input id="area-unit" name="area_unit" className="mt-1" value={draft.areaUnit} onChange={(e) => setDraft((current) => ({ ...current, areaUnit: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Equipment Used</label>
-                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.equipmentUsedId} onChange={(e) => setDraft((current) => ({ ...current, equipmentUsedId: e.target.value }))}>
+                  <select id="equipment-used" name="equipment_used_id" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.equipmentUsedId} onChange={(e) => setDraft((current) => ({ ...current, equipmentUsedId: e.target.value }))}>
                     <option value="">No equipment selected</option>
                     {equipmentUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unitNumber || unit.name || unit.id}</option>)}
                   </select>
@@ -938,19 +938,19 @@ export default function ApplicationsPage() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Application Method *</label>
-                    <Input className="mt-1" value={draft.applicationMethod} onChange={(e) => setDraft((current) => ({ ...current, applicationMethod: e.target.value }))} />
+                    <Input id="application-method" name="application_method" className="mt-1" value={draft.applicationMethod} onChange={(e) => setDraft((current) => ({ ...current, applicationMethod: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Applicator License #</label>
-                    <Input className="mt-1" value={draft.applicatorLicenseNumber} onChange={(e) => setDraft((current) => ({ ...current, applicatorLicenseNumber: e.target.value }))} />
+                    <Input id="applicator-license-number" name="applicator_license_number" className="mt-1" value={draft.applicatorLicenseNumber} onChange={(e) => setDraft((current) => ({ ...current, applicatorLicenseNumber: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Supervisor</label>
-                    <Input className="mt-1" value={draft.supervisorName} onChange={(e) => setDraft((current) => ({ ...current, supervisorName: e.target.value }))} />
+                    <Input id="supervisor-name" name="supervisor_name" className="mt-1" value={draft.supervisorName} onChange={(e) => setDraft((current) => ({ ...current, supervisorName: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Supervisor License #</label>
-                    <Input className="mt-1" value={draft.supervisorLicenseNumber} onChange={(e) => setDraft((current) => ({ ...current, supervisorLicenseNumber: e.target.value }))} />
+                    <Input id="supervisor-license-number" name="supervisor_license_number" className="mt-1" value={draft.supervisorLicenseNumber} onChange={(e) => setDraft((current) => ({ ...current, supervisorLicenseNumber: e.target.value }))} />
                   </div>
                 </div>
               </Card>
@@ -969,12 +969,12 @@ export default function ApplicationsPage() {
                     return (
                       <div key={`${item.productId}-${index}`} className="rounded-xl border p-3">
                         <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_auto]">
-                          <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={item.productId} onChange={(e) => updateMixItem(index, { productId: e.target.value })}>
+                          <select id={`tank-mix-product-${index}`} name={`tank_mix[${index}].product_id`} className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={item.productId} onChange={(e) => updateMixItem(index, { productId: e.target.value })}>
                             {chemicalProducts.map((productOption) => <option key={productOption.id} value={productOption.id}>{productOption.name}</option>)}
                           </select>
-                          <Input type="number" placeholder="Rate" value={item.rateApplied} onChange={(e) => updateMixItem(index, { rateApplied: e.target.value })} />
-                          <Input placeholder="Unit" value={item.rateUnit} onChange={(e) => updateMixItem(index, { rateUnit: e.target.value })} />
-                          <Input type="number" placeholder="Total amount" value={item.totalQuantityUsed} onChange={(e) => updateMixItem(index, { totalQuantityUsed: e.target.value })} />
+                          <Input id={`tank-mix-rate-${index}`} name={`tank_mix[${index}].rate_applied`} type="number" placeholder="Rate" value={item.rateApplied} onChange={(e) => updateMixItem(index, { rateApplied: e.target.value })} />
+                          <Input id={`tank-mix-unit-${index}`} name={`tank_mix[${index}].rate_unit`} placeholder="Unit" value={item.rateUnit} onChange={(e) => updateMixItem(index, { rateUnit: e.target.value })} />
+                          <Input id={`tank-mix-total-${index}`} name={`tank_mix[${index}].total_quantity_used`} type="number" placeholder="Total amount" value={item.totalQuantityUsed} onChange={(e) => updateMixItem(index, { totalQuantityUsed: e.target.value })} />
                           <Button variant="ghost" size="sm" onClick={() => removeMixItem(index)}>Remove</Button>
                         </div>
                         {product && (
@@ -999,7 +999,7 @@ export default function ApplicationsPage() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Linked Weather Log</label>
-                    <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.weatherLogId} onChange={(e) => setDraft((current) => ({ ...current, weatherLogId: e.target.value }))}>
+                    <select id="weather-log" name="weather_log_id" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.weatherLogId} onChange={(e) => setDraft((current) => ({ ...current, weatherLogId: e.target.value }))}>
                       {locationWeatherLogs.map((log) => (
                         <option key={log.id} value={log.id}>
                           {log.date} · {log.currentConditions}
@@ -1009,23 +1009,23 @@ export default function ApplicationsPage() {
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Wind Direction</label>
-                    <Input className="mt-1" value={draft.windDirection} onChange={(e) => setDraft((current) => ({ ...current, windDirection: e.target.value }))} />
+                    <Input id="wind-direction" name="wind_direction" className="mt-1" value={draft.windDirection} onChange={(e) => setDraft((current) => ({ ...current, windDirection: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Wind Speed (mph)</label>
-                    <Input className="mt-1" type="number" value={draft.windSpeedAtApplication} onChange={(e) => setDraft((current) => ({ ...current, windSpeedAtApplication: e.target.value }))} />
+                    <Input id="wind-speed-at-application" name="wind_speed_at_application" className="mt-1" type="number" value={draft.windSpeedAtApplication} onChange={(e) => setDraft((current) => ({ ...current, windSpeedAtApplication: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Temperature (F)</label>
-                    <Input className="mt-1" type="number" value={draft.temperatureAtApplication} onChange={(e) => setDraft((current) => ({ ...current, temperatureAtApplication: e.target.value }))} />
+                    <Input id="temperature-at-application" name="temperature_at_application" className="mt-1" type="number" value={draft.temperatureAtApplication} onChange={(e) => setDraft((current) => ({ ...current, temperatureAtApplication: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Humidity (%)</label>
-                    <Input className="mt-1" type="number" value={draft.humidityAtApplication} onChange={(e) => setDraft((current) => ({ ...current, humidityAtApplication: e.target.value }))} />
+                    <Input id="humidity-at-application" name="humidity_at_application" className="mt-1" type="number" value={draft.humidityAtApplication} onChange={(e) => setDraft((current) => ({ ...current, humidityAtApplication: e.target.value }))} />
                   </div>
                   <div className="md:col-span-3">
                     <label className="text-xs font-medium text-muted-foreground">Weather Conditions Summary</label>
-                    <Input className="mt-1" value={draft.weatherConditionsSummary} onChange={(e) => setDraft((current) => ({ ...current, weatherConditionsSummary: e.target.value }))} />
+                    <Input id="weather-conditions-summary" name="weather_conditions_summary" className="mt-1" value={draft.weatherConditionsSummary} onChange={(e) => setDraft((current) => ({ ...current, weatherConditionsSummary: e.target.value }))} />
                   </div>
                 </div>
               </Card>
@@ -1034,18 +1034,18 @@ export default function ApplicationsPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Restricted Entry Until</label>
-                    <Input className="mt-1" type="datetime-local" value={draft.restrictedEntryUntil ? draft.restrictedEntryUntil.slice(0, 16) : ''} onChange={(e) => setDraft((current) => ({ ...current, restrictedEntryUntil: e.target.value ? new Date(e.target.value).toISOString() : '' }))} />
+                    <Input id="restricted-entry-until" name="restricted_entry_until" className="mt-1" type="datetime-local" value={draft.restrictedEntryUntil ? draft.restrictedEntryUntil.slice(0, 16) : ''} onChange={(e) => setDraft((current) => ({ ...current, restrictedEntryUntil: e.target.value ? new Date(e.target.value).toISOString() : '' }))} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Site Conditions</label>
-                    <Input className="mt-1" value={draft.siteConditions} onChange={(e) => setDraft((current) => ({ ...current, siteConditions: e.target.value }))} />
+                    <Input id="site-conditions" name="site_conditions" className="mt-1" value={draft.siteConditions} onChange={(e) => setDraft((current) => ({ ...current, siteConditions: e.target.value }))} />
                   </div>
                 </div>
               </Card>
 
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Notes</label>
-                <textarea className="mt-1 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={draft.notes} onChange={(e) => setDraft((current) => ({ ...current, notes: e.target.value }))} />
+                <textarea id="application-notes" name="notes" className="mt-1 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={draft.notes} onChange={(e) => setDraft((current) => ({ ...current, notes: e.target.value }))} />
               </div>
             </div>
 
