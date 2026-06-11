@@ -53,6 +53,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
 
@@ -148,6 +158,16 @@ interface PropertyItem {
   created_at: string | null;
 }
 
+interface PropertyFormData {
+  name: string;
+  shortName: string;
+  logoInitials: string;
+  color: string;
+  city: string;
+  state: string;
+  acreage: string;
+}
+
 interface UsageStats {
   properties: number;
   employees: number;
@@ -192,6 +212,15 @@ function PlaceholderCard({ text }: { text: string }) {
 const settingsInputClass =
   'w-full rounded-lg border border-surface-border bg-surface-base px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand';
 const DEFAULT_PROPERTY_COLOR = '#166534';
+const EMPTY_PROPERTY_FORM: PropertyFormData = {
+  name: '',
+  shortName: '',
+  logoInitials: 'GC',
+  color: DEFAULT_PROPERTY_COLOR,
+  city: '',
+  state: '',
+  acreage: '0',
+};
 
 function SettingsCard({
   title,
@@ -591,15 +620,10 @@ function WorkspaceTab({
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'Manager' | 'Field Staff'>('Manager');
   const [savingOrg, setSavingOrg] = useState(false);
-  const [newPropertyName, setNewPropertyName] = useState('');
-  const [newPropertyShortName, setNewPropertyShortName] = useState('');
-  const [newPropertyLogoInitials, setNewPropertyLogoInitials] = useState('GC');
-  const [newPropertyColor, setNewPropertyColor] = useState(DEFAULT_PROPERTY_COLOR);
-  const [newPropertyCity, setNewPropertyCity] = useState('');
-  const [newPropertyState, setNewPropertyState] = useState('');
-  const [newPropertyAcreage, setNewPropertyAcreage] = useState('0');
+  const [propertyForm, setPropertyForm] = useState<PropertyFormData>(EMPTY_PROPERTY_FORM);
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
-  const [editingPropertyName, setEditingPropertyName] = useState('');
+  const [propertyPendingDelete, setPropertyPendingDelete] = useState<PropertyItem | null>(null);
+  const [savingProperty, setSavingProperty] = useState(false);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string; category: string | null }>>([]);
   const [newEquipmentTypeName, setNewEquipmentTypeName] = useState('');
   const [newEquipmentTypeCategory, setNewEquipmentTypeCategory] = useState('General');
@@ -717,86 +741,84 @@ function WorkspaceTab({
     toast.success('Organization updated');
   };
 
-  const addProperty = async () => {
-    const storeOrgId = storeOrg?.id;
-    const name = newPropertyName.trim();
-    const shortName = newPropertyShortName.trim();
-    if (!name || !shortName) {
-      toast.error('Property name and short name are required.');
+  const resetPropertyForm = () => {
+    setEditingPropertyId(null);
+    setPropertyForm(EMPTY_PROPERTY_FORM);
+  };
+
+  const saveProperty = async () => {
+    const storeOrgId = storeOrg?.id ?? orgId;
+    const name = propertyForm.name.trim();
+    const shortName = propertyForm.shortName.trim();
+    const logoInitials = propertyForm.logoInitials.trim().slice(0, 3).toUpperCase();
+    if (!name || !shortName || !logoInitials) {
+      toast.error('Property name, short name, and logo initials are required.');
       return;
     }
     if (!supabase || !storeOrgId) {
       toast.error('Organization context is unavailable.');
       return;
     }
-    const acreage = Number(newPropertyAcreage || '0');
+    const acreage = Number(propertyForm.acreage || '0');
     if (!Number.isFinite(acreage) || acreage < 0) {
       toast.error('Acreage must be 0 or greater.');
       return;
     }
+    const payload = {
+      name,
+      short_name: shortName,
+      logo_initials: logoInitials,
+      color: propertyForm.color || DEFAULT_PROPERTY_COLOR,
+      city: propertyForm.city.trim(),
+      state: propertyForm.state.trim().slice(0, 2).toUpperCase(),
+      acreage,
+      status: 'active',
+      org_id: storeOrgId,
+    };
+
     setError(null);
-    const { error: insertError } = await supabase
-      .from('properties')
-      .insert({
-        name,
-        short_name: shortName,
-        logo_initials: newPropertyLogoInitials.trim().slice(0, 3).toUpperCase() || 'GC',
-        color: newPropertyColor || DEFAULT_PROPERTY_COLOR,
-        city: newPropertyCity.trim(),
-        state: newPropertyState.trim().slice(0, 2).toUpperCase(),
-        acreage,
-        status: 'active',
-        org_id: storeOrgId,
-      });
-    if (insertError) {
-      setError(insertError.message);
-      toast.error(`Failed to add property: ${insertError.message}`);
+    setSavingProperty(true);
+    const { error: saveError } = editingPropertyId
+      ? await supabase
+          .from('properties')
+          .update(payload)
+          .eq('id', editingPropertyId)
+          .eq('org_id', storeOrgId)
+      : await supabase
+          .from('properties')
+          .insert({
+            id: crypto.randomUUID(),
+            ...payload,
+          });
+    setSavingProperty(false);
+    if (saveError) {
+      setError(saveError.message);
+      toast.error(`Failed to save property: ${saveError.message}`);
       return;
     }
-    toast.success(`Property added: ${name}`);
-    await refreshProperties(storeOrgId);
-    setNewPropertyName('');
-    setNewPropertyShortName('');
-    setNewPropertyLogoInitials('GC');
-    setNewPropertyColor(DEFAULT_PROPERTY_COLOR);
-    setNewPropertyCity('');
-    setNewPropertyState('');
-    setNewPropertyAcreage('0');
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['properties'] }),
+      refreshProperties(storeOrgId),
+    ]);
+    toast.success(editingPropertyId ? 'Property updated successfully' : 'Property added successfully');
+    resetPropertyForm();
   };
 
   const startPropertyEdit = (property: PropertyItem) => {
     setEditingPropertyId(property.id);
-    setEditingPropertyName(property.name);
-  };
-
-  const savePropertyEdit = async (propertyId: string) => {
-    if (!supabase || !orgId || !editingPropertyName.trim()) return;
-    setError(null);
-    const { error: updateError } = await supabase
-      .from('properties')
-      .update({ name: editingPropertyName.trim() })
-      .eq('id', propertyId)
-      .eq('org_id', orgId);
-    if (updateError) {
-      setError(updateError.message);
-      toast.error(`Failed to update property: ${updateError.message}`);
-      return;
-    }
-    setEditingPropertyId(null);
-    setEditingPropertyName('');
-    toast.success(`Property renamed to ${editingPropertyName.trim()}`);
-    await refreshProperties(orgId);
-  };
-
-  const cancelPropertyEdit = () => {
-    setEditingPropertyId(null);
-    setEditingPropertyName('');
+    setPropertyForm({
+      name: property.name,
+      shortName: property.short_name ?? '',
+      logoInitials: property.logo_initials ?? 'GC',
+      color: property.color ?? DEFAULT_PROPERTY_COLOR,
+      city: property.city ?? '',
+      state: property.state ?? '',
+      acreage: String(property.acreage ?? 0),
+    });
   };
 
   const deleteProperty = async (propertyId: string) => {
     if (!supabase || !orgId) return;
-    const confirmed = window.confirm('Delete this property?');
-    if (!confirmed) return;
     setError(null);
     const { error: deleteError } = await supabase.from('properties').delete().eq('id', propertyId).eq('org_id', orgId);
     if (deleteError) {
@@ -804,8 +826,13 @@ function WorkspaceTab({
       toast.error(`Failed to delete property: ${deleteError.message}`);
       return;
     }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['properties'] }),
+      refreshProperties(orgId),
+    ]);
+    setPropertyPendingDelete(null);
+    if (editingPropertyId === propertyId) resetPropertyForm();
     toast.success('Property deleted');
-    await refreshProperties(orgId);
   };
 
   const addEquipmentType = async () => {
@@ -1424,93 +1451,153 @@ function WorkspaceTab({
           <div className="overflow-hidden rounded-xl border border-surface-border">
             {properties.map((property) => (
               <div key={property.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
-                {editingPropertyId === property.id ? (
-                  <>
-                    <input className={`${settingsInputClass} flex-1`} value={editingPropertyName} onChange={(event) => setEditingPropertyName(event.target.value)} />
-                    <button className="text-sm font-medium text-brand" onClick={() => void savePropertyEdit(property.id)}>Save</button>
-                    <button className="text-sm text-text-muted" onClick={cancelPropertyEdit}>Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1 text-sm font-medium text-text-primary">{property.name}</span>
-                    <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => startPropertyEdit(property)} aria-label={`Edit ${property.name}`}><Pencil className="h-4 w-4" /></button>
-                    <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deleteProperty(property.id)} aria-label={`Delete ${property.name}`}><Trash2 className="h-4 w-4" /></button>
-                  </>
-                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-text-primary">{property.name}</p>
+                  <p className="text-xs text-text-muted">
+                    {property.short_name || 'No short name'} · {property.city || 'No city'}{property.state ? `, ${property.state}` : ''}
+                  </p>
+                </div>
+                <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => startPropertyEdit(property)} aria-label={`Edit ${property.name}`}><Pencil className="h-4 w-4" /></button>
+                <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => setPropertyPendingDelete(property)} aria-label={`Delete ${property.name}`}><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
         )}
         <div className="mt-4 grid max-w-lg gap-3">
-          <label className="text-xs font-medium uppercase tracking-widest text-text-muted">Add property</label>
-          <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
+              {editingPropertyId ? 'Edit property' : 'Add property'}
+            </p>
+            {editingPropertyId ? (
+              <button type="button" className="text-xs text-text-muted hover:text-text-primary" onClick={resetPropertyForm}>
+                Cancel edit
+              </button>
+            ) : null}
+          </div>
+          <label htmlFor="prop-name" className="grid gap-1.5 text-xs font-medium text-text-muted">
             Property name *
-            <input className={settingsInputClass} placeholder="Springfield Park Course" value={newPropertyName} onChange={(event) => setNewPropertyName(event.target.value)} />
+            <input
+              id="prop-name"
+              name="property_name"
+              required
+              className={settingsInputClass}
+              placeholder="Springfield Park Course"
+              value={propertyForm.name}
+              onChange={(event) => setPropertyForm((current) => ({ ...current, name: event.target.value }))}
+            />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+            <label htmlFor="prop-short" className="grid gap-1.5 text-xs font-medium text-text-muted">
               Short name *
-              <input className={settingsInputClass} placeholder="SPC" value={newPropertyShortName} onChange={(event) => setNewPropertyShortName(event.target.value)} />
+              <input
+                id="prop-short"
+                name="short_name"
+                required
+                className={settingsInputClass}
+                placeholder="SPC"
+                value={propertyForm.shortName}
+                onChange={(event) => setPropertyForm((current) => ({ ...current, shortName: event.target.value }))}
+              />
             </label>
-            <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+            <label htmlFor="prop-initials" className="grid gap-1.5 text-xs font-medium text-text-muted">
               Logo initials *
               <input
+                id="prop-initials"
+                name="logo_initials"
+                required
                 className={settingsInputClass}
                 maxLength={3}
                 placeholder="GC"
-                value={newPropertyLogoInitials}
-                onChange={(event) => setNewPropertyLogoInitials(event.target.value.toUpperCase())}
+                value={propertyForm.logoInitials}
+                onChange={(event) => setPropertyForm((current) => ({ ...current, logoInitials: event.target.value.toUpperCase() }))}
               />
             </label>
           </div>
-          <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+          <label htmlFor="prop-color" className="grid gap-1.5 text-xs font-medium text-text-muted">
             Brand color *
             <div className="flex items-center gap-3">
               <input
+                id="prop-color"
+                name="color"
                 type="color"
                 className="h-10 w-14 cursor-pointer rounded-lg border border-surface-border bg-surface-base p-1"
-                value={newPropertyColor}
-                onChange={(event) => setNewPropertyColor(event.target.value)}
+                value={propertyForm.color}
+                onChange={(event) => setPropertyForm((current) => ({ ...current, color: event.target.value }))}
                 aria-label="Property brand color"
               />
-              <span className="text-sm uppercase text-text-secondary">{newPropertyColor}</span>
+              <span className="text-sm uppercase text-text-secondary">{propertyForm.color}</span>
             </div>
           </label>
           <div className="grid gap-3 sm:grid-cols-[1fr_100px]">
-            <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+            <label htmlFor="prop-city" className="grid gap-1.5 text-xs font-medium text-text-muted">
               City
-              <input className={settingsInputClass} placeholder="Springfield" value={newPropertyCity} onChange={(event) => setNewPropertyCity(event.target.value)} />
+              <input
+                id="prop-city"
+                name="city"
+                className={settingsInputClass}
+                placeholder="Springfield"
+                value={propertyForm.city}
+                onChange={(event) => setPropertyForm((current) => ({ ...current, city: event.target.value }))}
+              />
             </label>
-            <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+            <label htmlFor="prop-state" className="grid gap-1.5 text-xs font-medium text-text-muted">
               State
               <input
+                id="prop-state"
+                name="state"
                 className={settingsInputClass}
                 maxLength={2}
                 placeholder="OH"
-                value={newPropertyState}
-                onChange={(event) => setNewPropertyState(event.target.value.toUpperCase())}
+                value={propertyForm.state}
+                onChange={(event) => setPropertyForm((current) => ({ ...current, state: event.target.value.toUpperCase() }))}
               />
             </label>
           </div>
-          <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+          <label htmlFor="prop-acreage" className="grid gap-1.5 text-xs font-medium text-text-muted">
             Acreage
             <input
+              id="prop-acreage"
+              name="acreage"
               className={settingsInputClass}
               type="number"
               min={0}
               step="0.1"
-              value={newPropertyAcreage}
-              onChange={(event) => setNewPropertyAcreage(event.target.value)}
+              value={propertyForm.acreage}
+              onChange={(event) => setPropertyForm((current) => ({ ...current, acreage: event.target.value }))}
             />
           </label>
           <button
-            onClick={() => void addProperty()}
-            className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
+            type="button"
+            onClick={() => void saveProperty()}
+            disabled={savingProperty}
+            className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright disabled:opacity-60"
           >
-            Add Property
+            {savingProperty ? 'Saving...' : editingPropertyId ? 'Save Property' : 'Add Property'}
           </button>
         </div>
       </SettingsCard>
+
+      <AlertDialog open={Boolean(propertyPendingDelete)} onOpenChange={(open) => { if (!open) setPropertyPendingDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete property?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove {propertyPendingDelete?.name ?? 'this property'} from the workspace. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-status-warning text-text-inverse hover:bg-status-warning/90"
+              onClick={() => {
+                if (propertyPendingDelete) void deleteProperty(propertyPendingDelete.id);
+              }}
+            >
+              Delete Property
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
 
       <SettingsCard
