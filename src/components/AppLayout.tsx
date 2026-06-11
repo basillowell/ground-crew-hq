@@ -26,20 +26,20 @@ import { FeedbackWidget } from './FeedbackWidget';
 import { CommandBar } from './CommandBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import type { ProgramSettings, Property } from '@/data/seedData';
+import type { ProgramSettings } from '@/data/seedData';
 import {
   useAssignments,
   useDepartmentOptions,
+  useEmployees,
   useEquipmentUnits,
+  useProperties,
+  useProgramSettings,
   useScheduleEntries,
 } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { OperationsProvider } from '@/contexts/OperationsContext';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { isPro } from '@/utils/planGating';
-import { useAppStore, type Property as StoreProperty } from '@/store/appStore';
-import { toProgramSettingsView } from '@/store/programSettingsView';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -133,24 +133,6 @@ function applyBranding(programSetting?: ProgramSettings) {
   }
 }
 
-function toLayoutProperty(row: StoreProperty): Property {
-  return {
-    id: row.id,
-    name: row.name,
-    shortName: row.short_name,
-    type: 'Property',
-    address: '',
-    city: row.city,
-    state: row.state,
-    latitude: row.latitude ?? undefined,
-    longitude: row.longitude ?? undefined,
-    acreage: Number(row.acreage ?? 0),
-    logoInitials: row.logo_initials,
-    color: row.color,
-    status: row.status as Property['status'],
-  };
-}
-
 const inAppNotificationEventName = 'ground-crew-in-app-notification';
 
 type IncomingNotification = Omit<AppNotification, 'read'>;
@@ -163,7 +145,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
-  const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId } = useAuth();
+  const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive } = useAuth();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
@@ -172,15 +154,16 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [syncFlashActive, setSyncFlashActive] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
-  const storeProperties = useAppStore((state) => state.properties);
-  const storeEmployees = useAppStore((state) => state.employees);
-  const storeOrg = useAppStore((state) => state.org);
-  const storeProgramSettings = useAppStore((state) => state.programSettings);
   const deptQuery = useDepartmentOptions(orgId);
   const todayKey = currentDate.toISOString().slice(0, 10);
   const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
   const assignmentsQuery = useAssignments(todayKey, currentPropertyId, orgId);
   const equipmentQuery = useEquipmentUnits(currentPropertyId, orgId);
+  const employeesQuery = useEmployees(currentPropertyId, orgId);
+  const propertiesQuery = useProperties(orgId);
+  const programSettingQuery = useProgramSettings(orgId);
+  const programSetting = programSettingQuery.data ?? null;
+  const properties = propertiesQuery.data ?? [];
   const latestClockEventQuery = useQuery({
     queryKey: ['employee-mobile-clock-status', orgId, currentUser?.employeeId],
     enabled: currentRole === 'employee' && Boolean(orgId && currentUser?.employeeId),
@@ -199,15 +182,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     },
   });
   const isEmployeeClockedIn = latestClockEventQuery.data === 'clock_in';
-
-  const programSetting = useMemo(
-    () => toProgramSettingsView(storeProgramSettings, storeOrg),
-    [storeOrg, storeProgramSettings],
-  );
-  const properties = useMemo(
-    () => storeProperties.map(toLayoutProperty),
-    [storeProperties],
-  );
 
   useEffect(() => {
     if (!properties.length) return;
@@ -230,12 +204,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const computedNotifications = useMemo(() => {
     const currentDayKey = currentDate.toISOString().slice(0, 10);
-    const employees = storeEmployees.filter(
-      (employee) =>
-        !currentPropertyId ||
-        currentPropertyId === 'all' ||
-        employee.property_id === currentPropertyId,
-    );
+    const employees = employeesQuery.data ?? [];
     const scheduleEntries = scheduleQuery.data ?? [];
     const assignments = assignmentsQuery.data ?? [];
     const equipmentUnits = equipmentQuery.data ?? [];
@@ -264,7 +233,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         nextNotifications.push({
           id: 'unscheduled-crew',
           title: `${unscheduledCrew.length} crew members still need shifts`,
-          description: `${unscheduledCrew.slice(0, 3).map((entry) => `${entry.first_name} ${entry.last_name}`).join(', ')}${unscheduledCrew.length > 3 ? ' and more' : ''}`,
+          description: `${unscheduledCrew.slice(0, 3).map((entry) => `${entry.firstName} ${entry.lastName}`).join(', ')}${unscheduledCrew.length > 3 ? ' and more' : ''}`,
           severity: 'warning',
           route: '/app/scheduler',
           icon: 'schedule',
@@ -299,7 +268,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
 
     return nextNotifications;
-  }, [assignmentsQuery.data, currentDate, currentPropertyId, currentUser?.role, department, equipmentQuery.data, scheduleQuery.data, storeEmployees]);
+  }, [employeesQuery.data, scheduleQuery.data, assignmentsQuery.data, equipmentQuery.data, currentDate, currentUser?.role, department]);
 
   useEffect(() => {
     const handleNotification = (event: Event) => {
@@ -339,7 +308,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       read: true,
     }];
   }, [inAppNotifications]);
-  const planTier: 'FREE' | 'PRO' = isPro(storeOrg?.subscription_status ?? null) ? 'PRO' : 'FREE';
+  const planTier: 'FREE' | 'PRO' = isPlanActive() ? 'PRO' : 'FREE';
 
   const unreadNotificationCount = useMemo(
     () => inAppNotifications.filter((entry) => !entry.read).length,
@@ -436,20 +405,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   };
 
   const handleSignOut = async () => {
-    try {
-      queryClient.clear();
-      window.localStorage.removeItem('ground-crew-query-cache');
-      Object.keys(window.localStorage).forEach((key) => {
-        if (key.startsWith('ground-crew') || key.startsWith('workflow') || key.startsWith('field-cache')) {
-          window.localStorage.removeItem(key);
-        }
-      });
-      await supabase.auth.signOut();
-      window.location.assign('/');
-    } catch (err) {
-      console.error('Sign out failed:', err);
-      window.location.assign('/');
-    }
+    await signOut();
+    navigate('/');
   };
 
   const markAllNotificationsRead = () => {
@@ -624,10 +581,10 @@ export function AppLayout({ children }: AppLayoutProps) {
           <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}
-            departments={deptQuery.data?.map((d) => d.name) ?? []}
+            departments={deptQuery.data?.map((d) => d.name) ?? ['Maintenance']}
             currentDate={currentDate}
             setCurrentDate={setCurrentDate}
-            properties={properties}
+            properties={propertiesQuery.data ?? []}
             currentPropertyId={currentPropertyId}
             onSelectProperty={handleSelectProperty}
             allowAllProperties={currentUser?.role === 'admin' || currentUser?.role === 'manager'}
@@ -639,6 +596,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             onOpenNotification={handleNotificationOpen}
             onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
             onSignOut={handleSignOut}
+            currentUser={currentUser ?? undefined}
             programSetting={programSetting ?? undefined}
             planTier={planTier}
             onOpenCommandBar={() => setCommandBarOpen(true)}

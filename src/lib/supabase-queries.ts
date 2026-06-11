@@ -1199,6 +1199,64 @@ export function useAssignmentsRange(startDate: string, endDate: string, property
   });
 }
 
+async function fetchEmployees(propertyId?: string, orgId?: string): Promise<Employee[]> {
+  const client = ensureSupabase();
+  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
+  let query = client.from('employees').select('*').order('last_name').order('first_name');
+  if (orgId) query = query.eq('org_id', orgId);
+  if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data as DbEmployee[]).map(toEmployee);
+}
+
+async function fetchProperties(orgId?: string): Promise<Property[]> {
+  const client = ensureSupabase();
+  let query = client.from('properties').select('*').order('name');
+  if (orgId) query = query.eq('org_id', orgId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data as DbProperty[]).map(toProperty);
+}
+
+async function fetchProgramSettings(orgId: string): Promise<ProgramSettings | null> {
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('program_settings')
+    .select('*')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return toProgramSettings(data as DbProgramSettings);
+}
+
+export function useEmployees(propertyId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['employees', propertyId ?? 'all', orgId ?? 'all-orgs'],
+    queryFn: () => fetchEmployees(propertyId, orgId),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useProperties(orgId?: string) {
+  return useQuery({
+    queryKey: ['properties', orgId ?? 'all-orgs'],
+    queryFn: () => fetchProperties(orgId),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useProgramSettings(orgId?: string) {
+  return useQuery({
+    queryKey: ['program-settings', orgId ?? 'all-orgs'],
+    queryFn: () => fetchProgramSettings(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
 export function useTasks(propertyId?: string, orgId?: string) {
   return useQuery({
     queryKey: ['tasks', propertyId ?? 'all', orgId ?? 'all-orgs'],
