@@ -1300,7 +1300,7 @@ export function useProgramSettings(orgId?: string) {
 
 export function useTasks(_propertyId?: string, orgId?: string) {
   return useQuery({
-    queryKey: ['tasks', orgId ?? 'all-orgs'],
+    queryKey: ['tasks', orgId],
     queryFn: () => fetchTasks(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 30,

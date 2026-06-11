@@ -569,9 +569,6 @@ export default function WorkboardContent() {
   const [lastRealtimeRefreshAt, setLastRealtimeRefreshAt] = useState<number | null>(null);
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const [needsFilter, setNeedsFilter] = useState<'all' | 'open' | 'done'>('all');
-  const [taskLibrary, setTaskLibrary] = useState<TaskLibraryItem[]>([]);
-  const [taskLibraryLoading, setTaskLibraryLoading] = useState(false);
-  const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
   const [weatherSnapshot, setWeatherSnapshot] = useState<WorkboardWeatherSnapshot | null>(null);
   const [dismissedEscalationIds, setDismissedEscalationIds] = useState<string[]>([]);
   const [assignmentFlashMap, setAssignmentFlashMap] = useState<Record<string, 'complete' | 'started'>>({});
@@ -687,14 +684,20 @@ export default function WorkboardContent() {
   const storeProperties = useAppStore((state) => state.properties);
   const storeEmployees = useAppStore((state) => state.employees);
   const isHydrated = useAppStore((state) => state.isHydrated);
-  const hydratedOrgId = isHydrated ? currentUser?.orgId : undefined;
-  const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, hydratedOrgId);
-  const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, hydratedOrgId);
-  const tasksQuery = useTasks(undefined, hydratedOrgId);
-  const equipmentQuery = useEquipmentUnits(effectivePropertyId, hydratedOrgId);
+  const orgId = isHydrated ? currentUser?.orgId : undefined;
+  const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, orgId);
+  const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, orgId);
+  const {
+    data: taskOptions = [],
+    isLoading: tasksLoading,
+    error: tasksError,
+    refetch: refetchTasks,
+  } = useTasks(undefined, orgId);
+  console.log('tasks loaded:', taskOptions.length, orgId);
+  const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
   const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined);
-  const departmentsQuery = useDepartmentOptions(hydratedOrgId);
-  const tasksLoading = tasksQuery.isLoading || taskLibraryLoading;
+  const departmentsQuery = useDepartmentOptions(orgId);
+  const taskLibraryError = (tasksError as { message?: string } | null)?.message ?? null;
 
   const availableEquipmentQuery = useQuery({
     queryKey: ['workboard-available-equipment', currentUser?.orgId ?? 'all-orgs'],
@@ -928,10 +931,20 @@ export default function WorkboardContent() {
   const scheduleList = scheduleQuery.data ?? [];
   const taskList = useMemo(
     () =>
-      (tasksQuery.data ?? [])
+      taskOptions
         .filter((t) => String(t.status ?? 'active').toLowerCase() !== 'inactive')
         .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999) || a.name.localeCompare(b.name)),
-    [tasksQuery.data],
+    [taskOptions],
+  );
+  const taskLibrary = useMemo<TaskLibraryItem[]>(
+    () =>
+      taskList.map((task) => ({
+        id: task.id,
+        name: task.name,
+        category: task.category,
+        estimated_hours: Number(task.duration ?? 0) / 60,
+      })),
+    [taskList],
   );
   const groupedTaskLibrary = useMemo(() => {
     return taskLibrary.reduce<Record<string, TaskLibraryItem[]>>((acc, task) => {
@@ -974,7 +987,7 @@ export default function WorkboardContent() {
   const previousWeekAssignmentsQuery = useAssignments(
     previousWeekDateKey,
     effectivePropertyId,
-    hydratedOrgId,
+    orgId,
   );
   const previousWeekSummary = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1226,60 +1239,21 @@ export default function WorkboardContent() {
     });
   }, [boardDate, employeeList, scheduleList, taskList]);
 
-  const fetchTaskLibrary = useCallback(async () => {
-    if (!supabase || !currentUser?.orgId) return;
-    setTaskLibraryLoading(true);
-    setTaskLibraryError(null);
-    let query = supabase
-      .from('tasks')
-      .select('id, name, category, estimated_hours, status, property_id')
-      .eq('org_id', currentUser.orgId)
-      .eq('status', 'active')
-      .order('priority', { ascending: true })
-      .order('name', { ascending: true });
-    if (effectivePropertyId && effectivePropertyId !== 'all') {
-      query = query.eq('property_id', effectivePropertyId);
-    }
-    const { data, error } = await query;
-    if (error) {
-      setTaskLibraryError(error.message);
-      setTaskLibrary([]);
-    } else {
-      const normalized = ((data ?? []) as Array<TaskLibraryItem & { status?: string | null }>)
-        .filter((task) => String(task.status ?? 'active').toLowerCase() !== 'inactive')
-        .map((task) => ({
-          id: task.id,
-          name: task.name,
-          category: task.category,
-          estimated_hours: task.estimated_hours,
-        }));
-      setTaskLibrary(normalized);
-    }
-    setTaskLibraryLoading(false);
-  }, [currentUser?.orgId, effectivePropertyId]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    void fetchTaskLibrary();
-  }, [fetchTaskLibrary, isHydrated]);
-
   useEffect(() => {
     if (!isHydrated) return;
     if (!assignmentDialogOpen) return;
-    void fetchTaskLibrary();
-    void tasksQuery.refetch();
-  }, [assignmentDialogOpen, fetchTaskLibrary, isHydrated, tasksQuery.refetch]);
+    void refetchTasks();
+  }, [assignmentDialogOpen, isHydrated, refetchTasks]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== 'ground-crew-task-library-updated-at') return;
-      void fetchTaskLibrary();
-      void tasksQuery.refetch();
+      void refetchTasks();
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [fetchTaskLibrary, tasksQuery.refetch]);
+  }, [refetchTasks]);
 
   useEffect(() => {
     const authUserId = currentUser?.authUser?.id;
@@ -2345,10 +2319,10 @@ export default function WorkboardContent() {
     setSelectedTemplateEmployeeIds(scheduledEmployees.map((employee) => employee.id));
     setSelectedTemplateTaskIds([]);
     setTaskTemplateDialogOpen(true);
-    if (!taskLibraryLoading && taskLibrary.length === 0 && !taskLibraryError) {
-      void fetchTaskLibrary();
+    if (!tasksLoading && taskLibrary.length === 0 && !taskLibraryError) {
+      void refetchTasks();
     }
-  }, [fetchTaskLibrary, scheduledEmployees, taskLibrary.length, taskLibraryError, taskLibraryLoading]);
+  }, [refetchTasks, scheduledEmployees, taskLibrary.length, taskLibraryError, tasksLoading]);
 
   const quickPlanDayLabel = useMemo(
     () => new Date(`${boardDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
@@ -3988,13 +3962,13 @@ export default function WorkboardContent() {
   const isLoadingBoard =
     assignmentsQuery.isLoading ||
     scheduleQuery.isLoading ||
-    tasksQuery.isLoading ||
+    tasksLoading ||
     equipmentQuery.isLoading ||
     notesQuery.isLoading;
   const boardErrorMessage =
     (assignmentsQuery.error as { message?: string } | null)?.message ||
     (scheduleQuery.error as { message?: string } | null)?.message ||
-    (tasksQuery.error as { message?: string } | null)?.message ||
+    taskLibraryError ||
     (equipmentQuery.error as { message?: string } | null)?.message ||
     (notesQuery.error as { message?: string } | null)?.message ||
     (taskRequestsQuery.error as { message?: string } | null)?.message ||
@@ -4013,7 +3987,7 @@ export default function WorkboardContent() {
             onRetry={() => {
               void assignmentsQuery.refetch();
               void scheduleQuery.refetch();
-              void tasksQuery.refetch();
+              void refetchTasks();
               void equipmentQuery.refetch();
               void notesQuery.refetch();
               void taskRequestsQuery.refetch();
@@ -5323,7 +5297,7 @@ export default function WorkboardContent() {
                 <button
                   type="button"
                   className="mt-2 text-xs font-medium text-primary hover:underline"
-                  onClick={() => void fetchTaskLibrary()}
+                  onClick={() => void refetchTasks()}
                 >
                   Retry loading tasks →
                 </button>
@@ -5700,12 +5674,12 @@ export default function WorkboardContent() {
 
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Tasks</p>
-              {taskLibraryLoading ? (
+              {tasksLoading ? (
                 <div className="rounded-md border p-4 text-sm text-muted-foreground">Loading task library...</div>
               ) : taskLibraryError ? (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   <p>Could not load tasks: {taskLibraryError}</p>
-                  <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => void fetchTaskLibrary()}>
+                  <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => void refetchTasks()}>
                     Retry
                   </Button>
                 </div>
@@ -5753,7 +5727,7 @@ export default function WorkboardContent() {
               onClick={() => void applyDailyTaskTemplate()}
               disabled={
                 applyingTaskTemplate ||
-                taskLibraryLoading ||
+                tasksLoading ||
                 selectedTemplateTaskIds.length === 0 ||
                 (!applyTemplateToAllCrew && selectedTemplateEmployeeIds.length === 0) ||
                 scheduledEmployees.length === 0
