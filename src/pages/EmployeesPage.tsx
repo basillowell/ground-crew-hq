@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, UserCog } from 'lucide-react';
+import { Plus, UserCog, Users } from 'lucide-react';
+import { EmptyState } from '@/components/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
@@ -685,8 +686,14 @@ export default function EmployeesPage() {
           <tbody>
             {employees.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                  No employees yet. Add your first crew member.
+                <td colSpan={7} className="py-6">
+                  <EmptyState
+                    icon={Users}
+                    title="No crew members yet"
+                    description="Add your first employee to start scheduling shifts and assigning work."
+                    actionLabel="Add employee"
+                    onAction={() => setAddOpen(true)}
+                  />
                 </td>
               </tr>
             ) : (
@@ -830,7 +837,13 @@ export default function EmployeesPage() {
       {viewMode === 'roster' ? (
       <div className="space-y-3 md:hidden">
         {employees.length === 0 ? (
-          <div className="rounded-xl border border-surface-border bg-surface-card p-4 text-sm text-text-muted">No employees yet. Add your first crew member.</div>
+          <EmptyState
+            icon={Users}
+            title="No crew members yet"
+            description="Add your first employee to start scheduling shifts and assigning work."
+            actionLabel="Add employee"
+            onAction={() => setAddOpen(true)}
+          />
         ) : (
           visibleEmployees.map((employee) => {
             const fullName = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee';

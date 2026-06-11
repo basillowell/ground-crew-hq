@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Activity,
+  ArrowRight,
   CalendarDays,
   ChartNoAxesColumnIncreasing,
+  CheckCircle2,
   ClipboardCheck,
   ClipboardList,
   Clock3,
   TriangleAlert,
   Wrench,
+  X,
   type LucideIcon,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -23,6 +27,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchNwsAlerts } from '@/lib/weather/providers';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import {
+  useAssignmentsRange,
+  useEquipmentUnits,
+  useScheduleEntriesRange,
+  useWeatherLocations,
+} from '@/lib/supabase-queries';
 import { useAppStore } from '@/store/appStore';
 import { formatTime } from '@/utils/formatTime';
 
@@ -219,6 +229,7 @@ function Panel({
 }
 
 export default function CommandCenterOperationalPage() {
+  const navigate = useNavigate();
   const { orgId } = useAuth();
   const employees = useAppStore((state) => state.employees);
   const properties = useAppStore((state) => state.properties);
@@ -228,6 +239,18 @@ export default function CommandCenterOperationalPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [nwsAlert, setNwsAlert] = useState<string | null>(null);
+
+  const dismissKey = `gcrew-onboarding-dismissed-${orgId ?? 'unknown'}`;
+  const [checklistDismissed, setChecklistDismissed] = useState(() => !!localStorage.getItem(dismissKey));
+  const handleDismissChecklist = () => {
+    localStorage.setItem(dismissKey, '1');
+    setChecklistDismissed(true);
+  };
+
+  const { data: weatherLocations = [] } = useWeatherLocations(undefined, orgId ?? undefined);
+  const { data: equipmentUnits = [] } = useEquipmentUnits(undefined, orgId ?? undefined);
+  const { data: allScheduleEntries = [] } = useScheduleEntriesRange('2020-01-01', '2099-12-31', undefined, orgId ?? undefined);
+  const { data: allAssignments = [] } = useAssignmentsRange('2020-01-01', '2099-12-31', undefined, orgId ?? undefined);
 
   const today = useMemo(() => new Date(), []);
   const todayKey = useMemo(() => getLocalDateKey(today), [today]);
@@ -487,6 +510,78 @@ export default function CommandCenterOperationalPage() {
             {errorMessage}
           </div>
         ) : null}
+
+        {(() => {
+          const checklistItems = [
+            { label: 'Add your first employee', done: employees.length > 0, route: '/app/employees' },
+            { label: 'Set up weather for this property', done: weatherLocations.length > 0, route: '/app/weather' },
+            { label: 'Add equipment to your fleet', done: equipmentUnits.length > 0, route: '/app/equipment' },
+            { label: 'Build your task library', done: data.tasks.length > 0, route: '/app/settings' },
+            { label: 'Schedule your first shift', done: allScheduleEntries.length > 0, route: '/app/scheduler' },
+            { label: 'Assign work on the workboard', done: allAssignments.length > 0, route: '/app/workboard' },
+          ];
+          const completedCount = checklistItems.filter((item) => item.done).length;
+          const isNewOrg = employees.length < 3 && allScheduleEntries.length === 0;
+          const showChecklist = isNewOrg && !checklistDismissed && completedCount < 6 && !isLoading;
+          if (!showChecklist) return null;
+          return (
+            <section className="rounded-xl border border-brand-bright/20 bg-surface-card p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-base font-semibold text-text-primary">Get Ground Crew HQ ready for your team</h2>
+                  <p className="mt-0.5 text-sm text-text-secondary">Complete these steps to go operational</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-elevated">
+                      <div
+                        className="h-full rounded-full bg-brand-bright transition-all duration-500"
+                        style={{ width: `${(completedCount / checklistItems.length) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-medium text-text-secondary">{completedCount} of {checklistItems.length}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDismissChecklist}
+                  className="rounded-md p-1 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
+                  aria-label="Dismiss getting started checklist"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {checklistItems.map((item) => (
+                  <div
+                    key={item.label}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg border px-3 py-2.5',
+                      item.done ? 'border-surface-border bg-surface-base opacity-50' : 'border-surface-border bg-surface-elevated',
+                    )}
+                  >
+                    {item.done ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-bright" />
+                    ) : (
+                      <div className="h-4 w-4 shrink-0 rounded-full border-2 border-text-muted" />
+                    )}
+                    <span className={cn('min-w-0 flex-1 text-sm', item.done ? 'text-text-muted line-through' : 'text-text-primary')}>
+                      {item.label}
+                    </span>
+                    {!item.done ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(item.route)}
+                        className="shrink-0 rounded p-1 text-text-muted hover:bg-surface-card hover:text-brand-bright"
+                        aria-label={`Go to ${item.label}`}
+                      >
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
 
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard

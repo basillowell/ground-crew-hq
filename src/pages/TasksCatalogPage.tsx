@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ListChecks } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -27,6 +30,7 @@ function groupedByCategory(tasks: TaskListItem[]) {
 }
 
 export default function TasksCatalogPage() {
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const isHydrated = useAppStore((state) => state.isHydrated);
   const orgId = currentUser?.orgId ?? '';
@@ -104,9 +108,13 @@ export default function TasksCatalogPage() {
           </button>
         </Card>
       ) : orderedCategories.length === 0 ? (
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground">No tasks available yet.</p>
-        </Card>
+        <EmptyState
+          icon={ListChecks}
+          title="No tasks in your library"
+          description="Create tasks your crew can be assigned to on the workboard. Manage your task library in Settings."
+          actionLabel="Go to Settings"
+          onAction={() => navigate('/app/settings')}
+        />
       ) : (
         orderedCategories.map((category) => (
           <Card key={category} className="p-4">
