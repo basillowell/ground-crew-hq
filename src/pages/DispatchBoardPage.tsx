@@ -39,39 +39,10 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { useAppStore, type Employee, type Property } from '@/store/appStore';
+import { useAssignmentsRange, useEmployees, useProperties, useTasks } from '@/lib/supabase-queries';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Assignment, Employee, Property, Task } from '@/data/seedData';
 import { formatTime } from '@/utils/formatTime';
-
-type AssignmentRow = {
-  id: string;
-  employee_id: string;
-  property_id: string;
-  task_id: string | null;
-  date: string;
-  location: string | null;
-  status: string;
-  created_at: string;
-  org_id: string | null;
-  notes: string | null;
-  order_index: number | null;
-  estimated_hours: number | null;
-  actual_hours: number | null;
-  completed_at: string | null;
-  start_time: string | null;
-  title: string | null;
-  equipment_unit_id: string | null;
-  actual_start_at: string | null;
-  actual_completed_at: string | null;
-};
-
-type TaskRow = {
-  id: string;
-  name: string;
-  category: string;
-  color: string | null;
-  estimated_hours: number | null;
-  org_id: string | null;
-};
 
 type StatusTone = 'active' | 'pending' | 'complete' | 'hold' | 'warning';
 
@@ -133,11 +104,11 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function employeeName(employee: Employee | undefined): string {
-  return employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown crew member';
+  return employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown crew member';
 }
 
 function propertyName(property: Property | undefined): string {
-  return property?.short_name || property?.name || 'Property';
+  return property?.shortName || property?.name || 'Property';
 }
 
 function AssignmentCard({
@@ -146,8 +117,8 @@ function AssignmentCard({
   property,
   onOpen,
 }: {
-  assignment: AssignmentRow;
-  task: TaskRow | undefined;
+  assignment: Assignment;
+  task: Task | undefined;
   property: Property | undefined;
   onOpen: () => void;
 }) {
@@ -162,7 +133,7 @@ function AssignmentCard({
     id: assignment.id,
     data: {
       type: 'assignment',
-      employeeId: assignment.employee_id,
+      employeeId: assignment.employeeId,
       date: assignment.date,
     } satisfies CellData,
   });
@@ -200,7 +171,7 @@ function AssignmentCard({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StatusBadge status={assignment.status} />
             <span className="text-xs text-text-muted">
-              {assignment.estimated_hours ?? task?.estimated_hours ?? 0}h
+              {assignment.estimatedHours ?? (task?.duration ?? 0) / 60}h
             </span>
           </div>
         </button>
@@ -220,8 +191,8 @@ function DispatchCell({
 }: {
   employeeId: string;
   date: string;
-  assignments: AssignmentRow[];
-  taskById: Map<string, TaskRow>;
+  assignments: Assignment[];
+  taskById: Map<string, Task>;
   propertyById: Map<string, Property>;
   onOpen: (assignmentId: string) => void;
   onCreateClick: () => void;
@@ -250,8 +221,8 @@ function DispatchCell({
             <AssignmentCard
               key={assignment.id}
               assignment={assignment}
-              task={assignment.task_id ? taskById.get(assignment.task_id) : undefined}
-              property={propertyById.get(assignment.property_id)}
+              task={assignment.taskId ? taskById.get(assignment.taskId) : undefined}
+              property={assignment.propertyId ? propertyById.get(assignment.propertyId) : undefined}
               onOpen={() => onOpen(assignment.id)}
             />
           ))}
@@ -270,17 +241,10 @@ function DispatchCell({
 }
 
 export default function DispatchBoardPage() {
-  const { orgId } = useAuth();
-  const employees = useAppStore((state) => state.employees);
-  const properties = useAppStore((state) => state.properties);
-  const isHydrated = useAppStore((state) => state.isHydrated);
+  const { currentPropertyId, orgId } = useAuth();
+  const queryClient = useQueryClient();
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
-  const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
-  const [tasks, setTasks] = useState<TaskRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
-  const [refreshTick, setRefreshTick] = useState(0);
 
   // Create-assignment slide-over state
   const [createCell, setCreateCell] = useState<{ employeeId: string; date: string } | null>(null);
@@ -305,53 +269,26 @@ export default function DispatchBoardPage() {
   );
   const weekStartKey = getLocalDateKey(weekDays[0]);
   const weekEndKey = getLocalDateKey(weekDays[6]);
-
-  useEffect(() => {
-    if (!isHydrated || !orgId) return;
-
-    let cancelled = false;
-
-    const loadDispatchBoard = async () => {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      const [assignmentsResult, tasksResult] = await Promise.all([
-        supabase
-          .from('assignments')
-          .select(
-            'id, employee_id, property_id, task_id, date, location, status, created_at, org_id, notes, order_index, estimated_hours, actual_hours, completed_at, start_time, title, equipment_unit_id, actual_start_at, actual_completed_at',
-          )
-          .eq('org_id', orgId)
-          .gte('date', weekStartKey)
-          .lte('date', weekEndKey)
-          .order('date', { ascending: true })
-          .order('order_index', { ascending: true }),
-        supabase
-          .from('tasks')
-          .select('id, name, category, color, estimated_hours, org_id')
-          .eq('org_id', orgId),
-      ]);
-
-      if (cancelled) return;
-
-      const queryError = assignmentsResult.error ?? tasksResult.error;
-      if (queryError) {
-        console.error('[DispatchBoard] Load failed:', queryError);
-        setErrorMessage('The dispatch board could not be loaded. Refresh to try again.');
-        setIsLoading(false);
-        return;
-      }
-
-      setAssignments((assignmentsResult.data ?? []) as AssignmentRow[]);
-      setTasks((tasksResult.data ?? []) as TaskRow[]);
-      setIsLoading(false);
-    };
-
-    void loadDispatchBoard();
-    return () => {
-      cancelled = true;
-    };
-  }, [isHydrated, orgId, weekEndKey, weekStartKey, refreshTick]);
+  const propertyScope = currentPropertyId || 'all';
+  const assignmentsQuery = useAssignmentsRange(weekStartKey, weekEndKey, propertyScope, orgId ?? undefined);
+  const employeesQuery = useEmployees(propertyScope, orgId ?? undefined);
+  const tasksQuery = useTasks(propertyScope, orgId ?? undefined);
+  const propertiesQuery = useProperties(orgId ?? undefined);
+  const assignments = assignmentsQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
+  const properties = propertiesQuery.data ?? [];
+  const isLoading =
+    assignmentsQuery.isLoading ||
+    employeesQuery.isLoading ||
+    tasksQuery.isLoading ||
+    propertiesQuery.isLoading;
+  const errorMessage =
+    assignmentsQuery.error?.message ||
+    employeesQuery.error?.message ||
+    tasksQuery.error?.message ||
+    propertiesQuery.error?.message ||
+    null;
 
   const fetchNwsAlert = useCallback(async () => {
     if (!orgId || !supabase) return;
@@ -381,9 +318,8 @@ export default function DispatchBoardPage() {
   }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     void fetchNwsAlert();
-  }, [isHydrated, fetchNwsAlert]);
+  }, [fetchNwsAlert]);
 
   // All employees rendered as rows — no active/status filter per dispatch spec
   const sortedEmployees = useMemo(
@@ -402,9 +338,9 @@ export default function DispatchBoardPage() {
   );
 
   const assignmentsByCell = useMemo(() => {
-    const grouped = new Map<string, AssignmentRow[]>();
+    const grouped = new Map<string, Assignment[]>();
     assignments.forEach((assignment) => {
-      const key = `${assignment.employee_id}:${assignment.date}`;
+      const key = `${assignment.employeeId}:${assignment.date}`;
       const existing = grouped.get(key) ?? [];
       existing.push(assignment);
       grouped.set(key, existing);
@@ -418,17 +354,7 @@ export default function DispatchBoardPage() {
     const assignment = assignments.find((item) => item.id === String(active.id));
     const target = over.data.current as CellData | undefined;
     if (!assignment || !target?.employeeId || !target.date) return;
-    if (assignment.employee_id === target.employeeId && assignment.date === target.date) return;
-
-    const previousAssignments = assignments;
-    const updatedAssignment = {
-      ...assignment,
-      employee_id: target.employeeId,
-      date: target.date,
-    };
-    setAssignments((current) =>
-      current.map((item) => (item.id === assignment.id ? updatedAssignment : item)),
-    );
+    if (assignment.employeeId === target.employeeId && assignment.date === target.date) return;
 
     const { error } = await supabase
       .from('assignments')
@@ -438,11 +364,12 @@ export default function DispatchBoardPage() {
 
     if (error) {
       console.error('[DispatchBoard] Move failed:', error);
-      setAssignments(previousAssignments);
-      toast.error('Assignment move failed. The board was restored.');
+      toast.error(`Assignment move failed: ${error.message}`);
       return;
     }
 
+    await queryClient.invalidateQueries({ queryKey: ['assignments-range'] });
+    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
     toast.success('Assignment moved');
   };
 
@@ -486,17 +413,20 @@ export default function DispatchBoardPage() {
 
     toast.success(inserts.length > 1 ? `${inserts.length} assignments created` : 'Assignment created');
     setCreateCell(null);
-    setRefreshTick((t) => t + 1);
+    await queryClient.invalidateQueries({ queryKey: ['assignments-range'] });
+    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
   };
 
-  const selectedTask = selectedAssignment?.task_id
-    ? taskById.get(selectedAssignment.task_id)
+  const selectedTask = selectedAssignment?.taskId
+    ? taskById.get(selectedAssignment.taskId)
     : undefined;
   const selectedEmployee = selectedAssignment
-    ? employees.find((employee) => employee.id === selectedAssignment.employee_id)
+    ? employees.find((employee) => employee.id === selectedAssignment.employeeId)
     : undefined;
   const selectedProperty = selectedAssignment
-    ? propertyById.get(selectedAssignment.property_id)
+    ? selectedAssignment.propertyId
+      ? propertyById.get(selectedAssignment.propertyId)
+      : undefined
     : undefined;
 
   const createEmployee = createCell
@@ -549,7 +479,7 @@ export default function DispatchBoardPage() {
 
         {errorMessage ? (
           <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-4 py-3 text-sm text-status-warning">
-            {errorMessage}
+            The dispatch board could not be loaded: {errorMessage}
           </div>
         ) : null}
 
@@ -675,9 +605,9 @@ export default function DispatchBoardPage() {
                     <div>
                       <dt className="text-xs uppercase text-text-muted">Timing</dt>
                       <dd className="mt-1 text-sm text-text-primary">
-                        {formatTime(selectedAssignment.start_time) || 'Start time not set'}
+                        {formatTime(selectedAssignment.startTime) || 'Start time not set'}
                         {' · '}
-                        {selectedAssignment.estimated_hours ?? selectedTask?.estimated_hours ?? 0} estimated hours
+                        {selectedAssignment.estimatedHours ?? (selectedTask?.duration ?? 0) / 60} estimated hours
                       </dd>
                     </div>
                   </div>
