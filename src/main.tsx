@@ -2,43 +2,41 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-const CHUNK_RELOAD_KEY = "ground-crew-chunk-reload";
-const CHUNK_LOAD_ERROR =
-  /ChunkLoadError|Loading chunk \d+ failed|Failed to fetch dynamically imported module|Importing a module script failed/i;
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return typeof error === "string" ? error : "";
-}
-
-function reloadAfterChunkError(message: string) {
-  if (!CHUNK_LOAD_ERROR.test(message)) return;
-
-  try {
-    if (window.sessionStorage.getItem(CHUNK_RELOAD_KEY)) return;
-    window.sessionStorage.setItem(CHUNK_RELOAD_KEY, "true");
-  } catch {
-    return;
-  }
-
-  window.location.reload();
-}
+// Stale chunk recovery — catches failed dynamic imports after deploy
+const RELOAD_FLAG = "gcrew-chunk-reload";
 
 window.addEventListener("error", (event) => {
-  reloadAfterChunkError(event.message || getErrorMessage(event.error));
+  const msg = event.message ?? "";
+  if (
+    msg.includes("Failed to fetch dynamically imported module") ||
+    msg.includes("Importing a module script failed")
+  ) {
+    if (!sessionStorage.getItem(RELOAD_FLAG)) {
+      sessionStorage.setItem(RELOAD_FLAG, "1");
+      window.location.reload();
+    }
+  }
 });
 
 window.addEventListener("unhandledrejection", (event) => {
-  reloadAfterChunkError(getErrorMessage(event.reason));
+  const msg = String(event.reason?.message ?? event.reason ?? "");
+  if (
+    msg.includes("Failed to fetch dynamically imported module") ||
+    msg.includes("Importing a module script failed") ||
+    msg.includes("Unable to preload CSS")
+  ) {
+    event.preventDefault();
+    if (!sessionStorage.getItem(RELOAD_FLAG)) {
+      sessionStorage.setItem(RELOAD_FLAG, "1");
+      window.location.reload();
+    }
+  }
 });
 
-window.addEventListener(
-  "load",
-  () => {
-    window.sessionStorage.removeItem(CHUNK_RELOAD_KEY);
-  },
-  { once: true },
-);
+// Clear the reload flag once the app loads successfully
+window.addEventListener("load", () => {
+  sessionStorage.removeItem(RELOAD_FLAG);
+});
 
 if ("serviceWorker" in navigator) {
   void navigator.serviceWorker.register("/sw.js");
