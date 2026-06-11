@@ -689,11 +689,12 @@ export default function WorkboardContent() {
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, orgId);
   const {
     data: taskOptions = [],
-    isLoading: tasksLoading,
+    isLoading: isLoadingTasks,
     error: tasksError,
     refetch: refetchTasks,
   } = useTasks(undefined, orgId);
   console.log('tasks loaded:', taskOptions.length, orgId);
+  const showTaskLoading = isLoadingTasks && taskOptions.length === 0;
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
   const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined, orgId);
   const departmentsQuery = useDepartmentOptions(orgId);
@@ -2320,10 +2321,10 @@ export default function WorkboardContent() {
     setSelectedTemplateEmployeeIds(scheduledEmployees.map((employee) => employee.id));
     setSelectedTemplateTaskIds([]);
     setTaskTemplateDialogOpen(true);
-    if (!tasksLoading && taskLibrary.length === 0 && !taskLibraryError) {
+    if (!showTaskLoading && taskLibrary.length === 0 && !taskLibraryError) {
       void refetchTasks();
     }
-  }, [refetchTasks, scheduledEmployees, taskLibrary.length, taskLibraryError, tasksLoading]);
+  }, [refetchTasks, scheduledEmployees, showTaskLoading, taskLibrary.length, taskLibraryError]);
 
   const quickPlanDayLabel = useMemo(
     () => new Date(`${boardDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
@@ -3964,7 +3965,7 @@ export default function WorkboardContent() {
   const isLoadingBoard =
     assignmentsQuery.isLoading ||
     scheduleQuery.isLoading ||
-    tasksLoading ||
+    showTaskLoading ||
     equipmentQuery.isLoading ||
     notesQuery.isLoading;
   const boardErrorMessage =
@@ -5290,8 +5291,8 @@ export default function WorkboardContent() {
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-assignment-task"
               >
-                {tasksLoading ? <option value="" disabled>Loading tasks...</option> : null}
-                {!tasksLoading && taskLibrary.length === 0 ? (
+                {showTaskLoading ? <option value="" disabled>Loading tasks...</option> : null}
+                {!showTaskLoading && taskLibrary.length === 0 ? (
                   <option value="" disabled>No tasks in library — add tasks in Settings → Tasks</option>
                 ) : null}
                 {orderedTaskCategories.map((category) => (
@@ -5686,7 +5687,7 @@ export default function WorkboardContent() {
 
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Tasks</p>
-              {tasksLoading ? (
+              {showTaskLoading ? (
                 <div className="rounded-md border p-4 text-sm text-muted-foreground">Loading task library...</div>
               ) : taskLibraryError ? (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -5739,7 +5740,7 @@ export default function WorkboardContent() {
               onClick={() => void applyDailyTaskTemplate()}
               disabled={
                 applyingTaskTemplate ||
-                tasksLoading ||
+                showTaskLoading ||
                 selectedTemplateTaskIds.length === 0 ||
                 (!applyTemplateToAllCrew && selectedTemplateEmployeeIds.length === 0) ||
                 scheduledEmployees.length === 0
