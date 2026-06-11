@@ -27,7 +27,12 @@ export default function DispatchBoardPage() {
   );
 
   const employeesWithAssignments = employees
-    .filter(e => e.status === 'active')
+    .filter(e =>
+      e.status === 'active' &&
+      !e.firstName?.toLowerCase().includes('demo') &&
+      !e.lastName?.toLowerCase().includes('demo') &&
+      !e.lastName?.toLowerCase().includes('viewer')
+    )
     .map(employee => ({
       employee,
       assignments: assignments.filter(a => a.employeeId === employee.id),
