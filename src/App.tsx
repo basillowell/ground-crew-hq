@@ -62,7 +62,7 @@ const queryClient = new QueryClient({
 const queryPersister =
   typeof window !== "undefined"
     ? createSyncStoragePersister({
-        storage: window.localStorage,
+        storage: window.sessionStorage,
         key: "ground-crew-query-cache-v2",
       })
     : undefined;
@@ -113,7 +113,7 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
     console.error("[RouteErrorBoundary]", error, info);
     // Auto-clear stale cached query state to avoid persistent crash loops after deploys.
     try {
-      window.localStorage.removeItem("ground-crew-query-cache-v2");
+      window.sessionStorage.removeItem("ground-crew-query-cache-v2");
     } catch {
       // No-op: recovery continues even if storage is unavailable.
     }
@@ -171,7 +171,7 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
               className="h-10 rounded-md bg-primary px-4 text-sm text-primary-foreground"
               onClick={async () => {
                 try {
-                  window.localStorage.removeItem("ground-crew-query-cache-v2");
+                  window.sessionStorage.removeItem("ground-crew-query-cache-v2");
                   Object.keys(window.localStorage).forEach((key) => {
                     if (key.startsWith("ground-crew") || key.startsWith("workflow") || key.startsWith("field-cache")) {
                       window.localStorage.removeItem(key);
