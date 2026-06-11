@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { useTasks } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
 import { APP_VERSION } from '@/constants/version';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -2777,6 +2778,10 @@ function HelpTab() {
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
   const isHydrated = useAppStore((state) => state.isHydrated);
   const storeEmployees = useAppStore((state) => state.employees);
+  const { refetch: refetchTasks } = useTasks(
+    propertyId ?? undefined,
+    orgId ?? undefined,
+  );
   const taskSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -2844,12 +2849,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     setLoading(true);
     setError(null);
     const [tasksResult, recurringResult] = await Promise.all([
-      supabase
-        .from('tasks')
-        .select('id, org_id, property_id, name, category, priority, estimated_hours')
-        .eq('org_id', orgId)
-        .order('priority', { ascending: true })
-        .order('name', { ascending: true }),
+      refetchTasks(),
       supabase
         .from('recurring_task_rules')
         .select('id, org_id, property_id, task_id, employee_id, days_of_week, active')
@@ -2862,7 +2862,15 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       setLoading(false);
       return;
     }
-    const nextTasks = (tasksResult.data as TaskLibraryItem[]) ?? [];
+    const nextTasks = (tasksResult.data ?? []).map<TaskLibraryItem>((task) => ({
+      id: task.id,
+      org_id: orgId,
+      property_id: propertyId,
+      name: task.name,
+      category: task.category,
+      priority: task.priority ?? null,
+      estimated_hours: task.duration / 60,
+    }));
     const nextRules = (recurringResult.data as RecurringTaskRule[]) ?? [];
     setTasks(nextTasks);
     setRecurringRules(nextRules);
@@ -2883,7 +2891,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       }, {});
     });
     setLoading(false);
-  }, [orgId]);
+  }, [orgId, propertyId, refetchTasks]);
 
   useEffect(() => {
     if (!isHydrated) return;

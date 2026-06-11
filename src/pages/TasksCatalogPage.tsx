@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ListChecks } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
@@ -6,9 +6,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/shared';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
-import { handleSupabaseError } from '@/utils/handleSupabaseError';
-import { useAppStore } from '@/store/appStore';
+import { useTasks } from '@/lib/supabase-queries';
 
 type TaskListItem = {
   id: string;
@@ -31,53 +29,26 @@ function groupedByCategory(tasks: TaskListItem[]) {
 
 export default function TasksCatalogPage() {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const orgId = currentUser?.orgId ?? '';
-  const [tasks, setTasks] = useState<TaskListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchTasks = useCallback(async () => {
-    if (!supabase || !orgId) {
-      setTasks([]);
-      setLoading(false);
-      setError('Unable to load tasks without organization context.');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Request timed out.')), 8000);
-    });
-
-    try {
-      const request = supabase
-        .from('tasks')
-        .select('id, name, category, status, priority, estimated_hours, color')
-        .eq('org_id', orgId)
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
-
-      const result = await Promise.race([request, timeout]);
-      const { data, error: queryError } = result as Awaited<typeof request>;
-      if (queryError) throw queryError;
-      setTasks((data ?? []) as TaskListItem[]);
-    } catch (err) {
-      const message = handleSupabaseError(err, 'TasksCatalogPage.fetchTasks') || 'Failed to load tasks.';
-      setError(message);
-      setTasks([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    void fetchTasks();
-  }, [fetchTasks, isHydrated]);
+  const { currentUser, currentPropertyId } = useAuth();
+  const {
+    data: taskRows = [],
+    isLoading: loading,
+    error,
+    refetch,
+  } = useTasks(currentPropertyId || undefined, currentUser?.orgId);
+  const tasks = useMemo<TaskListItem[]>(
+    () =>
+      taskRows.map((task) => ({
+        id: task.id,
+        name: task.name,
+        category: task.category,
+        status: task.status ?? 'active',
+        priority: task.priority ?? null,
+        estimated_hours: task.duration / 60,
+        color: task.color,
+      })),
+    [taskRows],
+  );
 
   const groups = useMemo(() => groupedByCategory(tasks), [tasks]);
   const orderedCategories = useMemo(() => Object.keys(groups).sort((a, b) => a.localeCompare(b)), [groups]);
@@ -98,10 +69,10 @@ export default function TasksCatalogPage() {
         </Card>
       ) : error ? (
         <Card className="p-4 space-y-3">
-          <p className="text-sm text-destructive">{error}</p>
+          <p className="text-sm text-destructive">{error.message}</p>
           <button
             type="button"
-            onClick={() => void fetchTasks()}
+            onClick={() => void refetch()}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           >
             Retry

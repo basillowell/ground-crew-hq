@@ -1282,6 +1282,7 @@ export default function WorkboardContent() {
       .from('tasks')
       .select('id, name, category, estimated_hours, status, property_id')
       .eq('org_id', currentUser.orgId)
+      .eq('status', 'active')
       .order('priority', { ascending: true })
       .order('name', { ascending: true });
     if (effectivePropertyId && effectivePropertyId !== 'all') {

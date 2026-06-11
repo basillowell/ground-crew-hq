@@ -129,6 +129,7 @@ type DbTask = {
   status: string;
   priority: number;
   duration?: number | null;
+  estimated_hours?: number | null;
   color?: string | null;
   icon?: string | null;
   skillTags?: string[] | null;
@@ -518,7 +519,7 @@ function toTask(row: DbTask): Task {
     id: row.id,
     name: row.name,
     category: row.category,
-    duration: Number(row.duration ?? 60),
+    duration: Number(row.estimated_hours ?? 1) * 60,
     color: row.color ?? 'hsl(var(--primary))',
     icon: row.icon ?? 'list-checks',
     status: row.status as Task['status'],
@@ -797,10 +798,12 @@ async function fetchAssignmentsRange(startDate: string, endDate: string, propert
 async function fetchTasks(propertyId?: string, orgId?: string): Promise<Task[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let query = client.from('tasks').select('*').order('priority').order('name');
+  let query = client.from('tasks').select('*');
   if (orgId) query = query.eq('org_id', orgId);
   if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
-  const { data, error } = await query;
+  const { data, error } = await query
+    .eq('status', 'active')
+    .order('priority', { ascending: true });
   if (error) throw error;
   return (data as DbTask[]).map(toTask);
 }
