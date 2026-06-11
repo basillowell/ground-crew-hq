@@ -4771,7 +4771,7 @@ export default function WorkboardContent() {
                                           type="time"
                                           value={timelineEditStart}
                                           onChange={(event) => setTimelineEditStart(event.target.value)}
-                                          className="ml-1 h-10 w-32 rounded border px-2 text-sm"
+                                          className="ml-1 h-10 w-32 rounded border border-border bg-background px-2 text-sm text-foreground"
                                         />
                                       </label>
                                       <label className="text-[10px] text-muted-foreground">
@@ -4780,7 +4780,7 @@ export default function WorkboardContent() {
                                           type="time"
                                           value={timelineEditEnd}
                                           onChange={(event) => setTimelineEditEnd(event.target.value)}
-                                          className="ml-1 h-10 w-32 rounded border px-2 text-sm"
+                                          className="ml-1 h-10 w-32 rounded border border-border bg-background px-2 text-sm text-foreground"
                                         />
                                       </label>
                                       <button
@@ -5452,14 +5452,14 @@ export default function WorkboardContent() {
 
             <div>
               <label className="text-xs text-muted-foreground">Start time</label>
-                <Input
-                  type="time"
-                  value={assignmentDraft.startTime}
-                  onChange={(e) => {
-                    setIsAssignmentModalDirty(true);
-                    setAssignmentDraft({ ...assignmentDraft, startTime: e.target.value });
-                  }}
-                className="mt-1"
+              <Input
+                type="time"
+                value={assignmentDraft.startTime}
+                className="mt-1 border-border bg-background text-foreground"
+                onChange={(e) => {
+                  setIsAssignmentModalDirty(true);
+                  setAssignmentDraft({ ...assignmentDraft, startTime: e.target.value });
+                }}
                 data-testid="input-assignment-start"
               />
               <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(assignmentDraft.startTime)}</div>
@@ -5624,7 +5624,7 @@ export default function WorkboardContent() {
                 type="date"
                 value={quickTaskDraft.date}
                 onChange={(event) => setQuickTaskDraft((current) => ({ ...current, date: event.target.value }))}
-                className="mt-1"
+                className="mt-1 border-border bg-background text-foreground"
               />
             </div>
             <div>
