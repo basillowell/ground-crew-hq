@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { Bell, ChevronLeft, ChevronRight, Copy, RefreshCw, Save, StickyNote, Trash2 } from 'lucide-react';
 import { formatTime } from '@/utils/formatTime';
 import { useAppStore } from '@/store/appStore';
+import { PageHeader } from '@/components/shared';
 
 type AssignmentStatus = 'planned' | 'pending' | 'in_progress' | 'done';
 
@@ -327,6 +328,7 @@ export default function WorkflowPage() {
         assignments: row.assignments.map((item) => (item.id === id ? { ...item, ...patch } : item)),
       })),
     );
+    toast.success('Assignment updated');
   };
 
   const toggleAssignmentStatus = async (assignment: AssignmentRow) => {
@@ -354,6 +356,7 @@ export default function WorkflowPage() {
         assignments: row.assignments.filter((item) => item.id !== id),
       })),
     );
+    toast.success('Assignment deleted');
   };
 
   const openAddTask = (employeeId: string) => {
@@ -439,6 +442,7 @@ export default function WorkflowPage() {
       ),
     );
     closeAddTask(employeeId);
+    toast.success('Task added');
   };
 
   const copyDay = async () => {
@@ -486,6 +490,7 @@ export default function WorkflowPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-4">
+      <PageHeader title="Workflow" subtitle="Plan daily assignments and track crew progress." />
       <Card className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">

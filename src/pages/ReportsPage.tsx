@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
+import { PageHeader } from '@/components/shared';
 
 const RechartsResponsiveContainer = lazy(() =>
   import('recharts').then((m) => ({ default: m.ResponsiveContainer })),
@@ -1022,9 +1023,8 @@ export default function ReportsPage() {
         </p>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Reports</h1>
-        <p className="mt-0.5 text-sm text-text-muted">Labor summaries and cost analysis.</p>
+      <div className="no-print">
+        <PageHeader title="Reports" subtitle="Labor summaries and cost analysis." />
       </div>
 
       <div className="no-print space-y-3 rounded-xl border border-surface-border bg-surface-card p-4">

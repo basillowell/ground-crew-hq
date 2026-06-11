@@ -6,6 +6,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { Receipt, Send, DollarSign, FileText } from 'lucide-react';
+import { PageHeader } from '@/components/shared';
 
 // columns from invoices migration
 interface Invoice {
@@ -153,12 +154,7 @@ export default function InvoicingPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Invoicing</h1>
-        <p className="mt-0.5 text-sm text-text-secondary">
-          Manage and track invoices for your properties.
-        </p>
-      </div>
+      <PageHeader title="Invoicing" subtitle="Manage and track invoices for your properties." />
 
       {/* Summary banner */}
       <div className="grid gap-4 sm:grid-cols-3">

@@ -20,6 +20,7 @@ import { fetchNwsWeather } from '@/lib/weather/providers';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { PageHeader } from '@/components/shared';
 
 type WeekTemplateItem = {
   id: string;
@@ -1111,11 +1112,10 @@ export default function SchedulerPage() {
       ) : null}
 
       {/* ── Top bar ── */}
+      <div className="px-3 pt-3 md:px-5">
+        <PageHeader title="Schedule" subtitle="Build and manage crew shifts." />
+      </div>
       <div className="border-b bg-card px-3 py-3 md:px-5 flex items-center gap-2 md:gap-3 flex-wrap shrink-0">
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight">Schedule</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Build and manage crew shifts.</p>
-        </div>
 
         {/* Week nav */}
         <div className="flex items-center gap-1">

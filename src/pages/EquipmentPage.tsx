@@ -14,6 +14,7 @@ import { TableSkeleton } from '@/components/TableSkeleton';
 import { toast } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '@/store/appStore';
+import { PageHeader } from '@/components/shared';
 
 type EquipmentUnitRow = {
   id: string;
@@ -383,11 +384,7 @@ export default function EquipmentPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-text-primary">Equipment</h1>
-          <p className="mt-0.5 text-sm text-text-muted">Track maintenance and availability.</p>
-        </div>
+      <PageHeader title="Equipment" subtitle="Track maintenance and availability.">
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-surface-border bg-surface-card p-0.5">
             <Button
@@ -416,7 +413,7 @@ export default function EquipmentPage() {
             </Button>
           ) : null}
         </div>
-      </div>
+      </PageHeader>
 
       {error ? <ErrorRetry message={error} onRetry={() => void fetchEquipment()} /> : null}
 

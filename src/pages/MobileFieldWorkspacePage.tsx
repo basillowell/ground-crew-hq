@@ -15,6 +15,7 @@ import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations
 import { createEvents, type EventAttributes } from 'ics';
 import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
+import { PageHeader } from '@/components/shared';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 
@@ -1214,7 +1215,7 @@ export default function MobileFieldWorkspacePage() {
         event_type: action === 'start' ? 'clock_in' : 'clock_out',
       });
       if (clockError) {
-        await supabase
+        const { error: rollbackError } = await supabase
           .from('assignments')
           .update({
             status: previous.status,
@@ -1224,6 +1225,9 @@ export default function MobileFieldWorkspacePage() {
           })
           .eq('id', assignment.id)
           .eq('org_id', orgId);
+        if (rollbackError) {
+          toast.error(`Assignment rollback failed: ${rollbackError.message}`);
+        }
         setAssignments((current) => current.map((row) => (row.id === previous.id ? previous : row)));
         setSavingIds((current) => ({ ...current, [assignment.id]: false }));
         toast.error(`${action === 'start' ? 'Start' : 'Complete'} failed: ${clockError.message}`);
@@ -1351,6 +1355,7 @@ export default function MobileFieldWorkspacePage() {
 
   return (
     <div className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans">
+      <PageHeader title="Field Workspace" subtitle="Your assignments, time clock, and field updates." />
       {showWelcomeBanner ? (
         <div className="mb-3 rounded-xl border border-primary/20 bg-primary/10 p-3 text-sm">
           <div className="flex items-center justify-between gap-3">

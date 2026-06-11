@@ -10,6 +10,7 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { useAppStore } from "@/store/appStore";
+import { PageHeader } from "@/components/shared";
 import {
   fetchNwsAlerts,
   fetchNwsForecast,
@@ -602,12 +603,10 @@ export default function WeatherPage() {
 
   return (
     <div className="space-y-4 p-4 md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Weather</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">Live operations forecast for {selectedStation?.name}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">NOAA/NWS · Timezone: {selectedTimezone}</p>
-        </div>
+      <PageHeader
+        title="Weather"
+        subtitle={`Live operations forecast for ${selectedStation?.name ?? "selected station"} · NOAA/NWS · ${selectedTimezone}`}
+      >
         {stations.length > 1 ? (
           <select
             className="h-9 min-w-[240px] rounded-md border bg-background px-3 text-sm"
@@ -621,7 +620,7 @@ export default function WeatherPage() {
             ))}
           </select>
         ) : null}
-      </div>
+      </PageHeader>
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3 lg:max-h-[calc(100vh-11rem)] lg:overflow-y-auto lg:pr-1">

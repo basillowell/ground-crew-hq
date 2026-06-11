@@ -54,6 +54,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
+import { PageHeader } from '@/components/shared';
 
 const TABS = ['Operations', 'Tasks', 'Equipment', 'Workforce', 'SOPs', 'Account', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -344,10 +345,7 @@ export default function SettingsPage() {
 
   return (
     <div className="settings-theme mx-auto max-w-6xl space-y-4 bg-surface-base p-4 text-text-primary md:p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Operations Control Center</h1>
-        <p className="mt-1 text-sm text-text-muted">{user?.email}</p>
-      </div>
+      <PageHeader title="Settings" subtitle={`Operations Control Center · ${user?.email ?? 'Workspace settings'}`} />
 
       <div className="mb-4 md:hidden">
         <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">Section</label>

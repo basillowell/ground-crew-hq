@@ -7,6 +7,7 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { Send, MessageSquare, Hash } from 'lucide-react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { PageHeader } from '@/components/shared';
 
 // columns from messages migration
 interface Message {
@@ -161,6 +162,7 @@ export default function BreakroomPage() {
     setSending(false);
     if (err) { toast.error(err.message); return; }
     setBody('');
+    toast.success('Message sent');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -235,6 +237,9 @@ export default function BreakroomPage() {
 
       {/* Message area */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="border-b border-surface-border px-4 pt-3">
+          <PageHeader title="Breakroom" subtitle="Share updates with your team channels." />
+        </div>
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-surface-border px-4 py-3">
           <Hash className="h-4 w-4 text-text-muted" />
@@ -339,4 +344,3 @@ export default function BreakroomPage() {
     </div>
   );
 }
-

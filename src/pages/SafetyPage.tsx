@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
+import { PageHeader } from '@/components/shared';
 
 const safetyItems = [
   { title: 'Chemical Handling Training', status: 'completed', assignees: 6, dueDate: '2024-03-01' },
@@ -79,17 +80,11 @@ export default function SafetyPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Safety</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Toolbox talks and compliance records.</p>
-          </div>
-          <Button size="sm" className="h-9 gap-1.5" onClick={() => setShowLogTalkModal(true)}>
-            Log Safety Talk
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Safety"
+        subtitle="Toolbox talks and compliance records."
+        action={{ label: 'Log Safety Talk', onClick: () => setShowLogTalkModal(true) }}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="rounded-xl border bg-card p-4 text-center">

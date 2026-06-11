@@ -42,6 +42,7 @@ import { supabase } from '@/lib/supabase';
 import ChemicalSettings from '@/pages/settings/ChemicalSettings';
 import { useChemicalLogs } from '@/hooks/useChemicalLogs';
 import { useAppStore } from '@/store/appStore';
+import { PageSkeleton } from '@/components/PageSkeleton';
 
 type DraftMixItem = {
   productId: string;
@@ -644,6 +645,17 @@ export default function ApplicationsPage() {
     });
 
     downloadCsv('chemical-audit-export.csv', [header.join(','), ...rows]);
+  }
+
+  if (
+    !isHydrated ||
+    equipmentUnitsQuery.isLoading ||
+    weatherLogsQuery.isLoading ||
+    logsQuery.isLoading ||
+    productsQuery.isLoading ||
+    mixItemsQuery.isLoading
+  ) {
+    return <PageSkeleton />;
   }
 
   return (

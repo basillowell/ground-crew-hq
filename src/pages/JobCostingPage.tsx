@@ -6,6 +6,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp } from 'lucide-react';
+import { PageHeader } from '@/components/shared';
 
 // columns from docs/dev/live-db-state.md — assignments
 interface CompletedAssignment {
@@ -196,12 +197,7 @@ export default function JobCostingPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Job Costing</h1>
-        <p className="mt-0.5 text-sm text-text-secondary">
-          Labor cost and margin analysis for completed assignments.
-        </p>
-      </div>
+      <PageHeader title="Job Costing" subtitle="Labor cost and margin analysis for completed assignments." />
 
       {summary && (
         <div className="grid gap-4 sm:grid-cols-3">

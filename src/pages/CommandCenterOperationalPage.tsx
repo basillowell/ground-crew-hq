@@ -35,6 +35,8 @@ import {
 } from '@/lib/supabase-queries';
 import { useAppStore } from '@/store/appStore';
 import { formatTime } from '@/utils/formatTime';
+import { PageHeader } from '@/components/shared';
+import { PageSkeleton } from '@/components/PageSkeleton';
 
 type AssignmentRow = {
   id: string;
@@ -479,6 +481,8 @@ export default function CommandCenterOperationalPage() {
       .sort((a, b) => b.assignments - a.assignments);
   }, [data.assignments, taskById]);
 
+  if (isLoading) return <PageSkeleton />;
+
   return (
     <div className="min-h-full bg-surface-base px-4 py-5 text-text-primary sm:px-6 lg:px-8">
       <div className="mx-auto max-w-screen-2xl space-y-5">
@@ -492,18 +496,15 @@ export default function CommandCenterOperationalPage() {
           </div>
         ) : null}
 
-        <header>
-          <p className="body-muted uppercase">Operations overview</p>
-          <h1 className="heading-xl mt-1">Command Center</h1>
-          <p className="body-base mt-2">
-            {today.toLocaleDateString('en-US', {
+        <PageHeader
+          title="Command Center"
+          subtitle={today.toLocaleDateString('en-US', {
               weekday: 'long',
               month: 'long',
               day: 'numeric',
               year: 'numeric',
             })}
-          </p>
-        </header>
+        />
 
         {errorMessage ? (
           <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-4 py-3 text-sm text-status-warning">

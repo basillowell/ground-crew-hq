@@ -1843,11 +1843,14 @@ export default function WorkboardContent() {
         });
         if (clockError) {
           syncTimelineCaches(assignment.id, { status: previousStatus, actualStartAt: previousStartAt });
-          await supabase
+          const { error: rollbackError } = await supabase
             .from('assignments')
             .update({ status: previousStatus, actual_start_at: previousStartAt })
             .eq('id', assignment.id)
             .eq('org_id', currentUser.orgId);
+          if (rollbackError) {
+            toast.error(`Task start rollback failed: ${rollbackError.message}`);
+          }
           toast.error(`Failed to start task: ${clockError.message}`);
           setSavingTimelineAssignmentId(null);
           return;
@@ -1941,7 +1944,7 @@ export default function WorkboardContent() {
             actualCompletedAt: previousCompletedAt,
             actualHours: previousActualHours,
           });
-          await supabase
+          const { error: rollbackError } = await supabase
             .from('assignments')
             .update({
               status: previousStatus,
@@ -1950,6 +1953,9 @@ export default function WorkboardContent() {
             })
             .eq('id', assignment.id)
             .eq('org_id', currentUser.orgId);
+          if (rollbackError) {
+            toast.error(`Task completion rollback failed: ${rollbackError.message}`);
+          }
           toast.error(`Failed to complete task: ${clockError.message}`);
           setSavingTimelineAssignmentId(null);
           return;
@@ -1972,6 +1978,8 @@ export default function WorkboardContent() {
         if (!nextResult.error) {
           syncTimelineCaches(nextTask.id, { status: 'in_progress', actualStartAt: nowIso });
           triggerAssignmentFlash(nextTask.id, 'started');
+        } else {
+          toast.error(`Next task could not be started: ${nextResult.error.message}`);
         }
       }
 
@@ -2091,6 +2099,8 @@ export default function WorkboardContent() {
               .eq('org_id', currentUser.orgId);
             if (!nextUpdate.error) {
               syncTimelineCaches(nextTask.id, { actualStartAt: returnedCompletedAt ?? endTs });
+            } else {
+              toast.error(`Next task start time could not be updated: ${nextUpdate.error.message}`);
             }
           }
         }
@@ -4092,6 +4102,17 @@ export default function WorkboardContent() {
 
       {/* ─── MAIN DISPATCH BOARD ─── */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-3 pt-3 md:px-5">
+          <PageHeader
+            title="Workflow"
+            subtitle="Assign tasks and manage daily operations."
+            badge={showFreshUpdateBadge ? (
+              <Badge variant="secondary" className="gap-1">
+                <Radio className="h-3 w-3 animate-pulse" /> Live
+              </Badge>
+            ) : undefined}
+          />
+        </div>
 
         {/* Header bar */}
         <div className="border-b border-surface-border bg-surface-card px-3 py-3 md:px-5">
@@ -4113,19 +4134,10 @@ export default function WorkboardContent() {
             ) : null}
           </div>
 
-          <div className="flex flex-col flex-1 min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-text-primary">Workflow</h1>
-            <p className="mt-0.5 text-sm text-text-muted">Assign tasks and manage daily operations.</p>
-          </div>
           <div className="flex items-center gap-2">
             {activeProperty && (
               <Badge variant="outline" style={{ borderColor: activeProperty.color, color: activeProperty.color }}>
                 {activeProperty.shortName}
-              </Badge>
-            )}
-            {showFreshUpdateBadge && (
-              <Badge variant="secondary" className="gap-1">
-                <Radio className="h-3 w-3 animate-pulse" /> Live
               </Badge>
             )}
           </div>

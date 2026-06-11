@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { isUSCoordinates } from '@/lib/weather/providers';
 import { toast } from '@/components/ui/sonner';
+import { PageHeader } from '@/components/shared';
+import { PageSkeleton } from '@/components/PageSkeleton';
 import {
   Sheet,
   SheetContent,
@@ -501,24 +503,22 @@ export default function DispatchBoardPage() {
     ? employees.find((e) => e.id === createCell.employeeId)
     : undefined;
 
+  if (isLoading) return <PageSkeleton />;
+
   return (
     <div className="min-h-full bg-surface-base px-4 py-5 text-text-primary sm:px-6 lg:px-8">
       <div className="mx-auto max-w-full space-y-5">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="body-muted uppercase">Weekly operations</p>
-            <h1 className="heading-xl mt-1">Dispatch Board</h1>
-            <p className="body-base mt-2">
-              Drag assignments between crew members and days to update the weekly plan.
-            </p>
-          </div>
+        <PageHeader
+          title="Dispatch Board"
+          subtitle="Drag assignments between crew members and days to update the weekly plan."
+          badge={nwsAlertBadge ? (
+            <div className="flex items-center gap-1.5 rounded-full border border-status-pending/30 bg-status-pending/10 px-3 py-1.5 text-xs font-medium text-status-pending">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span className="max-w-xs truncate">{nwsAlertBadge}</span>
+            </div>
+          ) : undefined}
+        >
           <div className="flex flex-wrap items-center gap-2">
-            {nwsAlertBadge ? (
-              <div className="flex items-center gap-1.5 rounded-full border border-status-pending/30 bg-status-pending/10 px-3 py-1.5 text-xs font-medium text-status-pending">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                <span className="max-w-xs truncate">{nwsAlertBadge}</span>
-              </div>
-            ) : null}
             <button
               type="button"
               onClick={() => setWeekStart((current) => addDays(current, -7))}
@@ -545,7 +545,7 @@ export default function DispatchBoardPage() {
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>
-        </header>
+        </PageHeader>
 
         {errorMessage ? (
           <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-4 py-3 text-sm text-status-warning">
