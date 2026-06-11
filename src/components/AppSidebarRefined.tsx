@@ -26,11 +26,9 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePropertyClassOptions } from '@/lib/supabase-queries';
+import { useProgramSettings, useProperties, usePropertyClassOptions } from '@/lib/supabase-queries';
 import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/constants/version';
-import { useAppStore } from '@/store/appStore';
-import { toProgramSettingsView } from '@/store/programSettingsView';
 
 interface AppSidebarRefinedProps {
   onNavigate?: () => void;
@@ -136,18 +134,16 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { currentRole, currentPropertyId } = useAuth();
-  const storeProgramSettings = useAppStore((store) => store.programSettings);
-  const storeOrg = useAppStore((store) => store.org);
-  const programSetting = toProgramSettingsView(storeProgramSettings, storeOrg);
+  const { currentRole, currentPropertyId, orgId } = useAuth();
+  const { data: programSetting } = useProgramSettings(orgId);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
   const logoInitials = (programSetting?.logoInitials || navigationTitle.slice(0, 2)).toUpperCase();
   const logoUrl = programSetting?.logoUrl;
-  const properties = useAppStore((store) => store.properties);
+  const { data: properties = [] } = useProperties(orgId);
   const propertyClasses = usePropertyClassOptions().data ?? [];
   const currentProperty = properties.find((property) => property.id === currentPropertyId);
-  const currentPropertyClassId = (currentProperty as { property_class_id?: string } | undefined)?.property_class_id;
+  const currentPropertyClassId = currentProperty?.propertyClassId;
   const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentPropertyClassId);
   const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];
   const navRole: NavRole = currentRole === 'admin' || currentRole === 'manager' ? 'admin' : 'employee';
