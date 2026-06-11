@@ -303,6 +303,8 @@ function AppRoutes() {
 
 function AppWithNotificationSetup() {
   const { currentUser } = useAuth();
+  const authUserId = currentUser?.authUser?.id;
+  const employeeId = currentUser?.employeeId;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -323,15 +325,15 @@ function AppWithNotificationSetup() {
   }, [currentUser]);
 
   useEffect(() => {
-    if (!supabase || !currentUser) return;
+    if (!supabase || !authUserId || !employeeId) return;
 
     // TODO: Restore message notifications when a typed chat table is added to the live schema.
 
     const scheduleChannel = supabase
-      .channel(`app-notify-schedule-${currentUser.employeeId}`)
+      .channel(`app-notify-schedule-${authUserId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "schedule_entries", filter: `employee_id=eq.${currentUser.employeeId}` },
+        { event: "*", schema: "public", table: "schedule_entries", filter: `employee_id=eq.${employeeId}` },
         () => {
           sendNotification("Schedule updated", "Your shift schedule changed. Open Scheduler to review.", "/app/scheduler");
           publishInAppNotification({
@@ -348,10 +350,10 @@ function AppWithNotificationSetup() {
       .subscribe();
 
     const assignmentsChannel = supabase
-      .channel(`app-notify-assignments-${currentUser.employeeId}`)
+      .channel(`app-notify-assignments-${authUserId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "assignments", filter: `employee_id=eq.${currentUser.employeeId}` },
+        { event: "INSERT", schema: "public", table: "assignments", filter: `employee_id=eq.${employeeId}` },
         async (payload) => {
           const next = payload.new as {
             title?: string | null;
@@ -386,7 +388,7 @@ function AppWithNotificationSetup() {
       void scheduleChannel.unsubscribe();
       void assignmentsChannel.unsubscribe();
     };
-  }, [currentUser]);
+  }, [authUserId, employeeId]);
 
   return (
     <TooltipProvider>

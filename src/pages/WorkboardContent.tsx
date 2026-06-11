@@ -916,6 +916,12 @@ export default function WorkboardContent() {
         .filter((employee) => String(employee.role ?? '').toLowerCase() !== 'viewer'),
     [effectivePropertyId, storeEmployees],
   );
+  const employeeListRef = useRef(employeeList);
+
+  useEffect(() => {
+    employeeListRef.current = employeeList;
+  }, [employeeList]);
+
   const assignmentList = assignmentsQuery.data ?? [];
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -1330,17 +1336,19 @@ export default function WorkboardContent() {
   }, [fetchTaskLibrary, tasksQuery.refetch]);
 
   useEffect(() => {
-    if (!isHydrated) return;
-    if (!supabase) return;
+    const authUserId = currentUser?.authUser?.id;
+    const orgId = currentUser?.orgId;
+    if (!supabase || !authUserId || !orgId || !isHydrated) return;
+
     const assignmentsChannel = supabase
-      .channel('workboard-assignments')
+      .channel(`workboard-assignments-${authUserId}-${orgId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'assignments',
-          filter: currentUser?.orgId ? `org_id=eq.${currentUser.orgId}` : undefined,
+          filter: `org_id=eq.${orgId}`,
         },
         (payload) => {
           setLastRealtimeRefreshAt(Date.now());
@@ -1354,7 +1362,7 @@ export default function WorkboardContent() {
             const started = nextStatus === 'in_progress' || nextStatus === 'in-progress';
             if (completed || started) {
               triggerAssignmentFlash(next.id, completed ? 'complete' : 'started');
-              const assignee = employeeList.find((employee) => employee.id === (next.employee_id ?? ''));
+              const assignee = employeeListRef.current.find((employee) => employee.id === (next.employee_id ?? ''));
               const fullName = assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Crew member';
               const actionLabel = completed ? 'completed' : 'started';
               const taskLabel = next.title || 'a task';
@@ -1367,16 +1375,16 @@ export default function WorkboardContent() {
       .subscribe();
 
     const taskRequestsChannel = supabase
-      .channel('workflow-live-task-requests')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests' }, () => {
+      .channel(`workflow-live-task-requests-${authUserId}-${orgId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests', filter: `org_id=eq.${orgId}` }, () => {
         setLastRealtimeRefreshAt(Date.now());
         void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
       })
       .subscribe();
 
     const scheduleChannel = supabase
-      .channel('workflow-live-schedule')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries' }, () => {
+      .channel(`workflow-live-schedule-${authUserId}-${orgId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `org_id=eq.${orgId}` }, () => {
         void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
       })
       .subscribe();
@@ -1386,7 +1394,7 @@ export default function WorkboardContent() {
       void taskRequestsChannel.unsubscribe();
       void scheduleChannel.unsubscribe();
     };
-  }, [currentUser?.orgId, employeeList, isHydrated, queryClient, triggerAssignmentFlash]);
+  }, [currentUser?.authUser?.id, currentUser?.orgId, isHydrated, queryClient, triggerAssignmentFlash]);
 
   useEffect(
     () => () => {

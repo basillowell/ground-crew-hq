@@ -6,7 +6,6 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { Send, MessageSquare, Hash } from 'lucide-react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 import { PageHeader } from '@/components/shared';
 
 // columns from messages migration
@@ -46,7 +45,8 @@ function fmtDate(iso: string) {
 }
 
 export default function BreakroomPage() {
-  const { orgId } = useAuth();
+  const { orgId, currentUser } = useAuth();
+  const authUserId = currentUser?.authUser?.id;
   const isHydrated = useAppStore((s) => s.isHydrated);
   const employees = useAppStore((s) => s.employees);
   const properties = useAppStore((s) => s.properties);
@@ -63,11 +63,9 @@ export default function BreakroomPage() {
   const [sending, setSending] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
-  const realtimeRef = useRef<RealtimeChannel | null>(null);
 
   // Find current employee from auth
-  const authContext = useAuth();
-  const myEmployeeId = authContext.currentUser?.employeeId ?? null;
+  const myEmployeeId = currentUser?.employeeId ?? null;
 
   const fetchMessages = useCallback(async (channel: string) => {
     if (!orgId || !isHydrated) return;
@@ -112,12 +110,10 @@ export default function BreakroomPage() {
 
   // Realtime subscription
   useEffect(() => {
-    if (!orgId || !isHydrated) return;
-
-    realtimeRef.current?.unsubscribe();
+    if (!supabase || !authUserId || !orgId || !isHydrated) return;
 
     const channel = supabase
-      .channel(`breakroom-${orgId}-${activeChannel}`)
+      .channel(`breakroom-${authUserId}-${orgId}-${activeChannel}`)
       .on(
         'postgres_changes',
         {
@@ -141,11 +137,10 @@ export default function BreakroomPage() {
       )
       .subscribe();
 
-    realtimeRef.current = channel;
     return () => {
       void channel.unsubscribe();
     };
-  }, [orgId, isHydrated, activeChannel]);
+  }, [activeChannel, authUserId, isHydrated, orgId]);
 
   const handleSend = async () => {
     if (!body.trim() || !orgId || !myEmployeeId) {
