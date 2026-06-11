@@ -109,12 +109,25 @@ export interface Assignment {
   id?: string;
   clubId?: string;
   employeeId: string;
+  propertyId?: string;
   taskId: string;
   equipmentId?: string;
   date: string;
   startTime: string;
   duration: number;
+  estimatedHours?: number;
+  actualHours?: number;
+  title?: string;
+  notes?: string;
   area: string;
+  order?: number;
+  actualStartAt?: string | null;
+  actualCompletedAt?: string | null;
+  completedAt?: string | null;
+  actual_start_at?: string | null;
+  actual_completed_at?: string | null;
+  completed_at?: string | null;
+  actual_hours?: number | null;
   status?: 'planned' | 'in-progress' | 'completed';
 }
 

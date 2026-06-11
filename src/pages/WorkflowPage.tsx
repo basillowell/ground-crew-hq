@@ -12,6 +12,7 @@ import { Bell, ChevronLeft, ChevronRight, Copy, RefreshCw, Save, StickyNote, Tra
 import { formatTime } from '@/utils/formatTime';
 import { useAppStore } from '@/store/appStore';
 import { PageHeader } from '@/components/shared';
+import { useAssignments } from '@/lib/supabase-queries';
 
 type AssignmentStatus = 'planned' | 'pending' | 'in_progress' | 'done';
 
@@ -134,6 +135,11 @@ export default function WorkflowPage() {
   const [taskLibraryError, setTaskLibraryError] = useState<string | null>(null);
 
   const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null;
+  const assignmentsQuery = useAssignments(
+    selectedDate,
+    propertyId ?? undefined,
+    isHydrated ? orgId : undefined,
+  );
 
   const fetchBoard = useCallback(async () => {
     if (!supabase || !orgId) {
@@ -170,15 +176,8 @@ export default function WorkflowPage() {
       return;
     }
 
-    const { data: assignmentsData, error: assignmentsError } = await supabase
-      .from('assignments')
-      .select('id, employee_id, property_id, date, title, location, notes, status, estimated_hours, actual_hours, completed_at, order_index')
-      .eq('org_id', orgId)
-      .eq('date', selectedDate)
-      .in('employee_id', employeeIds)
-      .order('order_index', { ascending: true });
-    if (assignmentsError) {
-      setError(assignmentsError.message);
+    if (assignmentsQuery.error) {
+      setError(assignmentsQuery.error.message);
       setLoading(false);
       return;
     }
@@ -200,7 +199,24 @@ export default function WorkflowPage() {
     );
 
     const assignmentByEmployee = new Map<string, AssignmentRow[]>();
-    for (const row of (assignmentsData ?? []) as AssignmentRow[]) {
+    const sharedAssignments = (assignmentsQuery.data ?? [])
+      .filter((assignment) => employeeIds.includes(assignment.employeeId))
+      .sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
+    for (const assignment of sharedAssignments) {
+      const row: AssignmentRow = {
+        id: assignment.id ?? '',
+        employee_id: assignment.employeeId,
+        property_id: assignment.propertyId ?? null,
+        date: assignment.date,
+        title: assignment.title ?? '',
+        location: assignment.area || null,
+        notes: assignment.notes ?? null,
+        status: (assignment.status as AssignmentStatus) || 'pending',
+        estimated_hours: assignment.estimatedHours ?? assignment.duration / 60,
+        actual_hours: assignment.actualHours ?? assignment.actual_hours ?? 0,
+        completed_at: assignment.completedAt ?? assignment.completed_at ?? null,
+        order_index: assignment.order ?? null,
+      };
       if (!assignmentByEmployee.has(row.employee_id)) assignmentByEmployee.set(row.employee_id, []);
       assignmentByEmployee.get(row.employee_id)?.push({
         ...row,
@@ -225,12 +241,12 @@ export default function WorkflowPage() {
 
     setCrewRows(builtRows);
     setLoading(false);
-  }, [orgId, selectedDate, propertyId, storeEmployees]);
+  }, [assignmentsQuery.data, assignmentsQuery.error, orgId, propertyId, selectedDate, storeEmployees]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || assignmentsQuery.isLoading) return;
     void fetchBoard();
-  }, [fetchBoard, isHydrated]);
+  }, [assignmentsQuery.isLoading, fetchBoard, isHydrated]);
 
   const fetchTaskLibrary = useCallback(async () => {
     if (!supabase || !orgId) return;

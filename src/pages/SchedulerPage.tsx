@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
+import { useAssignmentsRange } from '@/lib/supabase-queries';
 
 type WeekTemplateItem = {
   id: string;
@@ -204,33 +205,12 @@ export default function SchedulerPage() {
     document.title = 'Schedule — Ground Crew HQ';
   }, []);
 
-  const assignmentsWeekQuery = useQuery({
-    queryKey: ['scheduler-week-assignments', weekStart, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
-    staleTime: 1000 * 60,
-    retry: false,
-    queryFn: async () => {
-      if (!supabase || !currentUser?.orgId) return [] as AssignmentSummary[];
-      const weekStartDate = weekDays[0]?.date;
-      const weekEndDate = weekDays[6]?.date;
-      if (!weekStartDate || !weekEndDate) return [] as AssignmentSummary[];
-      let query = supabase
-        .from('assignments')
-        .select('employee_id, date, title, estimated_hours, org_id, property_id')
-        .eq('org_id', currentUser.orgId)
-        .gte('date', weekStartDate)
-        .lte('date', weekEndDate);
-      if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []).map((row) => ({
-        employeeId: String(row.employee_id ?? ''),
-        date: String(row.date ?? ''),
-        title: String(row.title ?? ''),
-        estimatedHours: Number(row.estimated_hours ?? 0),
-      }));
-    },
-  });
+  const assignmentsWeekQuery = useAssignmentsRange(
+    weekDays[0]?.date ?? '',
+    weekDays[6]?.date ?? '',
+    propertyScope,
+    isHydrated ? currentUser?.orgId : undefined,
+  );
 
   const selectedProperty = useMemo(() => {
     const properties = storeProperties.map(toSchedulerProperty);
@@ -440,7 +420,12 @@ export default function SchedulerPage() {
     (assignmentsWeekQuery.data ?? []).forEach((assignment) => {
       const key = `${assignment.employeeId}-${assignment.date}`;
       const current = map.get(key) ?? [];
-      current.push(assignment);
+      current.push({
+        employeeId: assignment.employeeId,
+        date: assignment.date,
+        title: assignment.title ?? '',
+        estimatedHours: assignment.estimatedHours ?? assignment.duration / 60,
+      });
       map.set(key, current);
     });
     return map;

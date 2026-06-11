@@ -689,35 +689,6 @@ export default function WorkboardContent() {
   const isHydrated = useAppStore((state) => state.isHydrated);
   const hydratedOrgId = isHydrated ? currentUser?.orgId : undefined;
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, hydratedOrgId);
-  const assignmentTimelineQuery = useQuery({
-    queryKey: ['workboard-assignment-timeline', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
-    queryFn: async () => {
-      if (!supabase || !currentUser?.orgId) return [] as AssignmentTimelineMeta[];
-      let query = supabase
-        .from('assignments')
-        .select('id, employee_id, date, order_index, status, actual_start_at, actual_completed_at, actual_hours')
-        .eq('org_id', currentUser.orgId)
-        .eq('date', boardDate);
-      if (effectivePropertyId && effectivePropertyId !== 'all') {
-        query = query.eq('property_id', effectivePropertyId);
-      }
-      const { data, error } = await query;
-      if (error) return [] as AssignmentTimelineMeta[];
-      return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-        id: String(row.id ?? ''),
-        employeeId: String(row.employee_id ?? ''),
-        date: String(row.date ?? boardDate),
-        orderIndex: Number(row.order_index ?? 0),
-        status: String(row.status ?? 'planned'),
-        actualStartAt: row.actual_start_at ? String(row.actual_start_at) : null,
-        actualCompletedAt: row.actual_completed_at ? String(row.actual_completed_at) : null,
-        actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
-      }));
-    },
-    staleTime: 1000 * 30,
-    retry: false,
-  });
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, hydratedOrgId);
   const tasksQuery = useTasks(undefined, hydratedOrgId);
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, hydratedOrgId);
@@ -741,24 +712,6 @@ export default function WorkboardContent() {
       return (data ?? []) as AvailableEquipmentItem[];
     },
     staleTime: 1000 * 60 * 2,
-  });
-
-  const assignmentEquipmentQuery = useQuery({
-    queryKey: ['workboard-assignment-equipment', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
-    queryFn: async () => {
-      if (!supabase || !currentUser?.orgId) return [] as Array<{ id: string; equipment_unit_id: string | null }>;
-      let query = supabase
-        .from('assignments')
-        .select('id, equipment_unit_id')
-        .eq('org_id', currentUser.orgId)
-        .eq('date', boardDate);
-      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []) as Array<{ id: string; equipment_unit_id: string | null }>;
-    },
-    staleTime: 1000 * 30,
   });
 
   const taskRequestsQuery = useQuery({
@@ -945,12 +898,26 @@ export default function WorkboardContent() {
   ]);
   const assignmentTimelineById = useMemo(() => {
     const map = new Map<string, AssignmentTimelineMeta>();
-    for (const row of assignmentTimelineQuery.data ?? []) {
-      if (!row.id) continue;
-      map.set(row.id, row);
+    for (const assignment of assignmentList) {
+      if (!assignment.id) continue;
+      map.set(assignment.id, {
+        id: assignment.id,
+        employeeId: assignment.employeeId,
+        date: assignment.date,
+        orderIndex: assignment.order ?? 0,
+        status: String(assignment.status ?? 'planned'),
+        actualStartAt: assignment.actualStartAt ?? assignment.actual_start_at ?? null,
+        actualCompletedAt:
+          assignment.actualCompletedAt ??
+          assignment.actual_completed_at ??
+          assignment.completedAt ??
+          assignment.completed_at ??
+          null,
+        actualHours: assignment.actualHours ?? assignment.actual_hours ?? null,
+      });
     }
     return map;
-  }, [assignmentTimelineQuery.data]);
+  }, [assignmentList]);
   const assignmentTimelineRecord = useMemo(() => {
     const record: Record<string, { actualStartAt: string | null; actualCompletedAt: string | null }> = {};
     for (const [id, row] of assignmentTimelineById.entries()) {
@@ -980,21 +947,9 @@ export default function WorkboardContent() {
   );
   const equipmentList = equipmentQuery.data ?? [];
   const availableEquipmentList = availableEquipmentQuery.data ?? [];
-  const assignmentEquipmentMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const row of assignmentEquipmentQuery.data ?? []) {
-      if (row.id && row.equipment_unit_id) map.set(row.id, row.equipment_unit_id);
-    }
-    return map;
-  }, [assignmentEquipmentQuery.data]);
   const dayAssignments = useMemo(() => {
-    return assignmentList
-      .filter((a) => a.date === boardDate)
-      .map((assignment) => ({
-        ...assignment,
-        equipmentId: assignment.equipmentId ?? assignmentEquipmentMap.get(assignment.id) ?? assignment.equipmentId,
-      }));
-  }, [assignmentEquipmentMap, assignmentList, boardDate]);
+    return assignmentList.filter((assignment) => assignment.date === boardDate);
+  }, [assignmentList, boardDate]);
   const noteList = notesQuery.data ?? [];
   const taskRequests = taskRequestsQuery.data ?? [];
   const pendingTaskRequests = pendingTaskRequestsQuery.data ?? [];
@@ -1016,32 +971,23 @@ export default function WorkboardContent() {
     previousDate.setDate(previousDate.getDate() - 7);
     return previousDate.toISOString().slice(0, 10);
   }, [boardDate]);
-  const previousWeekSummaryQuery = useQuery({
-    queryKey: ['workboard-last-week-summary', previousWeekDateKey, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && supabase && currentUser?.orgId),
-    queryFn: async () => {
-      if (!supabase || !currentUser?.orgId) return [] as Array<{ title: string; count: number }>;
-      let query = supabase
-        .from('assignments')
-        .select('title')
-        .eq('org_id', currentUser.orgId)
-        .eq('date', previousWeekDateKey);
-      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
-      const { data, error } = await query;
-      if (error) throw error;
-      const counts = new Map<string, number>();
-      for (const row of data ?? []) {
-        const title = String((row as { title?: string }).title ?? '').trim();
-        if (!title) continue;
-        counts.set(title, (counts.get(title) ?? 0) + 1);
-      }
-      return Array.from(counts.entries())
-        .map(([title, count]) => ({ title, count }))
-        .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title))
-        .slice(0, 5);
-    },
-    staleTime: 1000 * 60,
-  });
+  const previousWeekAssignmentsQuery = useAssignments(
+    previousWeekDateKey,
+    effectivePropertyId,
+    hydratedOrgId,
+  );
+  const previousWeekSummary = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const assignment of previousWeekAssignmentsQuery.data ?? []) {
+      const title = assignment.title?.trim() ?? '';
+      if (!title) continue;
+      counts.set(title, (counts.get(title) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([title, count]) => ({ title, count }))
+      .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title))
+      .slice(0, 5);
+  }, [previousWeekAssignmentsQuery.data]);
   const hourlyWeatherStripQuery = useQuery({
     queryKey: ['workboard-hourly-strip', boardDate, weatherStripProperty?.id ?? 'no-property'],
     enabled: Boolean(isHydrated && weatherStripProperty?.latitude && weatherStripProperty?.longitude),
@@ -1711,26 +1657,18 @@ export default function WorkboardContent() {
         actualHours?: number;
       },
     ) => {
-      queryClient.setQueryData<AssignmentTimelineMeta[]>(assignmentTimelineQuery.queryKey, (current) =>
-        (current ?? []).map((row) =>
-          row.id === assignmentId
-            ? {
-                ...row,
-                actualStartAt: patch.actualStartAt !== undefined ? patch.actualStartAt : row.actualStartAt,
-                actualCompletedAt: patch.actualCompletedAt !== undefined ? patch.actualCompletedAt : row.actualCompletedAt,
-                status: patch.status ?? row.status,
-                actualHours: patch.actualHours ?? row.actualHours,
-              }
-            : row,
-        ),
-      );
-
       queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
         (current ?? []).map((row) => {
           if (row.id !== assignmentId) return row;
           const enriched = row as Assignment & Record<string, unknown>;
-          if (patch.actualStartAt !== undefined) enriched.actual_start_at = patch.actualStartAt;
-          if (patch.actualCompletedAt !== undefined) enriched.actual_completed_at = patch.actualCompletedAt;
+          if (patch.actualStartAt !== undefined) {
+            enriched.actual_start_at = patch.actualStartAt;
+            row.actualStartAt = patch.actualStartAt;
+          }
+          if (patch.actualCompletedAt !== undefined) {
+            enriched.actual_completed_at = patch.actualCompletedAt;
+            row.actualCompletedAt = patch.actualCompletedAt;
+          }
           if (patch.status) {
             enriched.status = patch.status;
             row.status = normalizeAssignmentStatus(patch.status) as Assignment['status'];
@@ -1743,7 +1681,7 @@ export default function WorkboardContent() {
         }),
       );
     },
-    [assignmentTimelineQuery.queryKey, assignmentsQuery.queryKey, queryClient],
+    [assignmentsQuery.queryKey, queryClient],
   );
 
   const getAssignmentTimelineMeta = useCallback(
@@ -2120,7 +2058,6 @@ export default function WorkboardContent() {
         toast.success('Actual times updated.');
       }
       await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      await queryClient.invalidateQueries({ queryKey: ['workboard-assignment-timeline'] });
       setSavingTimelineAssignmentId(null);
     },
     [currentUser?.orgId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, queryClient, syncTimelineCaches],
@@ -2881,7 +2818,7 @@ export default function WorkboardContent() {
       }
     }
 
-    const historySummary = previousWeekSummaryQuery.data ?? [];
+    const historySummary = previousWeekSummary;
     if (historySummary.length > 0) {
       items.push({
         id: 'history-last-week-plan',
@@ -2930,7 +2867,7 @@ export default function WorkboardContent() {
     hourlyWeatherStripQuery.data,
     openQuickPlanDialog,
     orderedDispatchBoard,
-    previousWeekSummaryQuery.data,
+    previousWeekSummary,
     weatherLogs,
     weatherSnapshot,
   ]);
@@ -3659,7 +3596,6 @@ export default function WorkboardContent() {
     }
 
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
-    void queryClient.invalidateQueries({ queryKey: ['workboard-assignment-equipment'] });
     void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
     setLinkedRequestId(null);
     setLinkedRequestTitle(null);

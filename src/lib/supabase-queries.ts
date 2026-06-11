@@ -115,6 +115,8 @@ type DbAssignment = {
   estimated_hours?: number | null;
   actual_hours?: number | null;
   completed_at?: string | null;
+  actual_start_at?: string | null;
+  actual_completed_at?: string | null;
   start_time?: string | null;
   title?: string | null;
   equipment_unit_id?: string | null;
@@ -504,17 +506,42 @@ function toAssignment(row: DbAssignment): Assignment {
     duration: Math.round(safeEstimatedHours * 60),
     estimatedHours: safeEstimatedHours,
     actualHours: Number(row.actual_hours ?? 0),
+    actual_hours: Number(row.actual_hours ?? 0),
     title: row.title ?? undefined,
     notes: row.notes ?? undefined,
     area: row.location ?? 'Unassigned area',
     equipmentId: row.equipment_unit_id ?? undefined,
     order: row.order_index ?? undefined,
+    actualStartAt: row.actual_start_at ?? null,
+    actualCompletedAt: row.actual_completed_at ?? null,
+    completedAt: row.completed_at ?? null,
+    actual_start_at: row.actual_start_at ?? null,
+    actual_completed_at: row.actual_completed_at ?? null,
+    completed_at: row.completed_at ?? null,
     status: (row.status as Assignment['status']) ?? 'planned',
   };
 }
 
 const ASSIGNMENTS_SELECT_COLUMNS =
-  'id, employee_id, property_id, task_id, date, location, status, created_at, org_id, notes, order_index, estimated_hours, actual_hours, completed_at, start_time, title, equipment_unit_id';
+  `id,
+  employee_id,
+  property_id,
+  task_id,
+  date,
+  location,
+  status,
+  estimated_hours,
+  actual_hours,
+  order_index,
+  actual_start_at,
+  actual_completed_at,
+  title,
+  notes,
+  equipment_unit_id,
+  created_at,
+  org_id,
+  completed_at,
+  start_time`;
 const SCHEDULE_ENTRIES_SELECT_COLUMNS =
   'id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes';
 
