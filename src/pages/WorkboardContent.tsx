@@ -719,7 +719,7 @@ export default function WorkboardContent() {
     retry: false,
   });
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, hydratedOrgId);
-  const tasksQuery = useTasks(effectivePropertyId, hydratedOrgId);
+  const tasksQuery = useTasks(undefined, hydratedOrgId);
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, hydratedOrgId);
   const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined);
   const departmentsQuery = useDepartmentOptions(hydratedOrgId);

@@ -2777,7 +2777,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   const isHydrated = useAppStore((state) => state.isHydrated);
   const storeEmployees = useAppStore((state) => state.employees);
   const { refetch: refetchTasks } = useTasks(
-    propertyId ?? undefined,
+    undefined,
     orgId ?? undefined,
   );
   const taskSensors = useSensors(

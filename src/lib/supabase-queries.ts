@@ -799,12 +799,10 @@ async function fetchAssignmentsRange(startDate: string, endDate: string, propert
   return (data as DbAssignment[]).map(toAssignment);
 }
 
-async function fetchTasks(propertyId?: string, orgId?: string): Promise<Task[]> {
+async function fetchTasks(orgId?: string): Promise<Task[]> {
   const client = ensureSupabase();
-  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
   let query = client.from('tasks').select('*');
   if (orgId) query = query.eq('org_id', orgId);
-  if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
   const { data, error } = await query
     .eq('status', 'active')
     .order('priority', { ascending: true });
@@ -1273,10 +1271,10 @@ export function useProgramSettings(orgId?: string) {
   });
 }
 
-export function useTasks(propertyId?: string, orgId?: string) {
+export function useTasks(_propertyId?: string, orgId?: string) {
   return useQuery({
-    queryKey: ['tasks', propertyId ?? 'all', orgId ?? 'all-orgs'],
-    queryFn: () => fetchTasks(propertyId, orgId),
+    queryKey: ['tasks', orgId ?? 'all-orgs'],
+    queryFn: () => fetchTasks(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 30,
   });
