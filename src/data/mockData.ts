@@ -12,10 +12,12 @@ export interface Employee {
   phone: string;
   email: string;
   photo: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'archived' | 'removed';
   department: string;
   language: string;
   workerType: 'full-time' | 'part-time' | 'seasonal';
+  employmentType?: string;
+  active?: boolean;
   jobDescriptionId?: string;
   jobDescription?: string;
   employmentStatusId?: string;

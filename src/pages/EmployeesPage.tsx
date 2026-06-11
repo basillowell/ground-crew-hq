@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, UserCog, Users } from 'lucide-react';
+import { MoreHorizontal, Plus, UserCog, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -12,6 +12,24 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { toast } from '@/components/ui/sonner';
 import { useAppStore } from '@/store/appStore';
+import { useEmployees, type EmployeeStatusFilter } from '@/lib/supabase-queries';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const EMPLOYEES_PER_PAGE = 20;
 const FALLBACK_ROLES = [
@@ -100,8 +118,12 @@ function emptyAddDraft(): AddEmployeeDraft {
 }
 
 function statusBadge(status: string | null) {
-  if (String(status).toLowerCase() === 'active') {
+  const normalized = String(status).toLowerCase();
+  if (normalized === 'active') {
     return <Badge className="rounded-full border border-status-active/20 bg-status-active/10 px-2 py-0.5 text-xs text-status-active">Active</Badge>;
+  }
+  if (normalized === 'archived') {
+    return <Badge className="rounded-full border border-surface-border bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">Archived</Badge>;
   }
   return <Badge className="rounded-full border border-status-warning/20 bg-status-warning/10 px-2 py-0.5 text-xs text-status-warning">Inactive</Badge>;
 }
@@ -155,14 +177,36 @@ function EmployeePagination({
 }
 
 export default function EmployeesPage() {
-  const { orgId, userRole } = useAuth();
+  const { orgId, userRole, currentPropertyId } = useAuth();
+  const queryClient = useQueryClient();
   const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeEmployees = useAppStore((state) => state.employees);
   const storeProperties = useAppStore((state) => state.properties);
   const storeDepartments = useAppStore((state) => state.departments);
   const hydrateStore = useAppStore((state) => state.hydrate);
   const isReadOnly = String(userRole ?? '') === 'viewer';
-  const employees = useMemo(() => storeEmployees as EmployeeRow[], [storeEmployees]);
+  const isAdmin = userRole === 'admin';
+  const [statusFilter, setStatusFilter] = useState<EmployeeStatusFilter>('active');
+  const employeesQuery = useEmployees(currentPropertyId || undefined, orgId ?? undefined, statusFilter);
+  const employees = useMemo<EmployeeRow[]>(
+    () =>
+      (employeesQuery.data ?? []).map((employee) => ({
+        id: employee.id,
+        first_name: employee.firstName,
+        last_name: employee.lastName,
+        role: employee.role,
+        department: employee.department,
+        property_id: employee.propertyId ?? null,
+        org_id: orgId,
+        status: employee.status,
+        active: employee.active ?? employee.status === 'active',
+        email: employee.email,
+        phone: employee.phone,
+        employment_type: employee.employmentType ?? employee.workerType,
+        language: employee.language,
+        hourly_rate: employee.wage,
+      })),
+    [employeesQuery.data, orgId],
+  );
   const properties = useMemo(
     () => storeProperties.map((property) => ({ id: property.id, name: property.name })),
     [storeProperties],
@@ -186,6 +230,8 @@ export default function EmployeesPage() {
   const [editDraft, setEditDraft] = useState<EditEmployeeDraft | null>(null);
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<EmployeeRow | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'roster' | 'availability'>('roster');
   const [employeePage, setEmployeePage] = useState(1);
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -468,9 +514,12 @@ export default function EmployeesPage() {
     }
 
     closeAddModal(true);
-    await hydrateStore(orgId);
+    await Promise.all([
+      hydrateStore(orgId),
+      queryClient.invalidateQueries({ queryKey: ['employees'] }),
+    ]);
     toast.success(`Added employee: ${addDraft.first_name.trim()} ${addDraft.last_name.trim()}`);
-  }, [addDraft, closeAddModal, hydrateStore, isReadOnly, orgId]);
+  }, [addDraft, closeAddModal, hydrateStore, isReadOnly, orgId, queryClient]);
 
   const startEdit = useCallback((employee: EmployeeRow) => {
     void fetchRoles();
@@ -524,9 +573,12 @@ export default function EmployeesPage() {
     }
 
     cancelEdit();
-    await hydrateStore(orgId);
+    await Promise.all([
+      hydrateStore(orgId),
+      queryClient.invalidateQueries({ queryKey: ['employees'] }),
+    ]);
     toast.success(`Updated employee: ${editDraft.first_name.trim()} ${editDraft.last_name.trim()}`);
-  }, [cancelEdit, editDraft, hydrateStore, isReadOnly, orgId]);
+  }, [cancelEdit, editDraft, hydrateStore, isReadOnly, orgId, queryClient]);
 
   const deactivateEmployee = useCallback(async (employee: EmployeeRow) => {
     if (isReadOnly) return;
@@ -549,11 +601,130 @@ export default function EmployeesPage() {
       return;
     }
 
-    await hydrateStore(orgId);
+    await Promise.all([
+      hydrateStore(orgId),
+      queryClient.invalidateQueries({ queryKey: ['employees'] }),
+    ]);
     toast.success(`Deactivated employee: ${name}`);
-  }, [hydrateStore, isReadOnly, orgId]);
+  }, [hydrateStore, isReadOnly, orgId, queryClient]);
 
-  if (!orgId || !isHydrated) {
+  const updateEmployeeStatus = useCallback(async (
+    employee: EmployeeRow,
+    status: 'active' | 'inactive' | 'archived',
+    successMessage: string,
+  ) => {
+    if (isReadOnly || !supabase || !orgId) return;
+    setDeactivatingId(employee.id);
+    const { error: updateError } = await supabase
+      .from('employees')
+      .update({ status, active: status === 'active' })
+      .eq('id', employee.id)
+      .eq('org_id', orgId);
+    setDeactivatingId(null);
+
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to update employee: ${updateError.message}`);
+      return;
+    }
+
+    await Promise.all([
+      hydrateStore(orgId),
+      queryClient.invalidateQueries({ queryKey: ['employees'] }),
+    ]);
+    toast.success(successMessage);
+  }, [hydrateStore, isReadOnly, orgId, queryClient]);
+
+  const removeEmployee = useCallback(async () => {
+    if (!pendingRemoval || !isAdmin || !supabase || !orgId) return;
+    const employee = pendingRemoval;
+    const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Employee';
+    setRemovingId(employee.id);
+
+    const { error: accessError } = await supabase
+      .from('app_users')
+      .delete()
+      .eq('employee_id', employee.id)
+      .eq('org_id', orgId);
+    if (accessError) {
+      setRemovingId(null);
+      setError(accessError.message);
+      toast.error(`Failed to revoke login access: ${accessError.message}`);
+      return;
+    }
+
+    const { error: employeeError } = await supabase
+      .from('employees')
+      .update({ status: 'removed', active: false })
+      .eq('id', employee.id)
+      .eq('org_id', orgId);
+    setRemovingId(null);
+
+    if (employeeError) {
+      setError(employeeError.message);
+      toast.error(`Failed to remove employee: ${employeeError.message}`);
+      return;
+    }
+
+    setPendingRemoval(null);
+    await Promise.all([
+      hydrateStore(orgId),
+      queryClient.invalidateQueries({ queryKey: ['employees'] }),
+    ]);
+    toast.success(`${name} has been removed. Historical data is preserved.`);
+  }, [hydrateStore, isAdmin, orgId, pendingRemoval, queryClient]);
+
+  const renderStatusActions = (employee: EmployeeRow) => {
+    const status = String(employee.status ?? 'active').toLowerCase();
+    const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Employee';
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label={`Actions for ${name}`} disabled={deactivatingId === employee.id}>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {status === 'active' ? (
+            <DropdownMenuItem onSelect={() => void deactivateEmployee(employee)}>
+              Deactivate
+            </DropdownMenuItem>
+          ) : null}
+          {status === 'inactive' ? (
+            <>
+              <DropdownMenuItem onSelect={() => void updateEmployeeStatus(employee, 'active', `Reactivated employee: ${name}`)}>
+                Reactivate
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void updateEmployeeStatus(employee, 'archived', `Archived employee: ${name}`)}>
+                Archive
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          {status === 'archived' ? (
+            <>
+              <DropdownMenuItem onSelect={() => void updateEmployeeStatus(employee, 'inactive', `Unarchived employee: ${name}`)}>
+                Unarchive
+              </DropdownMenuItem>
+              {isAdmin ? (
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setPendingRemoval(employee)}>
+                  Remove from platform
+                </DropdownMenuItem>
+              ) : null}
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  useEffect(() => {
+    setEmployeePage(1);
+    setEditingId(null);
+    setEditDraft(null);
+  }, [statusFilter]);
+
+  if (!orgId || !isHydrated || employeesQuery.isLoading) {
     return (
       <div className="p-6">
         <TableSkeleton />
@@ -580,12 +751,45 @@ export default function EmployeesPage() {
         <Button variant={viewMode === 'roster' ? 'default' : 'outline'} size="sm" className="h-9 rounded-lg" onClick={() => setViewMode('roster')}>
           Roster
         </Button>
-        <Button variant={viewMode === 'availability' ? 'default' : 'outline'} size="sm" className="h-9 rounded-lg" onClick={() => setViewMode('availability')}>
+        <Button
+          variant={viewMode === 'availability' ? 'default' : 'outline'}
+          size="sm"
+          className="h-9 rounded-lg"
+          onClick={() => {
+            setStatusFilter('active');
+            setViewMode('availability');
+          }}
+        >
           Availability
         </Button>
       </div>
 
-      {error ? <ErrorRetry message={error} onRetry={() => orgId && void hydrateStore(orgId)} /> : null}
+      {viewMode === 'roster' ? (
+        <div className="flex flex-wrap gap-2" aria-label="Employee status filter">
+          {(['active', 'inactive', 'archived'] as const).map((status) => (
+            <Button
+              key={status}
+              type="button"
+              size="sm"
+              variant={statusFilter === status ? 'default' : 'outline'}
+              onClick={() => setStatusFilter(status)}
+              className="capitalize"
+            >
+              {status}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
+      {error || employeesQuery.error ? (
+        <ErrorRetry
+          message={error ?? employeesQuery.error?.message ?? 'Failed to load employees'}
+          onRetry={() => {
+            setError(null);
+            void employeesQuery.refetch();
+          }}
+        />
+      ) : null}
 
       {viewMode === 'availability' ? (
         <div className="space-y-3">
@@ -810,18 +1014,13 @@ export default function EmployeesPage() {
                         </div>
                       ) : !isReadOnly ? (
                         <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => startEdit(employee)}>
-                            <UserCog className="mr-1 h-4 w-4" />
-                            Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void deactivateEmployee(employee)}
-                            disabled={String(employee.status).toLowerCase() === 'inactive' || deactivatingId === employee.id}
-                          >
-                            Deactivate
-                          </Button>
+                          {String(employee.status).toLowerCase() !== 'archived' ? (
+                            <Button variant="outline" size="sm" onClick={() => startEdit(employee)}>
+                              <UserCog className="mr-1 h-4 w-4" />
+                              Edit
+                            </Button>
+                          ) : null}
+                          {renderStatusActions(employee)}
                         </div>
                       ) : null}
                     </td>
@@ -906,15 +1105,10 @@ export default function EmployeesPage() {
                     </>
                   ) : !isReadOnly ? (
                     <>
-                      <Button variant="outline" className="min-h-11 flex-1" onClick={() => startEdit(employee)}>Edit</Button>
-                      <Button
-                        variant="outline"
-                        className="min-h-11 flex-1"
-                        onClick={() => void deactivateEmployee(employee)}
-                        disabled={String(employee.status).toLowerCase() === 'inactive' || deactivatingId === employee.id}
-                      >
-                        Deactivate
-                      </Button>
+                      {String(employee.status).toLowerCase() !== 'archived' ? (
+                        <Button variant="outline" className="min-h-11 flex-1" onClick={() => startEdit(employee)}>Edit</Button>
+                      ) : null}
+                      {renderStatusActions(employee)}
                     </>
                   ) : null}
                 </div>
@@ -931,6 +1125,33 @@ export default function EmployeesPage() {
         total={employees.length}
         onPageChange={changeEmployeePage}
       />
+
+      <AlertDialog open={Boolean(pendingRemoval)} onOpenChange={(open) => !open && !removingId && setPendingRemoval(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from platform?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove{' '}
+              {`${pendingRemoval?.first_name ?? ''} ${pendingRemoval?.last_name ?? ''}`.trim() || 'this employee'} from your roster.
+              All historical labor data, clock events, and assignments will be preserved for reporting purposes.
+              Their login access will be revoked.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(removingId)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void removeEmployee();
+              }}
+              disabled={Boolean(removingId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removingId ? 'Removing...' : 'Remove from platform'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={addOpen && !isReadOnly}

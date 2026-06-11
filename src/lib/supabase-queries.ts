@@ -56,6 +56,7 @@ type DbEmployee = {
   department_id?: string | null;
   worker_type?: string | null;
   worker_type_id?: string | null;
+  employment_type?: string | null;
   job_description_id?: string | null;
   job_description?: string | null;
   employment_status_id?: string | null;
@@ -70,6 +71,7 @@ type DbEmployee = {
   preferred_shift_template_id?: string | null;
   portal_enabled?: boolean | null;
   login_email?: string | null;
+  active?: boolean | null;
   status: string;
   phone: string | null;
   email: string | null;
@@ -440,6 +442,8 @@ function toEmployee(row: DbEmployee): Employee {
     photo: '',
     language: row.language ?? 'English',
     workerType: (row.worker_type as Employee['workerType']) ?? 'full-time',
+    employmentType: row.employment_type ?? undefined,
+    active: row.active ?? row.status === 'active',
     jobDescriptionId: row.job_description_id ?? undefined,
     jobDescription: row.job_description ?? undefined,
     employmentStatusId: row.employment_status_id ?? undefined,
@@ -1202,12 +1206,21 @@ export function useAssignmentsRange(startDate: string, endDate: string, property
   });
 }
 
-async function fetchEmployees(propertyId?: string, orgId?: string): Promise<Employee[]> {
+export type EmployeeStatusFilter = 'active' | 'inactive' | 'archived' | 'all';
+
+async function fetchEmployees(
+  propertyId?: string,
+  orgId?: string,
+  status: EmployeeStatusFilter = 'active',
+): Promise<Employee[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
   let query = client.from('employees').select('*').order('last_name').order('first_name');
   if (orgId) query = query.eq('org_id', orgId);
   if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
+  query = status === 'all'
+    ? query.in('status', ['active', 'inactive', 'archived'])
+    : query.eq('status', status);
   const { data, error } = await query;
   if (error) throw error;
   return (data as DbEmployee[]).map(toEmployee);
@@ -1233,10 +1246,14 @@ async function fetchProgramSettings(orgId: string): Promise<ProgramSettings | nu
   return toProgramSettings(data as DbProgramSettings);
 }
 
-export function useEmployees(propertyId?: string, orgId?: string) {
+export function useEmployees(
+  propertyId?: string,
+  orgId?: string,
+  status: EmployeeStatusFilter = 'active',
+) {
   return useQuery({
-    queryKey: ['employees', propertyId ?? 'all', orgId ?? 'all-orgs'],
-    queryFn: () => fetchEmployees(propertyId, orgId),
+    queryKey: ['employees', propertyId ?? 'all', orgId ?? 'all-orgs', status],
+    queryFn: () => fetchEmployees(propertyId, orgId, status),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
   });
