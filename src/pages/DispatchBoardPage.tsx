@@ -1,770 +1,116 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  DndContext,
-  PointerSensor,
-  closestCorners,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import {
-  AlertTriangle,
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  ClipboardList,
-  Clock3,
-  GripVertical,
-  MapPin,
-  Plus,
-  UserRound,
-} from 'lucide-react';
-import { isUSCoordinates } from '@/lib/weather/providers';
-import { toast } from '@/components/ui/sonner';
-import { PageHeader } from '@/components/shared';
-import { PageSkeleton } from '@/components/PageSkeleton';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
-import { cn } from '@/lib/utils';
-import { useAssignmentsRange, useEmployees, useProperties, useTasks } from '@/lib/supabase-queries';
-import { useQueryClient } from '@tanstack/react-query';
-import type { Assignment, Employee, Property, Task } from '@/data/seedData';
-import { formatTime } from '@/utils/formatTime';
-
-type StatusTone = 'active' | 'pending' | 'complete' | 'hold' | 'warning';
-
-type CellData = {
-  type: 'cell' | 'assignment';
-  employeeId: string;
-  date: string;
-};
-
-const statusStyles: Record<StatusTone, string> = {
-  active: 'border-status-active/20 bg-status-active/10 text-status-active',
-  pending: 'border-status-pending/20 bg-status-pending/10 text-status-pending',
-  complete: 'border-status-complete/20 bg-status-complete/10 text-status-complete',
-  hold: 'border-status-hold/20 bg-status-hold/10 text-status-hold',
-  warning: 'border-status-warning/20 bg-status-warning/10 text-status-warning',
-};
-
-function getLocalDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function getMonday(date: Date): Date {
-  const monday = new Date(date);
-  const day = monday.getDay();
-  monday.setDate(monday.getDate() + (day === 0 ? -6 : 1 - day));
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
-
-function addDays(date: Date, amount: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + amount);
-  return next;
-}
-
-function statusTone(status: string): StatusTone {
-  const normalized = status.toLowerCase().replaceAll('_', '-');
-  if (['complete', 'completed', 'done'].includes(normalized)) return 'complete';
-  if (['active', 'in-progress', 'scheduled'].includes(normalized)) return 'active';
-  if (['hold', 'paused', 'deferred'].includes(normalized)) return 'hold';
-  if (['blocked', 'warning', 'urgent', 'critical'].includes(normalized)) return 'warning';
-  return 'pending';
-}
-
-function formatStatus(status: string): string {
-  return status.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const tone = statusTone(status);
-  return (
-    <span className={cn('rounded-full border px-2 py-0.5 text-xs font-medium', statusStyles[tone])}>
-      {formatStatus(status)}
-    </span>
-  );
-}
-
-function employeeName(employee: Employee | undefined): string {
-  return employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown crew member';
-}
-
-function propertyName(property: Property | undefined): string {
-  return property?.shortName || property?.name || 'Property';
-}
-
-function AssignmentCard({
-  assignment,
-  task,
-  property,
-  onOpen,
-}: {
-  assignment: Assignment;
-  task: Task | undefined;
-  property: Property | undefined;
-  onOpen: () => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: assignment.id,
-    data: {
-      type: 'assignment',
-      employeeId: assignment.employeeId,
-      date: assignment.date,
-    } satisfies CellData,
-  });
-
-  const transformStyle = transform
-    ? `translate3d(${transform.x}px, ${transform.y}px, 0) scaleX(${transform.scaleX}) scaleY(${transform.scaleY})`
-    : undefined;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: transformStyle, transition }}
-      className={cn(
-        'group rounded-lg border border-surface-border bg-surface-card p-2.5 shadow-sm',
-        isDragging ? 'z-50 opacity-60 shadow-lg' : 'hover:border-brand-dim',
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          aria-label="Drag assignment"
-          className="mt-0.5 flex min-h-11 min-w-11 shrink-0 cursor-grab items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-text-primary active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
-          <p className="truncate text-sm font-medium text-text-primary">{propertyName(property)}</p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            <span className="rounded-full border border-brand-dim/30 bg-brand-ghost px-2 py-0.5 text-xs font-medium text-brand">
-              {task?.name ?? assignment.title ?? 'Untyped'}
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <StatusBadge status={assignment.status} />
-            <span className="text-xs text-text-muted">
-              {assignment.estimatedHours ?? (task?.duration ?? 0) / 60}h
-            </span>
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function DispatchCell({
-  employeeId,
-  date,
-  assignments,
-  taskById,
-  propertyById,
-  onOpen,
-  onCreateClick,
-}: {
-  employeeId: string;
-  date: string;
-  assignments: Assignment[];
-  taskById: Map<string, Task>;
-  propertyById: Map<string, Property>;
-  onOpen: (assignmentId: string) => void;
-  onCreateClick: () => void;
-}) {
-  const cellId = `cell:${employeeId}:${date}`;
-  const { isOver, setNodeRef } = useDroppable({
-    id: cellId,
-    data: { type: 'cell', employeeId, date } satisfies CellData,
-  });
-
-  const isEmpty = assignments.length === 0;
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        'group min-h-32 border-l border-surface-border p-2 transition-colors',
-        isOver ? 'bg-brand-ghost ring-2 ring-inset ring-brand' : 'bg-surface-base',
-        isEmpty && 'cursor-pointer hover:bg-surface-hover',
-      )}
-      onClick={isEmpty ? onCreateClick : undefined}
-    >
-      <SortableContext items={assignments.map((a) => a.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2">
-          {assignments.map((assignment) => (
-            <AssignmentCard
-              key={assignment.id}
-              assignment={assignment}
-              task={assignment.taskId ? taskById.get(assignment.taskId) : undefined}
-              property={assignment.propertyId ? propertyById.get(assignment.propertyId) : undefined}
-              onOpen={() => onOpen(assignment.id)}
-            />
-          ))}
-          {isEmpty && (
-            <div className="flex items-center justify-center pt-6 opacity-0 transition-opacity group-hover:opacity-100">
-              <span className="flex items-center gap-1 text-xs text-text-muted">
-                <Plus className="h-3 w-3" />
-                Add assignment
-              </span>
-            </div>
-          )}
-        </div>
-      </SortableContext>
-    </div>
-  );
-}
+import { useAssignments, useEmployees, useTasks } from '@/lib/supabase-queries';
+import { Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 export default function DispatchBoardPage() {
+  const navigate = useNavigate();
   const { currentPropertyId, orgId } = useAuth();
-  const queryClient = useQueryClient();
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
+  const todayKey = new Date().toISOString().slice(0, 10);
 
-  // Create-assignment slide-over state
-  const [createCell, setCreateCell] = useState<{ employeeId: string; date: string } | null>(null);
-  const [newTaskIds, setNewTaskIds] = useState<string[]>([]);
-  const [newPropertyId, setNewPropertyId] = useState<string | null>(
-    () => properties[0]?.id ?? null,
-  );
-  const [newStartTime, setNewStartTime] = useState('');
-  const [newEstimatedHours, setNewEstimatedHours] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [nwsAlertBadge, setNwsAlertBadge] = useState<string | null>(null);
+  const { data: assignments = [], isLoading: assignmentsLoading } =
+    useAssignments(todayKey, currentPropertyId ?? undefined, orgId ?? undefined);
+  const { data: employees = [], isLoading: employeesLoading } =
+    useEmployees(currentPropertyId ?? undefined, orgId ?? undefined);
+  const { data: tasks = [] } =
+    useTasks(currentPropertyId ?? undefined, orgId ?? undefined);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
+  const isLoading = assignmentsLoading || employeesLoading;
+
+  if (isLoading) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+    </div>
   );
 
-  const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
-    [weekStart],
-  );
-  const weekStartKey = getLocalDateKey(weekDays[0]);
-  const weekEndKey = getLocalDateKey(weekDays[6]);
-  const propertyScope = currentPropertyId || 'all';
-  const assignmentsQuery = useAssignmentsRange(weekStartKey, weekEndKey, propertyScope, orgId ?? undefined);
-  const employeesQuery = useEmployees(propertyScope, orgId ?? undefined);
-  const tasksQuery = useTasks(propertyScope, orgId ?? undefined);
-  const propertiesQuery = useProperties(orgId ?? undefined);
-  const assignments = assignmentsQuery.data ?? [];
-  const employees = employeesQuery.data ?? [];
-  const tasks = tasksQuery.data ?? [];
-  const properties = propertiesQuery.data ?? [];
-  const isLoading =
-    assignmentsQuery.isLoading ||
-    employeesQuery.isLoading ||
-    tasksQuery.isLoading ||
-    propertiesQuery.isLoading;
-  const errorMessage =
-    assignmentsQuery.error?.message ||
-    employeesQuery.error?.message ||
-    tasksQuery.error?.message ||
-    propertiesQuery.error?.message ||
-    null;
-
-  const fetchNwsAlert = useCallback(async () => {
-    if (!orgId || !supabase) return;
-    const { data } = await supabase
-      .from('weather_locations')
-      .select('latitude, longitude')
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .limit(1);
-    const loc = data?.[0];
-    if (!loc?.latitude || !loc?.longitude) return;
-    if (!isUSCoordinates(Number(loc.latitude), Number(loc.longitude))) return;
-    try {
-      const res = await fetch(
-        `https://api.weather.gov/alerts/active?point=${loc.latitude},${loc.longitude}`,
-        { headers: { Accept: 'application/geo+json' } },
-      );
-      if (!res.ok) return;
-      const json = (await res.json()) as {
-        features?: Array<{ properties?: { headline?: string; event?: string } }>;
-      };
-      const first = json.features?.[0]?.properties;
-      if (first) setNwsAlertBadge(first.headline ?? first.event ?? 'Weather alert active');
-    } catch {
-      // silent — this is a passive indicator
-    }
-  }, [orgId]);
-
-  useEffect(() => {
-    void fetchNwsAlert();
-  }, [fetchNwsAlert]);
-
-  // All employees rendered as rows — no active/status filter per dispatch spec
-  const sortedEmployees = useMemo(
-    () =>
-      [...employees].sort((left, right) => employeeName(left).localeCompare(employeeName(right))),
-    [employees],
-  );
-  const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
-  const propertyById = useMemo(
-    () => new Map(properties.map((property) => [property.id, property])),
-    [properties],
-  );
-  const selectedAssignment = useMemo(
-    () => assignments.find((assignment) => assignment.id === selectedAssignmentId) ?? null,
-    [assignments, selectedAssignmentId],
-  );
-
-  const assignmentsByCell = useMemo(() => {
-    const grouped = new Map<string, Assignment[]>();
-    assignments.forEach((assignment) => {
-      const key = `${assignment.employeeId}:${assignment.date}`;
-      const existing = grouped.get(key) ?? [];
-      existing.push(assignment);
-      grouped.set(key, existing);
-    });
-    return grouped;
-  }, [assignments]);
-
-  const handleDragEnd = async ({ active, over }: DragEndEvent) => {
-    if (!over || !orgId) return;
-
-    const assignment = assignments.find((item) => item.id === String(active.id));
-    const target = over.data.current as CellData | undefined;
-    if (!assignment || !target?.employeeId || !target.date) return;
-    if (assignment.employeeId === target.employeeId && assignment.date === target.date) return;
-
-    const { error } = await supabase
-      .from('assignments')
-      .update({ employee_id: target.employeeId, date: target.date })
-      .eq('id', assignment.id)
-      .eq('org_id', orgId);
-
-    if (error) {
-      console.error('[DispatchBoard] Move failed:', error);
-      toast.error(`Assignment move failed: ${error.message}`);
-      return;
-    }
-
-    await queryClient.invalidateQueries({ queryKey: ['assignments-range'] });
-    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-    toast.success('Assignment moved');
-  };
-
-  const openCreateSheet = (employeeId: string, date: string) => {
-    setNewTaskIds([]);
-    setNewPropertyId(properties[0]?.id ?? null);
-    setNewStartTime('');
-    setNewEstimatedHours('');
-    setCreateCell({ employeeId, date });
-  };
-
-  const handleCreateSave = async () => {
-    if (!orgId || !createCell) return;
-    if (!newPropertyId) {
-      toast.error('Select a property before creating the assignment.');
-      return;
-    }
-    setIsSaving(true);
-
-    const taskIdsToCreate = newTaskIds.length > 0 ? newTaskIds : [null as string | null];
-    const inserts = taskIdsToCreate.map((taskId) => ({
-      employee_id: createCell.employeeId,
-      date: createCell.date,
-      task_id: taskId,
-      property_id: newPropertyId,
-      org_id: orgId,
-      status: 'planned',
-      start_time: newStartTime || null,
-      estimated_hours: newEstimatedHours ? parseFloat(newEstimatedHours) : null,
+  const employeesWithAssignments = employees
+    .filter(e => e.status === 'active')
+    .map(employee => ({
+      employee,
+      assignments: assignments.filter(a => a.employeeId === employee.id),
     }));
 
-    const { error } = await supabase.from('assignments').insert(inserts);
-
-    setIsSaving(false);
-
-    if (error) {
-      console.error('[DispatchBoard] Create failed:', error);
-      toast.error('Failed to create assignment.');
-      return;
-    }
-
-    toast.success(inserts.length > 1 ? `${inserts.length} assignments created` : 'Assignment created');
-    setCreateCell(null);
-    await queryClient.invalidateQueries({ queryKey: ['assignments-range'] });
-    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-  };
-
-  const selectedTask = selectedAssignment?.taskId
-    ? taskById.get(selectedAssignment.taskId)
-    : undefined;
-  const selectedEmployee = selectedAssignment
-    ? employees.find((employee) => employee.id === selectedAssignment.employeeId)
-    : undefined;
-  const selectedProperty = selectedAssignment
-    ? selectedAssignment.propertyId
-      ? propertyById.get(selectedAssignment.propertyId)
-      : undefined
-    : undefined;
-
-  const createEmployee = createCell
-    ? employees.find((e) => e.id === createCell.employeeId)
-    : undefined;
-
-  if (isLoading) return <PageSkeleton />;
-
   return (
-    <div className="min-h-full bg-surface-base px-4 py-5 text-text-primary sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-full space-y-5">
-        <PageHeader
-          title="Dispatch Board"
-          subtitle="Drag assignments between crew members and days to update the weekly plan."
-          badge={nwsAlertBadge ? (
-            <div className="flex items-center gap-1.5 rounded-full border border-status-pending/30 bg-status-pending/10 px-3 py-1.5 text-xs font-medium text-status-pending">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-              <span className="max-w-xs truncate">{nwsAlertBadge}</span>
-            </div>
-          ) : undefined}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setWeekStart((current) => addDays(current, -7))}
-              className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-surface-border bg-surface-card text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-              aria-label="Previous week"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setWeekStart(getMonday(new Date()))}
-              className="min-h-11 rounded-lg border border-surface-border bg-surface-card px-4 text-sm font-medium text-text-primary hover:bg-surface-hover"
-            >
-              {weekDays[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              {' - '}
-              {weekDays[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </button>
-            <button
-              type="button"
-              onClick={() => setWeekStart((current) => addDays(current, 7))}
-              className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-surface-border bg-surface-card text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-              aria-label="Next week"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        </PageHeader>
-
-        {errorMessage ? (
-          <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 px-4 py-3 text-sm text-status-warning">
-            The dispatch board could not be loaded: {errorMessage}
-          </div>
-        ) : null}
-
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={(event) => void handleDragEnd(event)}>
-          <div className="overflow-x-auto rounded-lg border border-surface-border bg-surface-card">
-            <div className="min-w-[1480px]">
-              <div className="grid grid-cols-[220px_repeat(7,minmax(180px,1fr))] border-b border-surface-border bg-surface-elevated">
-                <div className="sticky left-0 z-20 flex items-center border-r border-surface-border bg-surface-elevated px-4 py-3">
-                  <span className="label-field">Crew Member</span>
-                </div>
-                {weekDays.map((day) => (
-                  <div key={day.toISOString()} className="border-l border-surface-border px-3 py-3 text-center">
-                    <p className="text-xs font-medium uppercase text-text-muted">
-                      {day.toLocaleDateString('en-US', { weekday: 'short' })}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-text-primary">
-                      {day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              {isLoading ? (
-                <div className="space-y-px bg-surface-border">
-                  {[0, 1, 2, 3].map((row) => (
-                    <div key={row} className="h-32 animate-pulse bg-surface-elevated" />
-                  ))}
-                </div>
-              ) : sortedEmployees.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-surface-elevated">
-                    <UserRound className="h-6 w-6 text-text-muted" />
-                  </div>
-                  <p className="heading-md">No crew members found</p>
-                  <p className="body-base mt-1">Add employees in Settings to populate the dispatch board.</p>
-                </div>
-              ) : (
-                sortedEmployees.map((employee) => (
-                  <div
-                    key={employee.id}
-                    className="grid grid-cols-[220px_repeat(7,minmax(180px,1fr))] border-b border-surface-border last:border-b-0"
-                  >
-                    <div className="sticky left-0 z-10 border-r border-surface-border bg-surface-card px-4 py-3">
-                      <p className="text-sm font-semibold text-text-primary">{employeeName(employee)}</p>
-                      <p className="mt-1 truncate text-xs text-text-secondary">
-                        {employee.role} · {employee.department}
-                      </p>
-                    </div>
-                    {weekDays.map((day) => {
-                      const date = getLocalDateKey(day);
-                      return (
-                        <DispatchCell
-                          key={`${employee.id}:${date}`}
-                          employeeId={employee.id}
-                          date={date}
-                          assignments={assignmentsByCell.get(`${employee.id}:${date}`) ?? []}
-                          taskById={taskById}
-                          propertyById={propertyById}
-                          onOpen={setSelectedAssignmentId}
-                          onCreateClick={() => openCreateSheet(employee.id, date)}
-                        />
-                      );
-                    })}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </DndContext>
+    <div className="space-y-6 p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dispatch</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Today's crew assignments · {todayKey}
+          </p>
+        </div>
+        <Button onClick={() => navigate('/app/workboard')}>
+          Open Workboard →
+        </Button>
       </div>
 
-      {/* View assignment details */}
-      <Sheet
-        open={Boolean(selectedAssignment)}
-        onOpenChange={(open) => {
-          if (!open) setSelectedAssignmentId(null);
-        }}
-      >
-        <SheetContent className="overflow-y-auto border-surface-border bg-surface-elevated text-text-primary sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle className="text-text-primary">
-              {selectedTask?.name ?? selectedAssignment?.title ?? 'Assignment details'}
-            </SheetTitle>
-            <SheetDescription className="text-text-secondary">
-              Full dispatch information for this job.
-            </SheetDescription>
-          </SheetHeader>
-
-          {selectedAssignment ? (
-            <div className="mt-6 space-y-4">
-              <div className="rounded-lg border border-surface-border bg-surface-card p-4">
-                <StatusBadge status={selectedAssignment.status} />
-                <dl className="mt-4 space-y-4">
-                  <div className="flex gap-3">
-                    <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-brand-bright" />
-                    <div>
-                      <dt className="text-xs uppercase text-text-muted">Crew member</dt>
-                      <dd className="mt-1 text-sm text-text-primary">{employeeName(selectedEmployee)}</dd>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-brand-bright" />
-                    <div>
-                      <dt className="text-xs uppercase text-text-muted">Date</dt>
-                      <dd className="mt-1 text-sm text-text-primary">
-                        {new Date(`${selectedAssignment.date}T12:00:00`).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          month: 'long',
-                          day: 'numeric',
-                        })}
-                      </dd>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-bright" />
-                    <div>
-                      <dt className="text-xs uppercase text-text-muted">Property</dt>
-                      <dd className="mt-1 text-sm text-text-primary">{propertyName(selectedProperty)}</dd>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-brand-bright" />
-                    <div>
-                      <dt className="text-xs uppercase text-text-muted">Timing</dt>
-                      <dd className="mt-1 text-sm text-text-primary">
-                        {formatTime(selectedAssignment.startTime) || 'Start time not set'}
-                        {' · '}
-                        {selectedAssignment.estimatedHours ?? (selectedTask?.duration ?? 0) / 60} estimated hours
-                      </dd>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-brand-bright" />
-                    <div>
-                      <dt className="text-xs uppercase text-text-muted">Category</dt>
-                      <dd className="mt-1 text-sm text-text-primary">{selectedTask?.category ?? 'General'}</dd>
-                    </div>
-                  </div>
-                </dl>
-              </div>
-
-              <div className="rounded-lg border border-surface-border bg-surface-card p-4">
-                <p className="text-xs uppercase text-text-muted">Notes</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
-                  {selectedAssignment.notes || 'No notes added.'}
-                </p>
-              </div>
-            </div>
-          ) : null}
-        </SheetContent>
-      </Sheet>
-
-      {/* Create assignment slide-over */}
-      <Sheet
-        open={Boolean(createCell)}
-        onOpenChange={(open) => {
-          if (!open) setCreateCell(null);
-        }}
-      >
-        <SheetContent className="overflow-y-auto border-surface-border bg-surface-elevated text-text-primary sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle className="text-text-primary">New Assignment</SheetTitle>
-            <SheetDescription className="text-text-secondary">
-              {createEmployee ? `Assign a task to ${employeeName(createEmployee)}` : 'Create a new assignment'}
-              {createCell
-                ? ` on ${new Date(`${createCell.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`
-                : ''}
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-6 space-y-5">
-            <div>
+      {employeesWithAssignments.length === 0 ? (
+        <Card className="p-12 text-center">
+          <p className="text-sm font-medium">No crew scheduled today</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Add shifts in the Scheduler first.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => navigate('/app/scheduler')}
+          >
+            Open Scheduler
+          </Button>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {employeesWithAssignments.map(({ employee, assignments: empAssignments }) => (
+            <Card key={employee.id} className="p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <label className="label-field block">Tasks</label>
-                {newTaskIds.length > 0 && (
-                  <span className="text-xs text-brand">{newTaskIds.length} selected</span>
-                )}
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex
+                    items-center justify-center text-xs font-semibold text-primary">
+                    {employee.firstName?.[0]}{employee.lastName?.[0]}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {employee.firstName} {employee.lastName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {employee.department}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant={empAssignments.length > 0 ? 'default' : 'outline'}>
+                  {empAssignments.length} task{empAssignments.length !== 1 ? 's' : ''}
+                </Badge>
               </div>
-              <div className="mt-1.5 max-h-52 overflow-y-auto rounded-lg border border-surface-border bg-surface-card">
-                {tasks.length === 0 ? (
-                  <p className="px-3 py-4 text-center text-sm text-text-muted">No tasks in library.</p>
-                ) : (
-                  tasks.map((t) => (
-                    <label
-                      key={t.id}
-                      className="flex min-h-[44px] cursor-pointer items-center gap-3 border-b border-surface-border px-3 py-2 last:border-0 hover:bg-surface-hover"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={newTaskIds.includes(t.id)}
-                        onChange={(e) =>
-                          setNewTaskIds((current) =>
-                            e.target.checked
-                              ? [...current, t.id]
-                              : current.filter((id) => id !== t.id),
-                          )
-                        }
-                        className="h-4 w-4 rounded accent-brand"
-                      />
-                      <span className="flex-1 text-sm text-text-primary">{t.name}</span>
-                      {t.category ? (
-                        <span className="rounded-full bg-brand-ghost px-2 py-0.5 text-xs text-brand">
-                          {t.category}
-                        </span>
-                      ) : null}
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
 
-            <div>
-              <label className="label-field block" htmlFor="new-property">
-                Property
-              </label>
-              <select
-                id="new-property"
-                value={newPropertyId ?? ''}
-                onChange={(e) => setNewPropertyId(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-              >
-                <option value="">— Select property —</option>
-                {properties.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {propertyName(p)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="label-field block" htmlFor="new-start-time">
-                Start time
-              </label>
-              <input
-                id="new-start-time"
-                type="time"
-                value={newStartTime}
-                onChange={(e) => setNewStartTime(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-              />
-            </div>
-
-            <div>
-              <label className="label-field block" htmlFor="new-estimated-hours">
-                Estimated hours
-              </label>
-              <input
-                id="new-estimated-hours"
-                type="number"
-                min="0.5"
-                max="24"
-                step="0.5"
-                placeholder="e.g. 2.5"
-                value={newEstimatedHours}
-                onChange={(e) => setNewEstimatedHours(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-surface-border bg-surface-card px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setCreateCell(null)}
-                className="flex-1 rounded-lg border border-surface-border bg-surface-card px-4 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-hover"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleCreateSave()}
-                disabled={isSaving}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-text-inverse hover:bg-brand-bright disabled:opacity-60"
-              >
-                {isSaving ? (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-                Create Assignment
-              </button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+              {empAssignments.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No tasks assigned yet
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {empAssignments.map(assignment => {
+                    const task = tasks.find(t => t.id === assignment.taskId);
+                    return (
+                      <div
+                        key={assignment.id}
+                        className="rounded-lg bg-muted/40 px-3 py-2 text-xs"
+                      >
+                        <p className="font-medium">{task?.name ?? 'Task'}</p>
+                        <p className="text-muted-foreground mt-0.5">
+                          {assignment.area ?? 'No location set'}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
