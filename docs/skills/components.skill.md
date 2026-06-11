@@ -4,32 +4,74 @@
 import { useAuth } from '@/contexts/AuthContext'
 
 const {
-  currentUser,        // { id, firstName, lastName, role, orgId, employeeId }
-  currentPropertyId,  // string — currently selected property
+  currentUser,        // AuthProfile | null — { authUser, appUserId, employeeId, orgId, role, status, subscriptionStatus, department, propertyId, fullName, title, email, phone }
+  orgId,              // string | null — direct shortcut (same as currentUser?.orgId)
+  currentPropertyId,  // string — currently selected property ('all' for admin/manager)
   setCurrentPropertyId, // (id: string) => void
-  orgId,              // string — shortcut for currentUser?.orgId
+  currentRole,        // AuthRole — 'admin' | 'manager' | 'employee' (never null)
+  isAdmin,            // boolean
+  isManager,          // boolean
+  isEmployee,         // boolean
   signOut,            // async () => void
   isLoading,          // boolean — true while auth resolves
+  isReady,            // boolean — true once auth is done (inverse of isLoading)
+  isOrgReady,         // boolean — isReady && orgId is set
+  hasSession,         // boolean — Supabase session exists
+  hasProfileIssue,    // boolean — ready but no orgId (account not found)
   isPlanActive,       // () => boolean — subscription check
+  authState,          // 'checking-session' | 'loading-profile' | 'authenticated' | 'no-session' | 'profile-missing' | 'network-timeout' | 'profile-error'
+  authDebugMessage,   // string — human-readable debug info
+  retryAuthHydration, // async () => void — retry profile load
+  user,               // User | null — raw Supabase auth user
+  userRole,           // AuthRole | null — role from app_users table
 } = useAuth()
 
 ## Data Hooks — always from supabase-queries.ts
 import {
-  useEmployees,           // (propertyId?, orgId?) => Employee[]
-  useAssignments,         // (date, propertyId?) => Assignment[]
-  useScheduleEntries,     // (date, propertyId?) => ScheduleEntry[]
-  useTasks,               // (propertyId?, orgId?) => Task[]
-  useEquipmentUnits,      // (propertyId?, orgId?) => EquipmentUnit[]
-  useProperties,          // (orgId?) => Property[]
-  useProgramSettings,     // (orgId?) => ProgramSettings
-  useClockEvents,         // (employeeId, date?) => ClockEvent[]
-  useClockEventsRange,    // (startDate, endDate, propertyId?) => ClockEvent[]
-  useNotes,               // (propertyId?) => Note[]
-  useChemicalApplicationLogsAll, // () => ChemicalApplicationLog[]
-  useChemicalProducts,    // () => ChemicalProduct[]
-  useWeatherLocations,    // (propertyId?) => WeatherLocation[]
-  useWeatherStations,     // () => WeatherStation[]
-  useWeatherDailyLogs,    // () => WeatherDailyLog[]
+  // --- Core operational ---
+  useEmployees,               // (propertyId?, orgId?, status?: 'active'|'inactive'|'archived'|'all') => Employee[]
+  useAssignments,             // (date, propertyId?, orgId?) => Assignment[]
+  useAssignmentsRange,        // (startDate, endDate, propertyId?, orgId?) => Assignment[]
+  useScheduleEntries,         // (date, propertyId?, orgId?) => ScheduleEntry[]
+  useScheduleEntriesRange,    // (startDate, endDate, propertyId?, orgId?) => ScheduleEntry[]
+  useTasks,                   // (_propertyId?, orgId?) => Task[]  — propertyId param ignored, tasks are org-wide
+  useEquipmentUnits,          // (propertyId?, orgId?) => EquipmentUnit[]
+  useProperties,              // (orgId?) => Property[]
+  useProgramSettings,         // (orgId?) => ProgramSettings | null
+  useClockEvents,             // (date, propertyId?, orgId?) => ClockEvent[]
+  useClockEventsRange,        // (startDate, endDate, propertyId?, orgId?) => ClockEvent[]
+  useNotes,                   // (propertyId?, orgId?) => Note[]
+
+  // --- Workforce framework ---
+  useDepartmentOptions,       // (orgId?) => DepartmentOption[]  — queries 'departments' table
+  useGroupOptions,            // (orgId?) => GroupOption[]        — queries 'employee_groups' table
+  useRoleOptions,             // (orgId?) => RoleOption[]         — queries 'workforce_roles' table
+  useLanguageOptions,         // (orgId?) => LanguageOption[]
+  useShiftTemplates,          // (orgId?) => ShiftTemplate[]
+  useWorkerTypes,             // (orgId?) => { id, name }[]
+  useJobDescriptions,         // (orgId?) => { id, name }[]
+  useEmploymentStatuses,      // (orgId?) => { id, name }[]
+  useWageCategories,          // (orgId?) => { id, name }[]
+  useOvertimeRules,           // (orgId?) => { id, name }[]
+
+  // --- Weather ---
+  useWeatherLocations,        // (propertyId?, orgId?, activeOnly?) => WeatherLocation[]
+  useWeatherStations,         // () => WeatherStationSummary[]
+  useWeatherDailyLogs,        // () => WeatherDailyLog[]  — fetches ALL logs, no params
+  useWeatherDailyLogsRange,   // (startDate, endDate, propertyId?, orgId?) => WeatherDailyLog[]
+  useWeatherDailyLogsByIds,   // (ids: string[]) => WeatherDailyLog[]
+
+  // --- Chemical / compliance ---
+  useChemicalApplicationLogsAll,  // (orgId?) => ChemicalApplicationLog[]
+  useChemicalApplicationLogsRange, // (startDate, endDate, propertyId?, orgId?) => ChemicalApplicationLog[]
+  useChemicalApplicationLogs,     // (date, orgId?) => partial fields only (weatherLogId, license numbers)
+  useChemicalProducts,            // () => ChemicalProduct[]
+  useChemicalApplicationTankMixItems, // () => ChemicalApplicationTankMixItem[]
+  useApplicationAreas,            // (propertyId?) => ApplicationArea[]
+
+  // --- Config ---
+  usePropertyClassOptions,    // () => PropertyClassOption[]
+  useWorkLocations,           // (propertyId?, orgId?) => WorkLocation[]
 } from '@/lib/supabase-queries'
 
 ## Query Client
@@ -37,12 +79,41 @@ import { useQueryClient } from '@tanstack/react-query'
 const queryClient = useQueryClient()
 
 ## Query Key Conventions
-['employees'], ['assignments', date, propertyId],
-['schedule-entries', date, propertyId], ['tasks'],
-['equipment-units'], ['properties'], ['program-settings'],
-['clock-events'], ['notes'], ['weather-locations'],
-['weather-stations'], ['weather-daily-logs'],
-['chemical-application-logs'], ['chemical-products']
+['employees', propertyId, orgId, status]
+['assignments', date, propertyId, orgId]
+['assignments-range', startDate, endDate, propertyId, orgId]
+['schedule-entries', date, propertyId, orgId]
+['schedule-entries-range', startDate, endDate, propertyId, orgId]
+['tasks', orgId]
+['equipment-units', propertyId, orgId]
+['properties', orgId]
+['program-settings', orgId]
+['clock-events', date, propertyId, orgId]
+['clock-events-range', startDate, endDate, propertyId, orgId]
+['notes', propertyId, orgId]
+['department-options', orgId]
+['group-options', orgId]
+['role-options', orgId]
+['language-options', orgId]
+['shift-templates', orgId]
+['worker-types', orgId]
+['job-descriptions', orgId]
+['employment-statuses', orgId]
+['wage-categories', orgId]
+['overtime-rules', orgId]
+['weather-locations', propertyId, orgId, activeOnly]
+['weather-stations']
+['weather-daily-logs-all']
+['weather-daily-logs-range', startDate, endDate, propertyId, orgId]
+['weather-daily-logs-by-ids', sortedKey]
+['chemical-application-logs', date, orgId]
+['chemical-application-logs-range', startDate, endDate, propertyId, orgId]
+['chemical-application-logs-all', orgId]
+['chemical-products']
+['chemical-application-tank-mix-items']
+['application-areas', propertyId]
+['property-class-options']
+['work-locations', propertyId, orgId]
 
 ## Standard Component Structure
 export default function MyPage() {

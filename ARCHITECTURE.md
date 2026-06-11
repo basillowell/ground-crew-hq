@@ -36,18 +36,18 @@
 | `/app/dispatch` | DispatchBoardPage | ✓ |
 | `/app/scheduler` | SchedulerPage | ✓ |
 | `/app/workboard` | WorkboardShell + WorkboardContent | ✓ |
-| `/app/team` | EmployeesPage | ✓ |
+| `/app/employees` | EmployeesPage | ✓ |
 | `/app/equipment` | EquipmentPage | ✓ |
 | `/app/invoicing` | InvoicingPage | ✓ |
 | `/app/reports` | ReportsPage | ✓ |
 | `/app/job-costing` | JobCostingPage | ✓ |
 | `/app/weather` | WeatherPage | ✓ |
-| `/app/chemicals` | ChemicalsPage | ✓ |
+| `/app/applications` | ApplicationsPage | ✓ |
 | `/app/safety` | SafetyPage | ✓ |
 | `/app/breakroom` | BreakroomPage (Realtime) | ✓ |
+| `/app/messaging` | MessagingPage | ✓ |
 | `/app/field` | MobileFieldWorkspacePage | ✓ |
 | `/app/settings` | SettingsPage | ✓ |
-| `/app/applications` | ApplicationsPage | ✓ |
 | `/portal/:clientToken` | ClientPortalPage (public) | ✓ |
 
 ### Navigation Architecture
@@ -133,7 +133,7 @@ useEffect(() => {
 **Supabase project:** `fjqeekwisnbpxgebrnpl`  
 **Total tables:** 47  
 **RLS:** Enabled on all tables  
-**Query rule:** All queries must include `.eq('org_id', 'bb13da4a-d2de-4fc9-ad5a-bfd266e08807')`  
+**Query rule:** All queries must include `.eq('org_id', orgId)` where orgId comes from useAuth()  
 **Schema doc:** `docs/dev/live-db-state.md` — authoritative, updated with every migration
 
 ### Domain Map
@@ -153,7 +153,7 @@ useEffect(() => {
 | `workforce_roles` | 6 | Role definitions |
 | `worker_types` | 5 | Employment type categories |
 | `employee_groups` | 5 | Crew groupings |
-| `clock_events` | 8 | GPS clock in/out/break — event_type: 'clock_in'\|'clock_out'\|'break' |
+| `clock_events` | 8 | GPS clock in/out/break — event_type: 'in'\|'out'\|'break' |
 | `employment_statuses` | 5 | Status definitions |
 | `job_descriptions` | 6 | Role descriptions |
 | `wage_categories` | 6 | Pay rate categories |

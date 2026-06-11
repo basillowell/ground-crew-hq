@@ -1,10 +1,11 @@
 # Features Skill — Ground Crew HQ
 
-## 14 Production Pages
+## Production Pages (App.tsx routes)
 | Route | File | Purpose |
 |---|---|---|
 | /app/dashboard | CommandCenterOperationalPage | Daily ops summary, crew, quick actions |
-| /app/workboard | WorkboardPage | Task dispatch, assignments, Gantt |
+| /app/dispatch | DispatchBoardPage | Real-time crew dispatch board |
+| /app/workboard | WorkboardShell + WorkboardContent | Task dispatch, assignments, Gantt |
 | /app/scheduler | SchedulerPage | Weekly shift planning by employee |
 | /app/field | MobileFieldWorkspacePage | Crew clock in/out, tasks, offline |
 | /app/employees | EmployeesPage | Crew roster, profiles, departments |
@@ -15,8 +16,17 @@
 | /app/applications | ApplicationsPage | Chemical logs, tank mix, compliance |
 | /app/breakroom | BreakroomPage | TV display board for crew areas |
 | /app/messaging | MessagingPage | Internal messaging |
-| /app/tasks | TasksCatalogPage | Task library management |
-| /app/settings | ProgramSetupHubPage | Brand, modules, billing, users |
+| /app/job-costing | JobCostingPage | Job cost tracking |
+| /app/invoicing | InvoicingPage | Invoicing and billing |
+| /app/settings | SettingsPage | Brand, modules, billing, users |
+
+## Public Routes (no auth required)
+| Route | File | Purpose |
+|---|---|---|
+| / | LaunchPortalPage | Landing page + auth dialog |
+| /pricing | PricingPage | Subscription pricing |
+| /auth/reset | ResetPasswordPage | Password reset |
+| /portal/:clientToken | ClientPortalPage | Public client portal |
 
 ## App Shell
 - AppLayout.tsx — wraps all /app/* routes, loads Supabase data for shell
@@ -29,7 +39,8 @@ Program Setup → Employees + Properties + Tasks + Shift Templates
 → Reports (scheduled vs assigned vs actual hours)
 
 ## Key Business Rules
-- Every data write scoped by org_id AND property_id
+- Every data write scoped by org_id; property_id required where column is NOT NULL
+- tasks.property_id is nullable — tasks can be org-wide (not tied to a property)
 - Admins and managers can write to all tables in their org
 - Field crew (employee role) can only read their own data
 - Property switcher in top bar scopes all page queries
@@ -49,13 +60,13 @@ Program Setup → Employees + Properties + Tasks + Shift Templates
 - Pending clock events: localStorage key 'gcrew-pending-clocks'
 
 ## Self-Service Onboarding Flow
-New clients complete setup through the app � no developer help:
-1. Register ? org created automatically in organizations table
+New clients complete setup through the app — no developer help:
+1. Register — org created automatically in organizations table
 2. Dashboard shows onboarding checklist (6 steps)
 3. Weather setup via /app/weather onboarding flow
 4. Employees added via /app/employees
 5. Equipment added via /app/equipment
-6. Tasks added via /app/tasks
+6. Tasks added via /app/settings (task catalog)
 7. Shifts scheduled via /app/scheduler
 8. Assignments built via /app/workboard
 

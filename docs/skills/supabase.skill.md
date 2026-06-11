@@ -3,20 +3,34 @@
 ## Project
 - Project URL: https://fjqeekwisnbpxgebrnpl.supabase.co
 - Client import: import { supabase } from '@/lib/supabase'
+- Full schema reference: docs/dev/live-db-state.md (47 production tables)
 
-## 24 Production Tables
+## Key Tables Queried by supabase-queries.ts
 organizations, app_users, employees, properties,
 schedule_entries, assignments, tasks, equipment_units,
-clock_events, notes, program_settings, department_options,
-group_options, role_options, language_options, shift_templates,
-work_locations, weather_locations, weather_stations,
-weather_daily_logs, manual_rainfall_entries,
+clock_events, notes, program_settings,
+departments, employee_groups, workforce_roles,
+language_options, shift_templates, work_locations,
+worker_types, job_descriptions, employment_statuses,
+wage_categories, overtime_rules,
+weather_locations, weather_stations, weather_daily_logs,
+manual_rainfall_entries,
 chemical_application_logs, chemical_products,
-chemical_application_tank_mix_items
+chemical_application_tank_mix_items,
+application_areas, property_class_options,
+invoices, clients, messages
+
+NOTE: department_options, group_options, role_options are LEGACY fallback
+tables. Active queries hit departments, employee_groups, workforce_roles first.
 
 ## Every Write Must Include
-- org_id: currentUser?.orgId (from useAuth())
-- property_id: currentPropertyId (from useAuth(), where column exists)
+- org_id: orgId (from useAuth())
+- property_id: currentPropertyId (from useAuth(), where column is NOT NULL)
+
+## Tasks Are Org-Wide
+tasks.property_id is nullable as of migration 006_tasks_org_wide.sql.
+Do NOT require property_id when writing to tasks — it is optional.
+useTasks() ignores the propertyId param and fetches by org only.
 
 ## After Every Mutation
 queryClient.invalidateQueries({ queryKey: ['table-name'] })
@@ -45,12 +59,12 @@ const { data, isLoading } = useEmployees(currentPropertyId, orgId)
 // Direct mutation pattern
 const { error } = await supabase
   .from('employees')
-  .upsert({ ...fields, org_id: currentUser?.orgId })
+  .upsert({ ...fields, org_id: orgId })
 if (error) throw error
 await queryClient.invalidateQueries({ queryKey: ['employees'] })
 
 ## New Table Checklist
-1. Add to 001_initial_schema.sql or new migration file
+1. Add a new numbered migration file (e.g. 021_new_feature.sql)
 2. Add org_id column with FK to organizations
 3. Add RLS policy using admin/manager bypass pattern
 4. Add fetch function to supabase-queries.ts
