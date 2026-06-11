@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/appStore';
+import { useAssignments, useNotes, useTasks } from '@/lib/supabase-queries';
+import { fetchNwsWeather } from '@/lib/weather/providers';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
-import { Send, MessageSquare, Hash } from 'lucide-react';
+import { ClipboardList, CloudSun, Hash, MessageSquare, Send, StickyNote } from 'lucide-react';
 import { PageHeader } from '@/components/shared';
 
 // columns from messages migration
@@ -17,6 +19,11 @@ interface Message {
   body: string;
   created_at: string;
 }
+
+type BreakroomWeather = {
+  temperature: number;
+  windSpeed: number;
+};
 
 const COMPANY_CHANNEL = 'general';
 const UNREAD_KEY = (orgId: string, channel: string) =>
@@ -45,11 +52,27 @@ function fmtDate(iso: string) {
 }
 
 export default function BreakroomPage() {
-  const { orgId, currentUser } = useAuth();
+  const { orgId, currentPropertyId, currentUser } = useAuth();
   const authUserId = currentUser?.authUser?.id;
   const isHydrated = useAppStore((s) => s.isHydrated);
   const employees = useAppStore((s) => s.employees);
   const properties = useAppStore((s) => s.properties);
+  const todayKey = new Date().toLocaleDateString('en-CA');
+  const selectedPropertyId =
+    currentPropertyId && currentPropertyId !== 'all'
+      ? currentPropertyId
+      : currentUser?.propertyId || properties[0]?.id || '';
+  const { data: notes = [], isLoading: notesLoading } = useNotes(
+    isHydrated ? selectedPropertyId : undefined,
+    isHydrated ? orgId ?? undefined : undefined,
+  );
+  const { data: assignments = [] } = useAssignments(
+    todayKey,
+    isHydrated ? selectedPropertyId : undefined,
+    isHydrated ? orgId ?? undefined : undefined,
+  );
+  const { data: tasks = [] } = useTasks(undefined, isHydrated ? orgId ?? undefined : undefined);
+  const [weather, setWeather] = useState<BreakroomWeather | null>(null);
   const channels = [
     { id: COMPANY_CHANNEL, label: 'Company-wide' },
     ...properties.map((p) => ({ id: `property-${p.id}`, label: p.name })),
@@ -63,6 +86,22 @@ export default function BreakroomPage() {
   const [sending, setSending] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
+  const activeProperty = properties.find((property) => property.id === selectedPropertyId) ?? null;
+  const dailyNote = notes.find((note) => note.type === 'daily' && note.date === todayKey);
+  const assignmentSummary = useMemo(() => {
+    const employeeNames = new Map(
+      employees.map((employee) => [
+        employee.id,
+        `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim(),
+      ]),
+    );
+    const taskNames = new Map(tasks.map((task) => [task.id, task.name]));
+    return assignments.map((assignment) => ({
+      id: assignment.id ?? `${assignment.employeeId}-${assignment.taskId}`,
+      employeeName: employeeNames.get(assignment.employeeId) || 'Unassigned crew member',
+      taskName: assignment.title || taskNames.get(assignment.taskId) || 'Assigned task',
+    }));
+  }, [assignments, employees, tasks]);
 
   // Find current employee from auth
   const myEmployeeId = currentUser?.employeeId ?? null;
@@ -102,6 +141,32 @@ export default function BreakroomPage() {
     void fetchMessages(activeChannel);
     markRead(activeChannel);
   }, [fetchMessages, activeChannel, isHydrated, markRead]);
+
+  useEffect(() => {
+    if (!isHydrated || activeProperty?.latitude == null || activeProperty.longitude == null) {
+      setWeather(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchNwsWeather({
+      latitude: activeProperty.latitude,
+      longitude: activeProperty.longitude,
+    })
+      .then((payload) => {
+        if (!cancelled) {
+          setWeather({
+            temperature: Number(payload.current.temperature ?? 0),
+            windSpeed: Number(payload.current.windSpeed ?? 0),
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setWeather(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProperty?.latitude, activeProperty?.longitude, isHydrated]);
 
   // Scroll to bottom when messages load or change
   useEffect(() => {
@@ -234,6 +299,56 @@ export default function BreakroomPage() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="border-b border-surface-border px-4 pt-3">
           <PageHeader title="Breakroom" subtitle="Share updates with your team channels." />
+        </div>
+        <div className="grid gap-3 border-b border-surface-border bg-surface-base p-4 lg:grid-cols-3">
+          <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-2">
+            <div className="mb-2 flex items-center gap-2 text-brand">
+              <StickyNote className="h-4 w-4" />
+              <h2 className="text-xs font-semibold uppercase tracking-wide">Today's Daily Note</h2>
+            </div>
+            {notesLoading ? (
+              <div className="h-12 animate-pulse rounded bg-surface-hover" />
+            ) : dailyNote ? (
+              <>
+                <p className="font-semibold text-text-primary">{dailyNote.title}</p>
+                <p className="mt-1 text-sm leading-relaxed text-text-secondary">{dailyNote.content}</p>
+              </>
+            ) : (
+              <p className="text-sm text-text-muted">No daily note has been posted for today.</p>
+            )}
+          </section>
+          <section className="rounded-xl border border-surface-border bg-surface-elevated p-4">
+            <div className="mb-2 flex items-center gap-2 text-brand">
+              <CloudSun className="h-4 w-4" />
+              <h2 className="text-xs font-semibold uppercase tracking-wide">Current Weather</h2>
+            </div>
+            {weather ? (
+              <div>
+                <p className="text-2xl font-bold text-text-primary">{Math.round(weather.temperature)}°F</p>
+                <p className="text-sm text-text-secondary">Wind {Math.round(weather.windSpeed)} mph</p>
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted">Weather unavailable for this property.</p>
+            )}
+          </section>
+          <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-3">
+            <div className="mb-3 flex items-center gap-2 text-brand">
+              <ClipboardList className="h-4 w-4" />
+              <h2 className="text-xs font-semibold uppercase tracking-wide">Today's Assignments</h2>
+            </div>
+            {assignmentSummary.length > 0 ? (
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {assignmentSummary.map((assignment) => (
+                  <div key={assignment.id} className="rounded-lg bg-surface-hover px-3 py-2">
+                    <p className="text-sm font-semibold text-text-primary">{assignment.employeeName}</p>
+                    <p className="text-xs text-text-secondary">{assignment.taskName}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted">No assignments scheduled for today.</p>
+            )}
+          </section>
         </div>
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-surface-border px-4 py-3">

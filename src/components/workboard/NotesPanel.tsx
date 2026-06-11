@@ -6,7 +6,7 @@ import type { Note } from '@/data/seedData';
 
 interface NotesPanelProps {
   notes: Note[];
-  onAddNote?: () => void;
+  onAddNote?: (type: Note['type']) => void;
 }
 
 export function NotesPanel({ notes, onAddNote }: NotesPanelProps) {
@@ -32,7 +32,12 @@ export function NotesPanel({ notes, onAddNote }: NotesPanelProps) {
                 </div>
               </div>
             ))}
-          <Button variant="ghost" size="sm" className="w-full text-xs border border-dashed" onClick={onAddNote}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs border border-dashed"
+            onClick={() => onAddNote?.(tab === 'alerts' ? 'alert' : tab)}
+          >
             <Plus className="h-3 w-3 mr-1" /> Add Note
           </Button>
         </TabsContent>

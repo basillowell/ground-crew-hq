@@ -695,7 +695,7 @@ export default function WorkboardContent() {
   } = useTasks(undefined, orgId);
   console.log('tasks loaded:', taskOptions.length, orgId);
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
-  const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined);
+  const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined, orgId);
   const departmentsQuery = useDepartmentOptions(orgId);
   const taskLibraryError = (tasksError as { message?: string } | null)?.message ?? null;
 
@@ -3920,17 +3920,18 @@ export default function WorkboardContent() {
       toast.info('Demo mode is read-only.');
       return;
     }
-    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !noteDraft.title.trim() || !noteDraft.content.trim()) return;
+    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !currentUser?.orgId || !noteDraft.title.trim() || !noteDraft.content.trim()) {
+      toast.error('Select a property and enter a title and note before saving.');
+      return;
+    }
     const { error } = await supabase.from('notes').insert({
-      id: makeId(),
-      property_id: effectivePropertyId,
       type: noteDraft.type,
       title: noteDraft.title.trim(),
       content: noteDraft.content.trim(),
+      property_id: effectivePropertyId,
+      org_id: currentUser.orgId,
+      created_by: currentUser.employeeId ?? null,
       location: noteDraft.location.trim() || null,
-      created_by: currentUser?.appUserId ?? null,
-      author: noteDraft.author.trim() || 'Operations Admin',
-      date: boardDate,
     });
     if (error) { toast.error(`Failed to save note: ${error.message}`); return; }
     await queryClient.invalidateQueries({ queryKey: ['notes'] });
@@ -4905,7 +4906,10 @@ export default function WorkboardContent() {
                   <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
                     <NotesPanel
                       notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-                      onAddNote={() => setNoteDialogOpen(true)}
+                      onAddNote={(type) => {
+                        setNoteDraft((current) => ({ ...current, type }));
+                        setNoteDialogOpen(true);
+                      }}
                     />
                   </Suspense>
                 </SafeSection>
@@ -5083,7 +5087,10 @@ export default function WorkboardContent() {
             <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
               <NotesPanel
                 notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-                onAddNote={() => setNoteDialogOpen(true)}
+                onAddNote={(type) => {
+                  setNoteDraft((current) => ({ ...current, type }));
+                  setNoteDialogOpen(true);
+                }}
               />
             </Suspense>
           </SafeSection>
