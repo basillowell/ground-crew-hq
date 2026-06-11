@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Clock3,
+  Loader2,
   TriangleAlert,
   Wrench,
   X,
@@ -28,39 +29,20 @@ import { fetchNwsAlerts } from '@/lib/weather/providers';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import {
+  useAssignments,
   useAssignmentsRange,
+  useEmployees,
   useEquipmentUnits,
+  useProgramSettings,
+  useProperties,
+  useScheduleEntries,
   useScheduleEntriesRange,
+  useTasks,
   useWeatherLocations,
 } from '@/lib/supabase-queries';
-import { useAppStore } from '@/store/appStore';
 import { formatTime } from '@/utils/formatTime';
 import { PageHeader } from '@/components/shared';
-import { PageSkeleton } from '@/components/PageSkeleton';
-
-type AssignmentRow = {
-  id: string;
-  employee_id: string;
-  property_id: string;
-  task_id: string | null;
-  date: string;
-  status: string;
-  created_at: string;
-  start_time: string | null;
-  title: string | null;
-};
-
-type TaskRow = {
-  id: string;
-  name: string;
-  category: string;
-};
-
-type ScheduleEntryRow = {
-  employee_id: string;
-  date: string;
-  shift_start: string;
-};
+import { Badge } from '@/components/ui/badge';
 
 type TaskRequestRow = {
   id: string;
@@ -81,9 +63,6 @@ type ClockEventRow = {
 };
 
 type DashboardData = {
-  assignments: AssignmentRow[];
-  tasks: TaskRow[];
-  scheduleEntries: ScheduleEntryRow[];
   taskRequests: TaskRequestRow[];
   clockEventsToday: ClockEventRow[];
   recentClockEvents: ClockEventRow[];
@@ -102,9 +81,6 @@ const statusStyles: Record<StatusTone, string> = {
 };
 
 const emptyDashboardData: DashboardData = {
-  assignments: [],
-  tasks: [],
-  scheduleEntries: [],
   taskRequests: [],
   clockEventsToday: [],
   recentClockEvents: [],
@@ -232,27 +208,11 @@ function Panel({
 
 export default function CommandCenterOperationalPage() {
   const navigate = useNavigate();
-  const { orgId } = useAuth();
-  const employees = useAppStore((state) => state.employees);
-  const properties = useAppStore((state) => state.properties);
-  const programSettings = useAppStore((state) => state.programSettings);
-  const isHydrated = useAppStore((state) => state.isHydrated);
+  const { currentPropertyId, orgId } = useAuth();
   const [data, setData] = useState<DashboardData>(emptyDashboardData);
-  const [isLoading, setIsLoading] = useState(true);
+  const [supplementalLoading, setSupplementalLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [nwsAlert, setNwsAlert] = useState<string | null>(null);
-
-  const dismissKey = `gcrew-onboarding-dismissed-${orgId ?? 'unknown'}`;
-  const [checklistDismissed, setChecklistDismissed] = useState(() => !!localStorage.getItem(dismissKey));
-  const handleDismissChecklist = () => {
-    localStorage.setItem(dismissKey, '1');
-    setChecklistDismissed(true);
-  };
-
-  const { data: weatherLocations = [] } = useWeatherLocations(undefined, orgId ?? undefined);
-  const { data: equipmentUnits = [] } = useEquipmentUnits(undefined, orgId ?? undefined);
-  const { data: allScheduleEntries = [] } = useScheduleEntriesRange('2020-01-01', '2099-12-31', undefined, orgId ?? undefined);
-  const { data: allAssignments = [] } = useAssignmentsRange('2020-01-01', '2099-12-31', undefined, orgId ?? undefined);
 
   const today = useMemo(() => new Date(), []);
   const todayKey = useMemo(() => getLocalDateKey(today), [today]);
@@ -261,42 +221,58 @@ export default function CommandCenterOperationalPage() {
     [today],
   );
   const weekBounds = useMemo(() => getWeekBounds(today), [today]);
+  const propertyScope = currentPropertyId || 'all';
+
+  const propertiesQuery = useProperties(orgId ?? undefined);
+  const employeesQuery = useEmployees(propertyScope, orgId ?? undefined);
+  const assignmentsQuery = useAssignments(todayKey, propertyScope, orgId ?? undefined);
+  const weeklyAssignmentsQuery = useAssignmentsRange(
+    weekBounds.start,
+    weekBounds.end,
+    propertyScope,
+    orgId ?? undefined,
+  );
+  const scheduleEntriesQuery = useScheduleEntries(todayKey, propertyScope, orgId ?? undefined);
+  const tasksQuery = useTasks(propertyScope, orgId ?? undefined);
+  const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgId ?? undefined);
+  const programSettingsQuery = useProgramSettings(orgId ?? undefined);
+
+  const properties = propertiesQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
+  const assignments = assignmentsQuery.data ?? [];
+  const weeklyAssignments = weeklyAssignmentsQuery.data ?? [];
+  const scheduleEntries = scheduleEntriesQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
+  const equipmentUnits = equipmentUnitsQuery.data ?? [];
+  const programSettings = programSettingsQuery.data ?? null;
+
+  const dismissKey = `gcrew-onboarding-dismissed-${orgId ?? 'unknown'}`;
+  const [checklistDismissed, setChecklistDismissed] = useState(() => !!localStorage.getItem(dismissKey));
+  const handleDismissChecklist = () => {
+    localStorage.setItem(dismissKey, '1');
+    setChecklistDismissed(true);
+  };
+
+  const { data: weatherLocations = [] } = useWeatherLocations(propertyScope, orgId ?? undefined);
+  const { data: allScheduleEntries = [] } = useScheduleEntriesRange('2020-01-01', '2099-12-31', undefined, orgId ?? undefined);
+  const { data: allAssignments = [] } = useAssignmentsRange('2020-01-01', '2099-12-31', undefined, orgId ?? undefined);
 
   useEffect(() => {
-    if (!isHydrated || !orgId) return;
+    if (!orgId) return;
 
     let cancelled = false;
 
     const loadDashboard = async () => {
-      setIsLoading(true);
+      setSupplementalLoading(true);
       setErrorMessage(null);
 
       const [
-        assignmentsResult,
-        tasksResult,
-        scheduleResult,
         requestsResult,
         requestCountResult,
         workOrdersResult,
         clockEventsTodayResult,
         recentClockEventsResult,
       ] = await Promise.all([
-        supabase
-          .from('assignments')
-          .select('id, employee_id, property_id, task_id, date, status, created_at, start_time, title')
-          .eq('org_id', orgId)
-          .gte('date', weekBounds.start)
-          .lte('date', weekBounds.end)
-          .order('date', { ascending: true }),
-        supabase
-          .from('tasks')
-          .select('id, name, category')
-          .eq('org_id', orgId),
-        supabase
-          .from('schedule_entries')
-          .select('employee_id, date, shift_start')
-          .eq('org_id', orgId)
-          .eq('date', todayKey),
         supabase
           .from('task_requests')
           .select('id, property_id, employee_id, title, status, priority, created_at')
@@ -328,9 +304,6 @@ export default function CommandCenterOperationalPage() {
       ]);
 
       const queryError =
-        assignmentsResult.error ??
-        tasksResult.error ??
-        scheduleResult.error ??
         requestsResult.error ??
         requestCountResult.error ??
         workOrdersResult.error ??
@@ -342,34 +315,31 @@ export default function CommandCenterOperationalPage() {
       if (queryError) {
         console.error('[CommandCenter] Dashboard load failed:', queryError);
         setErrorMessage('Operational data could not be loaded. Refresh to try again.');
-        setIsLoading(false);
+        setSupplementalLoading(false);
         return;
       }
 
       setData({
-        assignments: (assignmentsResult.data ?? []) as AssignmentRow[],
-        tasks: (tasksResult.data ?? []) as TaskRow[],
-        scheduleEntries: (scheduleResult.data ?? []) as ScheduleEntryRow[],
         taskRequests: (requestsResult.data ?? []) as TaskRequestRow[],
         clockEventsToday: (clockEventsTodayResult.data ?? []) as ClockEventRow[],
         recentClockEvents: (recentClockEventsResult.data ?? []) as ClockEventRow[],
         openTaskRequests: requestCountResult.count ?? 0,
         activeWorkOrders: workOrdersResult.count ?? 0,
       });
-      setIsLoading(false);
+      setSupplementalLoading(false);
     };
 
     void loadDashboard();
     return () => {
       cancelled = true;
     };
-  }, [isHydrated, orgId, todayKey, todayStartIso, weekBounds.end, weekBounds.start]);
+  }, [orgId, todayStartIso]);
 
   useEffect(() => {
-    if (!isHydrated || !orgId) return;
+    if (!orgId) return;
 
-    const latitude = programSettings?.weather_default_latitude;
-    const longitude = programSettings?.weather_default_longitude;
+    const latitude = programSettings?.weatherDefaultLatitude;
+    const longitude = programSettings?.weatherDefaultLongitude;
     if (latitude == null || longitude == null) {
       setNwsAlert(null);
       return;
@@ -396,10 +366,9 @@ export default function CommandCenterOperationalPage() {
       cancelled = true;
     };
   }, [
-    isHydrated,
     orgId,
-    programSettings?.weather_default_latitude,
-    programSettings?.weather_default_longitude,
+    programSettings?.weatherDefaultLatitude,
+    programSettings?.weatherDefaultLongitude,
   ]);
 
   const employeeById = useMemo(
@@ -411,18 +380,15 @@ export default function CommandCenterOperationalPage() {
     [properties],
   );
   const taskById = useMemo(
-    () => new Map(data.tasks.map((task) => [task.id, task])),
-    [data.tasks],
+    () => new Map(tasks.map((task) => [task.id, task])),
+    [tasks],
   );
   const shiftByEmployee = useMemo(
-    () => new Map(data.scheduleEntries.map((entry) => [entry.employee_id, entry.shift_start])),
-    [data.scheduleEntries],
+    () => new Map(scheduleEntries.map((entry) => [entry.employeeId, entry.shiftStart])),
+    [scheduleEntries],
   );
 
-  const todaysAssignments = useMemo(
-    () => data.assignments.filter((assignment) => assignment.date === todayKey),
-    [data.assignments, todayKey],
-  );
+  const todaysAssignments = assignments;
 
   const crewOnClock = useMemo(() => {
     const latestEventByEmployee = new Map<string, ClockEventRow>();
@@ -443,8 +409,8 @@ export default function CommandCenterOperationalPage() {
         timestamp: request.created_at ?? '1970-01-01T00:00:00Z',
         title: request.title,
         detail: [
-          employee ? `${employee.first_name} ${employee.last_name}` : null,
-          property?.short_name || property?.name,
+          employee ? `${employee.firstName} ${employee.lastName}` : null,
+          property?.shortName || property?.name,
         ].filter(Boolean).join(' · '),
         status: request.status,
         type: 'Task request',
@@ -457,8 +423,8 @@ export default function CommandCenterOperationalPage() {
       return {
         id: `clock-${event.id}`,
         timestamp: event.timestamp,
-        title: employee ? `${employee.first_name} ${employee.last_name}` : 'Crew member',
-        detail: property?.short_name || property?.name || 'Property',
+        title: employee ? `${employee.firstName} ${employee.lastName}` : 'Crew member',
+        detail: property?.shortName || property?.name || 'Property',
         status: event.event_type,
         type: 'Clock event',
       };
@@ -470,18 +436,38 @@ export default function CommandCenterOperationalPage() {
 
   const weeklyCategoryData = useMemo(() => {
     const grouped = new Map<string, number>();
-    data.assignments.forEach((assignment) => {
-      const category = assignment.task_id
-        ? taskById.get(assignment.task_id)?.category ?? 'General'
+    weeklyAssignments.forEach((assignment) => {
+      const category = assignment.taskId
+        ? taskById.get(assignment.taskId)?.category ?? 'General'
         : 'General';
       grouped.set(category, (grouped.get(category) ?? 0) + 1);
     });
     return [...grouped.entries()]
       .map(([category, assignments]) => ({ category, assignments }))
       .sort((a, b) => b.assignments - a.assignments);
-  }, [data.assignments, taskById]);
+  }, [taskById, weeklyAssignments]);
 
-  if (isLoading) return <PageSkeleton />;
+  const isLoading =
+    propertiesQuery.isLoading ||
+    employeesQuery.isLoading ||
+    assignmentsQuery.isLoading ||
+    weeklyAssignmentsQuery.isLoading ||
+    scheduleEntriesQuery.isLoading ||
+    tasksQuery.isLoading ||
+    equipmentUnitsQuery.isLoading ||
+    programSettingsQuery.isLoading ||
+    supplementalLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Loading operations data...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full bg-surface-base px-4 py-5 text-text-primary sm:px-6 lg:px-8">
@@ -504,6 +490,12 @@ export default function CommandCenterOperationalPage() {
               day: 'numeric',
               year: 'numeric',
             })}
+          badge={(
+            <Badge variant="outline" className="text-[10px]">
+              <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
+              Live
+            </Badge>
+          )}
         />
 
         {errorMessage ? (
@@ -517,7 +509,7 @@ export default function CommandCenterOperationalPage() {
             { label: 'Add your first employee', done: employees.length > 0, route: '/app/employees' },
             { label: 'Set up weather for this property', done: weatherLocations.length > 0, route: '/app/weather' },
             { label: 'Add equipment to your fleet', done: equipmentUnits.length > 0, route: '/app/equipment' },
-            { label: 'Build your task library', done: data.tasks.length > 0, route: '/app/settings' },
+            { label: 'Build your task library', done: tasks.length > 0, route: '/app/settings' },
             { label: 'Schedule your first shift', done: allScheduleEntries.length > 0, route: '/app/scheduler' },
             { label: 'Assign work on the workboard', done: allAssignments.length > 0, route: '/app/workboard' },
           ];
@@ -628,16 +620,16 @@ export default function CommandCenterOperationalPage() {
             ) : (
               <div className="divide-y divide-surface-border">
                 {todaysAssignments.map((assignment) => {
-                  const employee = employeeById.get(assignment.employee_id);
-                  const property = propertyById.get(assignment.property_id);
-                  const task = assignment.task_id ? taskById.get(assignment.task_id) : undefined;
-                  const shiftStart = shiftByEmployee.get(assignment.employee_id) ?? assignment.start_time;
+                  const employee = employeeById.get(assignment.employeeId);
+                  const property = assignment.propertyId ? propertyById.get(assignment.propertyId) : undefined;
+                  const task = assignment.taskId ? taskById.get(assignment.taskId) : undefined;
+                  const shiftStart = shiftByEmployee.get(assignment.employeeId) ?? assignment.startTime;
                   return (
                     <div key={assignment.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-sm font-medium text-text-primary">
-                            {employee ? `${employee.first_name} ${employee.last_name}` : 'Unassigned crew'}
+                            {employee ? `${employee.firstName} ${employee.lastName}` : 'Unassigned crew'}
                           </p>
                           <StatusBadge status={assignment.status} />
                         </div>
@@ -647,7 +639,7 @@ export default function CommandCenterOperationalPage() {
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-xs font-medium text-text-secondary">
-                          {property?.short_name || property?.name || 'Property'}
+                          {property?.shortName || property?.name || 'Property'}
                         </p>
                         <p className="mt-1 text-xs text-text-muted">
                           {formatTime(shiftStart) || 'Start not set'}
