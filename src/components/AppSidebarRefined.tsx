@@ -71,7 +71,7 @@ const complianceAndSettings: NavItemConfig[] = [
   { label: 'Chemical Logs', href: '/app/applications', icon: Shield, moduleId: 'applications' },
   { label: 'Safety', href: '/app/safety', icon: ShieldAlert, moduleId: 'workflow' },
   { label: 'Settings', href: '/app/settings', icon: Settings2, moduleId: 'command-center' },
-  { label: 'Help', icon: HelpCircle, disabled: true },
+  { label: 'Help', href: 'mailto:support@groundcrewhq.com', icon: HelpCircle },
 ];
 
 function NavItem({
@@ -106,6 +106,19 @@ function NavItem({
       >
         {content}
       </button>
+    );
+  }
+
+  if (href.startsWith('mailto:')) {
+    return (
+      <a
+        href={href}
+        onClick={onNavigate}
+        title={collapsed ? label : undefined}
+        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+      >
+        {content}
+      </a>
     );
   }
 
