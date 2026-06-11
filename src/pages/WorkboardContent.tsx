@@ -4473,10 +4473,16 @@ export default function WorkboardContent() {
                     : coverageRounded >= 50
                       ? 'bg-amber-100 text-amber-800'
                       : 'bg-red-100 text-red-800';
+                const laneAccentClass =
+                  coverageRounded > 80
+                    ? 'border-l-2 border-l-green-500/60'
+                    : coverageRounded >= 50
+                      ? 'border-l-2 border-l-amber-500/60'
+                      : 'border-l-2 border-l-red-500/60';
                 return (
                   <div
                     key={lane.employee.id}
-                    className={`rounded-xl border bg-card transition-all duration-500 ${
+                    className={`rounded-xl border bg-card transition-all duration-500 ${laneAccentClass} ${
                       laneFlashTone === 'complete'
                         ? 'ring-2 ring-green-400/70 bg-green-50/40'
                         : laneFlashTone === 'started'
@@ -4487,7 +4493,7 @@ export default function WorkboardContent() {
                     <button
                       type="button"
                       onClick={() => toggleDesktopCrew(lane.employee.id)}
-                      className="flex h-[52px] min-h-[52px] max-h-[52px] w-full items-center gap-3 border-b px-3 text-left hover:bg-muted/30"
+                      className="flex h-[52px] min-h-[52px] max-h-[52px] w-full items-center gap-3 border-b bg-muted/40 px-3 text-left hover:bg-muted/60"
                     >
                       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                         {initials}
@@ -4499,7 +4505,7 @@ export default function WorkboardContent() {
                         {lane.shift ? `${formatTime(lane.shift.shiftStart)}-${formatTime(lane.shift.shiftEnd)}` : 'No shift'}
                       </span>
                       <span className="w-[60px] text-right">
-                        <span className="inline-flex rounded-full border px-2 py-0.5 text-[11px]">
+                        <span className="inline-flex rounded-full bg-brand-bright/10 px-2 py-0.5 text-[11px] font-medium text-brand-bright">
                           {lane.employeeAssignments.length}
                         </span>
                       </span>

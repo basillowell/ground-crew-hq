@@ -183,7 +183,7 @@ function MetricCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-lg border border-surface-border bg-surface-card p-4">
+    <div className="rounded-lg border border-surface-border border-b-2 border-b-brand-bright/20 bg-surface-card p-4 transition-all hover:border-b-brand-bright/60 hover:shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="body-muted uppercase">{label}</p>
