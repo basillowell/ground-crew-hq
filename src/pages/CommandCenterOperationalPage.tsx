@@ -43,6 +43,7 @@ import {
 import { formatTime } from '@/utils/formatTime';
 import { PageHeader } from '@/components/shared';
 import { Badge } from '@/components/ui/badge';
+import { useQueryClient } from '@tanstack/react-query';
 
 type TaskRequestRow = {
   id: string;
@@ -208,6 +209,7 @@ function Panel({
 
 export default function CommandCenterOperationalPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { currentPropertyId, orgId } = useAuth();
   const [data, setData] = useState<DashboardData>(emptyDashboardData);
   const [supplementalLoading, setSupplementalLoading] = useState(true);
@@ -256,6 +258,18 @@ export default function CommandCenterOperationalPage() {
   const { data: weatherLocations = [] } = useWeatherLocations(propertyScope, orgId ?? undefined);
   const { data: allScheduleEntries = [] } = useScheduleEntriesRange('2020-01-01', '2099-12-31', undefined, orgId ?? undefined);
   const { data: allAssignments = [] } = useAssignmentsRange('2020-01-01', '2099-12-31', undefined, orgId ?? undefined);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+        void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
+        void queryClient.invalidateQueries({ queryKey: ['employees'] });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [queryClient]);
 
   useEffect(() => {
     if (!orgId) return;

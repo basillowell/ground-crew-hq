@@ -164,6 +164,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   const programSettingQuery = useProgramSettings(orgId);
   const programSetting = programSettingQuery.data ?? null;
   const properties = propertiesQuery.data ?? [];
+
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+  }, [location.pathname, queryClient]);
+
   const latestClockEventQuery = useQuery({
     queryKey: ['employee-mobile-clock-status', orgId, currentUser?.employeeId],
     enabled: currentRole === 'employee' && Boolean(orgId && currentUser?.employeeId),

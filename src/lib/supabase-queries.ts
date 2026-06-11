@@ -1172,7 +1172,6 @@ export function useScheduleEntries(date: string, propertyId?: string, orgId?: st
     queryFn: () => fetchScheduleEntries(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 5,
-    retry: false,
   });
 }
 
@@ -1182,7 +1181,6 @@ export function useScheduleEntriesRange(startDate: string, endDate: string, prop
     queryFn: () => fetchScheduleEntriesRange(startDate, endDate, propertyId, orgId),
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
-    retry: false,
   });
 }
 
@@ -1192,7 +1190,6 @@ export function useAssignments(date: string, propertyId?: string, orgId?: string
     queryFn: () => fetchAssignments(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 5,
-    retry: false,
   });
 }
 
@@ -1202,7 +1199,6 @@ export function useAssignmentsRange(startDate: string, endDate: string, property
     queryFn: () => fetchAssignmentsRange(startDate, endDate, propertyId, orgId),
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
-    retry: false,
   });
 }
 
@@ -1255,7 +1251,7 @@ export function useEmployees(
     queryKey: ['employees', propertyId ?? 'all', orgId ?? 'all-orgs', status],
     queryFn: () => fetchEmployees(propertyId, orgId, status),
     enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 15,
   });
 }
 
@@ -1264,7 +1260,7 @@ export function useProperties(orgId?: string) {
     queryKey: ['properties', orgId ?? 'all-orgs'],
     queryFn: () => fetchProperties(orgId),
     enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 60,
   });
 }
 
@@ -1282,7 +1278,7 @@ export function useTasks(propertyId?: string, orgId?: string) {
     queryKey: ['tasks', propertyId ?? 'all', orgId ?? 'all-orgs'],
     queryFn: () => fetchTasks(propertyId, orgId),
     enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 30,
   });
 }
 
