@@ -7,10 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { PageSkeleton } from '@/components/PageSkeleton';
+import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
-import { TableSkeleton } from '@/components/TableSkeleton';
 import { toast } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '@/store/appStore';
@@ -376,14 +375,15 @@ export default function EquipmentPage() {
 
   if (!orgId || loading) {
     return (
-      <div className="p-6">
-        <TableSkeleton />
+      <div className="space-y-6 p-6">
+        <PageHeaderSkeleton />
+        <TableSkeleton rows={6} />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="animate-fade-up space-y-6 p-4 md:p-6">
       <PageHeader title="Equipment" subtitle="Track maintenance and availability.">
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-surface-border bg-surface-card p-0.5">

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/EmptyState';
+import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { PageHeader } from '@/components/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTasks } from '@/lib/supabase-queries';
@@ -53,21 +54,24 @@ export default function TasksCatalogPage() {
   const groups = useMemo(() => groupedByCategory(tasks), [tasks]);
   const orderedCategories = useMemo(() => Object.keys(groups).sort((a, b) => a.localeCompare(b)), [groups]);
 
+  if (loading) {
+    return (
+      <div className="space-y-6 p-6">
+        <PageHeaderSkeleton />
+        <TableSkeleton rows={6} />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-4 max-w-6xl mx-auto space-y-4">
+    <div className="animate-fade-up mx-auto max-w-6xl space-y-4 p-4">
       <PageHeader
         title="Task Management"
         subtitle="Task library used by Workflow assignment and operations planning."
         badge={<Badge variant="secondary">{tasks.length} tasks</Badge>}
       />
 
-      {loading ? (
-        <Card className="p-4 space-y-3">
-          <div className="h-5 w-48 rounded bg-muted animate-pulse" />
-          <div className="h-10 rounded bg-muted animate-pulse" />
-          <div className="h-10 rounded bg-muted animate-pulse" />
-        </Card>
-      ) : error ? (
+      {error ? (
         <Card className="p-4 space-y-3">
           <p className="text-sm text-destructive">{error.message}</p>
           <button

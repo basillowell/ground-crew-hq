@@ -7,9 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { PageSkeleton } from '@/components/PageSkeleton';
+import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
-import { TableSkeleton } from '@/components/TableSkeleton';
 import { toast } from '@/components/ui/sonner';
 import { useAppStore } from '@/store/appStore';
 import { useEmployees, type EmployeeStatusFilter } from '@/lib/supabase-queries';
@@ -727,14 +726,15 @@ export default function EmployeesPage() {
 
   if (!orgId || !isHydrated || employeesQuery.isLoading) {
     return (
-      <div className="p-6">
-        <TableSkeleton />
+      <div className="space-y-6 p-6">
+        <PageHeaderSkeleton />
+        <TableSkeleton rows={6} />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-4 md:p-6 space-y-6">
+    <div className="animate-fade-up mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <PageHeader
         title="Team"
         subtitle="Manage your crew roster."

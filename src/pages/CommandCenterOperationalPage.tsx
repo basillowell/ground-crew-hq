@@ -8,7 +8,6 @@ import {
   ClipboardCheck,
   ClipboardList,
   Clock3,
-  Loader2,
   TriangleAlert,
   Wrench,
   X,
@@ -42,6 +41,11 @@ import {
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
 import { PageHeader } from '@/components/shared';
+import {
+  CardGridSkeleton,
+  PageHeaderSkeleton,
+  StatCardsSkeleton,
+} from '@/components/PageSkeleton';
 import { Badge } from '@/components/ui/badge';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -474,17 +478,16 @@ export default function CommandCenterOperationalPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex items-center gap-3">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          <span className="text-sm text-muted-foreground">Loading operations data...</span>
-        </div>
+      <div className="mx-auto max-w-[1400px] space-y-6 p-6">
+        <PageHeaderSkeleton />
+        <StatCardsSkeleton count={6} />
+        <CardGridSkeleton count={3} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-full bg-surface-base px-4 py-5 text-text-primary sm:px-6 lg:px-8">
+    <div className="animate-fade-up min-h-full bg-surface-base px-4 py-5 text-text-primary sm:px-6 lg:px-8">
       <div className="mx-auto max-w-screen-2xl space-y-5">
         {nwsAlert ? (
           <div className="flex items-start gap-3 rounded-lg border border-status-pending/30 bg-status-pending/10 px-4 py-3 text-status-pending">

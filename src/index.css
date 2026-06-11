@@ -303,6 +303,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes page-enter {
   from {
     opacity: 0;
@@ -315,6 +326,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 @layer utilities {
+  .animate-fade-up {
+    animation: fade-up 0.2s ease-out;
+  }
+
   .page-enter {
     animation: page-enter 0.18s ease-out both;
   }
