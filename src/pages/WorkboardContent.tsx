@@ -1912,7 +1912,7 @@ export default function WorkboardContent() {
 
   const saveAssignmentTimelineTimes = useCallback(
     async (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => {
-      if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      if (!supabase || !currentUser?.orgId || !assignment.id) return false;
       if (import.meta.env.DEV) {
         const now = Date.now();
         const lastRun = timelineSaveGuardRef.current[assignment.id] ?? 0;
@@ -1934,12 +1934,12 @@ export default function WorkboardContent() {
       if (startInput && endInput) {
         if (endInput < startInput) {
           toast.error('Completed time cannot be before start time.');
-          return;
+          return false;
         }
       }
       if (!startInput && !endInput) {
         toast.error('Enter a start or complete time before saving.');
-        return;
+        return false;
       }
 
       const payload: Record<string, unknown> = {};
@@ -1964,7 +1964,7 @@ export default function WorkboardContent() {
       if (error) {
         toast.error(`Failed to save actual times: ${error.message}`);
         setSavingTimelineAssignmentId(null);
-        return;
+        return false;
       }
       const returnedStartAt = typeof data?.actual_start_at === 'string' ? data.actual_start_at : startTs;
       const returnedCompletedAt =
@@ -2033,6 +2033,7 @@ export default function WorkboardContent() {
       }
       await queryClient.invalidateQueries({ queryKey: ['assignments'] });
       setSavingTimelineAssignmentId(null);
+      return true;
     },
     [currentUser?.orgId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, queryClient, syncTimelineCaches],
   );
@@ -4677,37 +4678,41 @@ export default function WorkboardContent() {
                                     <div className="relative z-20 mt-2 flex flex-wrap items-end gap-2 rounded-md border bg-background/70 p-2 pointer-events-auto">
                                       <label className="text-[10px] text-muted-foreground">
                                         Start
-                                        <input
+                                        <Input
                                           type="time"
                                           value={timelineEditStart}
                                           onChange={(event) => setTimelineEditStart(event.target.value)}
-                                          className="ml-1 h-10 w-32 rounded border border-border bg-background px-2 text-sm text-foreground"
+                                          className="ml-1 h-10 w-32 border-border bg-background text-foreground"
+                                          style={{ colorScheme: 'dark' }}
                                         />
                                       </label>
                                       <label className="text-[10px] text-muted-foreground">
                                         Complete
-                                        <input
+                                        <Input
                                           type="time"
                                           value={timelineEditEnd}
                                           onChange={(event) => setTimelineEditEnd(event.target.value)}
-                                          className="ml-1 h-10 w-32 rounded border border-border bg-background px-2 text-sm text-foreground"
+                                          className="ml-1 h-10 w-32 border-border bg-background text-foreground"
+                                          style={{ colorScheme: 'dark' }}
                                         />
                                       </label>
                                       <button
                                         type="button"
                                         className="h-10 rounded-lg bg-primary px-4 text-sm text-text-inverse hover:bg-primary/90"
-                                        onClick={() => {
-                                          void saveAssignmentTimelineTimes(
+                                        onClick={async () => {
+                                          const saved = await saveAssignmentTimelineTimes(
                                             assignment,
                                             laneOrderedAssignments,
                                             timelineEditStart,
                                             timelineEditEnd,
                                           );
-                                          setTimelineEditAssignmentId(null);
+                                          if (saved) {
+                                            setTimelineEditAssignmentId(null);
+                                          }
                                         }}
                                         disabled={savingTimelineAssignmentId === assignment.id}
                                       >
-                                        Save
+                                        {savingTimelineAssignmentId === assignment.id ? 'Saving...' : 'Save'}
                                       </button>
                                     </div>
                                   ) : null}
