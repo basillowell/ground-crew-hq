@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MoreHorizontal, Plus, UserCog, Users } from 'lucide-react';
+import { Loader2, MoreHorizontal, Plus, UserCog, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -12,7 +12,7 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { useAppStore } from '@/store/appStore';
 import { useEmployees, type EmployeeStatusFilter } from '@/lib/supabase-queries';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/shared';
 import {
   DropdownMenu,
@@ -238,8 +238,46 @@ export default function EmployeesPage() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [monthEntries, setMonthEntries] = useState<ScheduleEntryRow[]>([]);
-  const [monthEntriesLoading, setMonthEntriesLoading] = useState(false);
+  const availabilityMonthLabel = monthCursor.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+  const availabilityStartKey = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1)
+    .toISOString()
+    .slice(0, 10);
+  const availabilityEndKey = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0)
+    .toISOString()
+    .slice(0, 10);
+  const monthEntriesQuery = useQuery({
+    queryKey: ['team-availability', orgId ?? 'no-org', availabilityStartKey, availabilityEndKey],
+    enabled: Boolean(orgId && isHydrated && viewMode === 'availability'),
+    retry: false,
+    queryFn: async () => {
+      if (!orgId) return [] as ScheduleEntryRow[];
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Availability request timed out after 10 seconds.')), 10_000);
+      });
+      try {
+        const result = await Promise.race([
+          supabase
+            .from('schedule_entries')
+            .select('id, employee_id, property_id, date, shift_start, shift_end, status, notes')
+            .eq('org_id', orgId)
+            .gte('date', availabilityStartKey)
+            .lte('date', availabilityEndKey)
+            .order('date', { ascending: true }),
+          timeout,
+        ]);
+        if (result.error) throw result.error;
+        return (result.data ?? []) as ScheduleEntryRow[];
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    },
+  });
+  const monthEntries = monthEntriesQuery.data ?? [];
+  const refetchMonthEntries = monthEntriesQuery.refetch;
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [shiftDraft, setShiftDraft] = useState({
@@ -256,34 +294,6 @@ export default function EmployeesPage() {
   useEffect(() => {
     document.title = 'Team — Ground Crew HQ';
   }, []);
-
-  const fetchMonthEntries = useCallback(async () => {
-    if (!supabase || !orgId) return;
-    const start = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
-    const end = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0);
-    const startKey = start.toISOString().slice(0, 10);
-    const endKey = end.toISOString().slice(0, 10);
-    setMonthEntriesLoading(true);
-    const { data, error: scheduleError } = await supabase
-      .from('schedule_entries')
-      .select('id, employee_id, property_id, date, shift_start, shift_end, status, notes')
-      .eq('org_id', orgId)
-      .gte('date', startKey)
-      .lte('date', endKey)
-      .order('date', { ascending: true });
-    setMonthEntriesLoading(false);
-    if (scheduleError) {
-      toast.error(`Failed to load monthly availability: ${scheduleError.message}`);
-      return;
-    }
-    setMonthEntries((data ?? []) as ScheduleEntryRow[]);
-  }, [monthCursor, orgId]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    if (!orgId || viewMode !== 'availability') return;
-    void fetchMonthEntries();
-  }, [fetchMonthEntries, isHydrated, orgId, viewMode]);
 
   const employeePageCount = Math.max(1, Math.ceil(employees.length / EMPLOYEES_PER_PAGE));
   const visibleEmployees = useMemo(() => {
@@ -445,8 +455,8 @@ export default function EmployeesPage() {
     }
     setShiftDialogOpen(false);
     setEditingShiftId(null);
-    await fetchMonthEntries();
-  }, [editingShiftId, fetchMonthEntries, isReadOnly, orgId, shiftDraft]);
+    await refetchMonthEntries();
+  }, [editingShiftId, isReadOnly, orgId, refetchMonthEntries, shiftDraft]);
 
   const monthlyEmployeeStats = useMemo(() => {
     const byEmployee = new Map<string, { scheduled: number; off: number; sick: number; vacation: number }>();
@@ -797,7 +807,7 @@ export default function EmployeesPage() {
               Previous
             </Button>
             <div className="font-medium">
-              {monthCursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {availabilityMonthLabel}
             </div>
             <Button
               variant="outline"
@@ -809,8 +819,20 @@ export default function EmployeesPage() {
             </Button>
           </div>
 
-          {monthEntriesLoading ? (
-            <TableSkeleton />
+          {monthEntriesQuery.isLoading ? (
+            <div className="flex items-center justify-center p-12">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+          ) : monthEntriesQuery.error ? (
+            <ErrorRetry
+              message={`Failed to load availability: ${monthEntriesQuery.error.message}`}
+              onRetry={() => void monthEntriesQuery.refetch()}
+            />
+          ) : monthEntries.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-8 text-center">
+              <p className="text-sm font-medium">No availability set for {availabilityMonthLabel}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Availability tracking coming soon.</p>
+            </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-surface-border bg-surface-card">
               <table className="min-w-full text-xs">
@@ -850,6 +872,7 @@ export default function EmployeesPage() {
             </div>
           )}
 
+          {!monthEntriesQuery.isLoading && !monthEntriesQuery.error && monthEntries.length > 0 ? (
           <div className="rounded-xl border border-surface-border bg-surface-card p-3">
             <h3 className="mb-2 text-sm font-semibold text-text-primary">Quick stats</h3>
             <div className="space-y-1 text-sm text-text-muted">
@@ -864,6 +887,7 @@ export default function EmployeesPage() {
               })}
             </div>
           </div>
+          ) : null}
         </div>
       ) : null}
 
