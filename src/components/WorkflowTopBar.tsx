@@ -71,10 +71,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   onOpenCommandBar,
 }: WorkflowTopBarProps) {
   const { currentUser } = useAuth();
-  const firstName = (currentUser as { firstName?: string } | null)?.firstName ?? currentUser?.fullName?.split(' ')[0] ?? '';
-  const lastName = (currentUser as { lastName?: string } | null)?.lastName ?? currentUser?.fullName?.split(' ').slice(1).join(' ') ?? '';
-  const displayName = [firstName, lastName].filter(Boolean).join(' ') || currentUser?.fullName || 'WorkForce User';
-  const displayRole = (currentUser?.role || 'admin').toUpperCase();
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
   const formatTimestamp = (isoTimestamp: string) =>
@@ -88,8 +84,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const showAllPropertiesOption = allowAllProperties && properties.length > 1;
   const allPropertiesLabel = `All Properties (${properties.length})`;
   const bellBadgeLabel = pendingSyncCount > 0 ? `${pendingSyncCount} pending syncs` : String(unreadNotificationCount);
-
-  const rolePillLabel = displayRole === 'MANAGER' ? 'Supervisor' : displayRole === 'ADMIN' ? 'Admin' : 'Field Crew';
 
   return (
     <header className="sticky top-0 z-20 shrink-0 border-b border-surface-border bg-surface-base/80 px-3 py-2 backdrop-blur-md">
@@ -218,22 +212,13 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             Ask anything
           </Button>
 
-          <div className="hidden text-right md:block">
-            <div className="flex items-center justify-end gap-2">
-              <div className="text-sm font-semibold text-text-primary">{displayName}</div>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                  planTier === 'PRO' ? 'bg-brand/10 text-brand' : 'bg-surface-elevated text-text-muted'
-                }`}
-              >
-                {planTier}
-              </span>
-            </div>
-            <div className="flex items-center justify-end gap-1.5 mt-0.5">
-              <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-[10px] font-medium text-text-muted">
-                {rolePillLabel}
-              </span>
-            </div>
+          <div className="hidden md:block">
+            <p className="text-sm font-medium">
+              {currentUser?.firstName} {currentUser?.lastName}
+            </p>
+            <p className="text-xs text-muted-foreground capitalize">
+              {currentUser?.role}
+            </p>
           </div>
 
           {/* Mobile avatar */}
@@ -243,7 +228,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             onClick={onSignOut}
             aria-label="Account"
           >
-            {displayName.slice(0, 1).toUpperCase()}
+            {(currentUser?.firstName ?? '').slice(0, 1).toUpperCase()}
           </button>
 
           <Button

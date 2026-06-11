@@ -596,7 +596,6 @@ export function AppLayout({ children }: AppLayoutProps) {
             onOpenNotification={handleNotificationOpen}
             onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
             onSignOut={handleSignOut}
-            currentUser={currentUser ?? undefined}
             programSetting={programSetting ?? undefined}
             planTier={planTier}
             onOpenCommandBar={() => setCommandBarOpen(true)}
