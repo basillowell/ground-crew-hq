@@ -694,7 +694,7 @@ export default function WorkboardContent() {
     refetch: refetchTasks,
   } = useTasks(undefined, orgId);
   console.log('tasks loaded:', taskOptions.length, orgId);
-  const showTaskLoading = isLoadingTasks && taskOptions.length === 0;
+  const showTaskLoading = taskOptions.length === 0 && isLoadingTasks;
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
   const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined, orgId);
   const departmentsQuery = useDepartmentOptions(orgId);
