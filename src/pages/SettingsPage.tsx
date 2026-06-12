@@ -811,16 +811,19 @@ function WorkspaceTab({
       toast.error(`Failed to save property: ${saveError.message}`);
       return;
     }
+    const propertiesBeforeRefresh = useAppStore.getState().properties;
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] }),
       refreshProperties(storeOrgId),
     ]);
     if (insertedProperty) {
-      useAppStore.setState((state) => ({
-        properties: state.properties.some((property) => property.id === insertedProperty.id)
-          ? state.properties
-          : [...state.properties, insertedProperty].sort((a, b) => a.name.localeCompare(b.name)),
-      }));
+      const refreshedProperties = useAppStore.getState().properties;
+      const propertiesById = new Map(
+        [...propertiesBeforeRefresh, ...refreshedProperties, insertedProperty].map((property) => [property.id, property]),
+      );
+      useAppStore.setState({
+        properties: Array.from(propertiesById.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      });
     }
     toast.success(editingPropertyId ? 'Property updated successfully' : 'Property added successfully');
     resetPropertyForm();
@@ -1470,9 +1473,9 @@ function WorkspaceTab({
         {properties.length === 0 ? (
           <p className="text-sm text-text-muted">No properties yet. Add your first property below.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-surface-border">
+          <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
             {properties.map((property) => (
-              <div key={property.id} className="flex items-center gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
+              <div key={property.id} className="flex items-center gap-3 rounded-xl border border-surface-border px-4 py-3 hover:bg-surface-hover">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-text-primary">{property.name}</p>
                   <p className="text-xs text-text-muted">
