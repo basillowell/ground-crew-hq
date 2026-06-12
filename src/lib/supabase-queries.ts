@@ -126,7 +126,7 @@ type DbAssignment = {
 type DbTask = {
   id: string;
   org_id?: string | null;
-  property_id: string;
+  property_id: string | null;
   name: string;
   description: string | null;
   category: string;
@@ -832,7 +832,8 @@ async function fetchTasks(orgId?: string): Promise<Task[]> {
   if (orgId) query = query.eq('org_id', orgId);
   const { data, error } = await query
     .eq('status', 'active')
-    .order('priority', { ascending: true });
+    .order('category', { ascending: true })
+    .order('name', { ascending: true });
   if (error) throw error;
   return (data as DbTask[]).map(toTask);
 }

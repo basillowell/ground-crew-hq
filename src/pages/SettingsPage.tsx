@@ -2904,10 +2904,12 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     'Bunker Maintenance',
     'Aeration',
     'Fertilization',
-    'General Maintenance',
+    'General',
     'Equipment Maintenance',
     'Other',
   ] as const;
+  const displayCategory = (category: string | null | undefined) =>
+    category === 'General' ? 'General Maintenance' : category ?? 'General Maintenance';
   const [tasks, setTasks] = useState<TaskLibraryItem[]>([]);
   const employees = useMemo(
     () =>
@@ -2922,7 +2924,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
-  const [newCategory, setNewCategory] = useState('General Maintenance');
+  const [newCategory, setNewCategory] = useState('General');
   const [newPriority, setNewPriority] = useState<'1' | '2' | '3'>('2');
   const [newEstimatedHours, setNewEstimatedHours] = useState('1');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -2975,7 +2977,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     const nextTasks = (tasksResult.data ?? []).map<TaskLibraryItem>((task) => ({
       id: task.id,
       org_id: orgId,
-      property_id: propertyId,
+      property_id: null,
       name: task.name,
       category: task.category,
       priority: task.priority ?? null,
@@ -3001,7 +3003,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       }, {});
     });
     setLoading(false);
-  }, [orgId, propertyId, refetchTasks]);
+  }, [orgId, refetchTasks]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -3016,7 +3018,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
         org_id: orgId,
         property_id: propertyId,
         name: newName.trim(),
-        category: newCategory.trim() || 'General Maintenance',
+        category: newCategory.trim() || 'General',
         priority: Number(newPriority),
         estimated_hours: Number(newEstimatedHours || '0'),
         status: 'active',
@@ -3035,7 +3037,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       ),
     );
     setNewName('');
-    setNewCategory('General Maintenance');
+    setNewCategory('General');
     setNewPriority('2');
     setNewEstimatedHours('1');
     setTaskPanelOpen(false);
@@ -3063,7 +3065,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     setEditingTaskId(task.id);
     setEditDraft({
       name: task.name,
-      category: task.category ?? 'General Maintenance',
+      category: task.category ?? 'General',
       priority: task.priority ?? 2,
       estimated_hours: Number(task.estimated_hours ?? 0),
     });
@@ -3082,7 +3084,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       .from('tasks')
       .update({
         name: editDraft.name.trim(),
-        category: editDraft.category.trim() || 'General Maintenance',
+        category: editDraft.category.trim() || 'General',
         priority: editDraft.priority,
         estimated_hours: editDraft.estimated_hours,
       })
@@ -3099,7 +3101,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
           ? {
               ...task,
               name: editDraft.name.trim(),
-              category: editDraft.category.trim() || 'General Maintenance',
+              category: editDraft.category.trim() || 'General',
               priority: editDraft.priority,
               estimated_hours: editDraft.estimated_hours,
             }
@@ -3243,7 +3245,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                       <SortableTaskRowCompact key={task.id} id={task.id}>
                         <span className="flex-1 truncate pr-1 text-sm font-medium text-text-primary">{task.name}</span>
                         <span className="shrink-0 rounded-full bg-brand-ghost px-2 py-0.5 text-xs text-brand">
-                          {task.category ?? 'General'}
+                          {displayCategory(task.category)}
                         </span>
                         <span className="shrink-0 text-xs text-text-muted">
                           {Number(task.estimated_hours ?? 0).toFixed(1)}h
@@ -3286,7 +3288,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
               >
-                {taskCategoryOptions.map((c) => <option key={`inline-cat-${c}`} value={c}>{c}</option>)}
+                {taskCategoryOptions.map((c) => <option key={`inline-cat-${c}`} value={c}>{displayCategory(c)}</option>)}
               </select>
               <input
                 type="number"
@@ -3340,7 +3342,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                   : setNewCategory(event.target.value)}
               >
                 {taskCategoryOptions.map((category) => (
-                  <option key={`new-task-category-${category}`} value={category}>{category}</option>
+                  <option key={`new-task-category-${category}`} value={category}>{displayCategory(category)}</option>
                 ))}
               </select>
             </label>
