@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
 import { RecurringTasksSection } from '@/components/settings/RecurringTasksSection';
-import { useAppStore } from '@/store/appStore';
+import { useAppStore, type Property } from '@/store/appStore';
 import { type ThemeMode, useTheme } from '@/hooks/useTheme';
 import {
   DndContext,
@@ -778,18 +778,33 @@ function WorkspaceTab({
 
     setError(null);
     setSavingProperty(true);
-    const { error: saveError } = editingPropertyId
-      ? await supabase
-          .from('properties')
-          .update(payload)
-          .eq('id', editingPropertyId)
-          .eq('org_id', storeOrgId)
-      : await supabase
-          .from('properties')
-          .insert({
-            id: crypto.randomUUID(),
-            ...payload,
-          });
+    let insertedProperty: Property | null = null;
+    let saveError: { message: string } | null = null;
+    if (editingPropertyId) {
+      const result = await supabase
+        .from('properties')
+        .update(payload)
+        .eq('id', editingPropertyId)
+        .eq('org_id', storeOrgId);
+      saveError = result.error;
+    } else {
+      const propertyId = crypto.randomUUID();
+      const result = await supabase
+        .from('properties')
+        .insert({
+          id: propertyId,
+          ...payload,
+        });
+      saveError = result.error;
+      insertedProperty = {
+        id: propertyId,
+        ...payload,
+        latitude: null,
+        longitude: null,
+        created_at: new Date().toISOString(),
+        weather_location_label: null,
+      };
+    }
     setSavingProperty(false);
     if (saveError) {
       setError(saveError.message);
@@ -797,9 +812,16 @@ function WorkspaceTab({
       return;
     }
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['properties'] }),
+      queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] }),
       refreshProperties(storeOrgId),
     ]);
+    if (insertedProperty) {
+      useAppStore.setState((state) => ({
+        properties: state.properties.some((property) => property.id === insertedProperty.id)
+          ? state.properties
+          : [...state.properties, insertedProperty].sort((a, b) => a.name.localeCompare(b.name)),
+      }));
+    }
     toast.success(editingPropertyId ? 'Property updated successfully' : 'Property added successfully');
     resetPropertyForm();
   };
