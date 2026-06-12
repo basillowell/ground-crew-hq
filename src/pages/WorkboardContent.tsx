@@ -1261,59 +1261,53 @@ export default function WorkboardContent() {
     const orgId = currentUser?.orgId;
     if (!supabase || !authUserId || !orgId || !isHydrated) return;
 
-    const assignmentsChannel = supabase
-      .channel(`workboard-assignments-${authUserId}-${orgId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'assignments',
-          filter: `org_id=eq.${orgId}`,
-        },
-        (payload) => {
-          setLastRealtimeRefreshAt(Date.now());
-          const next = payload.new as { id?: string; status?: string; title?: string; employee_id?: string } | null;
-          const previous = payload.old as { status?: string } | null;
-          const nextStatus = (next?.status ?? '').toLowerCase();
-          const previousStatus = (previous?.status ?? '').toLowerCase();
-          const statusChanged = payload.eventType === 'UPDATE' && nextStatus && nextStatus !== previousStatus;
-          if (statusChanged && next?.id) {
-            const completed = nextStatus === 'done' || nextStatus === 'complete';
-            const started = nextStatus === 'in_progress' || nextStatus === 'in-progress';
-            if (completed || started) {
-              triggerAssignmentFlash(next.id, completed ? 'complete' : 'started');
-              const assignee = employeeListRef.current.find((employee) => employee.id === (next.employee_id ?? ''));
-              const fullName = assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Crew member';
-              const actionLabel = completed ? 'completed' : 'started';
-              const taskLabel = next.title || 'a task';
-              toast.success(`${fullName} ${actionLabel} ${taskLabel}`);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const timer = window.setTimeout(() => {
+      channel = supabase
+        .channel(`workboard-live-${authUserId}-${orgId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'assignments',
+            filter: `org_id=eq.${orgId}`,
+          },
+          (payload) => {
+            setLastRealtimeRefreshAt(Date.now());
+            const next = payload.new as { id?: string; status?: string; title?: string; employee_id?: string } | null;
+            const previous = payload.old as { status?: string } | null;
+            const nextStatus = (next?.status ?? '').toLowerCase();
+            const previousStatus = (previous?.status ?? '').toLowerCase();
+            const statusChanged = payload.eventType === 'UPDATE' && nextStatus && nextStatus !== previousStatus;
+            if (statusChanged && next?.id) {
+              const completed = nextStatus === 'done' || nextStatus === 'complete';
+              const started = nextStatus === 'in_progress' || nextStatus === 'in-progress';
+              if (completed || started) {
+                triggerAssignmentFlash(next.id, completed ? 'complete' : 'started');
+                const assignee = employeeListRef.current.find((employee) => employee.id === (next.employee_id ?? ''));
+                const fullName = assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Crew member';
+                const actionLabel = completed ? 'completed' : 'started';
+                const taskLabel = next.title || 'a task';
+                toast.success(`${fullName} ${actionLabel} ${taskLabel}`);
+              }
             }
-          }
-          void queryClient.invalidateQueries({ queryKey: ['assignments'] });
-        },
-      )
-      .subscribe();
-
-    const taskRequestsChannel = supabase
-      .channel(`workflow-live-task-requests-${authUserId}-${orgId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests', filter: `org_id=eq.${orgId}` }, () => {
-        setLastRealtimeRefreshAt(Date.now());
-        void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
-      })
-      .subscribe();
-
-    const scheduleChannel = supabase
-      .channel(`workflow-live-schedule-${authUserId}-${orgId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `org_id=eq.${orgId}` }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-      })
-      .subscribe();
+            void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+          },
+        )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests', filter: `org_id=eq.${orgId}` }, () => {
+          setLastRealtimeRefreshAt(Date.now());
+          void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `org_id=eq.${orgId}` }, () => {
+          void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
+        })
+        .subscribe();
+    }, 5000);
 
     return () => {
-      void assignmentsChannel.unsubscribe();
-      void taskRequestsChannel.unsubscribe();
-      void scheduleChannel.unsubscribe();
+      window.clearTimeout(timer);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [currentUser?.authUser?.id, currentUser?.orgId, isHydrated, queryClient, triggerAssignmentFlash]);
 

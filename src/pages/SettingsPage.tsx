@@ -17,6 +17,7 @@ import {
   ExternalLink,
   GripVertical,
   HelpCircle,
+  Loader2,
   Mail,
   Pencil,
   Plus,
@@ -812,10 +813,10 @@ function WorkspaceTab({
       return;
     }
     const propertiesBeforeRefresh = useAppStore.getState().properties;
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] }),
-      refreshProperties(storeOrgId),
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ['properties'] });
+    await queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] });
+    await queryClient.refetchQueries({ queryKey: ['properties'] });
+    await refreshProperties(storeOrgId);
     if (insertedProperty) {
       const refreshedProperties = useAppStore.getState().properties;
       const propertiesById = new Map(
@@ -2886,9 +2887,10 @@ function HelpTab() {
 }
 
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
+  const { isReady } = useAuth();
   const isHydrated = useAppStore((state) => state.isHydrated);
   const storeEmployees = useAppStore((state) => state.employees);
-  const { refetch: refetchTasks } = useTasks(
+  const { isLoading: tasksLoading, refetch: refetchTasks } = useTasks(
     undefined,
     orgId ?? undefined,
   );
@@ -3222,6 +3224,14 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     toast.success('Recurring rule saved');
     await fetchTasks();
   };
+
+  if (!isReady || tasksLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

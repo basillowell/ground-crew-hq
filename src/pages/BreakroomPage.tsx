@@ -177,33 +177,36 @@ export default function BreakroomPage() {
   useEffect(() => {
     if (!supabase || !authUserId || !orgId || !isHydrated) return;
 
-    const channel = supabase
-      .channel(`breakroom-${authUserId}-${orgId}-${activeChannel}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `org_id=eq.${orgId}`,
-        },
-        (payload) => {
-          const msg = payload.new as Message;
-          if (msg.channel === activeChannel) {
-            setMessages((prev) => [...prev, msg]);
-          } else {
-            // increment unread for other channel
-            setUnreadCounts((prev) => ({
-              ...prev,
-              [msg.channel]: (prev[msg.channel] ?? 0) + 1,
-            }));
-          }
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const timer = window.setTimeout(() => {
+      channel = supabase
+        .channel(`breakroom-${authUserId}-${orgId}-${activeChannel}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `org_id=eq.${orgId}`,
+          },
+          (payload) => {
+            const msg = payload.new as Message;
+            if (msg.channel === activeChannel) {
+              setMessages((prev) => [...prev, msg]);
+            } else {
+              setUnreadCounts((prev) => ({
+                ...prev,
+                [msg.channel]: (prev[msg.channel] ?? 0) + 1,
+              }));
+            }
+          },
+        )
+        .subscribe();
+    }, 5000);
 
     return () => {
-      void channel.unsubscribe();
+      window.clearTimeout(timer);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [activeChannel, authUserId, isHydrated, orgId]);
 

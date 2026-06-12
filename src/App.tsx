@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, lazy, ReactNode, Suspense } from "react";
+import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect } from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
@@ -9,6 +9,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
+import { sendNotification } from "@/lib/notifications";
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
@@ -118,6 +120,45 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function AppNotificationChannel() {
+  const { currentUser } = useAuth();
+
+  useEffect(() => {
+    const authUserId = currentUser?.authUser?.id;
+    const employeeId = currentUser?.employeeId;
+    const orgId = currentUser?.orgId;
+    if (!supabase || !authUserId || !employeeId || !orgId) return;
+
+    const channel = supabase
+      .channel(`app-notify-${currentUser.appUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `org_id=eq.${orgId}` },
+        (payload) => {
+          const next = payload.new as { body?: string };
+          sendNotification("New message", next.body || "", "/app/messaging");
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "schedule_entries", filter: `employee_id=eq.${employeeId}` },
+        () => sendNotification("Schedule updated", "Your shift changed", "/app/scheduler"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "assignments", filter: `employee_id=eq.${employeeId}` },
+        () => sendNotification("Task assigned", "New task assigned", "/app/workboard"),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUser?.appUserId, currentUser?.authUser?.id, currentUser?.employeeId, currentUser?.orgId]);
+
+  return null;
+}
+
 function AppRoutes() {
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -167,6 +208,7 @@ export default function App() {
       }}
     >
       <AuthProvider>
+        <AppNotificationChannel />
         <TooltipProvider>
           <Toaster />
           <Sonner />
