@@ -1302,7 +1302,7 @@ export function useTasks(_propertyId?: string, orgId?: string) {
   return useQuery({
     queryKey: ['tasks', orgId],
     queryFn: () => fetchTasks(orgId),
-    enabled: Boolean(orgId),
+    enabled: !!orgId && orgId !== '',
     staleTime: 1000 * 60 * 30,
   });
 }

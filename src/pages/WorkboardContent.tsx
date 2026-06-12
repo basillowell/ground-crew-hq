@@ -547,7 +547,7 @@ export default function WorkboardContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentPropertyId, setCurrentPropertyId, currentUser, userRole } = useAuth();
+  const { currentPropertyId, setCurrentPropertyId, currentUser, orgId: authOrgId, userRole } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const getLocalDateKey = useCallback(() => new Date().toLocaleDateString('en-CA'), []);
   const [boardDate, setBoardDate] = useState(() => new Date().toLocaleDateString('en-CA'));
@@ -684,7 +684,8 @@ export default function WorkboardContent() {
   const storeProperties = useAppStore((state) => state.properties);
   const storeEmployees = useAppStore((state) => state.employees);
   const isHydrated = useAppStore((state) => state.isHydrated);
-  const orgId = isHydrated ? currentUser?.orgId : undefined;
+  const orgId = isHydrated ? authOrgId ?? currentUser?.orgId : undefined;
+  const safeOrgId = authOrgId ?? currentUser?.orgId ?? '';
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, orgId);
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, orgId);
   const {
@@ -692,8 +693,7 @@ export default function WorkboardContent() {
     isLoading: isLoadingTasks,
     error: tasksError,
     refetch: refetchTasks,
-  } = useTasks(undefined, orgId);
-  console.log('tasks loaded:', taskOptions.length, orgId);
+  } = useTasks(undefined, safeOrgId);
   const showTaskLoading = taskOptions.length === 0 && isLoadingTasks;
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
   const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined, orgId);
