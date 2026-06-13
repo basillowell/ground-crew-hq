@@ -13,7 +13,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
 import { createEvents, type EventAttributes } from 'ics';
-import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin } from 'lucide-react';
+import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin, WifiOff } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { PageHeader } from '@/components/shared';
 
@@ -190,6 +190,9 @@ function ClockInCard({
   onClockIn,
   onClockOut,
   onBreak,
+  clockInLabel = 'Clock In',
+  clockOutLabel = 'Clock Out',
+  breakLabel = 'Break',
 }: {
   isClockedIn: boolean;
   isOnBreak: boolean;
@@ -199,6 +202,9 @@ function ClockInCard({
   onClockIn: () => void;
   onClockOut: () => void;
   onBreak: () => void;
+  clockInLabel?: string;
+  clockOutLabel?: string;
+  breakLabel?: string;
 }) {
   return (
     <section className="mb-4 rounded-lg border border-surface-border bg-surface-card p-4">
@@ -229,7 +235,7 @@ function ClockInCard({
               className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-status-pending/30 bg-status-pending/10 px-3 text-sm font-semibold text-status-pending disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coffee className="h-4 w-4" />}
-              Break
+              {breakLabel}
             </button>
             <button
               type="button"
@@ -238,7 +244,7 @@ function ClockInCard({
               className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-status-warning px-3 text-sm font-semibold text-text-primary disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-              Clock Out
+              {clockOutLabel}
             </button>
           </div>
         </div>
@@ -250,7 +256,7 @@ function ClockInCard({
           className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-bright px-4 py-3 text-base font-bold text-text-inverse disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogIn className="h-5 w-5" />}
-          Clock In
+          {clockInLabel}
         </button>
       )}
     </section>
@@ -1240,6 +1246,8 @@ export default function MobileFieldWorkspacePage() {
     [currentUser?.propertyId, employee, employeeId, orgId, shift?.propertyId],
   );
 
+  const syncQueueCount = loadSyncQueue().length;
+
   const displayOnlyLayout = (
     <div
       className="relative mx-auto w-full max-w-[520px] bg-surface-base px-4 pb-28 pt-4 font-sans"
@@ -1247,6 +1255,52 @@ export default function MobileFieldWorkspacePage() {
       onTouchMove={handlePullRefreshMove}
       onTouchEnd={() => void handlePullRefreshEnd()}
     >
+      {/* Language toggle */}
+      <div className="mb-3 flex items-center justify-end">
+        <div className="flex items-center gap-0.5 rounded-full border border-surface-border bg-surface-elevated px-1 py-0.5 text-xs font-medium">
+          <button
+            type="button"
+            className={`rounded-full px-2.5 py-1 transition-colors ${language === 'en' ? 'bg-brand-bright font-bold text-text-inverse' : 'text-text-muted'}`}
+            onClick={() => { setLanguage('en'); window.localStorage.setItem(LANG_STORAGE_KEY, 'en'); }}
+          >
+            EN
+          </button>
+          <span className="text-text-muted">|</span>
+          <button
+            type="button"
+            className={`rounded-full px-2.5 py-1 transition-colors ${language === 'es' ? 'bg-brand-bright font-bold text-text-inverse' : 'text-text-muted'}`}
+            onClick={() => { setLanguage('es'); window.localStorage.setItem(LANG_STORAGE_KEY, 'es'); }}
+          >
+            ES
+          </button>
+        </div>
+      </div>
+
+      {/* Offline cached data banner */}
+      {isOfflineData && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
+          <WifiOff className="h-4 w-4 shrink-0 text-yellow-400" />
+          <span className="text-sm text-yellow-300">Showing cached data — changes will sync when online</span>
+        </div>
+      )}
+
+      {/* Pending sync badge */}
+      {syncQueueCount > 0 && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
+          <span className="text-sm font-medium text-amber-300">
+            {syncQueueCount} action{syncQueueCount !== 1 ? 's' : ''} pending sync
+          </span>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event('online'))}
+            className="ml-auto text-xs text-amber-400 underline"
+          >
+            Sync now
+          </button>
+        </div>
+      )}
+
       <ClockInCard
         isClockedIn={isClockedIn}
         isOnBreak={isOnBreak}
@@ -1256,6 +1310,9 @@ export default function MobileFieldWorkspacePage() {
         onClockIn={() => void handleClockEvent('clock_in')}
         onClockOut={() => void handleClockEvent('clock_out')}
         onBreak={() => void handleClockEvent('break')}
+        clockInLabel={t.clockIn}
+        clockOutLabel={t.clockOut}
+        breakLabel={t.break}
       />
 
       {pullDistance > 0 ? (
@@ -1264,41 +1321,61 @@ export default function MobileFieldWorkspacePage() {
         </div>
       ) : null}
 
+      {/* Task progress bar */}
+      {!loading && assignments.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1.5 flex items-center justify-between text-xs text-text-muted">
+            <span>{doneCount} of {assignments.length} tasks complete</span>
+            <span>{completionPct}%</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-surface-elevated">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${completionPct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">My Tasks</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">{t.myTasks}</p>
           <p className="text-xs text-text-muted">{new Date().toLocaleDateString()}</p>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-3">
           {loading
             ? Array.from({ length: 4 }).map((_, idx) => (
-                <div key={`my-task-skeleton-${idx}`} className="h-[48px] animate-pulse rounded-xl bg-surface-elevated" />
+                <div key={`my-task-skeleton-${idx}`} className="h-[72px] animate-pulse rounded-xl bg-surface-elevated" />
               ))
             : assignments.length === 0
-              ? <p className="text-sm text-text-muted">No tasks assigned for today.</p>
+              ? <p className="text-sm text-text-muted">{t.noTasks}.</p>
               : assignments
                   .sort((a, b) => a.orderIndex - b.orderIndex)
                   .map((assignment) => (
-                    <div key={assignment.id} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-surface-border bg-surface-elevated/30 px-3">
-                      <span className="truncate text-sm font-medium text-text-primary">{assignment.title}</span>
-                      <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{assignment.location || 'Area'}</span>
-                      <span className="shrink-0 text-xs text-text-muted">{assignment.estimatedHours.toFixed(1)}h</span>
-                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(assignment.status)}`}>{statusBadgeLabel(assignment.status)}</span>
-                      {displayStatus(assignment.status) === 'done' ? (
-                        <button type="button" disabled className="ml-auto rounded-full border border-surface-border px-3 py-1 text-xs text-text-muted">
-                          Done
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="ml-auto flex items-center gap-1 rounded-full border border-surface-border px-3 py-1 text-xs text-text-secondary transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-50"
-                          disabled={Boolean(savingIds[assignment.id])}
-                          onClick={() => void handleMyTaskStatusAction(assignment, displayStatus(assignment.status) === 'planned' ? 'start' : 'complete')}
-                        >
-                          {savingIds[assignment.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                          {displayStatus(assignment.status) === 'planned' ? 'Start' : 'Complete'}
-                        </button>
-                      )}
+                    <div key={assignment.id} className="rounded-xl border border-surface-border bg-surface-elevated/30 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">{assignment.title}</span>
+                        <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{assignment.location || 'Area'}</span>
+                        <span className="shrink-0 text-xs text-text-muted">{assignment.estimatedHours.toFixed(1)}h</span>
+                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(assignment.status)}`}>{statusBadgeLabel(assignment.status)}</span>
+                      </div>
+                      <div className="mt-2">
+                        {displayStatus(assignment.status) === 'done' ? (
+                          <button type="button" disabled className="w-full min-h-[44px] rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-text-muted">
+                            {t.done}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-lg border border-surface-border px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-50"
+                            disabled={Boolean(savingIds[assignment.id])}
+                            onClick={() => void handleMyTaskStatusAction(assignment, displayStatus(assignment.status) === 'planned' ? 'start' : 'complete')}
+                          >
+                            {savingIds[assignment.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            {displayStatus(assignment.status) === 'planned' ? t.start : t.complete}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
         </div>
@@ -1307,7 +1384,7 @@ export default function MobileFieldWorkspacePage() {
       <div className="my-4 border-t border-surface-border" />
 
       <div className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Teammates</p>
+        <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">{t.teammates}</p>
         <div className="space-y-3">
           {loading
             ? Array.from({ length: 3 }).map((_, idx) => (
@@ -1317,7 +1394,7 @@ export default function MobileFieldWorkspacePage() {
                 </div>
               ))
             : teammates.length === 0
-              ? <p className="text-sm text-text-muted">No teammates scheduled today.</p>
+              ? <p className="text-sm text-text-muted">{t.noTeammates}</p>
               : teammates.map((teammate) => (
                   <div key={teammate.employeeId} className="rounded-xl border border-surface-border bg-surface-elevated/30 p-3">
                     <div className="mb-2 flex items-center justify-between">
@@ -1352,376 +1429,4 @@ export default function MobileFieldWorkspacePage() {
   );
 
   return displayOnlyLayout;
-
-  return (
-    <div className="mx-auto w-full max-w-[520px] bg-background px-4 pb-24 pt-4 font-sans">
-      <PageHeader title="Field Workspace" subtitle="Your assignments, time clock, and field updates." />
-      {showWelcomeBanner ? (
-        <div className="mb-3 rounded-xl border border-primary/20 bg-primary/10 p-3 text-sm">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-foreground">Welcome to Ground Crew HQ — your tasks for today are below.</p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8"
-              onClick={() => {
-                window.localStorage.setItem(onboardedKey, 'true');
-                setShowWelcomeBanner(false);
-              }}
-            >
-              Dismiss
-            </Button>
-          </div>
-        </div>
-      ) : null}
-      {isStandalone ? (
-        <div className="mb-3 -mx-4 bg-status-active px-4 py-2 text-sm font-medium text-text-inverse">
-          <div className="mx-auto flex w-full max-w-[520px] items-center justify-between">
-            <span>{employeeName}</span>
-            <span>{new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-          </div>
-        </div>
-      ) : null}
-      {isOfflineData ? (
-        <div className="mb-3 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900">
-          You're offline — showing cached data
-        </div>
-      ) : null}
-      <header className="mb-4 rounded-2xl border bg-card p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-lg font-semibold leading-tight">{employeeName}</p>
-            <p className="mt-1 text-base text-muted-foreground">{todayLabel}</p>
-            <p className="mt-1 text-base text-muted-foreground">{propertyName}</p>
-          </div>
-          <div className="flex items-center rounded-md border bg-background p-1 text-xs font-medium">
-            <button
-              type="button"
-              className={`rounded px-2 py-1 ${language === 'en' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
-              onClick={() => {
-                setLanguage('en');
-                window.localStorage.setItem(LANG_STORAGE_KEY, 'en');
-              }}
-            >
-              EN
-            </button>
-            <span className="px-1 text-muted-foreground">|</span>
-            <button
-              type="button"
-              className={`rounded px-2 py-1 ${language === 'es' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
-              onClick={() => {
-                setLanguage('es');
-                window.localStorage.setItem(LANG_STORAGE_KEY, 'es');
-              }}
-            >
-              ES
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {!shift ? (
-        <Card className="rounded-2xl p-5">
-          <p className="text-base font-medium">{t.notScheduled}</p>
-        </Card>
-      ) : (
-        <>
-          <Card className="mb-4 rounded-2xl p-5">
-            {!latestClockIn ? (
-              <Button
-                className="h-12 min-h-12 w-full bg-green-600 text-base hover:bg-green-700"
-                disabled={clockActionSaving}
-                onClick={() => void handleClockEvent('clock_in')}
-              >
-                {t.clockIn}
-              </Button>
-            ) : isClockedIn ? (
-              <div className="space-y-3">
-                <p className="text-base font-medium">Elapsed time: {elapsedLabel}</p>
-                <Button
-                  className="h-12 min-h-12 w-full bg-red-600 text-base hover:bg-red-700"
-                  disabled={clockActionSaving}
-                  onClick={() => void handleClockEvent('clock_out')}
-                >
-                  {t.clockOut}
-                </Button>
-              </div>
-            ) : (
-              <p className="text-base font-medium">{shiftCompleteLabel}</p>
-            )}
-          </Card>
-
-          <Card className="mb-4 rounded-2xl p-5">
-            <p className="text-base font-medium">{t.yourShift}: {formatTime(shift.shiftStart)} – {formatTime(shift.shiftEnd)}</p>
-          </Card>
-
-          <Button
-            className="mb-4 h-12 min-h-12 w-full text-base"
-            variant="outline"
-            onClick={handleAddToCalendar}
-          >
-            Add to Calendar
-          </Button>
-
-          <Card className="mb-4 rounded-2xl p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-base font-semibold">Task Progress</p>
-              <p className="text-base font-medium">{doneCount}/{assignments.length} {t.tasksDone}</p>
-            </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-surface-border">
-              <div
-                className="h-full rounded-full bg-green-600 transition-all duration-300"
-                style={{ width: `${completionPct}%` }}
-              />
-            </div>
-          </Card>
-
-          {assignments.length === 0 ? (
-            <Card className="rounded-2xl p-5">
-              <p className="text-base font-medium">{t.noTasks}. Check with your supervisor.</p>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {assignments.map((assignment) => {
-                const normalizedStatus = displayStatus(assignment.status);
-                const isSaving = Boolean(savingIds[assignment.id]);
-                const category = assignment.taskId ? taskMetaById[assignment.taskId]?.category : null;
-                return (
-                  <Card key={assignment.id} className="rounded-2xl p-4">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-semibold">{assignment.title}</h2>
-                      <Badge className="text-sm">{category || 'General'}</Badge>
-                    </div>
-                    <div className="mb-2 flex flex-wrap gap-2">
-                      <Badge variant="outline" className="text-sm">
-                        {assignment.estimatedHours.toFixed(1)} hrs est.
-                      </Badge>
-                      <Badge className={`text-sm ${statusBadgeClass(assignment.status)}`}>
-                        {statusBadgeLabel(assignment.status)}
-                      </Badge>
-                    </div>
-                    {assignment.startTime ? <p className="text-base">Start: {formatTime(assignment.startTime)}</p> : null}
-                    {assignment.location ? <p className="mt-1 text-base">Location: {assignment.location}</p> : null}
-                    {assignment.notes ? <p className="mt-1 text-base">Notes: {assignment.notes}</p> : null}
-
-                    {normalizedStatus === 'planned' ? (
-                      <Button
-                        className="mt-3 h-14 min-h-14 w-full bg-green-600 text-base font-semibold hover:bg-green-700"
-                        disabled={isSaving}
-                        onClick={() => void updateTaskStatus(assignment, 'in_progress')}
-                      >
-                        {t.start}
-                      </Button>
-                    ) : null}
-
-                    {normalizedStatus === 'in_progress' ? (
-                      <div className="mt-3 space-y-3">
-                        <Button
-                          className="h-14 min-h-14 w-full bg-blue-600 text-base font-semibold hover:bg-blue-700"
-                          disabled={isSaving}
-                          onClick={() => {
-                            setActiveDonePromptId(assignment.id);
-                            setActualHoursDraft((current) => ({
-                              ...current,
-                              [assignment.id]: current[assignment.id] ?? String(assignment.estimatedHours || 0),
-                            }));
-                          }}
-                        >
-                          {t.done}
-                        </Button>
-
-                        {activeDonePromptId === assignment.id ? (
-                          <div className="rounded-xl border p-3">
-                            <p className="mb-2 text-base font-medium">{t.howLong}</p>
-                            <div className="grid grid-cols-4 gap-2">
-                              {QUICK_HOURS_OPTIONS.map((option) => {
-                                const selected = actualHoursDraft[assignment.id] === option;
-                                return (
-                                  <button
-                                    key={option}
-                                    type="button"
-                                    className={`h-11 rounded-md border text-sm font-medium ${selected ? 'border-green-700 bg-green-100 text-green-900' : 'border-input bg-background text-foreground'}`}
-                                    onClick={() => {
-                                      setActualHoursDraft((current) => ({ ...current, [assignment.id]: option }));
-                                      setShowOtherActualInputId(null);
-                                    }}
-                                  >
-                                    {option}h
-                                  </button>
-                                );
-                              })}
-                              <button
-                                type="button"
-                                className={`h-11 rounded-md border text-sm font-medium ${showOtherActualInputId === assignment.id ? 'border-green-700 bg-green-100 text-green-900' : 'border-input bg-background text-foreground'}`}
-                                onClick={() => setShowOtherActualInputId(assignment.id)}
-                              >
-                                Other
-                              </button>
-                            </div>
-
-                            {showOtherActualInputId === assignment.id ? (
-                              <Input
-                                type="number"
-                                min={0}
-                                max={24}
-                                step={0.5}
-                                className="mt-2 h-11 text-base"
-                                value={actualHoursDraft[assignment.id] ?? ''}
-                                onChange={(event) =>
-                                  setActualHoursDraft((current) => ({
-                                    ...current,
-                                    [assignment.id]: event.target.value,
-                                  }))
-                                }
-                              />
-                            ) : null}
-
-                            <div className="mt-3 flex gap-2">
-                              <Button
-                                className="h-11 min-h-11 flex-1 text-base"
-                                disabled={isSaving}
-                                onClick={() => void completeTaskWithHours(assignment)}
-                              >
-                                Confirm Done
-                              </Button>
-                              <Button
-                                className="h-11 min-h-11 px-4 text-base"
-                                variant="outline"
-                                onClick={() => {
-                                  setActiveDonePromptId(null);
-                                  setShowOtherActualInputId(null);
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {normalizedStatus === 'done' ? (
-                      <div className="mt-3 flex h-14 min-h-14 items-center justify-center rounded-md bg-green-100 text-base font-semibold text-green-900">
-                        {t.completed} ✓ · {(assignment.actualHours ?? assignment.estimatedHours ?? 0).toFixed(1)}h
-                      </div>
-                    ) : null}
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
-
-      <footer className="fixed bottom-0 left-0 right-0 border-t bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto w-full max-w-[520px]">
-          <p className="text-base font-semibold">
-            {doneCount}/{assignments.length} {t.tasksDone} · {actualHoursTotal.toFixed(1)}h actual / {scheduledHoursTotal.toFixed(1)}h scheduled
-          </p>
-          <Button className="mt-2 h-12 min-h-12 w-full text-base" variant="outline" onClick={() => setNeedsOpen(true)}>
-            {t.reportNeed}
-          </Button>
-        </div>
-      </footer>
-
-      {showInstallBanner && deferredInstallPrompt ? (
-        <div className="fixed bottom-24 left-0 right-0 z-40 px-4">
-          <div className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-            <p className="text-sm text-emerald-900">Install Ground Crew HQ for faster access</p>
-            <div className="flex items-center gap-2">
-              <Button size="sm" className="h-8" onClick={() => void triggerInstallPrompt()}>
-                Install
-              </Button>
-              <Button size="sm" variant="outline" className="h-8" onClick={dismissInstallBanner}>
-                Dismiss
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {needsOpen ? (
-        <div className="fixed inset-0 z-50 bg-background">
-          <div className="mx-auto flex h-full w-full max-w-[520px] flex-col px-4 pb-4 pt-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">{t.reportNeed}</h2>
-              <button
-                type="button"
-                className="rounded-md border px-3 py-1.5 text-sm"
-                onClick={() => {
-                  setNeedsOpen(false);
-                  resetNeedsForm();
-                }}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Title</label>
-                <Input
-                  value={needsTitle}
-                  onChange={(event) => setNeedsTitle(event.target.value)}
-                  placeholder="Sprinkler head broken on hole 7"
-                  className="h-12 text-base"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">Priority</label>
-                <select
-                  value={needsPriority}
-                  onChange={(event) => setNeedsPriority(event.target.value as 'low' | 'medium' | 'high')}
-                  className="h-12 w-full rounded-md border border-input bg-background px-3 text-base"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">Location</label>
-                <Input
-                  value={needsLocation}
-                  onChange={(event) => setNeedsLocation(event.target.value)}
-                  placeholder="Hole 7 fairway"
-                  className="h-12 text-base"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">Notes</label>
-                <Textarea
-                  value={needsNotes}
-                  onChange={(event) => setNeedsNotes(event.target.value)}
-                  placeholder="Add extra details"
-                  className="min-h-24 text-base"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">Photo (optional)</label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => void handleNeedsPhotoChange(event.target.files?.[0] ?? null)}
-                  className="h-12 text-base"
-                />
-                {needsPhotoBase64 ? <p className="mt-1 text-xs text-muted-foreground">Photo attached</p> : null}
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <Button className="h-12 min-h-12 w-full text-base" onClick={() => void submitNeed()} disabled={needsSaving || !needsTitle.trim()}>
-                {needsSaving ? 'Submitting...' : 'Submit Request'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
 }

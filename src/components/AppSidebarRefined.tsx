@@ -102,7 +102,7 @@ function NavItem({
         type="button"
         disabled
         title={`${label} coming soon`}
-        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted opacity-60"
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm text-text-muted opacity-60"
       >
         {content}
       </button>
@@ -115,7 +115,7 @@ function NavItem({
         href={href}
         onClick={onNavigate}
         title={collapsed ? label : undefined}
-        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+        className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
       >
         {content}
       </a>
@@ -128,7 +128,7 @@ function NavItem({
       onClick={onNavigate}
       title={collapsed ? label : undefined}
       className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
+        'flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors',
         isActive
           ? 'border-l-2 border-brand bg-surface-hover font-medium text-brand'
           : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
