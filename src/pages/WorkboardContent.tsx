@@ -607,6 +607,14 @@ export default function WorkboardContent() {
     notes: false,
     escalations: false,
   });
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 640,
+  );
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [workOrdersExpanded, setWorkOrdersExpanded] = useState(false);
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [selectedScheduleRecipientIds, setSelectedScheduleRecipientIds] = useState<string[]>([]);
@@ -4358,6 +4366,61 @@ export default function WorkboardContent() {
               actionLabel="Open Scheduler"
               onAction={() => navigate('/app/scheduler')}
             />
+          ) : isMobile ? (
+            <div className="space-y-3 px-4 pb-24">
+              <div className="flex items-center justify-between py-3">
+                <h2 className="text-lg font-bold">Today's Crew</h2>
+                <span className="text-sm text-muted-foreground">{boardDate}</span>
+              </div>
+              {scheduledEmployees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No crew scheduled for {boardDate}.</p>
+              ) : (
+                scheduledEmployees.map((employee) => {
+                  const empAssignments = dayAssignments.filter((a) => a.employeeId === employee.id);
+                  return (
+                    <div key={employee.id} className="space-y-3 rounded-xl border bg-card p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                            {employee.firstName?.[0]}{employee.lastName?.[0]}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{employee.firstName} {employee.lastName}</p>
+                            <p className="text-xs text-muted-foreground">{employee.department}</p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {empAssignments.length} task{empAssignments.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      {empAssignments.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No tasks assigned</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {empAssignments.map((a) => {
+                            const ns = normalizeAssignmentStatus(a.status);
+                            return (
+                              <div key={a.id} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2">
+                                <span className="text-sm">{a.title}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  ns === 'done'
+                                    ? 'bg-green-500/10 text-green-400'
+                                    : ns === 'in-progress'
+                                      ? 'bg-blue-500/10 text-blue-400'
+                                      : 'bg-muted text-muted-foreground'
+                                }`}>
+                                  {ns}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           ) : viewMode === 'timeline' ? (
             <SafeSection fallback={<div className="h-64 rounded-xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">Timeline view is temporarily unavailable.</div>}>
               <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted" />}>
