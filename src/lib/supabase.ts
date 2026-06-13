@@ -18,6 +18,7 @@ export const supabase = hasSupabaseConfig
         persistSession: true,
         autoRefreshToken: true,
       },
+      realtime: { params: { eventsPerSecond: 2 } },
     })
   : null;
 

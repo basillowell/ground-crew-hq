@@ -31,6 +31,8 @@ const DispatchPage = lazy(() => import("./pages/DispatchBoardPage"));
 const InvoicingPage = lazy(() => import("./pages/InvoicingPage"));
 const JobCostingPage = lazy(() => import("./pages/JobCostingPage"));
 const PricingPage = lazy(() => import("./pages/PricingPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const ClientPortalPage = lazy(() => import("./pages/ClientPortalPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -217,6 +219,8 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/auth/reset" element={<ResetPasswordPage />} />
+                <Route path="/portal/:clientToken" element={<ClientPortalPage />} />
                 <Route
                   path="/app/*"
                   element={

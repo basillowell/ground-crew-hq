@@ -2898,7 +2898,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const taskCategoryOptions = [
+  const DEFAULT_TASK_CATEGORIES = [
     'Mowing',
     'Irrigation',
     'Chemical Application',
@@ -2909,7 +2909,47 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     'General',
     'Equipment Maintenance',
     'Other',
-  ] as const;
+  ];
+  const taskCategoriesKey = orgId ? `gcrew-task-categories-${orgId}` : null;
+  const [taskCategoryOptions, setTaskCategoryOptions] = useState<string[]>(DEFAULT_TASK_CATEGORIES);
+  const [editingCategoryIdx, setEditingCategoryIdx] = useState<number | null>(null);
+  const [editingCategoryValue, setEditingCategoryValue] = useState('');
+  const [deletingCategoryIdx, setDeletingCategoryIdx] = useState<number | null>(null);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+
+  useEffect(() => {
+    if (!taskCategoriesKey) return;
+    try {
+      const stored = localStorage.getItem(taskCategoriesKey);
+      if (stored) setTaskCategoryOptions(JSON.parse(stored) as string[]);
+    } catch { /* use defaults */ }
+  }, [taskCategoriesKey]);
+
+  const saveCategories = (cats: string[]) => {
+    setTaskCategoryOptions(cats);
+    if (taskCategoriesKey) localStorage.setItem(taskCategoriesKey, JSON.stringify(cats));
+  };
+  const commitCategoryRename = (idx: number) => {
+    const trimmed = editingCategoryValue.trim();
+    if (!trimmed) return;
+    const next = [...taskCategoryOptions];
+    next[idx] = trimmed;
+    saveCategories(next);
+    setEditingCategoryIdx(null);
+  };
+  const commitDeleteCategory = (idx: number) => {
+    saveCategories(taskCategoryOptions.filter((_, i) => i !== idx));
+    setDeletingCategoryIdx(null);
+  };
+  const commitAddCategory = () => {
+    const trimmed = newCategoryInput.trim();
+    if (!trimmed) return;
+    saveCategories([...taskCategoryOptions, trimmed]);
+    setShowAddCategory(false);
+    setNewCategoryInput('');
+  };
+
   const displayCategory = (category: string | null | undefined) =>
     category === 'General' ? 'General Maintenance' : category ?? 'General Maintenance';
   const [tasks, setTasks] = useState<TaskLibraryItem[]>([]);
@@ -3285,6 +3325,94 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                 </DndContext>
               )}
             </div>
+            <div className="mt-3 border-t border-dashed border-surface-border pt-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Task Categories</span>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddCategory(true); setNewCategoryInput(''); }}
+                  className="flex items-center gap-1 text-xs text-brand hover:text-brand-bright"
+                >
+                  <Plus className="h-3 w-3" /> Add Category
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {taskCategoryOptions.map((cat, idx) => (
+                  <div key={cat} className="flex items-center gap-1 rounded-lg border border-surface-border bg-surface-elevated px-2 py-1">
+                    {editingCategoryIdx === idx ? (
+                      <>
+                        <input
+                          autoFocus
+                          className="w-28 rounded bg-surface-base px-1 py-0.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-brand"
+                          value={editingCategoryValue}
+                          onChange={(e) => setEditingCategoryValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitCategoryRename(idx);
+                            if (e.key === 'Escape') setEditingCategoryIdx(null);
+                          }}
+                        />
+                        <button type="button" onClick={() => commitCategoryRename(idx)} className="text-xs text-brand hover:text-brand-bright">Save</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-xs text-text-primary">{cat}</span>
+                        <button
+                          type="button"
+                          onClick={() => { setEditingCategoryIdx(idx); setEditingCategoryValue(cat); }}
+                          className="rounded p-0.5 text-text-muted hover:text-text-primary"
+                          aria-label={`Edit ${cat}`}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingCategoryIdx(idx)}
+                          className="rounded p-0.5 text-text-muted hover:text-status-warning"
+                          aria-label={`Delete ${cat}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+                {showAddCategory && (
+                  <div className="flex items-center gap-1 rounded-lg border border-brand/40 bg-surface-elevated px-2 py-1">
+                    <input
+                      autoFocus
+                      className="w-28 rounded bg-surface-base px-1 py-0.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-brand"
+                      placeholder="Category name"
+                      value={newCategoryInput}
+                      onChange={(e) => setNewCategoryInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitAddCategory();
+                        if (e.key === 'Escape') setShowAddCategory(false);
+                      }}
+                    />
+                    <button type="button" onClick={commitAddCategory} className="text-xs text-brand hover:text-brand-bright">Add</button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <AlertDialog open={deletingCategoryIdx !== null} onOpenChange={(open) => { if (!open) setDeletingCategoryIdx(null); }}>
+              <AlertDialogContent className="border-surface-border bg-surface-elevated text-text-primary">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete category?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-text-muted">
+                    {deletingCategoryIdx !== null ? `"${taskCategoryOptions[deletingCategoryIdx]}" will be removed. Existing tasks keep their current category.` : ''}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="border-surface-border">Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-status-warning text-white hover:bg-status-warning/90"
+                    onClick={() => { if (deletingCategoryIdx !== null) commitDeleteCategory(deletingCategoryIdx); }}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <div className="mt-3 flex flex-wrap gap-2 border-t border-dashed border-surface-border pt-3">
               <input
                 className={`${settingsInputClass} min-w-[140px] flex-1`}
