@@ -25,6 +25,7 @@ import {
   Trash2,
   Users,
   Wrench,
+  X,
 } from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
 import { RecurringTasksSection } from '@/components/settings/RecurringTasksSection';
@@ -42,6 +43,7 @@ import {
 import {
   SortableContext,
   arrayMove,
+  rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -347,6 +349,94 @@ function SortableTaskRowCompact({ id, children }: { id: string; children: ReactN
         <GripVertical className="h-4 w-4" />
       </button>
       {children}
+    </div>
+  );
+}
+
+const CAT_DOT_COLORS = ['#16a34a','#2563eb','#d97706','#dc2626','#7c3aed','#0891b2','#059669','#ea580c','#4f46e5','#be185d'];
+
+interface SortableCategoryPillProps {
+  cat: string;
+  idx: number;
+  taskCount: number;
+  isEditing: boolean;
+  editValue: string;
+  isConfirmDelete: boolean;
+  onEditStart: () => void;
+  onEditChange: (v: string) => void;
+  onEditSave: () => void;
+  onEditCancel: () => void;
+  onDeleteRequest: () => void;
+  onDeleteConfirm: () => void;
+  onDeleteCancel: () => void;
+}
+
+function SortableCategoryPill({
+  cat, idx, taskCount, isEditing, editValue, isConfirmDelete,
+  onEditStart, onEditChange, onEditSave, onEditCancel,
+  onDeleteRequest, onDeleteConfirm, onDeleteCancel,
+}: SortableCategoryPillProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat });
+  const dotColor = CAT_DOT_COLORS[idx % CAT_DOT_COLORS.length];
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex flex-col items-start gap-1 ${isDragging ? 'opacity-50' : ''}`}
+    >
+      <div
+        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 transition-colors ${
+          isEditing ? 'border-brand bg-muted/40' : 'border-surface-border bg-muted/40 hover:border-surface-hover'
+        }`}
+      >
+        <button
+          type="button"
+          className="cursor-grab text-text-muted/40 hover:text-text-muted active:cursor-grabbing"
+          aria-label={`Reorder ${cat}`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-3 w-3" />
+        </button>
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
+        {isConfirmDelete ? (
+          <span className="flex items-center gap-1 text-xs">
+            {taskCount > 0 && (
+              <span className="text-text-muted">{cat} used by {taskCount} task{taskCount !== 1 ? 's' : ''} —{' '}</span>
+            )}
+            <span className="text-text-muted">Remove?</span>
+            <button type="button" onClick={onDeleteConfirm} className="font-medium text-status-warning hover:underline">Yes</button>
+            <button type="button" onClick={onDeleteCancel} className="text-text-muted hover:underline">No</button>
+          </span>
+        ) : isEditing ? (
+          <>
+            <input
+              autoFocus
+              className="w-28 bg-transparent text-xs text-text-primary focus:outline-none"
+              value={editValue}
+              onChange={(e) => onEditChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onEditSave();
+                if (e.key === 'Escape') onEditCancel();
+              }}
+            />
+            <button type="button" onClick={onEditSave} className="shrink-0 text-xs text-brand hover:text-brand-bright">Save</button>
+          </>
+        ) : (
+          <>
+            <span className="text-xs font-medium text-text-primary">{cat}</span>
+            <button type="button" onClick={onEditStart} className="shrink-0 rounded p-0.5 text-text-muted hover:text-text-primary" aria-label={`Edit ${cat}`}>
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+            <button type="button" onClick={onDeleteRequest} className="shrink-0 rounded p-0.5 text-text-muted hover:text-status-warning" aria-label={`Delete ${cat}`}>
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </>
+        )}
+      </div>
+      <span className="pl-6 text-xs text-text-muted/60">
+        {taskCount > 0 ? `${taskCount} task${taskCount !== 1 ? 's' : ''}` : 'Unused'}
+      </span>
     </div>
   );
 }
@@ -2887,12 +2977,12 @@ function HelpTab() {
 }
 
 function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
-  const { isReady } = useAuth();
+  const { isOrgReady } = useAuth();
   const isHydrated = useAppStore((state) => state.isHydrated);
   const storeEmployees = useAppStore((state) => state.employees);
   const { isLoading: tasksLoading, refetch: refetchTasks } = useTasks(
     undefined,
-    orgId ?? undefined,
+    isOrgReady ? (orgId ?? undefined) : undefined,
   );
   const taskSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -3184,6 +3274,14 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     toast.success('Task priority order saved');
   };
 
+  const handleCategoryDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const oldIdx = taskCategoryOptions.indexOf(String(active.id));
+    const newIdx = taskCategoryOptions.indexOf(String(over.id));
+    if (oldIdx < 0 || newIdx < 0) return;
+    saveCategories(arrayMove(taskCategoryOptions, oldIdx, newIdx));
+  };
+
   const setRecurringEnabled = (taskId: string, enabled: boolean) => {
     setRecurringDrafts((current) => ({
       ...current,
@@ -3265,10 +3363,11 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     await fetchTasks();
   };
 
-  if (!isReady || tasksLoading) {
+  if (!isOrgReady || tasksLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+      <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading task library...
       </div>
     );
   }
@@ -3325,94 +3424,67 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                 </DndContext>
               )}
             </div>
-            <div className="mt-3 border-t border-dashed border-surface-border pt-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Task Categories</span>
+            <div className="mt-4 border-t border-surface-border pt-4">
+              <div className="mb-3 flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">Task Categories</p>
+                  <p className="mt-0.5 text-xs text-text-muted">Categories organize your task library and workboard dispatch</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => { setShowAddCategory(true); setNewCategoryInput(''); }}
-                  className="flex items-center gap-1 text-xs text-brand hover:text-brand-bright"
+                  className="flex shrink-0 items-center gap-1 text-xs text-brand hover:text-brand-bright"
                 >
-                  <Plus className="h-3 w-3" /> Add Category
+                  <Plus className="h-3.5 w-3.5" /> Add Category
                 </button>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {taskCategoryOptions.map((cat, idx) => (
-                  <div key={cat} className="flex items-center gap-1 rounded-lg border border-surface-border bg-surface-elevated px-2 py-1">
-                    {editingCategoryIdx === idx ? (
-                      <>
-                        <input
-                          autoFocus
-                          className="w-28 rounded bg-surface-base px-1 py-0.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-brand"
-                          value={editingCategoryValue}
-                          onChange={(e) => setEditingCategoryValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') commitCategoryRename(idx);
-                            if (e.key === 'Escape') setEditingCategoryIdx(null);
-                          }}
+              <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
+                <SortableContext items={taskCategoryOptions} strategy={rectSortingStrategy}>
+                  <div className="flex flex-wrap gap-2">
+                    {taskCategoryOptions.map((cat, idx) => {
+                      const taskCount = tasks.filter((t) => t.category === cat).length;
+                      return (
+                        <SortableCategoryPill
+                          key={cat}
+                          cat={cat}
+                          idx={idx}
+                          taskCount={taskCount}
+                          isEditing={editingCategoryIdx === idx}
+                          editValue={editingCategoryValue}
+                          isConfirmDelete={deletingCategoryIdx === idx}
+                          onEditStart={() => { setEditingCategoryIdx(idx); setEditingCategoryValue(cat); }}
+                          onEditChange={setEditingCategoryValue}
+                          onEditSave={() => commitCategoryRename(idx)}
+                          onEditCancel={() => setEditingCategoryIdx(null)}
+                          onDeleteRequest={() => setDeletingCategoryIdx(idx)}
+                          onDeleteConfirm={() => commitDeleteCategory(idx)}
+                          onDeleteCancel={() => setDeletingCategoryIdx(null)}
                         />
-                        <button type="button" onClick={() => commitCategoryRename(idx)} className="text-xs text-brand hover:text-brand-bright">Save</button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-xs text-text-primary">{cat}</span>
-                        <button
-                          type="button"
-                          onClick={() => { setEditingCategoryIdx(idx); setEditingCategoryValue(cat); }}
-                          className="rounded p-0.5 text-text-muted hover:text-text-primary"
-                          aria-label={`Edit ${cat}`}
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeletingCategoryIdx(idx)}
-                          className="rounded p-0.5 text-text-muted hover:text-status-warning"
-                          aria-label={`Delete ${cat}`}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </>
-                    )}
+                      );
+                    })}
+                    {showAddCategory ? (
+                      <div className="flex flex-col items-start gap-1">
+                        <div className="flex items-center gap-1.5 rounded-full border border-brand/40 bg-muted/40 px-3 py-1.5">
+                          <input
+                            autoFocus
+                            className="w-28 bg-transparent text-xs text-text-primary placeholder:text-text-muted focus:outline-none"
+                            placeholder="Category name"
+                            value={newCategoryInput}
+                            onChange={(e) => setNewCategoryInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitAddCategory();
+                              if (e.key === 'Escape') setShowAddCategory(false);
+                            }}
+                          />
+                          <button type="button" onClick={commitAddCategory} className="shrink-0 text-xs text-brand hover:text-brand-bright">Add</button>
+                        </div>
+                        <span className="pl-1 text-xs text-text-muted/60">New</span>
+                      </div>
+                    ) : null}
                   </div>
-                ))}
-                {showAddCategory && (
-                  <div className="flex items-center gap-1 rounded-lg border border-brand/40 bg-surface-elevated px-2 py-1">
-                    <input
-                      autoFocus
-                      className="w-28 rounded bg-surface-base px-1 py-0.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-brand"
-                      placeholder="Category name"
-                      value={newCategoryInput}
-                      onChange={(e) => setNewCategoryInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitAddCategory();
-                        if (e.key === 'Escape') setShowAddCategory(false);
-                      }}
-                    />
-                    <button type="button" onClick={commitAddCategory} className="text-xs text-brand hover:text-brand-bright">Add</button>
-                  </div>
-                )}
-              </div>
+                </SortableContext>
+              </DndContext>
             </div>
-            <AlertDialog open={deletingCategoryIdx !== null} onOpenChange={(open) => { if (!open) setDeletingCategoryIdx(null); }}>
-              <AlertDialogContent className="border-surface-border bg-surface-elevated text-text-primary">
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete category?</AlertDialogTitle>
-                  <AlertDialogDescription className="text-text-muted">
-                    {deletingCategoryIdx !== null ? `"${taskCategoryOptions[deletingCategoryIdx]}" will be removed. Existing tasks keep their current category.` : ''}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel className="border-surface-border">Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-status-warning text-white hover:bg-status-warning/90"
-                    onClick={() => { if (deletingCategoryIdx !== null) commitDeleteCategory(deletingCategoryIdx); }}
-                  >
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
             <div className="mt-3 flex flex-wrap gap-2 border-t border-dashed border-surface-border pt-3">
               <input
                 className={`${settingsInputClass} min-w-[140px] flex-1`}
