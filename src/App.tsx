@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect } from "react";
+import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect, useRef } from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
@@ -117,8 +117,20 @@ class RouteErrorBoundary extends Component<
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { currentUser, isLoading } = useAuth();
-  if (isLoading) return <RouteFallback />;
-  if (!currentUser) return <Navigate to="/" replace />;
+  const hasEverAuthed = useRef(false);
+
+  if (currentUser) {
+    hasEverAuthed.current = true;
+  }
+
+  if (isLoading && !hasEverAuthed.current) {
+    return <RouteFallback />;
+  }
+
+  if (!isLoading && !currentUser) {
+    return <Navigate to="/" replace />;
+  }
+
   return <>{children}</>;
 }
 

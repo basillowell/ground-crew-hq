@@ -547,7 +547,7 @@ export default function WorkboardContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentPropertyId, setCurrentPropertyId, currentUser, orgId: authOrgId, userRole, isOrgReady } = useAuth();
+  const { currentPropertyId, setCurrentPropertyId, currentUser, orgId: authOrgId, userRole } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const getLocalDateKey = useCallback(() => new Date().toLocaleDateString('en-CA'), []);
   const [boardDate, setBoardDate] = useState(() => new Date().toLocaleDateString('en-CA'));
@@ -694,7 +694,6 @@ export default function WorkboardContent() {
   const isHydrated = useAppStore((state) => state.isHydrated);
   const orgId = isHydrated ? authOrgId ?? currentUser?.orgId : undefined;
   const safeOrgId = authOrgId ?? currentUser?.orgId ?? '';
-  const taskOrgIdSafe = isOrgReady ? (authOrgId ?? undefined) : undefined;
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, orgId);
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, orgId);
   const {
@@ -702,8 +701,8 @@ export default function WorkboardContent() {
     isLoading: isLoadingTasks,
     error: tasksError,
     refetch: refetchTasks,
-  } = useTasks(undefined, taskOrgIdSafe);
-  const showTaskLoading = (!isOrgReady || isLoadingTasks) && taskOptions.length === 0;
+  } = useTasks(undefined, authOrgId ?? undefined);
+  const showTaskLoading = isLoadingTasks && taskOptions.length === 0;
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
   const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined, orgId);
   const departmentsQuery = useDepartmentOptions(orgId);
@@ -5350,7 +5349,7 @@ export default function WorkboardContent() {
                 data-testid="select-assignment-task"
               >
                 {showTaskLoading ? <option value="" disabled>Loading tasks...</option> : null}
-                {taskLibrary.length === 0 && !isLoadingTasks && isOrgReady ? (
+                {taskLibrary.length === 0 && !isLoadingTasks ? (
                   <option value="" disabled>No tasks in library — add tasks in Settings → Tasks</option>
                 ) : null}
                 {orderedTaskCategories.map((category) => (

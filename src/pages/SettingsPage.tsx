@@ -1561,7 +1561,7 @@ function WorkspaceTab({
         {properties.length === 0 ? (
           <p className="text-sm text-text-muted">No properties yet. Add your first property below.</p>
         ) : (
-          <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
+          <div className="space-y-3 pr-1">
             {properties.map((property) => (
               <div key={property.id} className="flex items-center gap-3 rounded-xl border border-surface-border px-4 py-3 hover:bg-surface-hover">
                 <div className="min-w-0 flex-1">
@@ -1682,7 +1682,7 @@ function WorkspaceTab({
           <button
             type="button"
             onClick={() => void saveProperty()}
-            disabled={savingProperty}
+            disabled={savingProperty || (!editingPropertyId && !propertyForm.name.trim())}
             className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright disabled:opacity-60"
           >
             {savingProperty ? 'Saving...' : editingPropertyId ? 'Save Property' : 'Add Property'}
@@ -2974,12 +2974,11 @@ function HelpTab() {
 }
 
 function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; propertyId: string | null }) {
-  const { isOrgReady, orgId } = useAuth();
+  const { orgId } = useAuth();
   const queryClient = useQueryClient();
   const isHydrated = useAppStore((state) => state.isHydrated);
   const storeEmployees = useAppStore((state) => state.employees);
-  const orgIdSafe = isOrgReady ? (orgId ?? undefined) : undefined;
-  const { data: rawTasks = [], isLoading: tasksLoading } = useTasks(undefined, orgIdSafe);
+  const { data: rawTasks = [], isLoading: tasksLoading } = useTasks(undefined, orgId ?? undefined);
   const taskSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -3157,7 +3156,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
       toast.error(`Failed to add task: ${insertError.message}`);
       return;
     }
-    void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
+    void queryClient.invalidateQueries({ queryKey: ['tasks', orgId ?? undefined] });
     setNewName('');
     setNewCategory('General');
     setNewPriority('2');
@@ -3178,7 +3177,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
       return;
     }
     const deletedTaskName = tasks.find((task) => task.id === taskId)?.name ?? 'Task';
-    void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
+    void queryClient.invalidateQueries({ queryKey: ['tasks', orgId ?? undefined] });
     signalTaskLibraryUpdate();
     toast.success(`Task deleted: ${deletedTaskName}`);
   };
@@ -3217,7 +3216,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
       toast.error(`Failed to update task: ${updateError.message}`);
       return;
     }
-    void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
+    void queryClient.invalidateQueries({ queryKey: ['tasks', orgId ?? undefined] });
     signalTaskLibraryUpdate();
     toast.success(`Task updated: ${editDraft.name.trim()}`);
     cancelEditTask();
@@ -3244,10 +3243,10 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     const updateError = results.find((result) => result.error)?.error;
     if (updateError) {
       toast.error(`Unable to save task order: ${updateError.message}`);
-      void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
+      void queryClient.invalidateQueries({ queryKey: ['tasks', orgId ?? undefined] });
       return;
     }
-    void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
+    void queryClient.invalidateQueries({ queryKey: ['tasks', orgId ?? undefined] });
     signalTaskLibraryUpdate();
     toast.success('Task priority order saved');
   };
@@ -3341,7 +3340,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     await fetchTasks();
   };
 
-  if (!isOrgReady || tasksLoading) {
+  if (tasksLoading && tasks.length === 0) {
     return (
       <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
