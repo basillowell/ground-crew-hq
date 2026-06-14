@@ -170,24 +170,15 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [location.pathname, queryClient]);
 
   useEffect(() => {
-    const handleVisibility = async () => {
-      if (document.visibilityState !== 'visible' || !supabase) return;
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/');
-        return;
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+        void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
-        queryClient.invalidateQueries({ queryKey: ['schedule-entries'] }),
-      ]);
     };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [navigate, queryClient]);
+    document.addEventListener('visibilitychange', handleVisible);
+    return () => document.removeEventListener('visibilitychange', handleVisible);
+  }, [queryClient]);
 
   const latestClockEventQuery = useQuery({
     queryKey: ['employee-mobile-clock-status', orgId, currentUser?.employeeId],
