@@ -353,7 +353,6 @@ function SortableTaskRowCompact({ id, children }: { id: string; children: ReactN
   );
 }
 
-const CAT_DOT_COLORS = ['#16a34a','#2563eb','#d97706','#dc2626','#7c3aed','#0891b2','#059669','#ea580c','#4f46e5','#be185d'];
 
 interface SortableCategoryPillProps {
   cat: string;
@@ -372,12 +371,11 @@ interface SortableCategoryPillProps {
 }
 
 function SortableCategoryPill({
-  cat, idx, taskCount, isEditing, editValue, isConfirmDelete,
+  cat, idx: _idx, taskCount, isEditing, editValue, isConfirmDelete,
   onEditStart, onEditChange, onEditSave, onEditCancel,
   onDeleteRequest, onDeleteConfirm, onDeleteCancel,
 }: SortableCategoryPillProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat });
-  const dotColor = CAT_DOT_COLORS[idx % CAT_DOT_COLORS.length];
   return (
     <div
       ref={setNodeRef}
@@ -385,7 +383,7 @@ function SortableCategoryPill({
       className={`flex flex-col items-start gap-1 ${isDragging ? 'opacity-50' : ''}`}
     >
       <div
-        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 transition-colors ${
+        className={`group flex max-w-[180px] items-center gap-1.5 rounded-full border px-3 py-1.5 transition-colors ${
           isEditing ? 'border-brand bg-muted/40' : 'border-surface-border bg-muted/40 hover:border-surface-hover'
         }`}
       >
@@ -398,7 +396,6 @@ function SortableCategoryPill({
         >
           <GripVertical className="h-3 w-3" />
         </button>
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
         {isConfirmDelete ? (
           <span className="flex items-center gap-1 text-xs">
             {taskCount > 0 && (
@@ -424,19 +421,19 @@ function SortableCategoryPill({
           </>
         ) : (
           <>
-            <span className="text-xs font-medium text-text-primary">{cat}</span>
-            <button type="button" onClick={onEditStart} className="shrink-0 rounded p-0.5 text-text-muted hover:text-text-primary" aria-label={`Edit ${cat}`}>
+            <span className="truncate text-xs font-medium text-text-primary">{cat}</span>
+            <button type="button" onClick={onEditStart} className="shrink-0 rounded p-0.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-text-primary" aria-label={`Edit ${cat}`}>
               <Pencil className="h-2.5 w-2.5" />
             </button>
-            <button type="button" onClick={onDeleteRequest} className="shrink-0 rounded p-0.5 text-text-muted hover:text-status-warning" aria-label={`Delete ${cat}`}>
+            <button type="button" onClick={onDeleteRequest} className="shrink-0 rounded p-0.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-status-warning" aria-label={`Delete ${cat}`}>
               <X className="h-2.5 w-2.5" />
             </button>
           </>
         )}
       </div>
-      <span className="pl-6 text-xs text-text-muted/60">
-        {taskCount > 0 ? `${taskCount} task${taskCount !== 1 ? 's' : ''}` : 'Unused'}
-      </span>
+      {taskCount > 0 ? (
+        <span className="pl-6 text-xs text-text-muted/60">{taskCount} task{taskCount !== 1 ? 's' : ''}</span>
+      ) : null}
     </div>
   );
 }
@@ -2976,14 +2973,13 @@ function HelpTab() {
   );
 }
 
-function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: string | null }) {
-  const { isOrgReady } = useAuth();
+function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; propertyId: string | null }) {
+  const { isOrgReady, orgId } = useAuth();
+  const queryClient = useQueryClient();
   const isHydrated = useAppStore((state) => state.isHydrated);
   const storeEmployees = useAppStore((state) => state.employees);
-  const { isLoading: tasksLoading, refetch: refetchTasks } = useTasks(
-    undefined,
-    isOrgReady ? (orgId ?? undefined) : undefined,
-  );
+  const orgIdSafe = isOrgReady ? (orgId ?? undefined) : undefined;
+  const { data: rawTasks = [], isLoading: tasksLoading } = useTasks(undefined, orgIdSafe);
   const taskSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -3042,7 +3038,19 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
 
   const displayCategory = (category: string | null | undefined) =>
     category === 'General' ? 'General Maintenance' : category ?? 'General Maintenance';
-  const [tasks, setTasks] = useState<TaskLibraryItem[]>([]);
+  const tasks = useMemo<TaskLibraryItem[]>(
+    () =>
+      rawTasks.map((t) => ({
+        id: t.id,
+        org_id: orgId ?? '',
+        property_id: null,
+        name: t.name,
+        category: t.category ?? null,
+        priority: t.priority ?? null,
+        estimated_hours: (t.duration ?? 0) / 60,
+      })),
+    [rawTasks, orgId],
+  );
   const employees = useMemo(
     () =>
       storeEmployees
@@ -3084,46 +3092,38 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
   ] as const;
 
   const fetchTasks = useCallback(async () => {
-    if (!supabase) {
+    if (!supabase || !orgId) {
       setLoading(false);
       return;
     }
-    if (!orgId) return;
-
     setLoading(true);
     setError(null);
-    const [tasksResult, recurringResult] = await Promise.all([
-      refetchTasks(),
-      supabase
-        .from('recurring_task_rules')
-        .select('id, org_id, property_id, task_id, employee_id, days_of_week, active')
-        .eq('org_id', orgId)
-        .eq('active', true),
-    ]);
-
-    if (tasksResult.error || recurringResult.error) {
-      setError(tasksResult.error?.message ?? recurringResult.error?.message ?? 'Failed to load task settings');
+    const recurringResult = await supabase
+      .from('recurring_task_rules')
+      .select('id, org_id, property_id, task_id, employee_id, days_of_week, active')
+      .eq('org_id', orgId)
+      .eq('active', true);
+    if (recurringResult.error) {
+      setError(recurringResult.error.message ?? 'Failed to load task settings');
       setLoading(false);
       return;
     }
-    const nextTasks = (tasksResult.data ?? []).map<TaskLibraryItem>((task) => ({
-      id: task.id,
-      org_id: orgId,
-      property_id: null,
-      name: task.name,
-      category: task.category,
-      priority: task.priority ?? null,
-      estimated_hours: task.duration / 60,
-    }));
-    const nextRules = (recurringResult.data as RecurringTaskRule[]) ?? [];
-    setTasks(nextTasks);
-    setRecurringRules(nextRules);
-    setRecurringDrafts(() => {
-      const byTask = new Map<string, RecurringTaskRule>();
-      for (const rule of nextRules) {
-        if (!byTask.has(rule.task_id)) byTask.set(rule.task_id, rule);
-      }
-      return nextTasks.reduce<Record<string, { enabled: boolean; days: string[]; assignMode: 'all' | 'specific'; employeeId: string }>>((acc, task) => {
+    setRecurringRules((recurringResult.data as RecurringTaskRule[]) ?? []);
+    setLoading(false);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    void fetchTasks();
+  }, [fetchTasks, isHydrated]);
+
+  useEffect(() => {
+    const byTask = new Map<string, RecurringTaskRule>();
+    for (const rule of recurringRules) {
+      if (!byTask.has(rule.task_id)) byTask.set(rule.task_id, rule);
+    }
+    setRecurringDrafts(
+      tasks.reduce<Record<string, { enabled: boolean; days: string[]; assignMode: 'all' | 'specific'; employeeId: string }>>((acc, task) => {
         const rule = byTask.get(task.id);
         acc[task.id] = {
           enabled: Boolean(rule),
@@ -3132,15 +3132,9 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
           employeeId: rule?.employee_id ?? '',
         };
         return acc;
-      }, {});
-    });
-    setLoading(false);
-  }, [orgId, refetchTasks]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    void fetchTasks();
-  }, [fetchTasks, isHydrated]);
+      }, {}),
+    );
+  }, [tasks, recurringRules]);
 
   const addTask = async () => {
     if (!supabase || !orgId || !newName.trim()) return;
@@ -3163,11 +3157,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       toast.error(`Failed to add task: ${insertError.message}`);
       return;
     }
-    setTasks((current) =>
-      [...current, data as TaskLibraryItem].sort(
-        (a, b) => (a.priority ?? 99) - (b.priority ?? 99) || a.name.localeCompare(b.name),
-      ),
-    );
+    void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
     setNewName('');
     setNewCategory('General');
     setNewPriority('2');
@@ -3188,7 +3178,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       return;
     }
     const deletedTaskName = tasks.find((task) => task.id === taskId)?.name ?? 'Task';
-    setTasks((current) => current.filter((task) => task.id !== taskId));
+    void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
     signalTaskLibraryUpdate();
     toast.success(`Task deleted: ${deletedTaskName}`);
   };
@@ -3227,19 +3217,7 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       toast.error(`Failed to update task: ${updateError.message}`);
       return;
     }
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              name: editDraft.name.trim(),
-              category: editDraft.category.trim() || 'General',
-              priority: editDraft.priority,
-              estimated_hours: editDraft.estimated_hours,
-            }
-          : task,
-      ),
-    );
+    void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
     signalTaskLibraryUpdate();
     toast.success(`Task updated: ${editDraft.name.trim()}`);
     cancelEditTask();
@@ -3254,7 +3232,6 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
       ...task,
       priority: index + 1,
     }));
-    setTasks(reordered);
     const results = await Promise.all(
       reordered.map((task) =>
         supabase
@@ -3267,9 +3244,10 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
     const updateError = results.find((result) => result.error)?.error;
     if (updateError) {
       toast.error(`Unable to save task order: ${updateError.message}`);
-      await fetchTasks();
+      void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
       return;
     }
+    void queryClient.invalidateQueries({ queryKey: ['tasks', orgIdSafe] });
     signalTaskLibraryUpdate();
     toast.success('Task priority order saved');
   };
@@ -3430,13 +3408,6 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                   <p className="text-sm font-medium text-text-primary">Task Categories</p>
                   <p className="mt-0.5 text-xs text-text-muted">Categories organize your task library and workboard dispatch</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddCategory(true); setNewCategoryInput(''); }}
-                  className="flex shrink-0 items-center gap-1 text-xs text-brand hover:text-brand-bright"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Category
-                </button>
               </div>
               <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
                 <SortableContext items={taskCategoryOptions} strategy={rectSortingStrategy}>
@@ -3480,7 +3451,15 @@ function TasksTab({ orgId, propertyId }: { orgId: string | null; propertyId: str
                         </div>
                         <span className="pl-1 text-xs text-text-muted/60">New</span>
                       </div>
-                    ) : null}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setShowAddCategory(true); setNewCategoryInput(''); }}
+                        className="flex items-center gap-1 rounded-full border border-dashed border-surface-border px-3 py-1.5 text-xs text-text-muted transition-colors hover:border-brand hover:text-brand"
+                      >
+                        <Plus className="h-3 w-3" /> Add Category
+                      </button>
+                    )}
                   </div>
                 </SortableContext>
               </DndContext>
