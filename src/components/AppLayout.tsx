@@ -24,6 +24,7 @@ import { AppSidebarRefined } from './AppSidebarRefined';
 import { WorkflowTopBar } from './WorkflowTopBar';
 import { FeedbackWidget } from './FeedbackWidget';
 import { CommandBar } from './CommandBar';
+import { PageLoader } from './PageLoader';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { ProgramSettings } from '@/data/seedData';
@@ -145,8 +146,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
-  const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive } = useAuth();
+  const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive, isOrgReady } = useAuth();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
+  const [orgGuardExpired, setOrgGuardExpired] = useState(false);
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
@@ -164,6 +166,16 @@ export function AppLayout({ children }: AppLayoutProps) {
   const programSettingQuery = useProgramSettings(orgId);
   const programSetting = programSettingQuery.data ?? null;
   const properties = propertiesQuery.data ?? [];
+
+  useEffect(() => {
+    if (isOrgReady) {
+      setOrgGuardExpired(false);
+      return;
+    }
+    setOrgGuardExpired(false);
+    const timer = window.setTimeout(() => setOrgGuardExpired(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [isOrgReady]);
 
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
@@ -528,6 +540,10 @@ export function AppLayout({ children }: AppLayoutProps) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [location.pathname, navigate, shortcutsOverlayOpen]);
+
+  if (!isOrgReady && !orgGuardExpired) {
+    return <PageLoader />;
+  }
 
   return (
     <SidebarProvider>

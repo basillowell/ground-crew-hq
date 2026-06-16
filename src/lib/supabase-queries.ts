@@ -1198,6 +1198,8 @@ export function useScheduleEntries(date: string, propertyId?: string, orgId?: st
     queryFn: () => fetchScheduleEntries(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 5,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1208,6 +1210,8 @@ export function useScheduleEntriesRange(startDate: string, endDate: string, prop
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1217,6 +1221,8 @@ export function useAssignments(date: string, propertyId?: string, orgId?: string
     queryFn: () => fetchAssignments(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 3,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1227,6 +1233,8 @@ export function useAssignmentsRange(startDate: string, endDate: string, property
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1281,6 +1289,8 @@ export function useEmployees(
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 30,
     placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1291,6 +1301,8 @@ export function useProperties(orgId?: string) {
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 60,
     placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1301,6 +1313,8 @@ export function useProgramSettings(orgId?: string) {
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 60 * 24,
     placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1311,6 +1325,8 @@ export function useTasks(_propertyId?: string, orgId?: string) {
     enabled: !!orgId && orgId.length > 0,
     staleTime: 1000 * 60 * 60,
     placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1320,6 +1336,8 @@ export function useEquipmentUnits(propertyId?: string, orgId?: string) {
     queryFn: () => fetchEquipmentUnits(propertyId, orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 30,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1329,6 +1347,8 @@ export function useNotes(propertyId?: string, orgId?: string) {
     queryFn: () => fetchNotes(propertyId, orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1360,6 +1380,8 @@ export function useWorkLocations(propertyId?: string, orgId?: string) {
     },
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1369,6 +1391,8 @@ export function useWeatherLocations(propertyId?: string, orgId?: string, activeO
     queryFn: () => fetchWeatherLocations(propertyId, orgId, activeOnly),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1386,6 +1410,8 @@ export function useWeatherDailyLogsRange(startDate: string, endDate: string, pro
     queryFn: () => fetchWeatherDailyLogs(startDate, endDate, propertyId),
     enabled: Boolean(orgId && startDate && endDate),
     staleTime: 1000 * 60 * 5,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1405,6 +1431,8 @@ export function useDepartmentOptions(orgId?: string) {
     queryFn: () => fetchDepartmentOptions(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1414,6 +1442,8 @@ export function useGroupOptions(orgId?: string) {
     queryFn: () => fetchGroupOptions(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1423,6 +1453,8 @@ export function useRoleOptions(orgId?: string) {
     queryFn: () => fetchRoleOptions(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1432,6 +1464,8 @@ export function useLanguageOptions(orgId?: string) {
     queryFn: () => fetchLanguageOptions(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1441,6 +1475,8 @@ export function useShiftTemplates(orgId?: string) {
     queryFn: () => fetchShiftTemplates(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1450,6 +1486,8 @@ export function useWorkerTypes(orgId?: string) {
     queryFn: () => fetchWorkerTypes(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1459,6 +1497,8 @@ export function useJobDescriptions(orgId?: string) {
     queryFn: () => fetchFrameworkOptions('job_descriptions', orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1468,6 +1508,8 @@ export function useEmploymentStatuses(orgId?: string) {
     queryFn: () => fetchFrameworkOptions('employment_statuses', orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1477,6 +1519,8 @@ export function useWageCategories(orgId?: string) {
     queryFn: () => fetchFrameworkOptions('wage_categories', orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1486,6 +1530,8 @@ export function useOvertimeRules(orgId?: string) {
     queryFn: () => fetchFrameworkOptions('overtime_rules', orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 10,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1495,7 +1541,8 @@ export function useChemicalApplicationLogs(date: string, orgId?: string) {
     queryFn: () => fetchChemicalApplicationLogFieldsForDate(date, orgId),
     enabled: Boolean(orgId && date),
     staleTime: 1000 * 60 * 5,
-    retry: false,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1505,7 +1552,8 @@ export function useChemicalApplicationLogsRange(startDate: string, endDate: stri
     queryFn: () => fetchChemicalApplicationLogs(startDate, endDate, propertyId, orgId),
     enabled: Boolean(orgId && startDate && endDate),
     staleTime: 1000 * 60 * 5,
-    retry: false,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1533,7 +1581,8 @@ export function useChemicalApplicationLogsAll(orgId?: string) {
     queryFn: () => fetchChemicalApplicationLogsAll(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
-    retry: false,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1552,6 +1601,8 @@ export function useClockEvents(date: string, propertyId?: string, orgId?: string
     queryFn: () => fetchClockEvents(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 1,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
@@ -1562,6 +1613,8 @@ export function useClockEventsRange(startDate: string, endDate: string, property
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 1,
     placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 1000,
   });
 }
 
