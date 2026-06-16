@@ -422,7 +422,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const handleSignOut = async () => {
     queryClient.clear();
-    try { window.sessionStorage.removeItem('ground-crew-query-cache-v2'); } catch { /* ignore */ }
+    try { window.localStorage.removeItem('ground-crew-query-cache-v3'); } catch { /* ignore */ }
     await signOut();
     navigate('/');
   };

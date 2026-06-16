@@ -242,7 +242,7 @@ export default function ReportsPage() {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [clockEvents, setClockEvents] = useState<ClockEventRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timedOut, setTimedOut] = useState(false);
+  const [showTimeout, setShowTimeout] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'summary' | 'trends' | 'gm' | 'timesheets'>('summary');
   const [trendAssignments, setTrendAssignments] = useState<AssignmentRow[]>([]);
@@ -431,15 +431,6 @@ export default function ReportsPage() {
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
   useEffect(() => {
-    if (!loading) {
-      setTimedOut(false);
-      return;
-    }
-    const t = window.setTimeout(() => setTimedOut(true), 8000);
-    return () => window.clearTimeout(t);
-  }, [loading]);
-
-  useEffect(() => {
     if (!isHydrated) return;
     if (!orgId) return;
     void fetchReportData();
@@ -585,6 +576,19 @@ export default function ReportsPage() {
 
     return Array.from(byEmployee.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
   }, [assignments, clockEvents, employees]);
+
+  const hasLaborResult = !loading || Boolean(error) || laborRows.length > 0;
+
+  useEffect(() => {
+    if (hasLaborResult) {
+      setShowTimeout(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setShowTimeout(true);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [hasLaborResult]);
 
   const totals = useMemo(() => {
     return laborRows.reduce(
@@ -1315,9 +1319,20 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {timedOut ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">
-            Taking longer than expected. Try a shorter date range.
+        {showTimeout && !hasLaborResult ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center gap-3">
+            <p className="text-sm font-medium">
+              Data is taking longer than expected
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Try refreshing the page or selecting a shorter date range.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 rounded-lg border px-4 py-2 text-sm hover:bg-muted transition-colors"
+            >
+              Refresh page
+            </button>
           </div>
         ) : loading ? (
           <TableSkeleton />

@@ -1207,6 +1207,7 @@ export function useScheduleEntriesRange(startDate: string, endDate: string, prop
     queryFn: () => fetchScheduleEntriesRange(startDate, endDate, propertyId, orgId),
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -1225,6 +1226,7 @@ export function useAssignmentsRange(startDate: string, endDate: string, property
     queryFn: () => fetchAssignmentsRange(startDate, endDate, propertyId, orgId),
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -1278,6 +1280,7 @@ export function useEmployees(
     queryFn: () => fetchEmployees(propertyId, orgId, status),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 30,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -1287,6 +1290,7 @@ export function useProperties(orgId?: string) {
     queryFn: () => fetchProperties(orgId),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 60,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -1296,6 +1300,7 @@ export function useProgramSettings(orgId?: string) {
     queryFn: () => fetchProgramSettings(orgId!),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 60 * 24,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -1305,6 +1310,7 @@ export function useTasks(_propertyId?: string, orgId?: string) {
     queryFn: () => fetchTasks(orgId),
     enabled: !!orgId && orgId.length > 0,
     staleTime: 1000 * 60 * 60,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -1555,6 +1561,7 @@ export function useClockEventsRange(startDate: string, endDate: string, property
     queryFn: () => fetchClockEventsRange(startDate, endDate, propertyId, orgId),
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 1,
+    placeholderData: (prev) => prev,
   });
 }
 

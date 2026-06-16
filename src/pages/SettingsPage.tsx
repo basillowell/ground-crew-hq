@@ -250,6 +250,25 @@ function SettingsCard({
   );
 }
 
+function LoadingTimeoutFallback() {
+  return (
+    <div className="flex flex-col items-center justify-center p-12 text-center gap-3">
+      <p className="text-sm font-medium">
+        Data is taking longer than expected
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Try refreshing the page or selecting a shorter date range.
+      </p>
+      <button
+        onClick={() => window.location.reload()}
+        className="mt-2 rounded-lg border px-4 py-2 text-sm hover:bg-muted transition-colors"
+      >
+        Refresh page
+      </button>
+    </div>
+  );
+}
+
 function SortableShiftTemplateRow({
   template,
   onDelete,
@@ -703,6 +722,7 @@ function WorkspaceTab({
   const [orgNameDraft, setOrgNameDraft] = useState('');
   const properties = useMemo(() => storeProperties as PropertyItem[], [storeProperties]);
   const [loading, setLoading] = useState(true);
+  const [showTimeout, setShowTimeout] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -813,6 +833,25 @@ function WorkspaceTab({
     if (!orgId) return;
     void fetchWorkspaceData();
   }, [fetchWorkspaceData, isHydrated, orgId]);
+
+  const hasWorkspaceResult =
+    !loading ||
+    Boolean(error) ||
+    Boolean(orgInfo) ||
+    properties.length > 0 ||
+    equipmentTypes.length > 0 ||
+    Object.values(usageStats).some((value) => value > 0);
+
+  useEffect(() => {
+    if (hasWorkspaceResult) {
+      setShowTimeout(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setShowTimeout(true);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [hasWorkspaceResult]);
 
   const saveOrganization = async () => {
     if (!supabase || !orgId || !orgNameDraft.trim()) return;
@@ -1447,7 +1486,9 @@ function WorkspaceTab({
     toast.success(`SOP deleted: ${title}`);
   };
 
-  if (!orgId || loading) return <PageSkeleton />;
+  if (!orgId || loading) {
+    return showTimeout && !hasWorkspaceResult ? <LoadingTimeoutFallback /> : <PageSkeleton />;
+  }
 
   if (error) {
     return (
@@ -3068,6 +3109,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   const [recurringRules, setRecurringRules] = useState<RecurringTaskRule[]>([]);
   const [recurringDrafts, setRecurringDrafts] = useState<Record<string, { enabled: boolean; days: string[]; assignMode: 'all' | 'specific'; employeeId: string }>>({});
   const [loading, setLoading] = useState(true);
+  const [showTimeout, setShowTimeout] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState('General');
@@ -3122,6 +3164,19 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     if (!isHydrated) return;
     void fetchTasks();
   }, [fetchTasks, isHydrated]);
+
+  const hasTaskLibraryResult = (!tasksLoading && !loading) || Boolean(error) || tasks.length > 0;
+
+  useEffect(() => {
+    if (hasTaskLibraryResult) {
+      setShowTimeout(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setShowTimeout(true);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [hasTaskLibraryResult]);
 
   useEffect(() => {
     const byTask = new Map<string, RecurringTaskRule>();
@@ -3349,7 +3404,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
 
   if (tasksLoading && tasks.length === 0) {
     return (
-      <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+      showTimeout && !hasTaskLibraryResult ? <LoadingTimeoutFallback /> : <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading task library...
       </div>
@@ -3363,7 +3418,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
         subtitle="Reusable tasks for daily workflow planning. Drag to reorder priority."
       >
         {!orgId || loading ? (
-          <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />
+          showTimeout && !hasTaskLibraryResult ? <LoadingTimeoutFallback /> : <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />
         ) : error ? (
           <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchTasks()} />
         ) : (

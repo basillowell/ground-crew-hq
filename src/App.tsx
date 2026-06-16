@@ -50,8 +50,8 @@ const queryClient = new QueryClient({
 
 const queryPersister = typeof window !== "undefined"
   ? createSyncStoragePersister({
-      storage: window.sessionStorage,
-      key: "ground-crew-query-cache-v2",
+      storage: window.localStorage,
+      key: "ground-crew-query-cache-v3",
     })
   : undefined;
 
