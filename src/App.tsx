@@ -1,7 +1,5 @@
 import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect, useRef, useState } from "react";
-import { QueryClient } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -35,26 +33,25 @@ const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const ClientPortalPage = lazy(() => import("./pages/ClientPortalPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
+if (typeof window !== "undefined") {
+  localStorage.removeItem("ground-crew-query-cache-v3");
+  localStorage.removeItem("ground-crew-query-cache-v2");
+  localStorage.removeItem("ground-crew-query-cache");
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      gcTime: 1000 * 60 * 60 * 24,
+      gcTime: 1000 * 60 * 30,
       staleTime: 1000 * 60 * 5,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
       retry: 3,
-      retryDelay: (attemptIndex) =>
-        Math.min(1000 * 2 ** attemptIndex, 8000),
+      retryDelay: (attempt) =>
+        Math.min(1000 * 2 ** attempt, 8000),
     },
   },
 });
-
-const queryPersister = typeof window !== "undefined"
-  ? createSyncStoragePersister({
-      storage: window.localStorage,
-      key: "ground-crew-query-cache-v3",
-    })
-  : undefined;
 
 function RouteFallback() {
   return (
@@ -213,31 +210,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <PersistQueryClientProvider
-      client={queryClient}
-      persistOptions={{
-        persister: queryPersister,
-        onSuccess: () => queryClient.resumePausedMutations(),
-        dehydrateOptions: {
-          shouldDehydrateQuery: (query) => {
-            if (!Array.isArray(query.queryKey)) return false;
-            const key = String(query.queryKey[0]);
-            const allowed = [
-              "assignments",
-              "schedule-entries",
-              "clock-events",
-              "properties",
-              "tasks",
-              "employees",
-            ];
-            if (!allowed.includes(key)) return false;
-            const data = query.state.data;
-            if (Array.isArray(data) && data.length === 0) return false;
-            return query.state.status === "success";
-          },
-        },
-      }}
-    >
+    <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <AppNotificationChannel />
         <TooltipProvider>
@@ -264,6 +237,6 @@ export default function App() {
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
-    </PersistQueryClientProvider>
+    </QueryClientProvider>
   );
 }

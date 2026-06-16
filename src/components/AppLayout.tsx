@@ -442,7 +442,11 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const handleSignOut = async () => {
     queryClient.clear();
-    try { window.localStorage.removeItem('ground-crew-query-cache-v3'); } catch { /* ignore */ }
+    try {
+      window.localStorage.removeItem('ground-crew-query-cache-v3');
+      window.localStorage.removeItem('ground-crew-query-cache-v2');
+      window.localStorage.removeItem('ground-crew-query-cache');
+    } catch { /* ignore */ }
     await signOut();
     navigate('/');
   };
