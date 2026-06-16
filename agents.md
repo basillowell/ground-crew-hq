@@ -20,9 +20,9 @@
 - Read docs/dev/live-db-state.md before writing any DB query (Rule 10).
 
 ## Required Reading Before Any Session
-1. CODERULES.md — 12 non-negotiable rules (build gate, auth freeze, SQL boundary, etc.)
-2. ARCHITECTURE.md — full route inventory, DB domain map, store shape
-3. docs/dev/live-db-state.md — authoritative column names for every table
+1. CODERULES.md - non-negotiable rules (build gate, auth freeze, SQL boundary, duplicate insert guards, etc.)
+2. ARCHITECTURE.md - full route inventory, DB domain map, store shape
+3. docs/dev/live-db-state.md - authoritative column names for every table
 
 ## Product Direction
 Ground Crew HQ is a workforce operations platform for grounds/facilities crews:
@@ -31,7 +31,7 @@ Ground Crew HQ is a workforce operations platform for grounds/facilities crews:
 - daily workboard
 - task management (org-wide task library)
 - equipment management
-- weather (NWS — US only)
+- weather (NWS - US only)
 - reports (labor metrics)
 - safety (incident logging)
 - messaging (internal team)
@@ -47,7 +47,13 @@ Always inspect:
 - src/contexts/AuthContext.tsx
 - src/pages/LaunchPortalPage.tsx
 
-AuthContext.tsx is FROZEN — never modify it (CODERULES Rule 4).
+AuthContext.tsx is FROZEN - never modify it (CODERULES Rule 4).
+
+## Known Stability Patterns
+- ProtectedRoute must use `useRef(hasEverAuthed)` so tab switches and background refetches do not show a loading flash after a user has already authenticated.
+- `useTasks()` must use `orgId` directly. Do not gate task loading behind `isOrgReady`; tasks are org-wide and should fetch as soon as `orgId` is available.
+- Property inserts must have a submitting/loading guard that disables repeat submission and prevents duplicate property rows from double-clicks.
+- Auth lock contention: never call `supabase.auth.getSession()` inside `visibilitychange` handlers. Visibility changes must not trigger session re-hydration or auth lock waits.
 
 ## Before Weather Changes
 Always inspect:
@@ -57,7 +63,7 @@ Always inspect:
 
 ## Before Any DB Query
 Read docs/dev/live-db-state.md to confirm column names.
-Never guess column names — stale strings compile but fail at runtime (400 from Supabase).
+Never guess column names - stale strings compile but fail at runtime (400 from Supabase).
 
 ## Design Reference
 For visual polish, layout consistency, branding, page hierarchy, and UI behavior, read:

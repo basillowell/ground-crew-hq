@@ -97,6 +97,13 @@ areas is the top cause of drift. Touching 1–3 related files is normal; touchin
 
 ---
 
+**Rule 13 - Property inserts require duplicate-submit protection**
+Every property insert must have a submitting/loading state that disables the
+save action while the insert is in flight. This prevents duplicate property rows
+from double-clicks, Enter-key repeats, or slow-network retries.
+
+---
+
 ## Coding Rules
 
 **Stale state:** Use `useCallback` for all fetch functions.

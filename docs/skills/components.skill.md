@@ -120,21 +120,30 @@ export default function MyPage() {
   const { currentUser, currentPropertyId, orgId } = useAuth()
   const queryClient = useQueryClient()
   const { data: items = [], isLoading } = useItems(currentPropertyId, orgId)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function handleSave(item) {
-    const { error } = await supabase.from('items').upsert({
-      ...item,
-      org_id: orgId,
-      property_id: currentPropertyId,
-    })
-    if (error) throw error
-    await queryClient.invalidateQueries({ queryKey: ['items'] })
-    toast('Saved successfully')
+    if (isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      const { error } = await supabase.from('items').upsert({
+        ...item,
+        org_id: orgId,
+        property_id: currentPropertyId,
+      })
+      if (error) throw error
+      await queryClient.invalidateQueries({ queryKey: ['items'] })
+      toast('Saved successfully')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (isLoading) return <LoadingState />
   return <div>...</div>
 }
+
+Property insert forms must use this submitting/loading guard pattern and disable the save action while the insert is in flight.
 
 ## Offline Pattern (field page only)
 const PENDING_KEY = 'gcrew-pending-clocks'
