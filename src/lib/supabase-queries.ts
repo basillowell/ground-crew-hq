@@ -1215,7 +1215,7 @@ export function useAssignments(date: string, propertyId?: string, orgId?: string
     queryKey: ['assignments', date, propertyId ?? 'all', orgId ?? 'all-orgs'],
     queryFn: () => fetchAssignments(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 3,
   });
 }
 
@@ -1277,7 +1277,7 @@ export function useEmployees(
     queryKey: ['employees', propertyId ?? 'all', orgId ?? 'all-orgs', status],
     queryFn: () => fetchEmployees(propertyId, orgId, status),
     enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 30,
   });
 }
 
@@ -1295,7 +1295,7 @@ export function useProgramSettings(orgId?: string) {
     queryKey: ['program-settings', orgId ?? 'all-orgs'],
     queryFn: () => fetchProgramSettings(orgId!),
     enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 10,
+    staleTime: 1000 * 60 * 60 * 24,
   });
 }
 
@@ -1304,7 +1304,7 @@ export function useTasks(_propertyId?: string, orgId?: string) {
     queryKey: ['tasks', orgId],
     queryFn: () => fetchTasks(orgId),
     enabled: !!orgId && orgId.length > 0,
-    staleTime: 1000 * 60 * 30,
+    staleTime: 1000 * 60 * 60,
   });
 }
 
@@ -1313,7 +1313,7 @@ export function useEquipmentUnits(propertyId?: string, orgId?: string) {
     queryKey: ['equipment-units', propertyId ?? 'all', orgId ?? 'all-orgs'],
     queryFn: () => fetchEquipmentUnits(propertyId, orgId),
     enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 30,
   });
 }
 

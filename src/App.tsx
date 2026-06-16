@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect, useRef } from "react";
+import { Component, ErrorInfo, lazy, ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
@@ -40,7 +40,7 @@ const queryClient = new QueryClient({
     queries: {
       gcTime: 1000 * 60 * 60 * 24,
       staleTime: 1000 * 60 * 5,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
       refetchOnReconnect: true,
       retry: 2,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
@@ -136,12 +136,18 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 function AppNotificationChannel() {
   const { currentUser } = useAuth();
+  const [realtimeReady, setRealtimeReady] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setRealtimeReady(true), 30000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const authUserId = currentUser?.authUser?.id;
     const employeeId = currentUser?.employeeId;
     const orgId = currentUser?.orgId;
-    if (!supabase || !authUserId || !employeeId || !orgId) return;
+    if (!supabase || !authUserId || !employeeId || !orgId || !realtimeReady) return;
 
     const channel = supabase
       .channel(`app-notify-${currentUser.appUserId}`)
@@ -168,7 +174,7 @@ function AppNotificationChannel() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [currentUser?.appUserId, currentUser?.authUser?.id, currentUser?.employeeId, currentUser?.orgId]);
+  }, [currentUser?.appUserId, currentUser?.authUser?.id, currentUser?.employeeId, currentUser?.orgId, realtimeReady]);
 
   return null;
 }

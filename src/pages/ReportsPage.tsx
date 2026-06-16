@@ -102,6 +102,14 @@ type WeatherDailyLogRow = {
   wind: number | null;
 };
 
+type ClockEventRow = {
+  id: string;
+  employee_id: string;
+  property_id: string | null;
+  event_type: string | null;
+  timestamp: string | null;
+};
+
 type TimesheetScheduleRow = {
   id: string;
   employee_id: string;
@@ -232,7 +240,9 @@ export default function ReportsPage() {
   );
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
+  const [clockEvents, setClockEvents] = useState<ClockEventRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timedOut, setTimedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'summary' | 'trends' | 'gm' | 'timesheets'>('summary');
   const [trendAssignments, setTrendAssignments] = useState<AssignmentRow[]>([]);
@@ -291,6 +301,20 @@ export default function ReportsPage() {
       assignmentsQuery = assignmentsQuery.eq('property_id', selectedPropertyId);
     }
 
+    const clockStart = `${startDate}T00:00:00.000Z`;
+    const clockEnd = `${endDate}T23:59:59.999Z`;
+    let clockEventsQuery = supabase
+      .from('clock_events')
+      .select('id, employee_id, property_id, event_type, timestamp')
+      .eq('org_id', orgId)
+      .gte('timestamp', clockStart)
+      .lte('timestamp', clockEnd)
+      .order('timestamp', { ascending: true });
+
+    if (selectedPropertyId !== 'all') {
+      clockEventsQuery = clockEventsQuery.eq('property_id', selectedPropertyId);
+    }
+
     const now = new Date();
     const trendStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     const trendStartDate = toIsoDate(trendStart);
@@ -327,8 +351,9 @@ export default function ReportsPage() {
       tasksQuery = tasksQuery.eq('property_id', selectedPropertyId);
     }
 
-    const [assignmentsResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] = await Promise.all([
+    const [assignmentsResult, clockEventsResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] = await Promise.all([
       assignmentsQuery,
+      clockEventsQuery,
       tasksQuery,
       trendAssignmentsQuery,
       trendScheduleEntriesQuery,
@@ -358,11 +383,13 @@ export default function ReportsPage() {
     const weatherLogsResult = await supabase
       .from('weather_daily_logs')
       .select('date, rainfall_total, temperature, wind')
+      .eq('org_id', orgId)
       .gte('date', startDate)
       .lte('date', endDate);
 
     if (
       assignmentsResult.error ||
+      clockEventsResult.error ||
       tasksResult.error ||
       trendAssignmentsResult.error ||
       trendScheduleEntriesResult.error ||
@@ -372,6 +399,7 @@ export default function ReportsPage() {
     ) {
       setError(
         assignmentsResult.error?.message ??
+          clockEventsResult.error?.message ??
           tasksResult.error?.message ??
           trendAssignmentsResult.error?.message ??
           trendScheduleEntriesResult.error?.message ??
@@ -385,6 +413,7 @@ export default function ReportsPage() {
     }
 
     setAssignments((assignmentsResult.data ?? []) as AssignmentRow[]);
+    setClockEvents((clockEventsResult.data ?? []) as ClockEventRow[]);
     setTasks((tasksResult.data ?? []) as TaskRow[]);
     setTrendAssignments((trendAssignmentsResult.data ?? []) as AssignmentRow[]);
     setTrendScheduleEntries((trendScheduleEntriesResult.data ?? []) as ScheduleEntryTrendRow[]);
@@ -400,6 +429,15 @@ export default function ReportsPage() {
     );
     setLoading(false);
   }, [endDate, orgId, selectedPropertyId, startDate]);
+
+  useEffect(() => {
+    if (!loading) {
+      setTimedOut(false);
+      return;
+    }
+    const t = window.setTimeout(() => setTimedOut(true), 8000);
+    return () => window.clearTimeout(t);
+  }, [loading]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -456,6 +494,34 @@ export default function ReportsPage() {
   const laborRows = useMemo<LaborSummaryRow[]>(() => {
     const byEmployee = new Map<string, LaborSummaryRow>();
     const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    const clockHoursByEmployee = new Map<string, { hours: number; days: Set<string> }>();
+    const openClockInByEmployee = new Map<string, Date>();
+
+    [...clockEvents]
+      .filter((event) => event.timestamp)
+      .sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)))
+      .forEach((event) => {
+        const eventType = String(event.event_type ?? '').toLowerCase();
+        const eventTime = new Date(event.timestamp ?? '');
+        if (Number.isNaN(eventTime.getTime())) return;
+
+        if (eventType === 'clock_in' || eventType === 'in') {
+          openClockInByEmployee.set(event.employee_id, eventTime);
+          return;
+        }
+
+        if (eventType !== 'clock_out' && eventType !== 'out') return;
+
+        const start = openClockInByEmployee.get(event.employee_id);
+        if (!start) return;
+
+        const hours = Math.max(0, (eventTime.getTime() - start.getTime()) / (1000 * 60 * 60));
+        const existing = clockHoursByEmployee.get(event.employee_id) ?? { hours: 0, days: new Set<string>() };
+        existing.hours += hours;
+        existing.days.add(String(event.timestamp).slice(0, 10));
+        clockHoursByEmployee.set(event.employee_id, existing);
+        openClockInByEmployee.delete(event.employee_id);
+      });
 
     assignments.forEach((assignment) => {
       const employeeId = assignment.employee_id;
@@ -484,17 +550,41 @@ export default function ReportsPage() {
       byEmployee.set(employeeId, existing);
     });
 
+    clockHoursByEmployee.forEach((clockSummary, employeeId) => {
+      const employee = employeeById.get(employeeId);
+      const hourlyRate = Number(employee?.hourly_rate ?? 0);
+      const existing = byEmployee.get(employeeId) ?? {
+        employeeId,
+        employeeName: employee ? `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee' : 'Unknown Employee',
+        daysWorked: 0,
+        scheduledHours: 0,
+        actualHours: 0,
+        tasksCompleted: 0,
+        variance: 0,
+        scheduledCost: 0,
+        actualCost: 0,
+        varianceCost: 0,
+      };
+
+      if (clockSummary.hours > existing.actualHours) {
+        existing.actualHours = clockSummary.hours;
+        existing.actualCost = clockSummary.hours * hourlyRate;
+      }
+      byEmployee.set(employeeId, existing);
+    });
+
     byEmployee.forEach((row) => {
       const workedDays = new Set(
         assignments.filter((assignment) => assignment.employee_id === row.employeeId).map((assignment) => assignment.date),
       );
+      clockHoursByEmployee.get(row.employeeId)?.days.forEach((date) => workedDays.add(date));
       row.daysWorked = workedDays.size;
       row.variance = row.actualHours - row.scheduledHours;
       row.varianceCost = row.actualCost - row.scheduledCost;
     });
 
     return Array.from(byEmployee.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [assignments, employees]);
+  }, [assignments, clockEvents, employees]);
 
   const totals = useMemo(() => {
     return laborRows.reduce(
@@ -1225,16 +1315,21 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {loading ? (
+        {timedOut ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Taking longer than expected. Try a shorter date range.
+          </div>
+        ) : loading ? (
           <TableSkeleton />
         ) : error ? (
           <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
         ) : laborRows.length === 0 ? (
-          <EmptyState
-            icon={BarChart3}
-            title="No report data available"
-            description="Schedule shifts and assign tasks to generate labor reports."
-          />
+          <div className="rounded-xl border border-dashed p-8 text-center">
+            <p className="text-sm font-medium">No labor data for this period</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Reports populate once crew members clock in using the Field page.
+            </p>
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse', fontSize: '13px' }}>

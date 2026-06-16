@@ -1558,7 +1558,7 @@ function WorkspaceTab({
               onClick={() => navigate('/app/settings?tab=Account')}
               className="w-fit text-sm text-brand underline hover:text-brand-bright"
             >
-              Usage limit reached. Review workspace access settings.
+              Approaching plan limits. Contact support to upgrade.
             </button>
           ) : null}
         </div>
