@@ -672,6 +672,7 @@ export default function WorkboardContent() {
     author: 'Operations Admin',
     location: '',
   });
+  const [savingNote, setSavingNote] = useState(false);
   const [quickTaskDraft, setQuickTaskDraft] = useState({
     employeeId: '',
     date: new Date().toLocaleDateString('en-CA'),
@@ -682,6 +683,16 @@ export default function WorkboardContent() {
   const workflowParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const focusedPropertyId = workflowParams.get('property') || '';
   const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
+
+  const openNoteDialog = (type: Note['type']) => {
+    const noteLabel = type === 'alert' ? 'Alert' : `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
+    setNoteDraft((current) => ({
+      ...current,
+      type,
+      title: current.title.trim() ? current.title : `${noteLabel} note - ${boardDate}`,
+    }));
+    setNoteDialogOpen(true);
+  };
 
   const toggleScheduleRecipient = useCallback((employeeId: string) => {
     setSelectedScheduleRecipientIds((current) =>
@@ -1965,7 +1976,7 @@ export default function WorkboardContent() {
         .select('id, actual_start_at, actual_completed_at, actual_hours')
         .single();
       if (error) {
-        toast.error(`Failed to save actual times: ${error.message}`);
+        toast.error(`Failed to save times: ${error.message}`);
         setSavingTimelineAssignmentId(null);
         return false;
       }
@@ -2030,9 +2041,9 @@ export default function WorkboardContent() {
       }
 
       if (normalizedStatus === 'in-progress' && startInput && !endInput) {
-        toast.success('Started time updated.');
+        toast.success('Times saved');
       } else {
-        toast.success('Actual times updated.');
+        toast.success('Times saved');
       }
       await queryClient.invalidateQueries({ queryKey: ['assignments'] });
       setSavingTimelineAssignmentId(null);
@@ -3923,24 +3934,35 @@ export default function WorkboardContent() {
       toast.info('Demo mode is read-only.');
       return;
     }
-    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !currentUser?.orgId || !noteDraft.title.trim() || !noteDraft.content.trim()) {
-      toast.error('Select a property and enter a title and note before saving.');
+    if (savingNote) return;
+    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !currentUser?.orgId || !noteDraft.content.trim()) {
+      toast.error('Select a property and enter a note before saving.');
       return;
     }
-    const { error } = await supabase.from('notes').insert({
-      type: noteDraft.type,
-      title: noteDraft.title.trim(),
-      content: noteDraft.content.trim(),
-      property_id: effectivePropertyId,
-      org_id: currentUser.orgId,
-      created_by: currentUser.employeeId ?? null,
-      location: noteDraft.location.trim() || null,
-    });
-    if (error) { toast.error(`Failed to save note: ${error.message}`); return; }
-    await queryClient.invalidateQueries({ queryKey: ['notes'] });
-    setNoteDialogOpen(false);
-    setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
-    toast.success('Note saved');
+    setSavingNote(true);
+    const noteLabel = noteDraft.type === 'alert' ? 'Alert' : `${noteDraft.type.charAt(0).toUpperCase()}${noteDraft.type.slice(1)}`;
+    const noteTitle = noteDraft.title.trim() || `${noteLabel} note - ${boardDate}`;
+    try {
+      const { error } = await supabase.from('notes').insert({
+        type: noteDraft.type,
+        title: noteTitle,
+        content: noteDraft.content.trim(),
+        property_id: effectivePropertyId,
+        org_id: currentUser.orgId,
+        created_by: currentUser.employeeId ?? null,
+        location: noteDraft.location.trim() || null,
+      });
+      if (error) {
+        toast.error(`Failed to save note: ${error.message}`);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['notes'] });
+      setNoteDialogOpen(false);
+      setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
+      toast.success('Note saved');
+    } finally {
+      setSavingNote(false);
+    }
   }
 
   function persistLaneOrder(nextOrder: string[]) {
@@ -4964,10 +4986,7 @@ export default function WorkboardContent() {
                   <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
                     <NotesPanel
                       notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-                      onAddNote={(type) => {
-                        setNoteDraft((current) => ({ ...current, type }));
-                        setNoteDialogOpen(true);
-                      }}
+                      onAddNote={openNoteDialog}
                     />
                   </Suspense>
                 </SafeSection>
@@ -5145,10 +5164,7 @@ export default function WorkboardContent() {
             <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
               <NotesPanel
                 notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-                onAddNote={(type) => {
-                  setNoteDraft((current) => ({ ...current, type }));
-                  setNoteDialogOpen(true);
-                }}
+                onAddNote={openNoteDialog}
               />
             </Suspense>
           </SafeSection>
@@ -5908,8 +5924,10 @@ export default function WorkboardContent() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setNoteDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveNote}>Save Note</Button>
+            <Button variant="outline" onClick={() => setNoteDialogOpen(false)} disabled={savingNote}>Cancel</Button>
+            <Button onClick={saveNote} disabled={savingNote || !noteDraft.content.trim()}>
+              {savingNote ? 'Saving...' : 'Save Note'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

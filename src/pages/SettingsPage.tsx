@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useTasks } from '@/lib/supabase-queries';
@@ -712,6 +712,7 @@ function WorkspaceTab({
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [propertyPendingDelete, setPropertyPendingDelete] = useState<PropertyItem | null>(null);
   const [savingProperty, setSavingProperty] = useState(false);
+  const savingPropertyRef = useRef(false);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string; category: string | null }>>([]);
   const [newEquipmentTypeName, setNewEquipmentTypeName] = useState('');
   const [newEquipmentTypeCategory, setNewEquipmentTypeCategory] = useState('General');
@@ -835,6 +836,7 @@ function WorkspaceTab({
   };
 
   const saveProperty = async () => {
+    if (savingPropertyRef.current) return;
     const storeOrgId = storeOrg?.id ?? orgId;
     const name = propertyForm.name.trim();
     const shortName = propertyForm.shortName.trim();
@@ -865,56 +867,61 @@ function WorkspaceTab({
     };
 
     setError(null);
+    savingPropertyRef.current = true;
     setSavingProperty(true);
     let insertedProperty: Property | null = null;
     let saveError: { message: string } | null = null;
-    if (editingPropertyId) {
-      const result = await supabase
-        .from('properties')
-        .update(payload)
-        .eq('id', editingPropertyId)
-        .eq('org_id', storeOrgId);
-      saveError = result.error;
-    } else {
-      const propertyId = crypto.randomUUID();
-      const result = await supabase
-        .from('properties')
-        .insert({
+    try {
+      if (editingPropertyId) {
+        const result = await supabase
+          .from('properties')
+          .update(payload)
+          .eq('id', editingPropertyId)
+          .eq('org_id', storeOrgId);
+        saveError = result.error;
+      } else {
+        const propertyId = crypto.randomUUID();
+        const result = await supabase
+          .from('properties')
+          .insert({
+            id: propertyId,
+            ...payload,
+          });
+        saveError = result.error;
+        insertedProperty = {
           id: propertyId,
           ...payload,
+          latitude: null,
+          longitude: null,
+          created_at: new Date().toISOString(),
+          weather_location_label: null,
+        };
+      }
+      if (saveError) {
+        setError(saveError.message);
+        toast.error(`Failed to save property: ${saveError.message}`);
+        return;
+      }
+      const propertiesBeforeRefresh = useAppStore.getState().properties;
+      await queryClient.invalidateQueries({ queryKey: ['properties'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] });
+      await queryClient.refetchQueries({ queryKey: ['properties'] });
+      await refreshProperties(storeOrgId);
+      if (insertedProperty) {
+        const refreshedProperties = useAppStore.getState().properties;
+        const propertiesById = new Map(
+          [...propertiesBeforeRefresh, ...refreshedProperties, insertedProperty].map((property) => [property.id, property]),
+        );
+        useAppStore.setState({
+          properties: Array.from(propertiesById.values()).sort((a, b) => a.name.localeCompare(b.name)),
         });
-      saveError = result.error;
-      insertedProperty = {
-        id: propertyId,
-        ...payload,
-        latitude: null,
-        longitude: null,
-        created_at: new Date().toISOString(),
-        weather_location_label: null,
-      };
+      }
+      toast.success(editingPropertyId ? 'Property updated successfully' : 'Property added successfully');
+      resetPropertyForm();
+    } finally {
+      savingPropertyRef.current = false;
+      setSavingProperty(false);
     }
-    setSavingProperty(false);
-    if (saveError) {
-      setError(saveError.message);
-      toast.error(`Failed to save property: ${saveError.message}`);
-      return;
-    }
-    const propertiesBeforeRefresh = useAppStore.getState().properties;
-    await queryClient.invalidateQueries({ queryKey: ['properties'] });
-    await queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] });
-    await queryClient.refetchQueries({ queryKey: ['properties'] });
-    await refreshProperties(storeOrgId);
-    if (insertedProperty) {
-      const refreshedProperties = useAppStore.getState().properties;
-      const propertiesById = new Map(
-        [...propertiesBeforeRefresh, ...refreshedProperties, insertedProperty].map((property) => [property.id, property]),
-      );
-      useAppStore.setState({
-        properties: Array.from(propertiesById.values()).sort((a, b) => a.name.localeCompare(b.name)),
-      });
-    }
-    toast.success(editingPropertyId ? 'Property updated successfully' : 'Property added successfully');
-    resetPropertyForm();
   };
 
   const startPropertyEdit = (property: PropertyItem) => {
@@ -3141,7 +3148,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
       .from('tasks')
       .insert({
         org_id: orgId,
-        property_id: propertyId,
+        property_id: null,
         name: newName.trim(),
         category: newCategory.trim() || 'General',
         priority: Number(newPriority),
