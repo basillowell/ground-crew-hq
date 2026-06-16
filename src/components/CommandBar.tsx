@@ -7,8 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAppStore } from '@/store/appStore';
 import { supabase } from '@/lib/supabase';
+import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { fetchNwsWeather } from '@/lib/weather/providers';
 import { getWeatherConditionMeta } from '@/lib/weather/wmoUtils';
 import { formatTime } from '@/utils/formatTime';
@@ -112,8 +112,8 @@ function answerLocally(question: string, context: ContextPayload): string {
 export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId }: CommandBarProps) {
   const navigate = useNavigate();
   const { orgId } = useAuth();
-  const properties = useAppStore((state) => state.properties);
-  const employees = useAppStore((state) => state.employees);
+  const { data: properties = [] } = useProperties(orgId ?? undefined);
+  const { data: employees = [] } = useEmployees(undefined, orgId ?? undefined, 'all');
   const [input, setInput] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -155,10 +155,10 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
       (employee) =>
         !currentPropertyId ||
         currentPropertyId === 'all' ||
-        employee.property_id === currentPropertyId,
+        employee.propertyId === currentPropertyId,
     );
     for (const employee of scopedEmployees) {
-      employeeNameMap.set(employee.id, `${employee.first_name} ${employee.last_name}`.trim());
+      employeeNameMap.set(employee.id, `${employee.firstName} ${employee.lastName}`.trim());
     }
 
     let schedulesQuery = supabase

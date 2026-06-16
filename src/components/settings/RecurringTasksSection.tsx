@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CalendarDays, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useAppStore } from '@/store/appStore';
+import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { toast } from '@/components/ui/sonner';
 import { Switch } from '@/components/ui/switch';
 
@@ -32,9 +32,8 @@ interface Props {
 }
 
 export function RecurringTasksSection({ orgId }: Props) {
-  const isHydrated = useAppStore((s) => s.isHydrated);
-  const employees = useAppStore((s) => s.employees);
-  const properties = useAppStore((s) => s.properties);
+  const { data: employees = [], isLoading: employeesLoading } = useEmployees(undefined, orgId ?? undefined, 'all');
+  const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
 
   const [rules, setRules] = useState<RecurringRule[]>([]);
   const [taskOptions, setTaskOptions] = useState<TaskOption[]>([]);
@@ -50,7 +49,7 @@ export function RecurringTasksSection({ orgId }: Props) {
   const [saving, setSaving] = useState(false);
 
   const fetchRules = useCallback(async () => {
-    if (!orgId || !isHydrated) return;
+    if (!orgId) return;
     setLoading(true);
     setError(null);
     const timer = window.setTimeout(() => setError('Request timed out after 8 seconds.'), 8000);
@@ -68,10 +67,10 @@ export function RecurringTasksSection({ orgId }: Props) {
       clearTimeout(timer);
       setLoading(false);
     }
-  }, [orgId, isHydrated]);
+  }, [orgId]);
 
   const fetchTasks = useCallback(async () => {
-    if (!orgId || !isHydrated) return;
+    if (!orgId) return;
     const { data } = await supabase
       .from('tasks')
       .select('id, name')
@@ -79,13 +78,13 @@ export function RecurringTasksSection({ orgId }: Props) {
       .eq('status', 'active')
       .order('name');
     setTaskOptions(data ?? []);
-  }, [orgId, isHydrated]);
+  }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (employeesLoading || propertiesLoading) return;
     void fetchRules();
     void fetchTasks();
-  }, [fetchRules, fetchTasks, isHydrated]);
+  }, [employeesLoading, fetchRules, fetchTasks, propertiesLoading]);
 
   const resetForm = () => {
     setFormTaskId('');
@@ -147,7 +146,7 @@ export function RecurringTasksSection({ orgId }: Props) {
   const getEmployeeName = (id: string | null) => {
     if (!id) return 'Any employee';
     const emp = employees.find((e) => e.id === id);
-    return emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown';
+    return emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown';
   };
 
   const getPropertyName = (id: string | null) => {
@@ -155,7 +154,7 @@ export function RecurringTasksSection({ orgId }: Props) {
     return properties.find((p) => p.id === id)?.name ?? 'Unknown';
   };
 
-  if (!isHydrated || loading) {
+  if (employeesLoading || propertiesLoading || loading) {
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((n) => (
@@ -227,7 +226,7 @@ export function RecurringTasksSection({ orgId }: Props) {
                   .filter((emp) => emp.active !== false)
                   .map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name}
+                      {emp.firstName} {emp.lastName}
                     </option>
                   ))}
               </select>

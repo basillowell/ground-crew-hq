@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useAppStore } from '@/store/appStore';
-import { useAssignments, useNotes, useTasks } from '@/lib/supabase-queries';
+import { useAssignments, useEmployees, useNotes, useProperties, useTasks } from '@/lib/supabase-queries';
 import { fetchNwsWeather } from '@/lib/weather/providers';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -54,24 +53,26 @@ function fmtDate(iso: string) {
 export default function BreakroomPage() {
   const { orgId, currentPropertyId, currentUser } = useAuth();
   const authUserId = currentUser?.authUser?.id;
-  const isHydrated = useAppStore((s) => s.isHydrated);
-  const employees = useAppStore((s) => s.employees);
-  const properties = useAppStore((s) => s.properties);
+  const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
   const todayKey = new Date().toLocaleDateString('en-CA');
   const selectedPropertyId =
     currentPropertyId && currentPropertyId !== 'all'
       ? currentPropertyId
       : currentUser?.propertyId || properties[0]?.id || '';
+  const { data: employees = [], isLoading: employeesLoading } = useEmployees(
+    selectedPropertyId || undefined,
+    orgId ?? undefined,
+  );
   const { data: notes = [], isLoading: notesLoading } = useNotes(
-    isHydrated ? selectedPropertyId : undefined,
-    isHydrated ? orgId ?? undefined : undefined,
+    selectedPropertyId || undefined,
+    orgId ?? undefined,
   );
   const { data: assignments = [] } = useAssignments(
     todayKey,
-    isHydrated ? selectedPropertyId : undefined,
-    isHydrated ? orgId ?? undefined : undefined,
+    selectedPropertyId || undefined,
+    orgId ?? undefined,
   );
-  const { data: tasks = [] } = useTasks(undefined, isHydrated ? orgId ?? undefined : undefined);
+  const { data: tasks = [] } = useTasks(undefined, orgId ?? undefined);
   const [weather, setWeather] = useState<BreakroomWeather | null>(null);
   const channels = [
     { id: COMPANY_CHANNEL, label: 'Company-wide' },
@@ -92,7 +93,7 @@ export default function BreakroomPage() {
     const employeeNames = new Map(
       employees.map((employee) => [
         employee.id,
-        `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim(),
+        `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim(),
       ]),
     );
     const taskNames = new Map(tasks.map((task) => [task.id, task.name]));
@@ -107,7 +108,7 @@ export default function BreakroomPage() {
   const myEmployeeId = currentUser?.employeeId ?? null;
 
   const fetchMessages = useCallback(async (channel: string) => {
-    if (!orgId || !isHydrated) return;
+    if (!orgId) return;
     setLoading(true);
     setError(null);
     const timer = window.setTimeout(() => setError('Request timed out after 8 seconds.'), 8000);
@@ -127,7 +128,7 @@ export default function BreakroomPage() {
       clearTimeout(timer);
       setLoading(false);
     }
-  }, [orgId, isHydrated]);
+  }, [orgId]);
 
   // Mark channel as read
   const markRead = useCallback((channel: string) => {
@@ -137,13 +138,13 @@ export default function BreakroomPage() {
   }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     void fetchMessages(activeChannel);
     markRead(activeChannel);
-  }, [fetchMessages, activeChannel, isHydrated, markRead]);
+  }, [fetchMessages, activeChannel, orgId, markRead]);
 
   useEffect(() => {
-    if (!isHydrated || activeProperty?.latitude == null || activeProperty.longitude == null) {
+    if (!orgId || activeProperty?.latitude == null || activeProperty.longitude == null) {
       setWeather(null);
       return;
     }
@@ -166,7 +167,7 @@ export default function BreakroomPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeProperty?.latitude, activeProperty?.longitude, isHydrated]);
+  }, [activeProperty?.latitude, activeProperty?.longitude, orgId]);
 
   // Scroll to bottom when messages load or change
   useEffect(() => {
@@ -175,7 +176,7 @@ export default function BreakroomPage() {
 
   // Realtime subscription
   useEffect(() => {
-    if (!supabase || !authUserId || !orgId || !isHydrated) return;
+    if (!supabase || !authUserId || !orgId) return;
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
     const timer = window.setTimeout(() => {
@@ -208,7 +209,7 @@ export default function BreakroomPage() {
       window.clearTimeout(timer);
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [activeChannel, authUserId, isHydrated, orgId]);
+  }, [activeChannel, authUserId, orgId]);
 
   const handleSend = async () => {
     if (!body.trim() || !orgId || !myEmployeeId) {
@@ -237,12 +238,12 @@ export default function BreakroomPage() {
 
   const getSenderName = (senderId: string) => {
     const emp = employees.find((e) => e.id === senderId);
-    return emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown';
+    return emp ? `${emp.firstName} ${emp.lastName}` : 'Unknown';
   };
 
   const getSenderInitials = (senderId: string) => {
     const emp = employees.find((e) => e.id === senderId);
-    return emp ? initials(emp.first_name, emp.last_name) : '?';
+    return emp ? initials(emp.firstName, emp.lastName) : '?';
   };
 
   // Group messages by date
@@ -260,7 +261,7 @@ export default function BreakroomPage() {
   const activeChannelLabel =
     channels.find((c) => c.id === activeChannel)?.label ?? activeChannel;
 
-  if (!isHydrated) return <PageSkeleton />;
+  if (!orgId || propertiesLoading || employeesLoading) return <PageSkeleton />;
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">

@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useTasks } from '@/lib/supabase-queries';
+import {
+  useDepartmentOptions,
+  useEmployees,
+  useProgramSettings,
+  useProperties,
+  useRoleOptions,
+  useTasks,
+  useWorkerTypes,
+} from '@/lib/supabase-queries';
+import type { Property as LiveProperty } from '@/data/seedData';
 import { formatTime } from '@/utils/formatTime';
 import { APP_VERSION } from '@/constants/version';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -29,7 +38,6 @@ import {
 } from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
 import { RecurringTasksSection } from '@/components/settings/RecurringTasksSection';
-import { useAppStore, type Property } from '@/store/appStore';
 import { type ThemeMode, useTheme } from '@/hooks/useTheme';
 import {
   DndContext,
@@ -169,6 +177,25 @@ interface PropertyFormData {
   city: string;
   state: string;
   acreage: string;
+}
+
+function toPropertyItem(property: LiveProperty, orgId: string | null): PropertyItem {
+  return {
+    id: property.id,
+    name: property.name,
+    org_id: orgId ?? '',
+    short_name: property.shortName ?? null,
+    logo_initials: property.logoInitials ?? null,
+    color: property.color ?? null,
+    city: property.city ?? null,
+    state: property.state ?? null,
+    latitude: property.latitude ?? null,
+    longitude: property.longitude ?? null,
+    acreage: property.acreage ?? null,
+    status: property.status ?? null,
+    weather_location_label: null,
+    created_at: null,
+  };
 }
 
 interface UsageStats {
@@ -568,7 +595,6 @@ function OperationsTab({
 }
 
 function EquipmentTab({ orgId }: { orgId: string | null }) {
-  const isHydrated = useAppStore((state) => state.isHydrated);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string; category: string | null }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -594,9 +620,9 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
   }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     void fetchTypes();
-  }, [fetchTypes, isHydrated]);
+  }, [fetchTypes, orgId]);
 
   const addType = async () => {
     if (!supabase || !orgId || !newName.trim()) return;
@@ -679,13 +705,6 @@ function WorkspaceTab({
   userRole: string | null;
   currentPropertyId: string;
 }) {
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeOrg = useAppStore((state) => state.org);
-  const storeProperties = useAppStore((state) => state.properties);
-  const storeEmployees = useAppStore((state) => state.employees);
-  const storeDepartments = useAppStore((state) => state.departments);
-  const hydrateStore = useAppStore((state) => state.hydrate);
-  const refreshProperties = useAppStore((state) => state.refreshProperties);
   const { theme, setTheme } = useTheme();
   const SOP_STORAGE_KEY = 'ground-crew-sops';
   const sopCategoryOptions: StandardOperatingProcedure['category'][] = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
@@ -718,9 +737,32 @@ function WorkspaceTab({
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const propertiesQuery = useProperties(orgId ?? undefined);
+  const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
+  const departmentsQuery = useDepartmentOptions(orgId ?? undefined);
+  const orgInfoQuery = useQuery({
+    queryKey: ['organization-info', orgId ?? 'no-org'],
+    queryFn: async () => {
+      if (!supabase || !orgId) return null;
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('name, plan, subscription_status, created_at')
+        .eq('id', orgId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as OrganizationInfo | null;
+    },
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 30,
+    retry: 3,
+    retryDelay: 1000,
+  });
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [orgNameDraft, setOrgNameDraft] = useState('');
-  const properties = useMemo(() => storeProperties as PropertyItem[], [storeProperties]);
+  const properties = useMemo(
+    () => (propertiesQuery.data ?? []).map((property) => toPropertyItem(property, orgId)),
+    [orgId, propertiesQuery.data],
+  );
   const [loading, setLoading] = useState(true);
   const [showTimeout, setShowTimeout] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -805,34 +847,34 @@ function WorkspaceTab({
       return;
     }
 
-    const nextOrgInfo = storeOrg
-      ? ({
-          name: storeOrg.name,
-          plan: storeOrg.plan,
-          subscription_status: storeOrg.subscription_status,
-          created_at: '',
-        } satisfies OrganizationInfo)
-      : null;
+    const nextOrgInfo = orgInfoQuery.data ?? null;
     setOrgInfo(nextOrgInfo);
     setOrgNameDraft(String(nextOrgInfo?.name ?? ''));
     setEquipmentTypes((equipmentTypesData ?? []) as Array<{ id: string; name: string; category: string | null }>);
     setUsageStats({
-      properties: storeProperties.length,
-      employees: storeEmployees.length,
+      properties: properties.length,
+      employees: employeesQuery.data?.length ?? 0,
       tasks: tasksCount ?? 0,
       scheduleEntriesThisMonth: scheduleCount ?? 0,
       weatherLocations: weatherCount ?? 0,
-      departments: storeDepartments.filter((department) => department.active).length,
+      departments: departmentsQuery.data?.length ?? 0,
       shiftTemplates: shiftTemplatesCount ?? 0,
     });
     setLoading(false);
-  }, [orgId, storeDepartments, storeEmployees.length, storeOrg, storeProperties.length]);
+  }, [departmentsQuery.data?.length, employeesQuery.data?.length, orgId, orgInfoQuery.data, properties.length]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     if (!orgId) return;
+    if (propertiesQuery.isLoading || employeesQuery.isLoading || departmentsQuery.isLoading || orgInfoQuery.isLoading) return;
     void fetchWorkspaceData();
-  }, [fetchWorkspaceData, isHydrated, orgId]);
+  }, [
+    departmentsQuery.isLoading,
+    employeesQuery.isLoading,
+    fetchWorkspaceData,
+    orgId,
+    orgInfoQuery.isLoading,
+    propertiesQuery.isLoading,
+  ]);
 
   const hasWorkspaceResult =
     !loading ||
@@ -864,7 +906,7 @@ function WorkspaceTab({
       toast.error(`Failed to save organization name: ${updateError.message}`);
       return;
     }
-    await hydrateStore(orgId);
+    await queryClient.invalidateQueries({ queryKey: ['organization-info', orgId] });
     setOrgInfo((current) => (current ? { ...current, name: orgNameDraft.trim() } : current));
     toast.success('Organization updated');
   };
@@ -876,7 +918,7 @@ function WorkspaceTab({
 
   const saveProperty = async () => {
     if (savingPropertyRef.current) return;
-    const storeOrgId = storeOrg?.id ?? orgId;
+    const storeOrgId = orgId;
     const name = propertyForm.name.trim();
     const shortName = propertyForm.shortName.trim();
     const logoInitials = propertyForm.logoInitials.trim().slice(0, 3).toUpperCase();
@@ -908,7 +950,6 @@ function WorkspaceTab({
     setError(null);
     savingPropertyRef.current = true;
     setSavingProperty(true);
-    let insertedProperty: Property | null = null;
     let saveError: { message: string } | null = null;
     try {
       if (editingPropertyId) {
@@ -927,34 +968,15 @@ function WorkspaceTab({
             ...payload,
           });
         saveError = result.error;
-        insertedProperty = {
-          id: propertyId,
-          ...payload,
-          latitude: null,
-          longitude: null,
-          created_at: new Date().toISOString(),
-          weather_location_label: null,
-        };
       }
       if (saveError) {
         setError(saveError.message);
         toast.error(`Failed to save property: ${saveError.message}`);
         return;
       }
-      const propertiesBeforeRefresh = useAppStore.getState().properties;
       await queryClient.invalidateQueries({ queryKey: ['properties'] });
       await queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] });
       await queryClient.refetchQueries({ queryKey: ['properties'] });
-      await refreshProperties(storeOrgId);
-      if (insertedProperty) {
-        const refreshedProperties = useAppStore.getState().properties;
-        const propertiesById = new Map(
-          [...propertiesBeforeRefresh, ...refreshedProperties, insertedProperty].map((property) => [property.id, property]),
-        );
-        useAppStore.setState({
-          properties: Array.from(propertiesById.values()).sort((a, b) => a.name.localeCompare(b.name)),
-        });
-      }
       toast.success(editingPropertyId ? 'Property updated successfully' : 'Property added successfully');
       resetPropertyForm();
     } finally {
@@ -985,10 +1007,7 @@ function WorkspaceTab({
       toast.error(`Failed to delete property: ${deleteError.message}`);
       return;
     }
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['properties'] }),
-      refreshProperties(orgId),
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ['properties'] });
     setPropertyPendingDelete(null);
     if (editingPropertyId === propertyId) resetPropertyForm();
     toast.success('Property deleted');
@@ -1099,7 +1118,9 @@ function WorkspaceTab({
 
     let demoEmployees: Array<{ id: string; first_name: string; last_name: string }> = [];
 
-    if (storeEmployees.length < 3) {
+    const liveEmployees = employeesQuery.data ?? [];
+
+    if (liveEmployees.length < 3) {
       const employeeRows = demoEmployeesSeed.map((employee) => ({
         id: crypto.randomUUID(),
         org_id: orgId,
@@ -1126,11 +1147,11 @@ function WorkspaceTab({
         last_name,
       }));
     } else {
-      demoEmployees = storeEmployees
+      demoEmployees = liveEmployees
         .filter((employee) => employee.active && employee.status === 'active')
-        .sort((left, right) => left.last_name.localeCompare(right.last_name))
+        .sort((left, right) => left.lastName.localeCompare(right.lastName))
         .slice(0, 4)
-        .map(({ id, first_name, last_name }) => ({ id, first_name, last_name }));
+        .map(({ id, firstName, lastName }) => ({ id, first_name: firstName, last_name: lastName }));
     }
 
     const taskSeed = [
@@ -1856,34 +1877,30 @@ function WorkspaceTab({
 }
 
 function WorkforceTab({ orgId }: { orgId: string | null }) {
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeDepartments = useAppStore((state) => state.departments);
-  const storeWorkforceRoles = useAppStore((state) => state.workforceRoles);
-  const storeWorkerTypes = useAppStore((state) => state.workerTypes);
-  const refreshDepartments = useAppStore((state) => state.refreshDepartments);
-  const refreshWorkforceRoles = useAppStore((state) => state.refreshWorkforceRoles);
-  const refreshWorkerTypes = useAppStore((state) => state.refreshWorkerTypes);
+  const queryClient = useQueryClient();
+  const departmentsQuery = useDepartmentOptions(orgId ?? undefined);
+  const rolesQuery = useRoleOptions(orgId ?? undefined);
+  const workerTypesQuery = useWorkerTypes(orgId ?? undefined);
   const departments = useMemo(
     () =>
-      storeDepartments
-        .filter((department) => department.active)
+      (departmentsQuery.data ?? [])
         .map(({ id, name }) => ({ id, name }))
         .sort((left, right) => left.name.localeCompare(right.name)),
-    [storeDepartments],
+    [departmentsQuery.data],
   );
   const roles = useMemo(
     () =>
-      storeWorkforceRoles
-        .filter((role) => role.active && role.name.trim())
+      (rolesQuery.data ?? [])
+        .filter((role) => role.name.trim())
         .map(({ id, name }) => ({ id, name })),
-    [storeWorkforceRoles],
+    [rolesQuery.data],
   );
   const workerTypes = useMemo(
     () =>
-      storeWorkerTypes
-        .filter((workerType) => workerType.active && workerType.name.trim())
+      (workerTypesQuery.data ?? [])
+        .filter((workerType) => workerType.name.trim())
         .map(({ id, name }) => ({ id, name })),
-    [storeWorkerTypes],
+    [workerTypesQuery.data],
   );
   const [newDepartmentName, setNewDepartmentName] = useState('');
   const [newRoleName, setNewRoleName] = useState('');
@@ -1902,17 +1919,18 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     setLoading(true);
     setError(null);
     await Promise.all([
-      refreshWorkforceRoles(orgId),
-      refreshWorkerTypes(orgId),
+      queryClient.invalidateQueries({ queryKey: ['department-options'] }),
+      queryClient.invalidateQueries({ queryKey: ['role-options'] }),
+      queryClient.invalidateQueries({ queryKey: ['worker-types'] }),
     ]);
     setLoading(false);
-  }, [orgId, refreshWorkerTypes, refreshWorkforceRoles]);
+  }, [orgId, queryClient]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     if (!orgId) return;
+    if (departmentsQuery.isLoading || rolesQuery.isLoading || workerTypesQuery.isLoading) return;
     void fetchWorkforceSummary();
-  }, [fetchWorkforceSummary, isHydrated, orgId]);
+  }, [departmentsQuery.isLoading, fetchWorkforceSummary, orgId, rolesQuery.isLoading, workerTypesQuery.isLoading]);
 
   const addDepartment = useCallback(async () => {
     if (!supabase || !orgId || !newDepartmentName.trim()) return;
@@ -1929,8 +1947,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     }
     toast.success(`Department added: ${newDepartmentName.trim()}`);
     setNewDepartmentName('');
-    await refreshDepartments(orgId);
-  }, [newDepartmentName, orgId, refreshDepartments]);
+    await queryClient.invalidateQueries({ queryKey: ['department-options'] });
+  }, [newDepartmentName, orgId, queryClient]);
 
   const saveDepartmentEdit = useCallback(async () => {
     if (!supabase || !orgId || !editingDepartmentId || !editingDepartmentName.trim()) return;
@@ -1947,8 +1965,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     toast.success(`Department updated: ${editingDepartmentName.trim()}`);
     setEditingDepartmentId(null);
     setEditingDepartmentName('');
-    await refreshDepartments(orgId);
-  }, [editingDepartmentId, editingDepartmentName, orgId, refreshDepartments]);
+    await queryClient.invalidateQueries({ queryKey: ['department-options'] });
+  }, [editingDepartmentId, editingDepartmentName, orgId, queryClient]);
 
   const deactivateDepartment = useCallback(async (departmentId: string, departmentName: string) => {
     if (!supabase || !orgId) return;
@@ -1965,8 +1983,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
       return;
     }
     toast.success(`Department deactivated: ${departmentName}`);
-    await refreshDepartments(orgId);
-  }, [orgId, refreshDepartments]);
+    await queryClient.invalidateQueries({ queryKey: ['department-options'] });
+  }, [orgId, queryClient]);
 
   const addRole = useCallback(async () => {
     if (!supabase || !orgId || !newRoleName.trim()) return;
@@ -1983,8 +2001,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     }
     toast.success(`Role added: ${newRoleName.trim()}`);
     setNewRoleName('');
-    await refreshWorkforceRoles(orgId);
-  }, [newRoleName, orgId, refreshWorkforceRoles]);
+    await queryClient.invalidateQueries({ queryKey: ['role-options'] });
+  }, [newRoleName, orgId, queryClient]);
 
   const saveRoleEdit = useCallback(async () => {
     if (!supabase || !orgId || !editingRoleId || !editingRoleName.trim()) return;
@@ -2001,8 +2019,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     toast.success(`Role updated: ${editingRoleName.trim()}`);
     setEditingRoleId(null);
     setEditingRoleName('');
-    await refreshWorkforceRoles(orgId);
-  }, [editingRoleId, editingRoleName, orgId, refreshWorkforceRoles]);
+    await queryClient.invalidateQueries({ queryKey: ['role-options'] });
+  }, [editingRoleId, editingRoleName, orgId, queryClient]);
 
   const deactivateRole = useCallback(async (roleId: string, roleName: string) => {
     if (!supabase || !orgId) return;
@@ -2019,8 +2037,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
       return;
     }
     toast.success(`Role deactivated: ${roleName}`);
-    await refreshWorkforceRoles(orgId);
-  }, [orgId, refreshWorkforceRoles]);
+    await queryClient.invalidateQueries({ queryKey: ['role-options'] });
+  }, [orgId, queryClient]);
 
   const addWorkerType = useCallback(async () => {
     if (!supabase || !orgId || !newWorkerTypeName.trim()) return;
@@ -2035,8 +2053,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     }
     setNewWorkerTypeName('');
     toast.success('Worker type added');
-    await refreshWorkerTypes(orgId);
-  }, [newWorkerTypeName, orgId, refreshWorkerTypes]);
+    await queryClient.invalidateQueries({ queryKey: ['worker-types'] });
+  }, [newWorkerTypeName, orgId, queryClient]);
 
   const saveWorkerTypeEdit = useCallback(async () => {
     if (!supabase || !orgId || !editingWorkerTypeId || !editingWorkerTypeName.trim()) return;
@@ -2052,8 +2070,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
     setEditingWorkerTypeId(null);
     setEditingWorkerTypeName('');
     toast.success('Worker type updated');
-    await refreshWorkerTypes(orgId);
-  }, [editingWorkerTypeId, editingWorkerTypeName, orgId, refreshWorkerTypes]);
+    await queryClient.invalidateQueries({ queryKey: ['worker-types'] });
+  }, [editingWorkerTypeId, editingWorkerTypeName, orgId, queryClient]);
 
   const deactivateWorkerType = useCallback(async (workerTypeId: string, workerTypeName: string) => {
     if (!supabase || !orgId) return;
@@ -2068,8 +2086,8 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
       return;
     }
     toast.success('Worker type deactivated');
-    await refreshWorkerTypes(orgId);
-  }, [orgId, refreshWorkerTypes]);
+    await queryClient.invalidateQueries({ queryKey: ['worker-types'] });
+  }, [orgId, queryClient]);
 
   if (!orgId || loading) return <PageSkeleton />;
   if (error) return <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWorkforceSummary()} />;
@@ -2177,15 +2195,14 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
 }
 
 function WeatherTab({ orgId }: { orgId: string | null }) {
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeProperties = useAppStore((state) => state.properties);
+  const propertiesQuery = useProperties(orgId ?? undefined);
   const [locations, setLocations] = useState<WeatherLocationItem[]>([]);
   const properties = useMemo(
     () =>
-      storeProperties
+      (propertiesQuery.data ?? [])
         .map(({ id, name }) => ({ id, name }))
         .sort((left, right) => left.name.localeCompare(right.name)),
-    [storeProperties],
+    [propertiesQuery.data],
   );
   const [prefs, setPrefs] = useState<{ show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }>({
     show_hourly: true,
@@ -2257,10 +2274,10 @@ function WeatherTab({ orgId }: { orgId: string | null }) {
   }, [orgId, properties, stationPropertyId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     if (!orgId) return;
+    if (propertiesQuery.isLoading) return;
     void fetchWeatherSettings();
-  }, [fetchWeatherSettings, isHydrated, orgId]);
+  }, [fetchWeatherSettings, orgId, propertiesQuery.isLoading]);
 
   const savePrefs = useCallback(async (nextPrefs: { show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }) => {
     if (!supabase || !orgId) return;
@@ -2610,13 +2627,28 @@ function AccessTab({
   orgId: string | null;
   employeeName: string;
 }) {
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeOrg = useAppStore((state) => state.org);
-  const storeProperties = useAppStore((state) => state.properties);
-  const storeEmployees = useAppStore((state) => state.employees);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const organizationName = storeOrg?.name ?? '';
+  const propertiesQuery = useProperties(orgId ?? undefined);
+  const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
+  const orgInfoQuery = useQuery({
+    queryKey: ['organization-info', orgId ?? 'no-org'],
+    queryFn: async () => {
+      if (!supabase || !orgId) return null;
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('name, plan, subscription_status, created_at')
+        .eq('id', orgId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as OrganizationInfo | null;
+    },
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 30,
+    retry: 3,
+    retryDelay: 1000,
+  });
+  const organizationName = orgInfoQuery.data?.name ?? '';
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'Manager' | 'Field Staff'>('Manager');
@@ -2683,8 +2715,8 @@ function AccessTab({
     }
 
     setSystemInfo({
-      propertyCount: storeProperties.length,
-      employeeCount: storeEmployees.length,
+      propertyCount: propertiesQuery.data?.length ?? 0,
+      employeeCount: employeesQuery.data?.length ?? 0,
       taskCount: tasksCountResult.count ?? 0,
       scheduleEntriesThisWeek: scheduleCountResult.count ?? 0,
       assignmentsToday: assignmentsCountResult.count ?? 0,
@@ -2692,20 +2724,22 @@ function AccessTab({
     });
     setAppUsers((appUsersResult.data as AppUserRow[]) ?? []);
     setLoading(false);
-  }, [orgId, storeEmployees.length, storeProperties.length]);
+  }, [employeesQuery.data?.length, orgId, propertiesQuery.data?.length]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     if (!orgId) return;
+    if (employeesQuery.isLoading || propertiesQuery.isLoading || orgInfoQuery.isLoading) return;
     void fetchOrganizationName();
-  }, [fetchOrganizationName, isHydrated, orgId]);
+  }, [employeesQuery.isLoading, fetchOrganizationName, orgId, orgInfoQuery.isLoading, propertiesQuery.isLoading]);
 
   const handleSignOut = async () => {
     try {
       queryClient.clear();
+      window.localStorage.removeItem('ground-crew-query-cache-v3');
+      window.localStorage.removeItem('ground-crew-query-cache-v2');
       window.localStorage.removeItem('ground-crew-query-cache');
       Object.keys(window.localStorage).forEach((key) => {
-        if (key.startsWith('ground-crew') || key.startsWith('workflow') || key.startsWith('field-cache')) {
+        if (key.startsWith('ground-crew-query-cache')) {
           window.localStorage.removeItem(key);
         }
       });
@@ -2719,6 +2753,8 @@ function AccessTab({
 
   const handleClearAppCache = () => {
     queryClient.clear();
+    window.localStorage.removeItem('ground-crew-query-cache-v3');
+    window.localStorage.removeItem('ground-crew-query-cache-v2');
     window.localStorage.removeItem('ground-crew-query-cache');
     window.location.reload();
   };
@@ -2813,7 +2849,7 @@ Your role: ${inviteRole}
         ) : (
           <div className="overflow-hidden rounded-xl border border-surface-border">
             {appUsers.map((appUser) => {
-              const employee = storeEmployees.find((item) => item.id === appUser.employee_id);
+              const employee = employeesQuery.data?.find((item) => item.id === appUser.employee_id);
               const roleClass =
                 appUser.role.toLowerCase() === 'admin'
                   ? 'bg-brand-ghost text-brand'
@@ -2827,7 +2863,7 @@ Your role: ${inviteRole}
                 >
                   <div>
                     <p className="text-sm font-medium text-text-primary">
-                      {employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown employee'}
+                      {employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown employee'}
                     </p>
                     <p className="text-xs text-text-muted">{employee?.email ?? 'No email available'}</p>
                   </div>
@@ -2841,7 +2877,7 @@ Your role: ${inviteRole}
                     className={settingsInputClass}
                     value={appUser.role}
                     onChange={(event) => void updateUserRole(appUser.id, event.target.value)}
-                    aria-label={`Change role for ${employee?.first_name ?? 'user'}`}
+                    aria-label={`Change role for ${employee?.firstName ?? 'user'}`}
                   >
                     <option value="Admin">Admin</option>
                     <option value="Manager">Manager</option>
@@ -3024,8 +3060,7 @@ function HelpTab() {
 function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; propertyId: string | null }) {
   const { orgId } = useAuth();
   const queryClient = useQueryClient();
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeEmployees = useAppStore((state) => state.employees);
+  const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
   const { data: rawTasks = [], isLoading: tasksLoading } = useTasks(undefined, orgId ?? undefined);
   const taskSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -3100,11 +3135,11 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   );
   const employees = useMemo(
     () =>
-      storeEmployees
+      (employeesQuery.data ?? [])
         .filter((employee) => employee.active)
-        .map(({ id, first_name, last_name, status }) => ({ id, first_name, last_name, status }))
+        .map(({ id, firstName, lastName, status }) => ({ id, first_name: firstName, last_name: lastName, status }))
         .sort((left, right) => left.last_name.localeCompare(right.last_name)),
-    [storeEmployees],
+    [employeesQuery.data],
   );
   const [recurringRules, setRecurringRules] = useState<RecurringTaskRule[]>([]);
   const [recurringDrafts, setRecurringDrafts] = useState<Record<string, { enabled: boolean; days: string[]; assignMode: 'all' | 'specific'; employeeId: string }>>({});
@@ -3161,9 +3196,9 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (employeesQuery.isLoading) return;
     void fetchTasks();
-  }, [fetchTasks, isHydrated]);
+  }, [employeesQuery.isLoading, fetchTasks]);
 
   const hasTaskLibraryResult = (!tasksLoading && !loading) || Boolean(error) || tasks.length > 0;
 
@@ -3713,7 +3748,6 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
 }
 
 function SchedulerTab({ orgId }: { orgId: string | null }) {
-  const isHydrated = useAppStore((state) => state.isHydrated);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -3808,14 +3842,14 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
   }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     void fetchSettings();
-  }, [fetchSettings, isHydrated]);
+  }, [fetchSettings, orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     void fetchTemplates();
-  }, [fetchTemplates, isHydrated]);
+  }, [fetchTemplates, orgId]);
 
   if (!orgId) return <PageSkeleton />;
 

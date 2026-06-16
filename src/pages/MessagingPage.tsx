@@ -8,33 +8,32 @@ import { Send, Mail, Phone, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageSkeleton } from '@/components/PageSkeleton';
-import { useAppStore } from '@/store/appStore';
+import { useEmployees } from '@/lib/supabase-queries';
 import { PageHeader } from '@/components/shared';
 
 export default function MessagingPage() {
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeEmployees = useAppStore((state) => state.employees);
   const [selected, setSelected] = useState<string[]>([]);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [search, setSearch] = useState('');
   const { toast } = useToast();
   const { currentPropertyId, currentUser } = useAuth();
+  const { data: liveEmployees = [], isLoading: employeesLoading } = useEmployees(undefined, currentUser?.orgId ?? undefined, 'all');
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
 
   // TODO: Restore inbox history and realtime updates when a typed chat table is added to the live schema.
 
   const employees = useMemo(
     () =>
-      storeEmployees
-        .filter((employee) => propertyScope === 'all' || !propertyScope || employee.property_id === propertyScope)
+      liveEmployees
+        .filter((employee) => propertyScope === 'all' || !propertyScope || employee.propertyId === propertyScope)
         .map((employee) => ({
           id: employee.id,
-          firstName: employee.first_name,
-          lastName: employee.last_name,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
           status: employee.status,
         })),
-    [propertyScope, storeEmployees],
+    [liveEmployees, propertyScope],
   );
 
   const filtered = useMemo(
@@ -58,7 +57,7 @@ export default function MessagingPage() {
     setBody('');
   };
 
-  if (!currentUser?.orgId || !isHydrated) {
+  if (!currentUser?.orgId || employeesLoading) {
     return <PageSkeleton />;
   }
 

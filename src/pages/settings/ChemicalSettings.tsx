@@ -6,33 +6,33 @@ import { useChemicalSettings } from '@/hooks/useChemicalSettings';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/sonner';
 import ProductManager from '@/components/chemicals/ProductManager';
-import { useAppStore } from '@/store/appStore';
+import { useEmployees, useProperties } from '@/lib/supabase-queries';
 
 export default function ChemicalSettings() {
   const { currentUser } = useAuth();
   const orgId = currentUser?.orgId;
-  const storeProperties = useAppStore((state) => state.properties);
-  const storeEmployees = useAppStore((state) => state.employees);
+  const { data: liveProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
+  const { data: liveEmployees = [], isLoading: employeesLoading } = useEmployees(undefined, orgId, 'all');
   const { settings, setSettings, isLoading, isSaving, error, saveSettings } = useChemicalSettings();
   const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
 
   const properties = useMemo(
-    () => storeProperties.map(({ id, name }) => ({ id, name })),
-    [storeProperties],
+    () => liveProperties.map(({ id, name }) => ({ id, name })),
+    [liveProperties],
   );
   const employees = useMemo(
     () =>
-      storeEmployees.map(({ id, first_name, last_name }) => ({
+      liveEmployees.map(({ id, firstName, lastName }) => ({
         id,
-        firstName: first_name,
-        lastName: last_name,
+        firstName,
+        lastName,
       })),
-    [storeEmployees],
+    [liveEmployees],
   );
 
   const canSave = useMemo(() => Boolean(settings && orgId), [settings, orgId]);
 
-  if (!orgId || isLoading || !settings) {
+  if (!orgId || isLoading || propertiesLoading || employeesLoading || !settings) {
     return (
       <Card className="p-4">
         <p className="text-sm text-muted-foreground">Loading chemical settings...</p>

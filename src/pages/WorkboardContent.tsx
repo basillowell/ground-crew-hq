@@ -50,8 +50,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAssignments, useDepartmentOptions, useEquipmentUnits, useNotes, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
-import { useAppStore, type Employee as StoreEmployee, type Property as StoreProperty } from '@/store/appStore';
+import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { fetchNwsWeather } from '@/lib/weather/providers';
 import {
   getOperationalTimezone,
@@ -313,54 +312,6 @@ function normalizeWorkLocation(row: Record<string, unknown>): WorkLocation {
     name: String(row.name ?? ''),
     propertyId: row.propertyId ? String(row.propertyId) : row.property_id ? String(row.property_id) : undefined,
     propertyName: row.propertyName ? String(row.propertyName) : row.property_name ? String(row.property_name) : undefined,
-  };
-}
-
-function toWorkboardProperty(row: StoreProperty): Property {
-  return {
-    id: row.id,
-    name: row.name,
-    shortName: row.short_name,
-    type: 'Property',
-    address: '',
-    city: row.city,
-    state: row.state,
-    latitude: row.latitude ?? undefined,
-    longitude: row.longitude ?? undefined,
-    acreage: Number(row.acreage ?? 0),
-    logoInitials: row.logo_initials,
-    color: row.color,
-    status: row.status as Property['status'],
-  };
-}
-
-function toWorkboardEmployee(row: StoreEmployee): Employee {
-  return {
-    id: row.id,
-    propertyId: row.property_id ?? undefined,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    role: row.role,
-    department: row.department,
-    status: (row.status as Employee['status']) ?? 'active',
-    phone: row.phone ?? '',
-    email: row.email ?? '',
-    group: row.group_name ?? row.department ?? 'General',
-    wage: Number(row.hourly_rate ?? 0),
-    photo: '',
-    language: row.language ?? 'English',
-    workerType: (row.worker_type as Employee['workerType']) ?? 'full-time',
-    jobDescriptionId: row.job_description_id ?? undefined,
-    jobDescription: row.job_description ?? undefined,
-    employmentStatusId: row.employment_status_id ?? undefined,
-    employmentStatus: row.employment_status ?? undefined,
-    wageCategoryId: row.wage_category_id ?? undefined,
-    overtimeRuleId: row.overtime_rule_id ?? undefined,
-    hireDate: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-    defaultLocationId: row.default_location_id ?? undefined,
-    shiftTemplateId: row.preferred_shift_template_id ?? undefined,
-    portalEnabled: row.portal_enabled ?? false,
-    loginEmail: row.login_email ?? undefined,
   };
 }
 
@@ -700,11 +651,13 @@ export default function WorkboardContent() {
     );
   }, []);
 
-  const storeProperties = useAppStore((state) => state.properties);
-  const storeEmployees = useAppStore((state) => state.employees);
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const orgId = isHydrated ? authOrgId ?? currentUser?.orgId : undefined;
+  const orgId = authOrgId ?? currentUser?.orgId;
   const safeOrgId = authOrgId ?? currentUser?.orgId ?? '';
+  const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
+  const { data: storeEmployees = [], isLoading: employeesLoading } = useEmployees(
+    effectivePropertyId === 'all' ? undefined : effectivePropertyId,
+    orgId,
+  );
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, orgId);
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, orgId);
   const {
@@ -715,19 +668,19 @@ export default function WorkboardContent() {
   } = useTasks(undefined, authOrgId ?? undefined);
   const showTaskLoading = isLoadingTasks && taskOptions.length === 0;
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
-  const notesQuery = useNotes(isHydrated ? effectivePropertyId : undefined, orgId);
+  const notesQuery = useNotes(effectivePropertyId, orgId);
   const departmentsQuery = useDepartmentOptions(orgId);
   const taskLibraryError = (tasksError as { message?: string } | null)?.message ?? null;
 
   const availableEquipmentQuery = useQuery({
-    queryKey: ['workboard-available-equipment', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
+    queryKey: ['workboard-available-equipment', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
     queryFn: async () => {
-      if (!supabase || !currentUser?.orgId) return [] as AvailableEquipmentItem[];
+      if (!supabase || !orgId) return [] as AvailableEquipmentItem[];
       const { data, error } = await supabase
         .from('equipment_units')
         .select('id, name, unit_name, type, status, active, org_id')
-        .eq('org_id', currentUser.orgId)
+        .eq('org_id', orgId)
         .eq('active', true)
         .eq('status', 'available')
         .order('unit_name', { ascending: true });
@@ -738,12 +691,12 @@ export default function WorkboardContent() {
   });
 
   const taskRequestsQuery = useQuery({
-    queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
+    queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase) return [] as NeedsQueueRequest[];
       let query = supabase.from('task_requests').select('*').order('priority', { ascending: true }).order('created_at', { ascending: false });
-      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
       const { data, error } = await query;
       if (error) throw error;
@@ -754,14 +707,14 @@ export default function WorkboardContent() {
   });
 
   const escalationThresholdsQuery = useQuery({
-    queryKey: ['workboard-escalation-thresholds', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
+    queryKey: ['workboard-escalation-thresholds', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
     queryFn: async () => {
-      if (!supabase || !currentUser?.orgId) return DEFAULT_ESCALATION_THRESHOLDS;
+      if (!supabase || !orgId) return DEFAULT_ESCALATION_THRESHOLDS;
       const { data, error } = await supabase
         .from('scheduler_settings')
         .select('escalation_config')
-        .eq('org_id', currentUser.orgId)
+        .eq('org_id', orgId)
         .single();
       if (error) {
         return DEFAULT_ESCALATION_THRESHOLDS;
@@ -773,8 +726,8 @@ export default function WorkboardContent() {
   });
 
   const pendingTaskRequestsQuery = useQuery({
-    queryKey: ['task-requests-pending', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
+    queryKey: ['task-requests-pending', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase) return [] as PendingTaskRequest[];
       const today = getLocalDateKey();
@@ -785,7 +738,7 @@ export default function WorkboardContent() {
         .eq('date', today)
         .order('created_at', { ascending: true });
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
-      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      if (orgId) query = query.eq('org_id', orgId);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as PendingTaskRequest[];
@@ -795,15 +748,15 @@ export default function WorkboardContent() {
   });
 
   const weatherLogsQuery = useQuery({
-    queryKey: ['weather-daily-logs', boardDate, currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
+    queryKey: ['weather-daily-logs', boardDate, orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
     queryFn: async () => {
       try {
         if (!supabase) return [] as WeatherDailyLog[];
         let locationQuery = supabase
           .from('weather_locations')
           .select('id, name, property, area, latitude, longitude, org_id, is_active')
-          .eq('org_id', currentUser?.orgId ?? '');
+          .eq('org_id', orgId ?? '');
         locationQuery = locationQuery.eq('is_active', true);
         if (effectivePropertyId && effectivePropertyId !== 'all') {
           locationQuery = locationQuery.eq('property', effectivePropertyId);
@@ -830,15 +783,15 @@ export default function WorkboardContent() {
   });
 
   const weatherLocationsQuery = useQuery({
-    queryKey: ['weather-locations', effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
+    queryKey: ['weather-locations', effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase) return [] as WeatherLocation[];
       let query = supabase
         .from('weather_locations')
         .select('id, name, property, area, latitude, longitude, org_id, is_active')
         .eq('is_active', true);
-      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property', effectivePropertyId);
       const { data, error } = await query;
       if (error) return [] as WeatherLocation[];
@@ -847,12 +800,12 @@ export default function WorkboardContent() {
     staleTime: 1000 * 60 * 5,
   });
   const workOrdersQuery = useQuery({
-    queryKey: ['work-orders', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId && workOrdersExpanded),
+    queryKey: ['work-orders', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId && workOrdersExpanded),
     queryFn: async () => {
       if (!supabase) return [] as Array<Record<string, unknown>>;
       let query = supabase.from('work_orders').select('*').order('created_at', { ascending: false });
-      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
       const { data, error } = await query;
       if (error) throw error;
@@ -862,12 +815,12 @@ export default function WorkboardContent() {
   });
 
   const workLocationsQuery = useQuery({
-    queryKey: ['work-locations', effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId),
+    queryKey: ['work-locations', effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase) return [] as WorkLocation[];
       let query = supabase.from('work_locations').select('*');
-      if (currentUser?.orgId) query = query.eq('org_id', currentUser.orgId);
+      if (orgId) query = query.eq('org_id', orgId);
       const { data, error } = await query;
       if (error) return [] as WorkLocation[];
       return (data ?? []).map((row) => normalizeWorkLocation(row as Record<string, unknown>));
@@ -875,10 +828,7 @@ export default function WorkboardContent() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const properties = useMemo(
-    () => storeProperties.map(toWorkboardProperty),
-    [storeProperties],
-  );
+  const properties = storeProperties;
   const employeeList = useMemo(
     () =>
       storeEmployees
@@ -886,9 +836,8 @@ export default function WorkboardContent() {
           (employee) =>
             !effectivePropertyId ||
             effectivePropertyId === 'all' ||
-            employee.property_id === effectivePropertyId,
+            employee.propertyId === effectivePropertyId,
         )
-        .map(toWorkboardEmployee)
         .filter((employee) => String(employee.role ?? '').toLowerCase() !== 'viewer'),
     [effectivePropertyId, storeEmployees],
   );
@@ -1023,7 +972,7 @@ export default function WorkboardContent() {
   }, [previousWeekAssignmentsQuery.data]);
   const hourlyWeatherStripQuery = useQuery({
     queryKey: ['workboard-hourly-strip', boardDate, weatherStripProperty?.id ?? 'no-property'],
-    enabled: Boolean(isHydrated && weatherStripProperty?.latitude && weatherStripProperty?.longitude),
+    enabled: Boolean(orgId && weatherStripProperty?.latitude && weatherStripProperty?.longitude),
     staleTime: 1000 * 60 * 10,
     queryFn: async () => {
       if (!weatherStripProperty?.latitude || !weatherStripProperty?.longitude) return [] as Array<{
@@ -1260,10 +1209,9 @@ export default function WorkboardContent() {
   }, [boardDate, employeeList, scheduleList, taskList]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     if (!assignmentDialogOpen) return;
     void refetchTasks();
-  }, [assignmentDialogOpen, isHydrated, refetchTasks]);
+  }, [assignmentDialogOpen, refetchTasks]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1277,8 +1225,7 @@ export default function WorkboardContent() {
 
   useEffect(() => {
     const authUserId = currentUser?.authUser?.id;
-    const orgId = currentUser?.orgId;
-    if (!supabase || !authUserId || !orgId || !isHydrated) return;
+    if (!supabase || !authUserId || !orgId) return;
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
     const timer = window.setTimeout(() => {
@@ -1328,7 +1275,7 @@ export default function WorkboardContent() {
       window.clearTimeout(timer);
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [currentUser?.authUser?.id, currentUser?.orgId, isHydrated, queryClient, triggerAssignmentFlash]);
+  }, [currentUser?.authUser?.id, orgId, queryClient, triggerAssignmentFlash]);
 
   useEffect(
     () => () => {
@@ -1412,9 +1359,9 @@ export default function WorkboardContent() {
   }, [activeProperty?.latitude, activeProperty?.longitude, operationalTimezone]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     void fetchWorkboardWeather();
-  }, [fetchWorkboardWeather, boardDate, isHydrated]);
+  }, [fetchWorkboardWeather, boardDate, orgId]);
 
   const propertyRequests = useMemo(
     () =>
@@ -3990,6 +3937,8 @@ export default function WorkboardContent() {
     assignmentsQuery.isLoading ||
     scheduleQuery.isLoading ||
     showTaskLoading ||
+    propertiesLoading ||
+    employeesLoading ||
     equipmentQuery.isLoading ||
     notesQuery.isLoading;
   const boardErrorMessage =

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useAppStore } from '@/store/appStore';
+import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -30,9 +30,8 @@ type SortKey = 'property' | 'task' | 'employee' | 'estimated_hours' | 'actual_ho
 
 export default function JobCostingPage() {
   const { orgId } = useAuth();
-  const isHydrated = useAppStore((s) => s.isHydrated);
-  const employees = useAppStore((s) => s.employees);
-  const properties = useAppStore((s) => s.properties);
+  const { data: employees = [], isLoading: employeesLoading } = useEmployees(undefined, orgId ?? undefined, 'all');
+  const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
 
   const [assignments, setAssignments] = useState<CompletedAssignment[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
@@ -46,7 +45,7 @@ export default function JobCostingPage() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!orgId || !isHydrated) return;
+    if (!orgId) return;
     setLoading(true);
     setError(null);
     const timer = window.setTimeout(() => setError('Request timed out after 8 seconds.'), 8000);
@@ -73,12 +72,12 @@ export default function JobCostingPage() {
       clearTimeout(timer);
       setLoading(false);
     }
-  }, [orgId, isHydrated]);
+  }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId || employeesLoading || propertiesLoading) return;
     void fetchData();
-  }, [fetchData, isHydrated]);
+  }, [employeesLoading, fetchData, orgId, propertiesLoading]);
 
   const rows = useMemo(() => {
     return assignments.map((a) => {
@@ -87,7 +86,7 @@ export default function JobCostingPage() {
       const property = properties.find((p) => p.id === a.property_id);
       const actualHours = a.actual_hours ?? 0;
       const estimatedHours = a.estimated_hours ?? task?.estimated_hours ?? 0;
-      const hourlyRate = employee?.hourly_rate ?? null;
+      const hourlyRate = employee?.wage ?? null;
       const laborCost = hourlyRate !== null ? actualHours * hourlyRate : null;
       const revenue = hourlyRate !== null && estimatedHours > 0 ? estimatedHours * hourlyRate : null;
       const grossMargin =
@@ -102,7 +101,7 @@ export default function JobCostingPage() {
         taskName: task?.name ?? 'Unknown',
         taskCategory: task?.category ?? 'General',
         employeeName: employee
-          ? `${employee.first_name} ${employee.last_name}`
+          ? `${employee.firstName} ${employee.lastName}`
           : 'Unknown',
         estimatedHours,
         actualHours,
@@ -177,7 +176,7 @@ export default function JobCostingPage() {
     });
   }, [rows, sortKey, sortDir]);
 
-  if (!isHydrated || loading) return <PageSkeleton />;
+  if (!orgId || loading || employeesLoading || propertiesLoading) return <PageSkeleton />;
   if (error) {
     return (
       <div className="p-6">

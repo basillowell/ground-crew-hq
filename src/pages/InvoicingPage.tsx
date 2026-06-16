@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useAppStore } from '@/store/appStore';
+import { useProperties } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
@@ -44,8 +44,7 @@ function fmtDate(iso: string) {
 
 export default function InvoicingPage() {
   const { orgId } = useAuth();
-  const isHydrated = useAppStore((s) => s.isHydrated);
-  const properties = useAppStore((s) => s.properties);
+  const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +57,7 @@ export default function InvoicingPage() {
   }, []);
 
   const fetchInvoices = useCallback(async () => {
-    if (!orgId || !isHydrated) return;
+    if (!orgId) return;
     setLoading(true);
     setError(null);
     const timer = window.setTimeout(() => setError('Request timed out after 8 seconds.'), 8000);
@@ -76,12 +75,12 @@ export default function InvoicingPage() {
       clearTimeout(timer);
       setLoading(false);
     }
-  }, [orgId, isHydrated]);
+  }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId || propertiesLoading) return;
     void fetchInvoices();
-  }, [fetchInvoices, isHydrated]);
+  }, [fetchInvoices, orgId, propertiesLoading]);
 
   const sendInvoice = async (id: string) => {
     setUpdating(id);
@@ -143,7 +142,7 @@ export default function InvoicingPage() {
     [invoices, activeTab],
   );
 
-  if (!isHydrated || loading) return <PageSkeleton />;
+  if (!orgId || loading || propertiesLoading) return <PageSkeleton />;
   if (error) {
     return (
       <div className="p-6">

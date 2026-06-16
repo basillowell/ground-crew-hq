@@ -8,8 +8,8 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
-import { useAppStore } from '@/store/appStore';
 import { PageHeader } from '@/components/shared';
+import { useEmployees, useProperties } from '@/lib/supabase-queries';
 
 const RechartsResponsiveContainer = lazy(() =>
   import('recharts').then((m) => ({ default: m.ResponsiveContainer })),
@@ -204,10 +204,6 @@ function calculateShiftHours(shiftStart?: string | null, shiftEnd?: string | nul
 }
 
 export default function ReportsPage() {
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeEmployees = useAppStore((state) => state.employees);
-  const storeProperties = useAppStore((state) => state.properties);
-  const storeOrg = useAppStore((state) => state.org);
   const [searchParams] = useSearchParams();
   const isFullReportView = searchParams.get('fullReport') === '1';
   const queryStartDate = searchParams.get('start');
@@ -219,24 +215,26 @@ export default function ReportsPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
     queryPropertyId || (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : 'all'),
   );
+  const propertiesQuery = useProperties(orgId ?? undefined);
+  const employeesQuery = useEmployees(
+    selectedPropertyId === 'all' ? undefined : selectedPropertyId,
+    orgId ?? undefined,
+  );
   const properties = useMemo(
-    () => storeProperties.map((property) => ({ id: property.id, name: property.name })),
-    [storeProperties],
+    () => (propertiesQuery.data ?? []).map((property) => ({ id: property.id, name: property.name })),
+    [propertiesQuery.data],
   );
   const employees = useMemo(
     () =>
-      storeEmployees
-        .filter(
-          (employee) =>
-            selectedPropertyId === 'all' || employee.property_id === selectedPropertyId,
-        )
+      (employeesQuery.data ?? [])
+        .filter((employee) => selectedPropertyId === 'all' || employee.propertyId === selectedPropertyId)
         .map((employee) => ({
           id: employee.id,
-          first_name: employee.first_name,
-          last_name: employee.last_name,
-          hourly_rate: employee.hourly_rate,
+          first_name: employee.firstName,
+          last_name: employee.lastName,
+          hourly_rate: employee.wage,
         })),
-    [selectedPropertyId, storeEmployees],
+    [employeesQuery.data, selectedPropertyId],
   );
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
@@ -249,7 +247,7 @@ export default function ReportsPage() {
   const [trendScheduleEntries, setTrendScheduleEntries] = useState<ScheduleEntryTrendRow[]>([]);
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
   const [openNeedsCount, setOpenNeedsCount] = useState(0);
-  const organizationName = storeOrg?.name ?? 'Ground Crew HQ';
+  const organizationName = 'Ground Crew HQ';
   const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLogRow[]>([]);
   const [timesheetWeekStart, setTimesheetWeekStart] = useState<string>(() => toIsoDate(startOfWeek(new Date())));
   const [timesheetSchedules, setTimesheetSchedules] = useState<TimesheetScheduleRow[]>([]);
@@ -431,10 +429,9 @@ export default function ReportsPage() {
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     if (!orgId) return;
     void fetchReportData();
-  }, [fetchReportData, isHydrated, orgId]);
+  }, [fetchReportData, orgId]);
 
   const fetchTimesheetData = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -477,10 +474,9 @@ export default function ReportsPage() {
   }, [orgId, selectedPropertyId, timesheetWeekStart]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     if (!orgId) return;
     void fetchTimesheetData();
-  }, [fetchTimesheetData, isHydrated, orgId]);
+  }, [fetchTimesheetData, orgId]);
 
   const laborRows = useMemo<LaborSummaryRow[]>(() => {
     const byEmployee = new Map<string, LaborSummaryRow>();
@@ -1101,7 +1097,7 @@ export default function ReportsPage() {
     toast.success('Timesheet approval coming soon');
   }, []);
 
-  if (!orgId) {
+  if (!orgId || propertiesQuery.isLoading || employeesQuery.isLoading) {
     return <PageSkeleton />;
   }
 

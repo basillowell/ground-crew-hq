@@ -12,7 +12,6 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
-import { useAppStore } from '@/store/appStore';
 import { PageHeader } from '@/components/shared';
 
 type EquipmentUnitRow = {
@@ -117,7 +116,6 @@ function emptyAddDraft(): AddDraft {
 
 export default function EquipmentPage() {
   const { currentUser, currentPropertyId, userRole } = useAuth();
-  const isHydrated = useAppStore((state) => state.isHydrated);
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const orgId = currentUser?.orgId ?? '';
   const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null;
@@ -185,9 +183,9 @@ export default function EquipmentPage() {
   }, [orgId, propertyId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     void fetchEquipment();
-  }, [fetchEquipment, isHydrated]);
+  }, [fetchEquipment, orgId]);
 
   const typeNameById = useMemo(() => {
     const map = new Map<string, string>();

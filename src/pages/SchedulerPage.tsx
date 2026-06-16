@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Employee, Property, ScheduleEntry } from '@/data/seedData';
-import type { Employee as StoreEmployee, Property as StoreProperty } from '@/store/appStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +11,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAppStore } from '@/store/appStore';
 import { supabase } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
@@ -21,7 +19,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
-import { useAssignmentsRange } from '@/lib/supabase-queries';
+import { useAssignmentsRange, useEmployees, useProperties } from '@/lib/supabase-queries';
 
 type WeekTemplateItem = {
   id: string;
@@ -93,54 +91,6 @@ function weatherIconForCode(code: number) {
   return Sun;
 }
 
-function toSchedulerProperty(row: StoreProperty): Property {
-  return {
-    id: row.id,
-    name: row.name,
-    shortName: row.short_name,
-    type: 'Property',
-    address: '',
-    city: row.city,
-    state: row.state,
-    latitude: row.latitude ?? undefined,
-    longitude: row.longitude ?? undefined,
-    acreage: Number(row.acreage ?? 0),
-    logoInitials: row.logo_initials,
-    color: row.color,
-    status: row.status as Property['status'],
-  };
-}
-
-function toSchedulerEmployee(row: StoreEmployee): Employee {
-  return {
-    id: row.id,
-    propertyId: row.property_id ?? undefined,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    role: row.role,
-    department: row.department,
-    status: (row.status as Employee['status']) ?? 'active',
-    phone: row.phone ?? '',
-    email: row.email ?? '',
-    group: row.group_name ?? row.department ?? 'General',
-    wage: Number(row.hourly_rate ?? 0),
-    photo: '',
-    language: row.language ?? 'English',
-    workerType: (row.worker_type as Employee['workerType']) ?? 'full-time',
-    jobDescriptionId: row.job_description_id ?? undefined,
-    jobDescription: row.job_description ?? undefined,
-    employmentStatusId: row.employment_status_id ?? undefined,
-    employmentStatus: row.employment_status ?? undefined,
-    wageCategoryId: row.wage_category_id ?? undefined,
-    overtimeRuleId: row.overtime_rule_id ?? undefined,
-    hireDate: row.created_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
-    defaultLocationId: row.default_location_id ?? undefined,
-    shiftTemplateId: row.preferred_shift_template_id ?? undefined,
-    portalEnabled: row.portal_enabled ?? false,
-    loginEmail: row.login_email ?? undefined,
-  };
-}
-
 const STATUS_STYLES: Record<string, { cell: string; label: string; badge: string }> = {
   scheduled: {
     cell: 'bg-card border border-l-4 border-l-emerald-400 text-foreground hover:bg-muted/30',
@@ -189,9 +139,12 @@ export default function SchedulerPage() {
   const thisWeekStart = useMemo(() => getWeekStart(new Date()), []);
 
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
-  const storeEmployees = useAppStore((state) => state.employees);
-  const storeProperties = useAppStore((state) => state.properties);
-  const isHydrated = useAppStore((state) => state.isHydrated);
+  const orgId = currentUser?.orgId;
+  const { data: storeEmployees = [], isLoading: employeesLoading } = useEmployees(
+    propertyScope === 'all' ? undefined : propertyScope,
+    orgId,
+  );
+  const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
   const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '07:30', end: '16:00' });
   const [schedulerDefaultsLoading, setSchedulerDefaultsLoading] = useState(true);
   const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
@@ -209,11 +162,11 @@ export default function SchedulerPage() {
     weekDays[0]?.date ?? '',
     weekDays[6]?.date ?? '',
     propertyScope,
-    isHydrated ? currentUser?.orgId : undefined,
+    orgId,
   );
 
   const selectedProperty = useMemo(() => {
-    const properties = storeProperties.map(toSchedulerProperty);
+    const properties = storeProperties;
     if (propertyScope && propertyScope !== 'all') {
       return properties.find((property) => property.id === propertyScope) ?? null;
     }
@@ -221,8 +174,8 @@ export default function SchedulerPage() {
   }, [propertyScope, storeProperties]);
 
   const weekWeatherQuery = useQuery({
-    queryKey: ['scheduler-week-weather', weekStart, selectedProperty?.id ?? 'none', currentUser?.orgId ?? 'all-orgs'],
-    enabled: Boolean(isHydrated && currentUser?.orgId && selectedProperty?.latitude && selectedProperty?.longitude),
+    queryKey: ['scheduler-week-weather', weekStart, selectedProperty?.id ?? 'none', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId && selectedProperty?.latitude && selectedProperty?.longitude),
     staleTime: 1000 * 60 * 10,
     queryFn: async () => {
       if (!selectedProperty?.latitude || !selectedProperty?.longitude) return {} as Record<string, DayWeather>;
@@ -245,15 +198,15 @@ export default function SchedulerPage() {
 
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
-      queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', currentUser?.orgId ?? 'all-orgs'],
-      enabled: Boolean(isHydrated && currentUser?.orgId),
+      queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', orgId ?? 'all-orgs'],
+      enabled: Boolean(orgId),
       retry: false,
       queryFn: async () => {
-        if (!supabase || !currentUser?.orgId) return [] as ScheduleEntry[];
+        if (!supabase || !orgId) return [] as ScheduleEntry[];
         let query = supabase
           .from('schedule_entries')
           .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
-          .eq('org_id', currentUser.orgId)
+          .eq('org_id', orgId)
           .eq('date', day.date)
           .order('shift_start');
         if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
@@ -276,16 +229,15 @@ export default function SchedulerPage() {
   const employeeList = useMemo(
     () =>
       storeEmployees
-        .filter((employee) => !propertyScope || propertyScope === 'all' || employee.property_id === propertyScope)
-        .map(toSchedulerEmployee)
+        .filter((employee) => !propertyScope || propertyScope === 'all' || employee.propertyId === propertyScope)
         .filter((employee) => String(employee.role ?? '').toLowerCase() !== 'viewer'),
     [propertyScope, storeEmployees],
   );
   const scheduleList = useMemo(() => weekScheduleQueries.flatMap((q) => q.data ?? []), [weekScheduleQueries]);
-  const isWeekScheduleLoading = Boolean(currentUser?.orgId) && weekScheduleQueries.some((q) => q.isLoading || q.isFetching);
-  const isLoading = isWeekScheduleLoading;
+  const isWeekScheduleLoading = Boolean(orgId) && weekScheduleQueries.some((q) => q.isLoading || q.isFetching);
+  const isLoading = isWeekScheduleLoading || employeesLoading || propertiesLoading;
   const queryErrorMessage =
-    (currentUser?.orgId
+    (orgId
       ? (weekScheduleQueries.find((query) => query.error)?.error as { message?: string } | null)?.message
       : '') ||
     '';
@@ -320,9 +272,8 @@ export default function SchedulerPage() {
   }, [weekDays]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     const fetchSchedulerData = async () => {
-      if (!supabase || !currentUser?.orgId) {
+      if (!supabase || !orgId) {
         setSchedulerDefaultsLoading(false);
         return;
       }
@@ -331,18 +282,18 @@ export default function SchedulerPage() {
         supabase
           .from('scheduler_settings')
           .select('operational_day_start, operational_day_end')
-          .eq('org_id', currentUser.orgId)
+          .eq('org_id', orgId)
           .single(),
         supabase
           .from('shift_templates')
           .select('id, name, start, end, days, active')
-          .eq('org_id', currentUser.orgId)
+          .eq('org_id', orgId)
           .eq('active', true)
           .order('name', { ascending: true }),
         supabase
           .from('schedule_week_templates')
           .select('id, name, template_data')
-          .eq('org_id', currentUser.orgId)
+          .eq('org_id', orgId)
           .order('created_at', { ascending: false }),
       ]);
 
@@ -380,7 +331,7 @@ export default function SchedulerPage() {
     };
 
     void fetchSchedulerData();
-  }, [currentUser?.orgId, isHydrated]);
+  }, [orgId]);
 
   useEffect(() => {
     const firstId = employeeList.find((e) => e.status === 'active')?.id ?? '';

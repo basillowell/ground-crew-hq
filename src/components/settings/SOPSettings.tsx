@@ -5,7 +5,6 @@ import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Pencil, RotateCcw, Trash2, Plus, X, GripVertical } from 'lucide-react';
-import { useAppStore } from '@/store/appStore';
 import { DndContext, PointerSensor, closestCenter, type DragEndEvent, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -80,7 +79,6 @@ function SortableChecklistRow({ id, children }: { id: string; children: ReactNod
 
 export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: string | null }) {
   const { currentUser } = useAuth();
-  const isHydrated = useAppStore((state) => state.isHydrated);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,9 +115,8 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
   }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     void fetchSops();
-  }, [fetchSops, isHydrated]);
+  }, [fetchSops]);
 
   const activeSops = useMemo(() => sops.filter((s) => s.is_active), [sops]);
   const inactiveSops = useMemo(() => sops.filter((s) => !s.is_active), [sops]);

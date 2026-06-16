@@ -14,7 +14,7 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
 import { createEvents, type EventAttributes } from 'ics';
 import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin, WifiOff } from 'lucide-react';
-import { useAppStore } from '@/store/appStore';
+import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { PageHeader } from '@/components/shared';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
@@ -78,15 +78,6 @@ type TeammateCard = {
 type DeferredInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-};
-
-type FieldCachePayload = {
-  schedule: ShiftEntry | null;
-  assignments: FieldAssignment[];
-  clockEvents: ClockEventRecord[];
-  employee: EmployeeRecord | null;
-  propertyName: string;
-  taskMetaById: Record<string, TaskMeta>;
 };
 
 type FieldSyncQueueItem =
@@ -267,9 +258,12 @@ export default function MobileFieldWorkspacePage() {
   const queryClient = useQueryClient();
   const LANG_STORAGE_KEY = 'ground-crew-field-lang';
   const { currentUser } = useAuth();
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeEmployees = useAppStore((state) => state.employees);
-  const storeProperties = useAppStore((state) => state.properties);
+  const employeeId = currentUser?.employeeId ?? null;
+  const orgId = currentUser?.orgId ?? null;
+  const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
+  const propertiesQuery = useProperties(orgId ?? undefined);
+  const employees = employeesQuery.data ?? [];
+  const properties = propertiesQuery.data ?? [];
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [employee, setEmployee] = useState<EmployeeRecord | null>(null);
@@ -303,27 +297,24 @@ export default function MobileFieldWorkspacePage() {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     document.title = 'Field — Ground Crew HQ';
-  }, [isHydrated]);
+  }, [orgId]);
 
-  const employeeId = currentUser?.employeeId ?? null;
-  const orgId = currentUser?.orgId ?? null;
   const boardDate = todayKey();
   const t = fieldTranslations[language];
-  const cacheKey = `field-cache-${boardDate}`;
   const syncQueueKey = 'field-sync-queue';
   const installDismissKey = 'ground-crew-install-dismissed-at';
   const onboardedKey = 'ground-crew-field-onboarded';
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     const onboarded = window.localStorage.getItem(onboardedKey) === 'true';
     setShowWelcomeBanner(!onboarded);
-  }, [isHydrated, onboardedKey]);
+  }, [onboardedKey, orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     const media = window.matchMedia('(display-mode: standalone)');
     const checkStandalone = () => {
       const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
@@ -332,10 +323,10 @@ export default function MobileFieldWorkspacePage() {
     checkStandalone();
     media.addEventListener('change', checkStandalone);
     return () => media.removeEventListener('change', checkStandalone);
-  }, [isHydrated]);
+  }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       const dismissedAtRaw = window.localStorage.getItem(installDismissKey);
@@ -352,7 +343,7 @@ export default function MobileFieldWorkspacePage() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, [isHydrated, isStandalone, installDismissKey]);
+  }, [installDismissKey, isStandalone, orgId]);
 
   const loadSyncQueue = useCallback((): FieldSyncQueueItem[] => {
     try {
@@ -375,35 +366,6 @@ export default function MobileFieldWorkspacePage() {
     queue.push(item);
     saveSyncQueue(queue);
   }, [loadSyncQueue, saveSyncQueue]);
-
-  const loadFieldCache = useCallback((): FieldCachePayload | null => {
-    try {
-      const raw = window.localStorage.getItem(cacheKey);
-      if (!raw) return null;
-      return JSON.parse(raw) as FieldCachePayload;
-    } catch {
-      return null;
-    }
-  }, [cacheKey]);
-
-  const saveFieldCache = useCallback((payload: FieldCachePayload) => {
-    window.localStorage.setItem(cacheKey, JSON.stringify(payload));
-  }, [cacheKey]);
-
-  const applyFieldCache = useCallback((cache: FieldCachePayload) => {
-    setEmployee(cache.employee);
-    setShift(cache.schedule);
-    setAssignments(cache.assignments);
-    setClockEvents(cache.clockEvents);
-    setTaskMetaById(cache.taskMetaById ?? {});
-    setPropertyName(cache.propertyName || 'Assigned Property');
-
-    const nextActualDraft: Record<string, string> = {};
-    cache.assignments.forEach((assignment) => {
-      nextActualDraft[assignment.id] = String(assignment.actualHours ?? assignment.estimatedHours ?? 0);
-    });
-    setActualHoursDraft(nextActualDraft);
-  }, []);
 
   const syncQueue = useCallback(async () => {
     if (!supabase || !navigator.onLine || !orgId) return;
@@ -447,10 +409,10 @@ export default function MobileFieldWorkspacePage() {
   }, [employeeId, loadSyncQueue, orgId, queryClient, saveSyncQueue]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     const timerId = window.setInterval(() => setLiveNow(new Date()), 1_000);
     return () => window.clearInterval(timerId);
-  }, [isHydrated]);
+  }, [orgId]);
 
   const fetchFieldData = useCallback(async () => {
     if (!supabase || !employeeId || !orgId) {
@@ -462,19 +424,12 @@ export default function MobileFieldWorkspacePage() {
     setLoading(true);
     setError(null);
     if (!navigator.onLine) {
-      const cached = loadFieldCache();
-      if (cached) {
-        applyFieldCache(cached);
-        setIsOfflineData(true);
-        setLoading(false);
-        return;
-      }
-      setError('You are offline and no cached field data is available yet.');
+      setError('You are offline. Field data loads from Supabase once you are back online.');
       setLoading(false);
       return;
     }
 
-    const employeeRow = storeEmployees.find((employee) => employee.id === employeeId) ?? null;
+    const employeeRow = employees.find((employee) => employee.id === employeeId) ?? null;
     const [{ data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: clockRows, error: clockError }] = await Promise.all([
       supabase
         .from('schedule_entries')
@@ -504,13 +459,6 @@ export default function MobileFieldWorkspacePage() {
     ]);
 
     if (shiftError || assignmentsError || tasksError || clockError) {
-      const cached = loadFieldCache();
-      if (cached) {
-        applyFieldCache(cached);
-        setIsOfflineData(true);
-        setLoading(false);
-        return;
-      }
       setError(
         shiftError?.message ||
           assignmentsError?.message ||
@@ -526,8 +474,8 @@ export default function MobileFieldWorkspacePage() {
       employeeRow
         ? {
             id: String(employeeRow.id),
-            firstName: String(employeeRow.first_name ?? ''),
-            lastName: String(employeeRow.last_name ?? ''),
+            firstName: String(employeeRow.firstName ?? ''),
+            lastName: String(employeeRow.lastName ?? ''),
             language: employeeRow.language ? String(employeeRow.language) : null,
           }
         : null,
@@ -601,13 +549,13 @@ export default function MobileFieldWorkspacePage() {
     const teammateIds = Array.from(new Set(teammateRows.map((row) => String(row.employee_id))));
     const teammateIdSet = new Set(teammateIds);
     const teammateEmployeeMap = new Map(
-      storeEmployees
+      employees
         .filter((employee) => teammateIdSet.has(employee.id))
         .map((employee) => [
           employee.id,
           {
-            firstName: employee.first_name,
-            lastName: employee.last_name,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
             role: employee.role || null,
           },
         ]),
@@ -675,7 +623,7 @@ export default function MobileFieldWorkspacePage() {
     setTaskMetaById(taskMap);
 
     const propertiesById = new Map<string, string>();
-    storeProperties.forEach((property) => {
+    properties.forEach((property) => {
       propertiesById.set(property.id, property.name);
     });
 
@@ -687,58 +635,31 @@ export default function MobileFieldWorkspacePage() {
       setPropertyName('Assigned Property');
     }
 
-    const resolvedPropertyName =
-      shiftRow?.property_id && propertiesById.has(String(shiftRow.property_id))
-        ? propertiesById.get(String(shiftRow.property_id)) ?? 'Assigned Property'
-        : currentUser?.propertyId && propertiesById.has(String(currentUser.propertyId))
-          ? propertiesById.get(String(currentUser.propertyId)) ?? 'Assigned Property'
-          : 'Assigned Property';
-    saveFieldCache({
-      schedule: shiftRow
-        ? {
-            propertyId: shiftRow.property_id ? String(shiftRow.property_id) : null,
-            shiftStart: String(shiftRow.shift_start ?? '').slice(0, 5),
-            shiftEnd: String(shiftRow.shift_end ?? '').slice(0, 5),
-          }
-        : null,
-      assignments: normalizedAssignments,
-      clockEvents: normalizedClockEvents,
-      employee: employeeRow
-        ? {
-            id: String(employeeRow.id),
-            firstName: String(employeeRow.first_name ?? ''),
-            lastName: String(employeeRow.last_name ?? ''),
-            language: employeeRow.language ? String(employeeRow.language) : null,
-          }
-        : null,
-      propertyName: resolvedPropertyName,
-      taskMetaById: taskMap,
-    });
     setIsOfflineData(false);
     setLoading(false);
-  }, [LANG_STORAGE_KEY, applyFieldCache, boardDate, currentUser?.propertyId, employeeId, loadFieldCache, orgId, saveFieldCache, storeEmployees, storeProperties]);
+  }, [LANG_STORAGE_KEY, boardDate, currentUser?.propertyId, employeeId, employees, orgId, properties]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId || employeesQuery.isLoading || propertiesQuery.isLoading) return;
     void fetchFieldData();
-  }, [fetchFieldData, isHydrated]);
+  }, [employeesQuery.isLoading, fetchFieldData, orgId, propertiesQuery.isLoading]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     const handleOnline = () => {
       void syncQueue();
       void fetchFieldData();
     };
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
-  }, [fetchFieldData, isHydrated, syncQueue]);
+  }, [fetchFieldData, orgId, syncQueue]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!orgId) return;
     if (navigator.onLine) {
       void syncQueue();
     }
-  }, [isHydrated, syncQueue]);
+  }, [orgId, syncQueue]);
 
   const setSaving = (assignmentId: string, isSaving: boolean) => {
     setSavingIds((current) => ({ ...current, [assignmentId]: isSaving }));
@@ -881,8 +802,8 @@ export default function MobileFieldWorkspacePage() {
         toast.error('Property is not available for clock event.');
         return;
       }
-      const storeEmployee = storeEmployees.find((entry) => entry.id === employeeId);
-      const resolvedEmployeeId = storeEmployee?.id ?? employee?.id ?? employeeId;
+      const liveEmployee = employees.find((entry) => entry.id === employeeId);
+      const resolvedEmployeeId = liveEmployee?.id ?? employee?.id ?? employeeId;
 
       let position: GeolocationPosition;
       try {
@@ -1011,7 +932,7 @@ export default function MobileFieldWorkspacePage() {
       orgId,
       queryClient,
       shift?.propertyId,
-      storeEmployees,
+      employees,
     ],
   );
 
@@ -1276,11 +1197,11 @@ export default function MobileFieldWorkspacePage() {
         </div>
       </div>
 
-      {/* Offline cached data banner */}
+      {/* Offline sync banner */}
       {isOfflineData && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
           <WifiOff className="h-4 w-4 shrink-0 text-yellow-400" />
-          <span className="text-sm text-yellow-300">Showing cached data — changes will sync when online</span>
+          <span className="text-sm text-yellow-300">Offline changes queued. Live data refreshes from Supabase when online.</span>
         </div>
       )}
 

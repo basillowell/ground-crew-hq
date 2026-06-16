@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { hasSupabaseConfig, supabase, supabaseConfigError } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAppStore } from '@/store/appStore';
 
 type AuthPanel = 'sign-in' | 'sign-up' | 'forgot-password';
 
@@ -164,7 +163,6 @@ function PanelLink({ onClick, children }: { onClick: () => void; children: React
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
   const { currentUser, authDebugMessage, isLoading, authState, hasSession, retryAuthHydration } = useAuth();
-  const programSettings = useAppStore((state) => state.programSettings);
 
   // ── Sign-in state (unchanged) ──
   const [email, setEmail] = useState('');
@@ -192,8 +190,8 @@ export default function LaunchPortalPage() {
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
 
-  const appName = programSettings?.app_name || 'Ground Crew HQ';
-  const clientName = programSettings?.client_label || 'Ground Crew HQ';
+  const appName = 'Ground Crew HQ';
+  const clientName = 'Ground Crew HQ';
   const DEMO_EMAIL = 'demo@groundcrewhq.com';
   const DEMO_PASSWORD = 'GroundCrewHQDemo!2026';
 

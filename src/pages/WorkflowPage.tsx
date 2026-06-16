@@ -10,9 +10,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Bell, ChevronLeft, ChevronRight, Copy, RefreshCw, Save, StickyNote, Trash2 } from 'lucide-react';
 import { formatTime } from '@/utils/formatTime';
-import { useAppStore } from '@/store/appStore';
 import { PageHeader } from '@/components/shared';
-import { useAssignments } from '@/lib/supabase-queries';
+import { useAssignments, useEmployees } from '@/lib/supabase-queries';
 
 type AssignmentStatus = 'planned' | 'pending' | 'in_progress' | 'done';
 
@@ -117,9 +116,8 @@ function statusPill(status: AssignmentStatus) {
 
 export default function WorkflowPage() {
   const { currentUser, currentPropertyId } = useAuth();
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeEmployees = useAppStore((state) => state.employees);
   const orgId = currentUser?.orgId ?? '';
+  const { data: liveEmployees = [], isLoading: employeesLoading } = useEmployees(undefined, orgId || undefined, 'all');
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +136,7 @@ export default function WorkflowPage() {
   const assignmentsQuery = useAssignments(
     selectedDate,
     propertyId ?? undefined,
-    isHydrated ? orgId : undefined,
+    orgId || undefined,
   );
 
   const fetchBoard = useCallback(async () => {
@@ -183,17 +181,17 @@ export default function WorkflowPage() {
     }
 
     const employeeMap = new Map<string, LaborEmployee>(
-      storeEmployees
+      liveEmployees
         .filter((employee) => employeeIds.includes(employee.id))
         .map((employee) => [
           employee.id,
           {
             id: employee.id,
-            first_name: employee.first_name,
-            last_name: employee.last_name,
+            first_name: employee.firstName,
+            last_name: employee.lastName,
             role: employee.role,
             department: employee.department,
-            property_id: employee.property_id,
+            property_id: employee.propertyId,
           },
         ]),
     );
@@ -241,12 +239,12 @@ export default function WorkflowPage() {
 
     setCrewRows(builtRows);
     setLoading(false);
-  }, [assignmentsQuery.data, assignmentsQuery.error, orgId, propertyId, selectedDate, storeEmployees]);
+  }, [assignmentsQuery.data, assignmentsQuery.error, liveEmployees, orgId, propertyId, selectedDate]);
 
   useEffect(() => {
-    if (!isHydrated || assignmentsQuery.isLoading) return;
+    if (employeesLoading || assignmentsQuery.isLoading) return;
     void fetchBoard();
-  }, [assignmentsQuery.isLoading, fetchBoard, isHydrated]);
+  }, [assignmentsQuery.isLoading, employeesLoading, fetchBoard]);
 
   const fetchTaskLibrary = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -269,9 +267,8 @@ export default function WorkflowPage() {
   }, [orgId]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     void fetchTaskLibrary();
-  }, [fetchTaskLibrary, isHydrated]);
+  }, [fetchTaskLibrary]);
 
   const groupedTaskLibrary = useMemo(() => {
     return taskLibrary.reduce<Record<string, TaskLibraryItem[]>>((acc, task) => {

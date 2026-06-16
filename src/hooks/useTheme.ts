@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAppStore } from '@/store/appStore';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
@@ -22,7 +22,7 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export function useTheme() {
-  const programSettings = useAppStore((s) => s.programSettings);
+  const { orgId } = useAuth();
   const [theme, setThemeState] = useState<ThemeMode>(readStoredTheme);
 
   // Apply theme to DOM whenever state changes
@@ -35,25 +35,12 @@ export function useTheme() {
     return () => mq.removeEventListener('change', handler);
   }, [theme]);
 
-  // Sync from DB once programSettings loads (DB value wins over stale localStorage)
-  useEffect(() => {
-    if (!programSettings) return;
-    const pref = (programSettings as { theme_preference?: string | null }).theme_preference;
-    if (pref !== 'dark' && pref !== 'light' && pref !== 'system') return;
-    const stored = readStoredTheme();
-    if (pref !== stored) {
-      try { localStorage.setItem(STORAGE_KEY, pref); } catch { /* ignore */ }
-      setThemeState(pref as ThemeMode);
-    }
-  }, [programSettings]);
-
   const setTheme = useCallback(async (mode: ThemeMode) => {
     setThemeState(mode);
     try { localStorage.setItem(STORAGE_KEY, mode); } catch { /* ignore */ }
     applyTheme(mode);
 
     // Persist to DB — silently fails until theme_preference column is added
-    const orgId = programSettings?.org_id;
     if (!supabase || !orgId) return;
     try {
       await supabase
@@ -61,7 +48,7 @@ export function useTheme() {
         .update({ theme_preference: mode })
         .eq('org_id', orgId);
     } catch { /* silently ignore until DB migration runs */ }
-  }, [programSettings]);
+  }, [orgId]);
 
   return { theme, setTheme };
 }

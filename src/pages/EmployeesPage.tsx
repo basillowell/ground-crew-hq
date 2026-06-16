@@ -10,8 +10,7 @@ import { Input } from '@/components/ui/input';
 import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
-import { useAppStore } from '@/store/appStore';
-import { useEmployees, type EmployeeStatusFilter } from '@/lib/supabase-queries';
+import { useDepartmentOptions, useEmployees, useProperties, type EmployeeStatusFilter } from '@/lib/supabase-queries';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/shared';
 import {
@@ -179,14 +178,12 @@ function EmployeePagination({
 export default function EmployeesPage() {
   const { orgId, userRole, currentPropertyId } = useAuth();
   const queryClient = useQueryClient();
-  const isHydrated = useAppStore((state) => state.isHydrated);
-  const storeProperties = useAppStore((state) => state.properties);
-  const storeDepartments = useAppStore((state) => state.departments);
-  const hydrateStore = useAppStore((state) => state.hydrate);
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const isAdmin = userRole === 'admin';
   const [statusFilter, setStatusFilter] = useState<EmployeeStatusFilter>('active');
   const employeesQuery = useEmployees(currentPropertyId || undefined, orgId ?? undefined, statusFilter);
+  const propertiesQuery = useProperties(orgId ?? undefined);
+  const departmentsQuery = useDepartmentOptions(orgId ?? undefined);
   const employees = useMemo<EmployeeRow[]>(
     () =>
       (employeesQuery.data ?? []).map((employee) => ({
@@ -208,15 +205,12 @@ export default function EmployeesPage() {
     [employeesQuery.data, orgId],
   );
   const properties = useMemo(
-    () => storeProperties.map((property) => ({ id: property.id, name: property.name })),
-    [storeProperties],
+    () => (propertiesQuery.data ?? []).map((property) => ({ id: property.id, name: property.name })),
+    [propertiesQuery.data],
   );
   const departments = useMemo(
-    () =>
-      storeDepartments
-        .filter((department) => department.active)
-        .map((department) => ({ id: department.id, name: department.name })),
-    [storeDepartments],
+    () => (departmentsQuery.data ?? []).map((department) => ({ id: department.id, name: department.name })),
+    [departmentsQuery.data],
   );
   const [roles, setRoles] = useState<Array<{ id: string; name: string }>>([]);
   const [error, setError] = useState<string | null>(null);
@@ -250,7 +244,7 @@ export default function EmployeesPage() {
     .slice(0, 10);
   const monthEntriesQuery = useQuery({
     queryKey: ['team-availability', orgId ?? 'no-org', availabilityStartKey, availabilityEndKey],
-    enabled: Boolean(orgId && isHydrated && viewMode === 'availability'),
+    enabled: Boolean(orgId && viewMode === 'availability'),
     retry: false,
     queryFn: async () => {
       if (!orgId) return [] as ScheduleEntryRow[];
@@ -524,12 +518,9 @@ export default function EmployeesPage() {
     }
 
     closeAddModal(true);
-    await Promise.all([
-      hydrateStore(orgId),
-      queryClient.invalidateQueries({ queryKey: ['employees'] }),
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ['employees'] });
     toast.success(`Added employee: ${addDraft.first_name.trim()} ${addDraft.last_name.trim()}`);
-  }, [addDraft, closeAddModal, hydrateStore, isReadOnly, orgId, queryClient]);
+  }, [addDraft, closeAddModal, isReadOnly, orgId, queryClient]);
 
   const startEdit = useCallback((employee: EmployeeRow) => {
     void fetchRoles();
@@ -583,12 +574,9 @@ export default function EmployeesPage() {
     }
 
     cancelEdit();
-    await Promise.all([
-      hydrateStore(orgId),
-      queryClient.invalidateQueries({ queryKey: ['employees'] }),
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ['employees'] });
     toast.success(`Updated employee: ${editDraft.first_name.trim()} ${editDraft.last_name.trim()}`);
-  }, [cancelEdit, editDraft, hydrateStore, isReadOnly, orgId, queryClient]);
+  }, [cancelEdit, editDraft, isReadOnly, orgId, queryClient]);
 
   const deactivateEmployee = useCallback(async (employee: EmployeeRow) => {
     if (isReadOnly) return;
@@ -611,12 +599,9 @@ export default function EmployeesPage() {
       return;
     }
 
-    await Promise.all([
-      hydrateStore(orgId),
-      queryClient.invalidateQueries({ queryKey: ['employees'] }),
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ['employees'] });
     toast.success(`Deactivated employee: ${name}`);
-  }, [hydrateStore, isReadOnly, orgId, queryClient]);
+  }, [isReadOnly, orgId, queryClient]);
 
   const updateEmployeeStatus = useCallback(async (
     employee: EmployeeRow,
@@ -638,12 +623,9 @@ export default function EmployeesPage() {
       return;
     }
 
-    await Promise.all([
-      hydrateStore(orgId),
-      queryClient.invalidateQueries({ queryKey: ['employees'] }),
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ['employees'] });
     toast.success(successMessage);
-  }, [hydrateStore, isReadOnly, orgId, queryClient]);
+  }, [isReadOnly, orgId, queryClient]);
 
   const removeEmployee = useCallback(async () => {
     if (!pendingRemoval || !isAdmin || !supabase || !orgId) return;
@@ -677,12 +659,9 @@ export default function EmployeesPage() {
     }
 
     setPendingRemoval(null);
-    await Promise.all([
-      hydrateStore(orgId),
-      queryClient.invalidateQueries({ queryKey: ['employees'] }),
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ['employees'] });
     toast.success(`${name} has been removed. Historical data is preserved.`);
-  }, [hydrateStore, isAdmin, orgId, pendingRemoval, queryClient]);
+  }, [isAdmin, orgId, pendingRemoval, queryClient]);
 
   const renderStatusActions = (employee: EmployeeRow) => {
     const status = String(employee.status ?? 'active').toLowerCase();
@@ -734,7 +713,7 @@ export default function EmployeesPage() {
     setEditDraft(null);
   }, [statusFilter]);
 
-  if (!orgId || !isHydrated || employeesQuery.isLoading) {
+  if (!orgId || employeesQuery.isLoading || propertiesQuery.isLoading || departmentsQuery.isLoading) {
     return (
       <div className="space-y-6 p-6">
         <PageHeaderSkeleton />

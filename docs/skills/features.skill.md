@@ -67,6 +67,27 @@ Program Setup -> Employees + Properties + Tasks + Shift Templates
 - Never call `supabase.auth.getSession()` inside `visibilitychange` handlers.
 - Pending clock events use localStorage key `gcrew-pending-clocks`.
 
+## Data Source Status (verified June 2026)
+| Page | Confirmed data source |
+|---|---|
+| CommandCenterOperationalPage.tsx | Supabase ✓ via `supabase-queries.ts` hooks |
+| WorkboardContent.tsx | Supabase ✓ via `supabase-queries.ts` hooks and scoped writes |
+| SchedulerPage.tsx | Supabase ✓ via hooks and direct schedule/template queries |
+| EmployeesPage.tsx | Supabase ✓ via employees/properties/department hooks |
+| EquipmentPage.tsx | Supabase ✓ via direct equipment queries |
+| ReportsPage.tsx | Supabase ✓ via live report queries and employees/properties hooks |
+| SettingsPage.tsx | Supabase ✓ via live hooks and direct settings/admin queries |
+| WeatherPage.tsx | Supabase ✓ via weather location/log queries |
+| ApplicationsPage.tsx | Supabase ✓ via chemical hooks and live employees/properties hooks |
+| BreakroomPage.tsx | Supabase ✓ via messages, assignments, notes, employees, properties, and tasks |
+| SafetyPage.tsx | Supabase ✓ via incident/hazard queries |
+| TasksCatalogPage.tsx | Supabase ✓ via org-wide `useTasks()` |
+| DispatchBoardPage.tsx | Supabase ✓ via assignments/employees/tasks hooks |
+| MobileFieldWorkspacePage.tsx | Supabase ✓ for field data; localStorage retained only for the offline sync queue and UI preferences |
+| InvoicingPage.tsx | Supabase ✓ via invoice queries and properties hook |
+| JobCostingPage.tsx | Supabase ✓ via assignment/task queries and employees/properties hooks |
+| MessagingPage.tsx | Supabase ✓ via employees hook for recipients |
+
 ## Self-Service Onboarding Flow
 New clients complete setup through the app without developer help:
 1. Register - org created automatically in organizations table.
