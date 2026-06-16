@@ -148,7 +148,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
   const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive, isOrgReady } = useAuth();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
-  const [orgGuardExpired, setOrgGuardExpired] = useState(false);
+  const [orgReadyTimeout, setOrgReadyTimeout] = useState(false);
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
@@ -170,11 +170,11 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   useEffect(() => {
     if (isOrgReady) {
-      setOrgGuardExpired(false);
+      setOrgReadyTimeout(false);
       return;
     }
-    setOrgGuardExpired(false);
-    const timer = window.setTimeout(() => setOrgGuardExpired(true), 5000);
+    setOrgReadyTimeout(false);
+    const timer = window.setTimeout(() => setOrgReadyTimeout(true), 2000);
     return () => window.clearTimeout(timer);
   }, [isOrgReady]);
 
@@ -553,7 +553,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [location.pathname, navigate, shortcutsOverlayOpen]);
 
-  if (!isOrgReady && !orgGuardExpired) {
+  if (!isOrgReady && !orgReadyTimeout) {
     return <PageLoader />;
   }
 
