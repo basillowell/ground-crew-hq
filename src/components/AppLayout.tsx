@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -155,6 +155,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncFlashActive, setSyncFlashActive] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const prevOrgId = useRef<string | null>(null);
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const deptQuery = useDepartmentOptions(orgId);
   const todayKey = currentDate.toISOString().slice(0, 10);
@@ -176,6 +177,13 @@ export function AppLayout({ children }: AppLayoutProps) {
     const timer = window.setTimeout(() => setOrgGuardExpired(true), 5000);
     return () => window.clearTimeout(timer);
   }, [isOrgReady]);
+
+  useEffect(() => {
+    if (orgId && orgId !== prevOrgId.current) {
+      prevOrgId.current = orgId;
+      void queryClient.invalidateQueries();
+    }
+  }, [orgId, queryClient]);
 
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });

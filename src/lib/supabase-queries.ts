@@ -1198,6 +1198,7 @@ export function useScheduleEntries(date: string, propertyId?: string, orgId?: st
     queryFn: () => fetchScheduleEntries(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 5,
+    structuralSharing: false,
     retry: 3,
     retryDelay: 1000,
   });
@@ -1221,6 +1222,7 @@ export function useAssignments(date: string, propertyId?: string, orgId?: string
     queryFn: () => fetchAssignments(date, propertyId, orgId),
     enabled: Boolean(date && orgId),
     staleTime: 1000 * 60 * 3,
+    structuralSharing: false,
     retry: 3,
     retryDelay: 1000,
   });
@@ -1289,6 +1291,7 @@ export function useEmployees(
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 30,
     placeholderData: (prev) => prev,
+    structuralSharing: false,
     retry: 3,
     retryDelay: 1000,
   });
@@ -1301,6 +1304,7 @@ export function useProperties(orgId?: string) {
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 60,
     placeholderData: (prev) => prev,
+    structuralSharing: false,
     retry: 3,
     retryDelay: 1000,
   });
@@ -1322,9 +1326,10 @@ export function useTasks(_propertyId?: string, orgId?: string) {
   return useQuery({
     queryKey: ['tasks', orgId],
     queryFn: () => fetchTasks(orgId),
-    enabled: !!orgId && orgId.length > 0,
+    enabled: typeof orgId === 'string' && orgId.length > 0,
     staleTime: 1000 * 60 * 60,
     placeholderData: (prev) => prev,
+    structuralSharing: false,
     retry: 3,
     retryDelay: 1000,
   });

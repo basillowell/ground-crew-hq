@@ -219,12 +219,22 @@ export default function App() {
         persister: queryPersister,
         onSuccess: () => queryClient.resumePausedMutations(),
         dehydrateOptions: {
-          shouldDehydrateQuery: (query) =>
-            Array.isArray(query.queryKey) &&
-            ["assignments", "schedule-entries", "clock-events",
-             "properties", "tasks", "employees"].includes(
-              String(query.queryKey[0])
-            ),
+          shouldDehydrateQuery: (query) => {
+            if (!Array.isArray(query.queryKey)) return false;
+            const key = String(query.queryKey[0]);
+            const allowed = [
+              "assignments",
+              "schedule-entries",
+              "clock-events",
+              "properties",
+              "tasks",
+              "employees",
+            ];
+            if (!allowed.includes(key)) return false;
+            const data = query.state.data;
+            if (Array.isArray(data) && data.length === 0) return false;
+            return query.state.status === "success";
+          },
         },
       }}
     >
