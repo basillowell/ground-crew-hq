@@ -10,7 +10,10 @@ coverage/
 .env.production.local
 .env.test.local
 .env.test
+*.local
 *.log
+.playwright/
+CODEX/
 .import_replit/
 ValetPro_clean/
 ValetPro/
