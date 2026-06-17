@@ -3450,9 +3450,8 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   );
   const [recurringRules, setRecurringRules] = useState<RecurringTaskRule[]>([]);
   const [recurringDrafts, setRecurringDrafts] = useState<Record<string, { enabled: boolean; days: string[]; assignMode: 'all' | 'specific'; employeeId: string }>>({});
-  const [loading, setLoading] = useState(true);
   const [showTimeout, setShowTimeout] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [recurringRulesError, setRecurringRulesError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState('General');
   const [newPriority, setNewPriority] = useState<'1' | '2' | '3'>('2');
@@ -3483,23 +3482,19 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
 
   const fetchTasks = useCallback(async () => {
     if (!supabase || !orgId) {
-      setLoading(false);
       return;
     }
-    setLoading(true);
-    setError(null);
+    setRecurringRulesError(null);
     const recurringResult = await supabase
       .from('recurring_task_rules')
       .select('id, org_id, property_id, task_id, employee_id, days_of_week, active')
       .eq('org_id', orgId)
       .eq('active', true);
     if (recurringResult.error) {
-      setError(recurringResult.error.message ?? 'Failed to load task settings');
-      setLoading(false);
+      setRecurringRulesError(recurringResult.error.message ?? 'Failed to load recurring task settings');
       return;
     }
     setRecurringRules((recurringResult.data as RecurringTaskRule[]) ?? []);
-    setLoading(false);
   }, [orgId]);
 
   useEffect(() => {
@@ -3507,7 +3502,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     void fetchTasks();
   }, [employeesQuery.isLoading, fetchTasks]);
 
-  const hasTaskLibraryResult = (!tasksLoading && !loading) || Boolean(error) || tasks.length > 0;
+  const hasTaskLibraryResult = !tasksLoading || tasks.length > 0;
 
   useEffect(() => {
     if (hasTaskLibraryResult) {
@@ -3560,7 +3555,6 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
       .single();
 
     if (insertError) {
-      setError(insertError.message);
       toast.error(`Failed to add task: ${insertError.message}`);
       return;
     }
@@ -3580,7 +3574,6 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     if (!confirmed) return;
     const { error: deleteError } = await supabase.from('tasks').delete().eq('id', taskId).eq('org_id', orgId);
     if (deleteError) {
-      setError(deleteError.message);
       toast.error(`Failed to delete task: ${deleteError.message}`);
       return;
     }
@@ -3620,7 +3613,6 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
       .eq('id', taskId)
       .eq('org_id', orgId);
     if (updateError) {
-      setError(updateError.message);
       toast.error(`Failed to update task: ${updateError.message}`);
       return;
     }
@@ -3763,10 +3755,8 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
         title="Task Library"
         subtitle="Reusable tasks for daily workflow planning. Drag to reorder priority."
       >
-        {!orgId || loading ? (
+        {tasksLoading && tasks.length === 0 ? (
           showTimeout && !hasTaskLibraryResult ? <LoadingTimeoutFallback /> : <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />
-        ) : error ? (
-          <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchTasks()} />
         ) : (
           <>
             <div className="overflow-hidden rounded-xl border border-surface-border">
@@ -3973,6 +3963,18 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
             {editingTaskId ? (
               <div className="rounded-xl border border-surface-border bg-surface-base p-4">
                 <p className="mb-3 text-sm font-medium text-text-primary">Recurring Schedule</p>
+                {recurringRulesError ? (
+                  <div className="mb-3 rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+                    Recurring task settings could not load. Task editing is still available.
+                    <button
+                      type="button"
+                      className="ml-2 underline hover:text-status-warning/80"
+                      onClick={() => void fetchTasks()}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : null}
                 <label className="flex cursor-pointer items-center gap-3 text-sm text-text-secondary">
                   <Switch
                     checked={Boolean(recurringDrafts[editingTaskId]?.enabled)}
