@@ -1698,7 +1698,8 @@ export default function WorkboardContent() {
             ? assignmentTimelineById.get(assignment.id)?.actualStartAt ?? null
             : null;
       syncTimelineCaches(assignment.id, { status: 'in_progress', actualStartAt: nowIso });
-      const propertyForEvent = effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : currentPropertyId;
+      const hasSpecificProperty = effectivePropertyId && effectivePropertyId !== 'all';
+      const propertyForEvent = hasSpecificProperty ? effectivePropertyId : null;
       const employeeForEvent = assignment.employeeId || (typeof assignmentRecord.employee_id === 'string' ? assignmentRecord.employee_id : null);
       const { error: assignmentError } = await supabase
         .from('assignments')
@@ -1736,12 +1737,14 @@ export default function WorkboardContent() {
           setSavingTimelineAssignmentId(null);
           return;
         }
+      } else if (!propertyForEvent) {
+        toast.info('Task updated. Select a specific property to also log a clock event.');
       }
       triggerAssignmentFlash(assignment.id, 'started');
       toast.success(`Started ${assignment.title || 'task'}`);
       setSavingTimelineAssignmentId(null);
     },
-    [assignmentTimelineById, boardDate, currentPropertyId, currentUser?.orgId, effectivePropertyId, operationalTimezone, syncTimelineCaches, triggerAssignmentFlash],
+    [assignmentTimelineById, boardDate, currentUser?.orgId, effectivePropertyId, operationalTimezone, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const completeAssignmentTimeline = useCallback(
@@ -1805,7 +1808,8 @@ export default function WorkboardContent() {
         setSavingTimelineAssignmentId(null);
         return;
       }
-      const propertyForEvent = effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : currentPropertyId;
+      const hasSpecificProperty = effectivePropertyId && effectivePropertyId !== 'all';
+      const propertyForEvent = hasSpecificProperty ? effectivePropertyId : null;
       const assignmentRecord = assignment as Assignment & Record<string, unknown>;
       const employeeForEvent = assignment.employeeId || (typeof assignmentRecord.employee_id === 'string' ? assignmentRecord.employee_id : null);
       if (propertyForEvent && employeeForEvent) {
@@ -1841,6 +1845,8 @@ export default function WorkboardContent() {
           setSavingTimelineAssignmentId(null);
           return;
         }
+      } else if (!propertyForEvent) {
+        toast.info('Task updated. Select a specific property to also log a clock event.');
       }
 
       const ordered = orderEmployeeAssignments(employeeAssignments);
@@ -1868,7 +1874,7 @@ export default function WorkboardContent() {
       toast.success(`Completed ${assignment.title || 'task'}`);
       setSavingTimelineAssignmentId(null);
     },
-    [currentPropertyId, currentUser?.orgId, effectivePropertyId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, syncTimelineCaches, triggerAssignmentFlash],
+    [currentUser?.orgId, effectivePropertyId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const saveAssignmentTimelineTimes = useCallback(
