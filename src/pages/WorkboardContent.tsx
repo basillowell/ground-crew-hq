@@ -150,15 +150,17 @@ type AssignmentTimelineMeta = {
 
 type TaskRowDraft = {
   id: string;
+  propertyId: string;
   taskId: string;
   equipmentId: string;
   startTime: string;
   status: 'planned' | 'in_progress' | 'done';
 };
 
-function makeEmptyTaskRow(startTime = '05:30'): TaskRowDraft {
+function makeEmptyTaskRow(startTime = '05:30', propertyId = ''): TaskRowDraft {
   return {
     id: makeId(),
+    propertyId,
     taskId: '',
     equipmentId: '',
     startTime,
@@ -575,7 +577,6 @@ export default function WorkboardContent() {
   const [sopCollapsed, setSopCollapsed] = useState(true);
   const [expandedSopIds, setExpandedSopIds] = useState<string[]>([]);
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<string[]>([]);
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [taskRows, setTaskRows] = useState<TaskRowDraft[]>(() => [makeEmptyTaskRow()]);
   const [weatherConflictOverride, setWeatherConflictOverride] = useState(false);
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
@@ -3187,8 +3188,7 @@ export default function WorkboardContent() {
       effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id ?? '';
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
-    setSelectedEmployeeIds(targetEmployeeId ? [targetEmployeeId] : []);
-    setTaskRows([makeEmptyTaskRow()]);
+    setTaskRows([makeEmptyTaskRow('05:30', effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
     setAssignmentDraft({
       employeeId: targetEmployeeId,
       propertyId: targetPropertyId,
@@ -3227,7 +3227,6 @@ export default function WorkboardContent() {
       status: assignment.status,
       notes: '',
     });
-    setSelectedEmployeeIds([]);
     setTaskRows([makeEmptyTaskRow(assignment.startTime || '05:30')]);
     setIsAssignmentModalDirty(false);
     setAssignmentDialogOpen(true);
@@ -3245,8 +3244,7 @@ export default function WorkboardContent() {
     const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
-    setSelectedEmployeeIds(targetEmployeeId ? [targetEmployeeId] : []);
-    setTaskRows([{ ...makeEmptyTaskRow(), taskId: targetTaskId }]);
+    setTaskRows([{ ...makeEmptyTaskRow('05:30', (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : request.propertyId) ?? ''), taskId: targetTaskId }]);
     setAssignmentDraft({
       employeeId: targetEmployeeId,
       propertyId: (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id) ?? '',
@@ -3269,13 +3267,12 @@ export default function WorkboardContent() {
       setAssignmentDialogOpen(false);
       setLinkedRequestId(null);
       setLinkedRequestTitle(null);
-      setSelectedEmployeeIds([]);
-      setTaskRows([makeEmptyTaskRow()]);
+      setTaskRows([makeEmptyTaskRow('05:30', effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
       setWeatherConflictOverride(false);
       setIsAssignmentModalDirty(false);
       return true;
     },
-    [isAssignmentModalDirty],
+    [effectivePropertyId, isAssignmentModalDirty],
   );
 
   useEffect(() => {
@@ -3332,11 +3329,10 @@ export default function WorkboardContent() {
       toast.error('Invalid assignment date.');
       return;
     }
-    const resolvedPropertyId =
-      (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ??
-      assignmentDraft.propertyId ??
-      null;
-    if (!resolvedPropertyId) {
+    const resolvedPropertyId = editingAssignmentId
+      ? (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ?? assignmentDraft.propertyId ?? null
+      : null;
+    if (editingAssignmentId && !resolvedPropertyId) {
       toast.error('No property available for assignment.');
       return;
     }
@@ -3349,123 +3345,105 @@ export default function WorkboardContent() {
     let linkedRequestTaskId: string | null = editingAssignmentId ? assignmentDraft.taskId || null : null;
 
     if (!editingAssignmentId) {
-      const employeesToAssign = selectedEmployeeIds.length > 0
-        ? scheduledEmployees.filter((employee) => selectedEmployeeIds.includes(employee.id))
-        : [];
-      if (employeesToAssign.length === 0) {
-        toast.error('Select at least one crew member.');
+      if (!assignmentDraft.employeeId) {
+        toast.error('Select a crew member.');
         return;
       }
       if (taskRows.every((row) => !row.taskId)) {
         toast.error('Add at least one task.');
         return;
       }
-      const scheduledByEmployee = new Map(
-        scheduleList
-          .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
-          .map((entry) => [entry.employeeId, entry]),
-      );
+      const employee =
+        scheduledEmployees.find((entry) => entry.id === assignmentDraft.employeeId) ??
+        fallbackEligibleEmployees.find((entry) => entry.id === assignmentDraft.employeeId);
+      if (!employee) {
+        toast.error('Selected crew member not found.');
+        return;
+      }
+      const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
+      const shiftMinutes = shift ? Math.max(timeToMinutes(shift.shiftEnd) - timeToMinutes(shift.shiftStart), 0) : 0;
+      const assignedMinutes = dayAssignments
+        .filter((assignment) => assignment.employeeId === employee.id)
+        .reduce((sum, assignment) => sum + Math.round((assignment.estimatedHours ?? 0) * 60), 0);
       const rowsToInsert: Array<Record<string, unknown>> = [];
       const optimisticAssignments: Assignment[] = [];
-      const orderIndexByEmployee = dayAssignments.reduce<Record<string, number>>((acc, assignment) => {
-        acc[assignment.employeeId] = (acc[assignment.employeeId] ?? 0) + 1;
-        return acc;
-      }, {});
-      const assignedMinutesByEmployee = dayAssignments.reduce<Record<string, number>>((acc, assignment) => {
-        acc[assignment.employeeId] = (acc[assignment.employeeId] ?? 0) + Math.round((assignment.estimatedHours ?? 0) * 60);
-        return acc;
-      }, {});
-      const pendingMinutesByEmployee: Record<string, number> = {};
+      let nextOrder = dayAssignments.filter((assignment) => assignment.employeeId === employee.id).length + 1;
+      let pendingMinutes = 0;
 
-      for (const employee of employeesToAssign) {
-        const shift = scheduledByEmployee.get(employee.id);
-        const propertyIdForEmployee =
-          (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : assignmentDraft.propertyId || shift?.propertyId) ??
-          activeProperty?.id ??
-          properties[0]?.id ??
-          null;
-        for (const taskRow of taskRows) {
-          if (!taskRow.taskId) continue;
-          const selectedTask = taskLibrary.find((task) => task.id === taskRow.taskId) ?? null;
-          const selectedTaskName = selectedTask?.name ?? 'Task';
-          const selectedTaskId = String(selectedTask?.id ?? '').trim();
-          const employeeName = `${employee.firstName} ${employee.lastName}`.trim() || 'crew member';
-          if (!propertyIdForEmployee) {
-            toast.warning(`Skipped ${employeeName}: no property available.`);
+      for (const taskRow of taskRows) {
+        if (!taskRow.taskId) continue;
+        const propertyIdForRow = taskRow.propertyId || activeProperty?.id || properties[0]?.id || null;
+        if (!propertyIdForRow) {
+          toast.warning('Skipped a task: no property selected.');
+          continue;
+        }
+        const selectedTask = taskLibrary.find((task) => task.id === taskRow.taskId) ?? null;
+        const selectedTaskName = selectedTask?.name ?? 'Task';
+        const selectedTaskId = String(selectedTask?.id ?? '').trim();
+        if (!isValidUuid(selectedTaskId)) {
+          toast.warning(`Skipped ${selectedTaskName}: invalid task.`);
+          continue;
+        }
+        if (taskRow.equipmentId) {
+          const selectedEquipment = availableEquipment.find((unit) => unit.id === taskRow.equipmentId);
+          const isReady = selectedEquipment && String(selectedEquipment.status ?? '').toLowerCase() === 'available' && selectedEquipment.active !== false;
+          if (!isReady) {
+            toast.warning(`Skipped ${selectedTaskName}: equipment is not ready.`);
             continue;
           }
-          if (!isValidUuid(selectedTaskId)) {
-            toast.warning(`Skipped ${employeeName}: invalid task.`);
-            continue;
-          }
-          if (taskRow.equipmentId) {
-            const selectedEquipment = availableEquipment.find((unit) => unit.id === taskRow.equipmentId);
-            const isReady = selectedEquipment && String(selectedEquipment.status ?? '').toLowerCase() === 'available' && selectedEquipment.active !== false;
-            if (!isReady) {
-              toast.warning(`Skipped ${employeeName} / ${selectedTaskName}: equipment is not ready.`);
-              continue;
-            }
-          }
-          const employeeShift = shift ?? getShiftForEmployee(scheduleList, employee.id, boardDate);
-          const shiftMinutes = employeeShift
-            ? Math.max(timeToMinutes(employeeShift.shiftEnd) - timeToMinutes(employeeShift.shiftStart), 0)
-            : 0;
-          const assignedMinutes = assignedMinutesByEmployee[employee.id] ?? 0;
-          const estimatedHours = Number(selectedTask?.estimated_hours ?? 0);
-          const estimatedMinutes = Math.round(estimatedHours * 60);
-          const pendingMinutes = pendingMinutesByEmployee[employee.id] ?? 0;
-          if (shiftMinutes > 0 && assignedMinutes + pendingMinutes + estimatedMinutes > shiftMinutes) {
-            toast('Assigned tasks exceed shift hours', {
-              description: `${employeeName} · Shift: ${shiftMinutes} min · Assigned: ${assignedMinutes + pendingMinutes + estimatedMinutes} min`,
-            });
-          }
-          const nextOrder = (orderIndexByEmployee[employee.id] ?? 0) + 1;
-          orderIndexByEmployee[employee.id] = nextOrder;
-          const assignmentId = makeId();
-          const writeStatus = toAssignmentWriteStatus(taskRow.status);
-          const row: Record<string, unknown> = {
-            id: assignmentId,
-            org_id: currentUser.orgId,
-            employee_id: employee.id,
-            property_id: propertyIdForEmployee,
-            task_id: selectedTaskId,
-            title: linkedRequestTitle ?? selectedTaskName,
-            date: boardDate,
-            status: writeStatus,
-            estimated_hours: estimatedHours,
-            order_index: nextOrder,
-            equipment_unit_id: taskRow.equipmentId || null,
-          };
-          if (taskRow.startTime) row.start_time = taskRow.startTime;
-          if (assignmentDraft.notes.trim()) row.notes = assignmentDraft.notes.trim();
-          const validationError = validateAssignmentWritePayload({
-            employee_id: String(row.employee_id ?? ''),
-            task_id: String(row.task_id ?? ''),
-            org_id: String(row.org_id ?? ''),
-            date: String(row.date ?? ''),
-            status: String(row.status ?? ''),
-          });
-          if (validationError) {
-            toast.warning(`Skipped ${employeeName} / ${selectedTaskName}: ${validationError}`);
-            continue;
-          }
-
-          linkedRequestTaskId = linkedRequestTaskId ?? selectedTaskId;
-          pendingMinutesByEmployee[employee.id] = pendingMinutes + estimatedMinutes;
-          rowsToInsert.push(row);
-          optimisticAssignments.push({
-            id: assignmentId,
-            employeeId: employee.id,
-            taskId: selectedTaskId,
-            equipmentId: taskRow.equipmentId || undefined,
-            date: boardDate,
-            startTime: taskRow.startTime || '06:00',
-            estimatedHours: Number((estimatedMinutes / 60).toFixed(2)),
-            duration: estimatedMinutes,
-            area: activeProperty?.name ?? 'Assigned property',
-            status: normalizeAssignmentStatus(writeStatus) as Assignment['status'],
+        }
+        const estimatedHours = Number(selectedTask?.estimated_hours ?? 0);
+        const estimatedMinutes = Math.round(estimatedHours * 60);
+        if (shiftMinutes > 0 && assignedMinutes + pendingMinutes + estimatedMinutes > shiftMinutes) {
+          toast('Assigned tasks exceed shift hours', {
+            description: `Shift: ${shiftMinutes} min · Assigned: ${assignedMinutes + pendingMinutes + estimatedMinutes} min`,
           });
         }
+        const assignmentId = makeId();
+        const writeStatus = toAssignmentWriteStatus(taskRow.status);
+        const row: Record<string, unknown> = {
+          id: assignmentId,
+          org_id: currentUser.orgId,
+          employee_id: employee.id,
+          property_id: propertyIdForRow,
+          task_id: selectedTaskId,
+          title: linkedRequestTitle ?? selectedTaskName,
+          date: boardDate,
+          status: writeStatus,
+          estimated_hours: estimatedHours,
+          order_index: nextOrder,
+          equipment_unit_id: taskRow.equipmentId || null,
+          start_time: taskRow.startTime || null,
+          notes: assignmentDraft.notes.trim() || null,
+        };
+        const validationError = validateAssignmentWritePayload({
+          employee_id: String(row.employee_id ?? ''),
+          task_id: String(row.task_id ?? ''),
+          org_id: String(row.org_id ?? ''),
+          date: String(row.date ?? ''),
+          status: String(row.status ?? ''),
+        });
+        if (validationError) {
+          toast.warning(`Skipped ${selectedTaskName}: ${validationError}`);
+          continue;
+        }
+
+        linkedRequestTaskId = linkedRequestTaskId ?? selectedTaskId;
+        pendingMinutes += estimatedMinutes;
+        nextOrder += 1;
+        rowsToInsert.push(row);
+        optimisticAssignments.push({
+          id: assignmentId,
+          employeeId: employee.id,
+          taskId: selectedTaskId,
+          equipmentId: taskRow.equipmentId || undefined,
+          date: boardDate,
+          startTime: taskRow.startTime || '06:00',
+          estimatedHours: Number((estimatedMinutes / 60).toFixed(2)),
+          duration: estimatedMinutes,
+          area: properties.find((property) => property.id === propertyIdForRow)?.name ?? 'Assigned property',
+          status: normalizeAssignmentStatus(writeStatus) as Assignment['status'],
+        });
       }
 
       if (rowsToInsert.length === 0) {
@@ -3496,14 +3474,15 @@ export default function WorkboardContent() {
             startTime: String(row.start_time ?? '06:00'),
             estimatedHours: Number(row.estimated_hours ?? 0),
             duration: Math.round(Number(row.estimated_hours ?? 0) * 60),
-            area: activeProperty?.name ?? 'Assigned property',
+            area: properties.find((property) => property.id === String(row.property_id ?? ''))?.name ?? 'Assigned property',
             status: normalizeAssignmentStatus(String(row.status ?? 'planned')) as Assignment['status'],
           });
         });
       } else {
         optimisticAssignments.forEach((assignment) => appendAssignmentToCaches(assignment));
       }
-      toast.success(`${rowsToInsert.length} tasks assigned across ${employeesToAssign.length} crew members.`);
+      const employeeName = `${employee.firstName} ${employee.lastName}`.trim() || 'crew member';
+      toast.success(`${rowsToInsert.length} tasks assigned to ${employeeName}.`);
     } else {
       if (!assignmentDraft.taskId || !assignmentDraft.employeeId) return;
       if (assignmentDraft.equipmentId) {
@@ -3619,8 +3598,7 @@ export default function WorkboardContent() {
     setLinkedRequestId(null);
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
-    setSelectedEmployeeIds([]);
-    setTaskRows([makeEmptyTaskRow()]);
+    setTaskRows([makeEmptyTaskRow('05:30', effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
     setWeatherConflictOverride(false);
     setIsAssignmentModalDirty(false);
     closeAssignmentDialog(true);
@@ -5331,119 +5309,30 @@ export default function WorkboardContent() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            {editingAssignmentId ? (
-              <div className="col-span-2">
-                <label className="text-xs text-muted-foreground">Crew member</label>
-                <select
-                  ref={assignmentFirstFieldRef}
-                  value={assignmentDraft.employeeId}
-                  onChange={(e) => {
-                    setIsAssignmentModalDirty(true);
-                    setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value });
-                  }}
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  data-testid="select-assignment-employee"
-                >
-                  {fallbackEligibleEmployees.length === 0 && <option value="">No employees available</option>}
-                  {fallbackEligibleEmployees.map((e) => {
-                    const shift = getShiftForEmployee(scheduleList, e.id, boardDate);
-                    const shiftStr = shift ? ` (${formatTime(shift.shiftStart)}–${formatTime(shift.shiftEnd)})` : '';
-                    return (
-                      <option key={e.id} value={e.id}>
-                        {e.firstName} {e.lastName}{shiftStr} · {e.department || e.group || 'General'}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            ) : (
-              <div className="col-span-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs text-muted-foreground">Crew members</label>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-primary hover:underline"
-                      onClick={() => {
-                        setIsAssignmentModalDirty(true);
-                        setSelectedEmployeeIds(scheduledEmployees.map((employee) => employee.id));
-                      }}
-                    >
-                      Select all
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
-                      onClick={() => {
-                        setIsAssignmentModalDirty(true);
-                        setSelectedEmployeeIds([]);
-                      }}
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                </div>
-                <div
-                  tabIndex={-1}
-                  className="max-h-44 overflow-y-auto rounded-md border border-input bg-background"
-                  data-testid="assignment-crew-multiselect"
-                >
-                  {scheduledEmployees.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-muted-foreground">No scheduled crew for this date.</div>
-                  ) : (
-                    scheduledEmployees.map((employee) => {
-                      const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
-                      const shiftStr = shift ? `${formatTime(shift.shiftStart)}-${formatTime(shift.shiftEnd)}` : 'No shift';
-                      const checked = selectedEmployeeIds.includes(employee.id);
-                      return (
-                        <label key={employee.id} className="flex cursor-pointer items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/40">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) => {
-                              setIsAssignmentModalDirty(true);
-                              setSelectedEmployeeIds((current) =>
-                                event.target.checked
-                                  ? Array.from(new Set([...current, employee.id]))
-                                  : current.filter((id) => id !== employee.id),
-                              );
-                            }}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-medium">
-                              {employee.firstName} {employee.lastName}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {shiftStr} · {employee.department || employee.group || 'General'}
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            )}
-            {effectivePropertyId === 'all' ? (
-              <div className="col-span-2">
-                <label className="text-xs text-muted-foreground">Property</label>
-                <select
-                  value={assignmentDraft.propertyId}
-                  onChange={(e) => {
-                    setIsAssignmentModalDirty(true);
-                    setAssignmentDraft({ ...assignmentDraft, propertyId: e.target.value });
-                  }}
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">Select property</option>
-                  {properties.map((property) => (
-                    <option key={property.id} value={property.id}>
-                      {property.name}
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Crew member</label>
+              <select
+                ref={assignmentFirstFieldRef}
+                value={assignmentDraft.employeeId}
+                onChange={(e) => {
+                  setIsAssignmentModalDirty(true);
+                  setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value });
+                }}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-assignment-employee"
+              >
+                {fallbackEligibleEmployees.length === 0 && <option value="">No employees available</option>}
+                {fallbackEligibleEmployees.map((e) => {
+                  const shift = getShiftForEmployee(scheduleList, e.id, boardDate);
+                  const shiftStr = shift ? ` (${formatTime(shift.shiftStart)}-${formatTime(shift.shiftEnd)})` : '';
+                  return (
+                    <option key={e.id} value={e.id}>
+                      {e.firstName} {e.lastName}{shiftStr} · {e.department || e.group || 'General'}
                     </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
+                  );
+                })}
+              </select>
+            </div>
 
             {editingAssignmentId ? (
               <>
@@ -5564,7 +5453,13 @@ export default function WorkboardContent() {
                     className="text-xs font-medium text-primary hover:underline"
                     onClick={() => {
                       setIsAssignmentModalDirty(true);
-                      setTaskRows((current) => [...current, makeEmptyTaskRow(current[current.length - 1]?.startTime || '05:30')]);
+                      setTaskRows((current) => [
+                        ...current,
+                        makeEmptyTaskRow(
+                          current[current.length - 1]?.startTime || '05:30',
+                          effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '',
+                        ),
+                      ]);
                     }}
                   >
                     + Add another task
@@ -5589,6 +5484,25 @@ export default function WorkboardContent() {
                       ) : null}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <label className="text-xs text-muted-foreground">Property</label>
+                        <select
+                          value={row.propertyId}
+                          onChange={(e) => {
+                            setIsAssignmentModalDirty(true);
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, propertyId: e.target.value } : item)));
+                          }}
+                          className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          data-testid="select-assignment-row-property"
+                        >
+                          <option value="">Select property</option>
+                          {properties.map((property) => (
+                            <option key={property.id} value={property.id}>
+                              {property.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <div className="col-span-2">
                         <label className="text-xs text-muted-foreground">Task</label>
                         <select
