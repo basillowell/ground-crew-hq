@@ -3153,6 +3153,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   const queryClient = useQueryClient();
   const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
   const propertiesQuery = useProperties(orgId ?? undefined);
+  const properties = propertiesQuery.data ?? [];
   const { data: rawTasks = [], isLoading: tasksLoading } = useTasks(undefined, orgId ?? undefined);
   const taskSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -3326,16 +3327,15 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
 
   const addTask = async () => {
     if (!supabase || !orgId || !newName.trim()) return;
-    const defaultPropertyId = propertiesQuery.data?.[0]?.id ?? null;
-    if (!defaultPropertyId) {
-      toast.error('No property found — add a property in Settings first');
+    if (!properties[0]?.id) {
+      toast.error('Add a property in Settings before creating tasks');
       return;
     }
     const { data, error: insertError } = await supabase
       .from('tasks')
       .insert({
         org_id: orgId,
-        property_id: defaultPropertyId,
+        property_id: properties[0]?.id ?? null,
         name: newName.trim(),
         category: newCategory.trim() || 'General',
         priority: Number(newPriority),
