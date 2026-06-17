@@ -102,6 +102,28 @@ Every property insert must have a submitting/loading state that disables the
 save action while the insert is in flight. This prevents duplicate property rows
 from double-clicks, Enter-key repeats, or slow-network retries.
 
+**Rule 14 - No sentinel values into UUID columns**
+Any selector that can resolve to a placeholder like 'all' (meaning "no
+specific item chosen") must be explicitly checked and converted to null,
+or the action blocked with a toast, before it reaches any Supabase
+insert/update payload. Never let a sentinel string land in a uuid column.
+
+**Rule 15 - No business data in localStorage**
+Any data used across more than one device, session, or user (categories,
+SOPs, anything visible to a teammate) lives in Supabase, never
+localStorage/sessionStorage - even as a "for now" shortcut.
+
+**Rule 16 - Verification must include real command output**
+A "done" report alone isn't sufficient. Every commit report must include
+actual output: git log -1 --oneline, git status --short, and grep -n
+counts for any removed/renamed symbols - not prose summary only.
+
+**Rule 17 - Admin/manager RLS scopes to org, not personal property assignment**
+Any RLS policy or helper function gating admin/manager access checks
+org_id membership only - never the admin's own employee.property_id.
+An admin manages their whole org, not just the one property their own
+employee record happens to be pinned to.
+
 ---
 
 ## Coding Rules
