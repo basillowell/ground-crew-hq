@@ -1386,9 +1386,9 @@ function WorkspaceTab({
     String(orgInfo?.subscription_status ?? '').toLowerCase() === 'active' ||
     String(orgInfo?.plan ?? '').toLowerCase().includes('pro');
   const usageLimits = {
-    properties: isProPlan ? null : 1,
-    employees: isProPlan ? null : 5,
-    tasks: isProPlan ? null : 20,
+    properties: isProPlan ? null : 3,
+    employees: isProPlan ? null : 10,
+    tasks: isProPlan ? null : 50,
     scheduleEntriesThisMonth: isProPlan ? null : 100,
   } as const;
   const usageRows = [
@@ -3061,6 +3061,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   const { orgId } = useAuth();
   const queryClient = useQueryClient();
   const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
+  const propertiesQuery = useProperties(orgId ?? undefined);
   const { data: rawTasks = [], isLoading: tasksLoading } = useTasks(undefined, orgId ?? undefined);
   const taskSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -3234,11 +3235,16 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
 
   const addTask = async () => {
     if (!supabase || !orgId || !newName.trim()) return;
+    const defaultPropertyId = propertiesQuery.data?.[0]?.id ?? null;
+    if (!defaultPropertyId) {
+      toast.error('No property found — add a property in Settings first');
+      return;
+    }
     const { data, error: insertError } = await supabase
       .from('tasks')
       .insert({
         org_id: orgId,
-        property_id: null,
+        property_id: defaultPropertyId,
         name: newName.trim(),
         category: newCategory.trim() || 'General',
         priority: Number(newPriority),
