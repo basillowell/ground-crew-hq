@@ -44,19 +44,18 @@ self.addEventListener("fetch", (event) => {
 
   if (event.request.mode === "navigate") {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        const networkFetch = fetch(event.request)
-          .then((response) => {
-            if (response && response.status === 200) {
-              const copy = response.clone();
-              void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-            }
-            return response;
-          })
-          .catch(() => cached);
-
-        return cached || networkFetch;
-      }),
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          return cached || Response.error();
+        }),
     );
     return;
   }
