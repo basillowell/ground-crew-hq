@@ -109,6 +109,13 @@ function normalizeAssignmentStatus(status?: string) {
   return 'planned';
 }
 
+function toAssignmentWriteStatus(status?: string) {
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'in-progress' || value === 'in_progress') return 'in_progress';
+  if (value === 'done' || value === 'complete' || value === 'completed') return 'done';
+  return 'planned';
+}
+
 function coverageBadgeClass(coveragePercent: number) {
   if (coveragePercent >= 80) return 'border-status-active/20 bg-status-active/10 text-status-active';
   if (coveragePercent >= 50) return 'border-status-pending/20 bg-status-pending/10 text-status-pending';
@@ -140,6 +147,24 @@ type AssignmentTimelineMeta = {
   actualCompletedAt: string | null;
   actualHours: number | null;
 };
+
+type TaskRowDraft = {
+  id: string;
+  taskId: string;
+  equipmentId: string;
+  startTime: string;
+  status: 'planned' | 'in_progress' | 'done';
+};
+
+function makeEmptyTaskRow(startTime = '05:30'): TaskRowDraft {
+  return {
+    id: makeId(),
+    taskId: '',
+    equipmentId: '',
+    startTime,
+    status: 'planned',
+  };
+}
 
 function toLocalTimeLabel(value: string | null | undefined, timezone: string) {
   if (!value) return '';
@@ -550,7 +575,8 @@ export default function WorkboardContent() {
   const [sopCollapsed, setSopCollapsed] = useState(true);
   const [expandedSopIds, setExpandedSopIds] = useState<string[]>([]);
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<string[]>([]);
-  const [assignToAllScheduledCrew, setAssignToAllScheduledCrew] = useState(false);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [taskRows, setTaskRows] = useState<TaskRowDraft[]>(() => [makeEmptyTaskRow()]);
   const [weatherConflictOverride, setWeatherConflictOverride] = useState(false);
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
     scheduledCrew: false,
@@ -610,7 +636,6 @@ export default function WorkboardContent() {
     propertyId: '',
     taskId: '',
     equipmentId: '',
-    area: 'Primary zone',
     startTime: '05:30',
     status: 'planned' as Assignment['status'],
     notes: '',
@@ -1385,9 +1410,16 @@ export default function WorkboardContent() {
       return { hasSprayConflict: false, sprayMessage: null, heatMessage: null };
     }
 
-    const selectedTask = taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null;
-    const categoryText = String(selectedTask?.category ?? '').toLowerCase();
-    const sprayCategory = categoryText.includes('spray') || categoryText.includes('irrigation') || categoryText.includes('application');
+    const selectedTaskIds = editingAssignmentId
+      ? [assignmentDraft.taskId]
+      : taskRows.map((row) => row.taskId).filter(Boolean);
+    const selectedTasks = selectedTaskIds
+      .map((taskId) => taskLibrary.find((task) => task.id === taskId) ?? null)
+      .filter((task): task is TaskLibraryItem => Boolean(task));
+    const sprayCategory = selectedTasks.some((task) => {
+      const categoryText = String(task.category ?? '').toLowerCase();
+      return categoryText.includes('spray') || categoryText.includes('irrigation') || categoryText.includes('application');
+    });
 
     const windOver = weatherSnapshot.windSpeed > escalationThresholds.windSpeedSprayCutoffMph;
     const rainOver = weatherSnapshot.precipitationProbability > escalationThresholds.rainProbabilitySprayCutoffPct;
@@ -1409,16 +1441,21 @@ export default function WorkboardContent() {
     };
   }, [
     assignmentDraft.taskId,
+    editingAssignmentId,
     escalationThresholds.heatAdvisoryTempF,
     escalationThresholds.rainProbabilitySprayCutoffPct,
     escalationThresholds.windSpeedSprayCutoffMph,
+    taskRows,
     taskLibrary,
     weatherSnapshot,
   ]);
 
   const selectedTaskForDraft = useMemo(
-    () => taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null,
-    [assignmentDraft.taskId, taskLibrary],
+    () => {
+      const taskId = editingAssignmentId ? assignmentDraft.taskId : taskRows.find((row) => row.taskId)?.taskId ?? '';
+      return taskLibrary.find((task) => task.id === taskId) ?? null;
+    },
+    [assignmentDraft.taskId, editingAssignmentId, taskRows, taskLibrary],
   );
 
   const handleGenerateTaskNotes = useCallback(async () => {
@@ -1429,7 +1466,6 @@ export default function WorkboardContent() {
     try {
       const taskName = selectedTaskForDraft.name || 'Task';
       const category = selectedTaskForDraft.category || 'General';
-      const location = assignmentDraft.area || 'assigned area';
       const estimated = Number(selectedTaskForDraft.estimated_hours ?? 0);
       const weatherLine = weatherSnapshot
         ? `Weather is ${Math.round(weatherSnapshot.temperature)}°F with winds near ${Math.round(weatherSnapshot.windSpeed)} mph.`
@@ -1439,7 +1475,7 @@ export default function WorkboardContent() {
       await new Promise((resolve) => window.setTimeout(resolve, 350));
 
       const generated = [
-        `Complete ${taskName} in ${location} using standard ${category.toLowerCase()} procedures.`,
+        `Complete ${taskName} using standard ${category.toLowerCase()} procedures.`,
         estimated > 0
           ? `Target completion in about ${estimated} hour${estimated === 1 ? '' : 's'} and report any hazards or delays immediately.`
           : 'Report any hazards or delays immediately and confirm completion once finished.',
@@ -1455,11 +1491,11 @@ export default function WorkboardContent() {
     } finally {
       setIsGeneratingTaskNotes(false);
     }
-  }, [assignmentDraft.area, isGeneratingTaskNotes, selectedTaskForDraft, weatherSnapshot]);
+  }, [isGeneratingTaskNotes, selectedTaskForDraft, weatherSnapshot]);
 
   useEffect(() => {
     setWeatherConflictOverride(false);
-  }, [assignmentDraft.taskId, assignmentDraft.employeeId, assignmentDraft.startTime, boardDate]);
+  }, [assignmentDraft.taskId, assignmentDraft.employeeId, assignmentDraft.startTime, boardDate, taskRows]);
 
   const isRequestOpen = useCallback(
     (status: string) => !['assigned', 'dismissed', 'done', 'closed'].includes(status.toLowerCase()),
@@ -3146,23 +3182,22 @@ export default function WorkboardContent() {
 
   function openAssignmentDialog(employeeId: string) {
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
     const targetPropertyId =
       effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id ?? '';
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
+    setSelectedEmployeeIds(targetEmployeeId ? [targetEmployeeId] : []);
+    setTaskRows([makeEmptyTaskRow()]);
     setAssignmentDraft({
       employeeId: targetEmployeeId,
       propertyId: targetPropertyId,
-      taskId: taskList[0]?.id ?? '',
+      taskId: '',
       equipmentId: '',
-      area: defaultLocation,
       startTime: '05:30',
       status: 'planned',
       notes: '',
     });
-    setAssignToAllScheduledCrew(false);
     setIsAssignmentModalDirty(false);
     setAssignmentDialogOpen(true);
   }
@@ -3188,12 +3223,12 @@ export default function WorkboardContent() {
       propertyId: assignment.propertyId ?? '',
       taskId: assignment.taskId,
       equipmentId: assignment.equipmentId ?? '',
-      area: assignment.area,
       startTime: assignment.startTime,
       status: assignment.status,
       notes: '',
     });
-    setAssignToAllScheduledCrew(false);
+    setSelectedEmployeeIds([]);
+    setTaskRows([makeEmptyTaskRow(assignment.startTime || '05:30')]);
     setIsAssignmentModalDirty(false);
     setAssignmentDialogOpen(true);
   }
@@ -3210,17 +3245,17 @@ export default function WorkboardContent() {
     const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
+    setSelectedEmployeeIds(targetEmployeeId ? [targetEmployeeId] : []);
+    setTaskRows([{ ...makeEmptyTaskRow(), taskId: targetTaskId }]);
     setAssignmentDraft({
       employeeId: targetEmployeeId,
       propertyId: (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id) ?? '',
       taskId: targetTaskId,
       equipmentId: '',
-      area: request.location || request.preferredLocation || propertyWorkLocations[0]?.name || 'Primary zone',
       startTime: '05:30',
       status: 'planned',
       notes: request.description ?? '',
     });
-    setAssignToAllScheduledCrew(false);
     setIsAssignmentModalDirty(false);
     setAssignmentDialogOpen(true);
   }
@@ -3234,7 +3269,8 @@ export default function WorkboardContent() {
       setAssignmentDialogOpen(false);
       setLinkedRequestId(null);
       setLinkedRequestTitle(null);
-      setAssignToAllScheduledCrew(false);
+      setSelectedEmployeeIds([]);
+      setTaskRows([makeEmptyTaskRow()]);
       setWeatherConflictOverride(false);
       setIsAssignmentModalDirty(false);
       return true;
@@ -3287,12 +3323,7 @@ export default function WorkboardContent() {
       toast.info('Demo mode is read-only.');
       return;
     }
-    if (!supabase || !assignmentDraft.taskId) return;
-    if (!assignToAllScheduledCrew && !assignmentDraft.employeeId) return;
-    if (assignToAllScheduledCrew && !editingAssignmentId && scheduledEmployees.length === 0) {
-      toast.error('No scheduled crew available for bulk assign.');
-      return;
-    }
+    if (!supabase) return;
     if (!currentUser?.orgId) {
       toast.error('Missing organization context.');
       return;
@@ -3309,48 +3340,26 @@ export default function WorkboardContent() {
       toast.error('No property available for assignment.');
       return;
     }
-    if (assignmentDraft.equipmentId) {
-      const selectedEquipment = availableEquipment.find((unit) => unit.id === assignmentDraft.equipmentId);
-      const isReady = selectedEquipment && String(selectedEquipment.status ?? '').toLowerCase() === 'available' && selectedEquipment.active !== false;
-      if (!isReady) {
-        toast.error('Selected equipment is not ready for assignment.');
-        return;
-      }
-    }
-
-    const employeeShift = getShiftForEmployee(scheduleList, assignmentDraft.employeeId, boardDate);
-    const shiftMinutes = employeeShift
-      ? Math.max(timeToMinutes(employeeShift.shiftEnd) - timeToMinutes(employeeShift.shiftStart), 0)
-      : 0;
-    const existingEmployeeAssignments = dayAssignments.filter(
-      (assignment) => assignment.employeeId === assignmentDraft.employeeId && assignment.id !== editingAssignmentId,
-    );
-    const assignedMinutes = existingEmployeeAssignments.reduce(
-      (sum, assignment) => sum + Math.round((assignment.estimatedHours ?? 0) * 60),
-      0,
-    );
-    const selectedTask = taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null;
-    const selectedTaskName = linkedRequestTitle ?? selectedTask?.name ?? 'Task';
-    const selectedTaskId = String(selectedTask?.id ?? '').trim();
 
     if (dispatchWeatherConflict.hasSprayConflict && !weatherConflictOverride && !ignoreWeatherConflict) {
       toast.warning('Weather conflict detected. Review warning before dispatching.');
       return;
     }
 
-    if (!isValidUuid(selectedTaskId)) {
-      toast.error('Selected task is invalid. Please reselect the task.');
-      return;
-    }
-    const estimatedHours = Number(selectedTask?.estimated_hours ?? 0);
-    const estimatedMinutes = Math.round(estimatedHours * 60);
-    if (shiftMinutes > 0 && assignedMinutes + estimatedMinutes > shiftMinutes) {
-      toast('Assigned tasks exceed shift hours', {
-        description: `Shift: ${shiftMinutes} min · Assigned: ${assignedMinutes + estimatedMinutes} min`,
-      });
-    }
+    let linkedRequestTaskId: string | null = editingAssignmentId ? assignmentDraft.taskId || null : null;
 
-    if (assignToAllScheduledCrew && !editingAssignmentId) {
+    if (!editingAssignmentId) {
+      const employeesToAssign = selectedEmployeeIds.length > 0
+        ? scheduledEmployees.filter((employee) => selectedEmployeeIds.includes(employee.id))
+        : [];
+      if (employeesToAssign.length === 0) {
+        toast.error('Select at least one crew member.');
+        return;
+      }
+      if (taskRows.every((row) => !row.taskId)) {
+        toast.error('Add at least one task.');
+        return;
+      }
       const scheduledByEmployee = new Map(
         scheduleList
           .filter((entry) => entry.date === boardDate && entry.status === 'scheduled')
@@ -3362,70 +3371,105 @@ export default function WorkboardContent() {
         acc[assignment.employeeId] = (acc[assignment.employeeId] ?? 0) + 1;
         return acc;
       }, {});
+      const assignedMinutesByEmployee = dayAssignments.reduce<Record<string, number>>((acc, assignment) => {
+        acc[assignment.employeeId] = (acc[assignment.employeeId] ?? 0) + Math.round((assignment.estimatedHours ?? 0) * 60);
+        return acc;
+      }, {});
+      const pendingMinutesByEmployee: Record<string, number> = {};
 
-      let hasValidationFailure = false;
-      for (const employee of scheduledEmployees) {
+      for (const employee of employeesToAssign) {
         const shift = scheduledByEmployee.get(employee.id);
         const propertyIdForEmployee =
-          (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : shift?.propertyId) ??
+          (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : assignmentDraft.propertyId || shift?.propertyId) ??
           activeProperty?.id ??
           properties[0]?.id ??
           null;
-        if (!propertyIdForEmployee) return;
-        const nextOrder = (orderIndexByEmployee[employee.id] ?? 0) + 1;
-        orderIndexByEmployee[employee.id] = nextOrder;
-        const assignmentId = makeId();
-        const row: Record<string, unknown> = {
-          id: assignmentId,
-          org_id: currentUser.orgId,
-          employee_id: employee.id,
-          property_id: propertyIdForEmployee,
-          task_id: selectedTaskId,
-          title: selectedTaskName,
-          date: boardDate,
-          status: 'planned',
-          estimated_hours: estimatedHours,
-          order_index: nextOrder,
-          equipment_unit_id: assignmentDraft.equipmentId || null,
-        };
-        if (assignmentDraft.startTime) row.start_time = assignmentDraft.startTime;
-        if (assignmentDraft.area.trim()) row.location = assignmentDraft.area.trim();
-        if (assignmentDraft.notes.trim()) row.notes = assignmentDraft.notes.trim();
-        if (assignmentDraft.equipmentId) {
-          row.equipment_unit_id = assignmentDraft.equipmentId;
-        }
-        const validationError = validateAssignmentWritePayload({
-          employee_id: String(row.employee_id ?? ''),
-          task_id: String(row.task_id ?? ''),
-          org_id: String(row.org_id ?? ''),
-          date: String(row.date ?? ''),
-          status: String(row.status ?? ''),
-        });
-        if (validationError) {
-          toast.error(validationError);
-          hasValidationFailure = true;
-          break;
-        }
+        for (const taskRow of taskRows) {
+          if (!taskRow.taskId) continue;
+          const selectedTask = taskLibrary.find((task) => task.id === taskRow.taskId) ?? null;
+          const selectedTaskName = selectedTask?.name ?? 'Task';
+          const selectedTaskId = String(selectedTask?.id ?? '').trim();
+          const employeeName = `${employee.firstName} ${employee.lastName}`.trim() || 'crew member';
+          if (!propertyIdForEmployee) {
+            toast.warning(`Skipped ${employeeName}: no property available.`);
+            continue;
+          }
+          if (!isValidUuid(selectedTaskId)) {
+            toast.warning(`Skipped ${employeeName}: invalid task.`);
+            continue;
+          }
+          if (taskRow.equipmentId) {
+            const selectedEquipment = availableEquipment.find((unit) => unit.id === taskRow.equipmentId);
+            const isReady = selectedEquipment && String(selectedEquipment.status ?? '').toLowerCase() === 'available' && selectedEquipment.active !== false;
+            if (!isReady) {
+              toast.warning(`Skipped ${employeeName} / ${selectedTaskName}: equipment is not ready.`);
+              continue;
+            }
+          }
+          const employeeShift = shift ?? getShiftForEmployee(scheduleList, employee.id, boardDate);
+          const shiftMinutes = employeeShift
+            ? Math.max(timeToMinutes(employeeShift.shiftEnd) - timeToMinutes(employeeShift.shiftStart), 0)
+            : 0;
+          const assignedMinutes = assignedMinutesByEmployee[employee.id] ?? 0;
+          const estimatedHours = Number(selectedTask?.estimated_hours ?? 0);
+          const estimatedMinutes = Math.round(estimatedHours * 60);
+          const pendingMinutes = pendingMinutesByEmployee[employee.id] ?? 0;
+          if (shiftMinutes > 0 && assignedMinutes + pendingMinutes + estimatedMinutes > shiftMinutes) {
+            toast('Assigned tasks exceed shift hours', {
+              description: `${employeeName} · Shift: ${shiftMinutes} min · Assigned: ${assignedMinutes + pendingMinutes + estimatedMinutes} min`,
+            });
+          }
+          const nextOrder = (orderIndexByEmployee[employee.id] ?? 0) + 1;
+          orderIndexByEmployee[employee.id] = nextOrder;
+          const assignmentId = makeId();
+          const writeStatus = toAssignmentWriteStatus(taskRow.status);
+          const row: Record<string, unknown> = {
+            id: assignmentId,
+            org_id: currentUser.orgId,
+            employee_id: employee.id,
+            property_id: propertyIdForEmployee,
+            task_id: selectedTaskId,
+            title: linkedRequestTitle ?? selectedTaskName,
+            date: boardDate,
+            status: writeStatus,
+            estimated_hours: estimatedHours,
+            order_index: nextOrder,
+            equipment_unit_id: taskRow.equipmentId || null,
+          };
+          if (taskRow.startTime) row.start_time = taskRow.startTime;
+          if (assignmentDraft.notes.trim()) row.notes = assignmentDraft.notes.trim();
+          const validationError = validateAssignmentWritePayload({
+            employee_id: String(row.employee_id ?? ''),
+            task_id: String(row.task_id ?? ''),
+            org_id: String(row.org_id ?? ''),
+            date: String(row.date ?? ''),
+            status: String(row.status ?? ''),
+          });
+          if (validationError) {
+            toast.warning(`Skipped ${employeeName} / ${selectedTaskName}: ${validationError}`);
+            continue;
+          }
 
-        rowsToInsert.push(row);
-        optimisticAssignments.push({
-          id: assignmentId,
-          employeeId: employee.id,
-          taskId: selectedTaskId,
-          equipmentId: assignmentDraft.equipmentId || undefined,
-          date: boardDate,
-          startTime: assignmentDraft.startTime || '06:00',
-          estimatedHours: Number((estimatedMinutes / 60).toFixed(2)),
-          duration: estimatedMinutes,
-          area: assignmentDraft.area.trim() || 'Primary zone',
-          status: 'planned',
-        });
+          linkedRequestTaskId = linkedRequestTaskId ?? selectedTaskId;
+          pendingMinutesByEmployee[employee.id] = pendingMinutes + estimatedMinutes;
+          rowsToInsert.push(row);
+          optimisticAssignments.push({
+            id: assignmentId,
+            employeeId: employee.id,
+            taskId: selectedTaskId,
+            equipmentId: taskRow.equipmentId || undefined,
+            date: boardDate,
+            startTime: taskRow.startTime || '06:00',
+            estimatedHours: Number((estimatedMinutes / 60).toFixed(2)),
+            duration: estimatedMinutes,
+            area: activeProperty?.name ?? 'Assigned property',
+            status: normalizeAssignmentStatus(writeStatus) as Assignment['status'],
+          });
+        }
       }
 
-      if (hasValidationFailure) return;
-
       if (rowsToInsert.length === 0) {
-        toast.error('No scheduled crew available for bulk assign.');
+        toast.error('No valid assignments to dispatch.');
         return;
       }
 
@@ -3449,19 +3493,54 @@ export default function WorkboardContent() {
             taskId: String(row.task_id ?? ''),
             equipmentId: row.equipment_unit_id ? String(row.equipment_unit_id) : undefined,
             date: String(row.date ?? boardDate),
-            startTime: String(row.start_time ?? (assignmentDraft.startTime || '06:00')),
+            startTime: String(row.start_time ?? '06:00'),
             estimatedHours: Number(row.estimated_hours ?? 0),
             duration: Math.round(Number(row.estimated_hours ?? 0) * 60),
-            area: String(row.location ?? (assignmentDraft.area.trim() || 'Primary zone')),
+            area: activeProperty?.name ?? 'Assigned property',
             status: normalizeAssignmentStatus(String(row.status ?? 'planned')) as Assignment['status'],
           });
         });
       } else {
         optimisticAssignments.forEach((assignment) => appendAssignmentToCaches(assignment));
       }
-      toast.success(`Assigned ${selectedTaskName} to ${rowsToInsert.length} crew members.`);
+      toast.success(`${rowsToInsert.length} tasks assigned across ${employeesToAssign.length} crew members.`);
     } else {
+      if (!assignmentDraft.taskId || !assignmentDraft.employeeId) return;
+      if (assignmentDraft.equipmentId) {
+        const selectedEquipment = availableEquipment.find((unit) => unit.id === assignmentDraft.equipmentId);
+        const isReady = selectedEquipment && String(selectedEquipment.status ?? '').toLowerCase() === 'available' && selectedEquipment.active !== false;
+        if (!isReady) {
+          toast.error('Selected equipment is not ready for assignment.');
+          return;
+        }
+      }
+      const employeeShift = getShiftForEmployee(scheduleList, assignmentDraft.employeeId, boardDate);
+      const shiftMinutes = employeeShift
+        ? Math.max(timeToMinutes(employeeShift.shiftEnd) - timeToMinutes(employeeShift.shiftStart), 0)
+        : 0;
+      const existingEmployeeAssignments = dayAssignments.filter(
+        (assignment) => assignment.employeeId === assignmentDraft.employeeId && assignment.id !== editingAssignmentId,
+      );
+      const assignedMinutes = existingEmployeeAssignments.reduce(
+        (sum, assignment) => sum + Math.round((assignment.estimatedHours ?? 0) * 60),
+        0,
+      );
+      const selectedTask = taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null;
+      const selectedTaskName = linkedRequestTitle ?? selectedTask?.name ?? 'Task';
+      const selectedTaskId = String(selectedTask?.id ?? '').trim();
+      if (!isValidUuid(selectedTaskId)) {
+        toast.error('Selected task is invalid. Please reselect the task.');
+        return;
+      }
+      const estimatedHours = Number(selectedTask?.estimated_hours ?? 0);
+      const estimatedMinutes = Math.round(estimatedHours * 60);
+      if (shiftMinutes > 0 && assignedMinutes + estimatedMinutes > shiftMinutes) {
+        toast('Assigned tasks exceed shift hours', {
+          description: `Shift: ${shiftMinutes} min · Assigned: ${assignedMinutes + estimatedMinutes} min`,
+        });
+      }
       const assignmentId = editingAssignmentId ?? makeId();
+      const writeStatus = toAssignmentWriteStatus(assignmentDraft.status);
       const basePayload: Record<string, unknown> = {
         id: assignmentId,
         org_id: currentUser.orgId,
@@ -3470,13 +3549,12 @@ export default function WorkboardContent() {
         task_id: selectedTaskId,
         title: selectedTaskName,
         date: boardDate,
-        status: assignmentDraft.status ?? 'planned',
+        status: writeStatus,
         estimated_hours: estimatedHours,
         order_index: existingEmployeeAssignments.length,
         equipment_unit_id: assignmentDraft.equipmentId || null,
       };
       if (assignmentDraft.startTime) basePayload.start_time = assignmentDraft.startTime;
-      if (assignmentDraft.area.trim()) basePayload.location = assignmentDraft.area.trim();
       if (assignmentDraft.notes.trim()) basePayload.notes = assignmentDraft.notes.trim();
       if (assignmentDraft.equipmentId) {
         basePayload.equipment_unit_id = assignmentDraft.equipmentId;
@@ -3513,8 +3591,8 @@ export default function WorkboardContent() {
         date: String(data?.date ?? boardDate),
         startTime: String(data?.start_time ?? (assignmentDraft.startTime || '06:00')),
         duration: Math.round(Number(data?.estimated_hours ?? estimatedHours) * 60),
-        area: String(data?.location ?? (assignmentDraft.area.trim() || 'Primary zone')),
-        status: normalizeAssignmentStatus(String(data?.status ?? assignmentDraft.status ?? 'planned')) as Assignment['status'],
+        area: String(data?.location ?? activeProperty?.name ?? 'Assigned property'),
+        status: normalizeAssignmentStatus(String(data?.status ?? writeStatus)) as Assignment['status'],
       };
       appendAssignmentToCaches(optimisticAssignment);
       const selectedEmployee = employeeList.find((employee) => employee.id === optimisticAssignment.employeeId);
@@ -3527,8 +3605,7 @@ export default function WorkboardContent() {
         .from('task_requests')
         .update({
           status: 'assigned',
-          task_id: assignmentDraft.taskId || null,
-          preferred_location: assignmentDraft.area,
+          task_id: linkedRequestTaskId,
           org_id: currentUser?.orgId ?? null,
         })
         .eq('id', linkedRequestId);
@@ -3542,7 +3619,8 @@ export default function WorkboardContent() {
     setLinkedRequestId(null);
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
-    setAssignToAllScheduledCrew(false);
+    setSelectedEmployeeIds([]);
+    setTaskRows([makeEmptyTaskRow()]);
     setWeatherConflictOverride(false);
     setIsAssignmentModalDirty(false);
     closeAssignmentDialog(true);
@@ -5253,7 +5331,7 @@ export default function WorkboardContent() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            {!assignToAllScheduledCrew || editingAssignmentId ? (
+            {editingAssignmentId ? (
               <div className="col-span-2">
                 <label className="text-xs text-muted-foreground">Crew member</label>
                 <select
@@ -5278,7 +5356,74 @@ export default function WorkboardContent() {
                   })}
                 </select>
               </div>
-            ) : null}
+            ) : (
+              <div className="col-span-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Crew members</label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-primary hover:underline"
+                      onClick={() => {
+                        setIsAssignmentModalDirty(true);
+                        setSelectedEmployeeIds(scheduledEmployees.map((employee) => employee.id));
+                      }}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+                      onClick={() => {
+                        setIsAssignmentModalDirty(true);
+                        setSelectedEmployeeIds([]);
+                      }}
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                </div>
+                <div
+                  tabIndex={-1}
+                  className="max-h-44 overflow-y-auto rounded-md border border-input bg-background"
+                  data-testid="assignment-crew-multiselect"
+                >
+                  {scheduledEmployees.length === 0 ? (
+                    <div className="px-3 py-4 text-sm text-muted-foreground">No scheduled crew for this date.</div>
+                  ) : (
+                    scheduledEmployees.map((employee) => {
+                      const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
+                      const shiftStr = shift ? `${formatTime(shift.shiftStart)}-${formatTime(shift.shiftEnd)}` : 'No shift';
+                      const checked = selectedEmployeeIds.includes(employee.id);
+                      return (
+                        <label key={employee.id} className="flex cursor-pointer items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/40">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              setIsAssignmentModalDirty(true);
+                              setSelectedEmployeeIds((current) =>
+                                event.target.checked
+                                  ? Array.from(new Set([...current, employee.id]))
+                                  : current.filter((id) => id !== employee.id),
+                              );
+                            }}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium">
+                              {employee.firstName} {employee.lastName}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {shiftStr} · {employee.department || employee.group || 'General'}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
             {effectivePropertyId === 'all' ? (
               <div className="col-span-2">
                 <label className="text-xs text-muted-foreground">Property</label>
@@ -5300,6 +5445,8 @@ export default function WorkboardContent() {
               </div>
             ) : null}
 
+            {editingAssignmentId ? (
+              <>
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Task</label>
               <select
@@ -5355,32 +5502,6 @@ export default function WorkboardContent() {
               </button>
             </div>
 
-            {!editingAssignmentId ? (
-              <div className="col-span-2 rounded-lg border bg-muted/20 px-3 py-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={assignToAllScheduledCrew}
-                    onChange={(e) => {
-                      setIsAssignmentModalDirty(true);
-                      setAssignToAllScheduledCrew(e.target.checked);
-                    }}
-                  />
-                  Assign to all scheduled crew
-                </label>
-                {assignToAllScheduledCrew && assignmentDraft.taskId ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Will assign{' '}
-                    <span className="font-medium text-foreground">
-                      {taskLibrary.find((task) => task.id === assignmentDraft.taskId)?.name ?? 'selected task'}
-                    </span>{' '}
-                    to {scheduledEmployees.length} crew member{scheduledEmployees.length === 1 ? '' : 's'}:{' '}
-                    {scheduledEmployees.map((employee) => `${employee.firstName} ${employee.lastName}`).join(', ')}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Equipment</label>
                 <select
@@ -5433,35 +5554,137 @@ export default function WorkboardContent() {
                 <option value="complete">Complete</option>
               </select>
             </div>
-
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Location / Area</label>
-              {propertyWorkLocations.length > 0 ? (
-                <select
-                  value={assignmentDraft.area}
-                  onChange={(e) => {
-                    setIsAssignmentModalDirty(true);
-                    setAssignmentDraft({ ...assignmentDraft, area: e.target.value });
-                  }}
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  data-testid="select-assignment-area"
-                >
-                  {propertyWorkLocations.map((l) => (
-                    <option key={l.id} value={l.name}>{l.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  value={assignmentDraft.area}
-                  onChange={(e) => {
-                    setIsAssignmentModalDirty(true);
-                    setAssignmentDraft({ ...assignmentDraft, area: e.target.value });
-                  }}
-                  className="mt-1"
-                  data-testid="input-assignment-area"
-                />
-              )}
-            </div>
+              </>
+            ) : (
+              <div className="col-span-2 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Tasks</label>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary hover:underline"
+                    onClick={() => {
+                      setIsAssignmentModalDirty(true);
+                      setTaskRows((current) => [...current, makeEmptyTaskRow(current[current.length - 1]?.startTime || '05:30')]);
+                    }}
+                  >
+                    + Add another task
+                  </button>
+                </div>
+                {taskRows.map((row, index) => (
+                  <div key={row.id} className="rounded-lg border bg-muted/20 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Task {index + 1}</span>
+                      {taskRows.length > 1 ? (
+                        <button
+                          type="button"
+                          className="text-lg leading-none text-muted-foreground hover:text-foreground"
+                          aria-label={`Remove task ${index + 1}`}
+                          onClick={() => {
+                            setIsAssignmentModalDirty(true);
+                            setTaskRows((current) => current.filter((item) => item.id !== row.id));
+                          }}
+                        >
+                          x
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <label className="text-xs text-muted-foreground">Task</label>
+                        <select
+                          value={row.taskId}
+                          onChange={(e) => {
+                            if (e.target.value === '__manage_task_library__') {
+                              if (!closeAssignmentDialog()) return;
+                              navigate('/app/settings?tab=Tasks');
+                              return;
+                            }
+                            setIsAssignmentModalDirty(true);
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, taskId: e.target.value } : item)));
+                          }}
+                          className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          data-testid="select-assignment-task"
+                        >
+                          <option value="">Select task</option>
+                          {showTaskLoading ? <option value="" disabled>Loading tasks...</option> : null}
+                          {taskLibrary.length === 0 && !isLoadingTasks ? (
+                            <option value="" disabled>No tasks in library - add tasks in Settings to Tasks</option>
+                          ) : null}
+                          {orderedTaskCategories.map((category) => (
+                            <optgroup key={category} label={category}>
+                              {groupedTaskLibrary[category].map((task) => (
+                                <option key={task.id} value={task.id}>
+                                  {task.name} ({Number(task.estimated_hours ?? 0)}h)
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                          <option value="__manage_task_library__">+ Manage task library</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs text-muted-foreground">Equipment</label>
+                        <select
+                          value={row.equipmentId}
+                          onChange={(e) => {
+                            setIsAssignmentModalDirty(true);
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, equipmentId: e.target.value } : item)));
+                          }}
+                          className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          data-testid="select-assignment-equipment"
+                        >
+                          <option value="">No equipment</option>
+                          {availableEquipment.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {(u.unit_name || u.name || 'Equipment')} ({u.type || 'General'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Start time</label>
+                        <Input
+                          type="time"
+                          value={row.startTime}
+                          className="mt-1 border-border bg-background text-foreground"
+                          onChange={(e) => {
+                            setIsAssignmentModalDirty(true);
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, startTime: e.target.value } : item)));
+                          }}
+                          data-testid="input-assignment-start"
+                        />
+                        <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(row.startTime)}</div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Status</label>
+                        <select
+                          value={row.status}
+                          onChange={(e) => {
+                            setIsAssignmentModalDirty(true);
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, status: e.target.value as TaskRowDraft['status'] } : item)));
+                          }}
+                          className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          data-testid="select-assignment-status"
+                        >
+                          <option value="planned">Planned</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="done">Complete</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {taskLibraryError ? (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary hover:underline"
+                    onClick={() => void refetchTasks()}
+                  >
+                    Retry loading tasks
+                  </button>
+                ) : null}
+              </div>
+            )}
 
             <div className="col-span-2">
               <div className="flex items-center justify-between">
@@ -5472,7 +5695,7 @@ export default function WorkboardContent() {
                   variant="outline"
                   className="h-8 gap-1.5 px-2 text-xs"
                   onClick={() => void handleGenerateTaskNotes()}
-                  disabled={!assignmentDraft.taskId || isGeneratingTaskNotes}
+                  disabled={!selectedTaskForDraft || isGeneratingTaskNotes}
                 >
                   <Sparkles className={`h-3.5 w-3.5 ${isGeneratingTaskNotes ? 'animate-pulse' : ''}`} />
                   {isGeneratingTaskNotes ? 'Generating…' : 'Generate notes'}
