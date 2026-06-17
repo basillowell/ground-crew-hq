@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import {
@@ -412,6 +412,207 @@ function SortableTaskRowCompact({ id, children }: { id: string; children: ReactN
   );
 }
 
+function PropertyFormFields({
+  idPrefix,
+  propertyForm,
+  setPropertyForm,
+}: {
+  idPrefix: string;
+  propertyForm: PropertyFormData;
+  setPropertyForm: Dispatch<SetStateAction<PropertyFormData>>;
+}) {
+  return (
+    <div className="grid gap-3">
+      <label htmlFor={`${idPrefix}-name`} className="grid gap-1.5 text-xs font-medium text-text-muted">
+        Property name *
+        <input
+          id={`${idPrefix}-name`}
+          name="property_name"
+          required
+          className={settingsInputClass}
+          placeholder="Springfield Park Course"
+          value={propertyForm.name}
+          onChange={(event) => setPropertyForm((current) => ({ ...current, name: event.target.value }))}
+        />
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label htmlFor={`${idPrefix}-short`} className="grid gap-1.5 text-xs font-medium text-text-muted">
+          Short name *
+          <input
+            id={`${idPrefix}-short`}
+            name="short_name"
+            required
+            className={settingsInputClass}
+            placeholder="SPC"
+            value={propertyForm.shortName}
+            onChange={(event) => setPropertyForm((current) => ({ ...current, shortName: event.target.value }))}
+          />
+        </label>
+        <label htmlFor={`${idPrefix}-initials`} className="grid gap-1.5 text-xs font-medium text-text-muted">
+          Logo initials *
+          <input
+            id={`${idPrefix}-initials`}
+            name="logo_initials"
+            required
+            className={settingsInputClass}
+            maxLength={3}
+            placeholder="GC"
+            value={propertyForm.logoInitials}
+            onChange={(event) => setPropertyForm((current) => ({ ...current, logoInitials: event.target.value.toUpperCase() }))}
+          />
+        </label>
+      </div>
+      <label htmlFor={`${idPrefix}-color`} className="grid gap-1.5 text-xs font-medium text-text-muted">
+        Brand color *
+        <div className="flex items-center gap-3">
+          <input
+            id={`${idPrefix}-color`}
+            name="color"
+            type="color"
+            className="h-10 w-14 cursor-pointer rounded-lg border border-surface-border bg-surface-base p-1"
+            value={propertyForm.color}
+            onChange={(event) => setPropertyForm((current) => ({ ...current, color: event.target.value }))}
+            aria-label="Property brand color"
+          />
+          <span className="text-sm uppercase text-text-secondary">{propertyForm.color}</span>
+        </div>
+      </label>
+      <div className="grid gap-3 sm:grid-cols-[1fr_100px]">
+        <label htmlFor={`${idPrefix}-city`} className="grid gap-1.5 text-xs font-medium text-text-muted">
+          City
+          <input
+            id={`${idPrefix}-city`}
+            name="city"
+            className={settingsInputClass}
+            placeholder="Springfield"
+            value={propertyForm.city}
+            onChange={(event) => setPropertyForm((current) => ({ ...current, city: event.target.value }))}
+          />
+        </label>
+        <label htmlFor={`${idPrefix}-state`} className="grid gap-1.5 text-xs font-medium text-text-muted">
+          State
+          <input
+            id={`${idPrefix}-state`}
+            name="state"
+            className={settingsInputClass}
+            maxLength={2}
+            placeholder="OH"
+            value={propertyForm.state}
+            onChange={(event) => setPropertyForm((current) => ({ ...current, state: event.target.value.toUpperCase() }))}
+          />
+        </label>
+      </div>
+      <label htmlFor={`${idPrefix}-acreage`} className="grid gap-1.5 text-xs font-medium text-text-muted">
+        Acreage
+        <input
+          id={`${idPrefix}-acreage`}
+          name="acreage"
+          className={settingsInputClass}
+          type="number"
+          min={0}
+          step="0.1"
+          value={propertyForm.acreage}
+          onChange={(event) => setPropertyForm((current) => ({ ...current, acreage: event.target.value }))}
+        />
+      </label>
+    </div>
+  );
+}
+
+function SortablePropertyCard({
+  property,
+  isEditing,
+  propertyForm,
+  setPropertyForm,
+  savingProperty,
+  onEdit,
+  onCancelEdit,
+  onSave,
+  onDelete,
+}: {
+  property: PropertyItem;
+  isEditing: boolean;
+  propertyForm: PropertyFormData;
+  setPropertyForm: Dispatch<SetStateAction<PropertyFormData>>;
+  savingProperty: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSave: () => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: property.id,
+    disabled: isEditing,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`rounded-xl border border-surface-border px-4 py-3 transition-opacity ${
+        isDragging ? 'opacity-50 bg-surface-hover' : 'hover:bg-surface-hover'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {!isEditing ? (
+          <button
+            type="button"
+            className="flex min-h-11 min-w-11 cursor-grab items-center justify-center rounded-lg text-text-muted hover:bg-surface-elevated hover:text-text-primary active:cursor-grabbing"
+            aria-label={`Reorder ${property.name}`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1 py-1">
+          <p className="truncate text-sm font-medium text-text-primary">{property.name}</p>
+          <p className="text-xs text-text-muted">
+            {property.short_name || 'No short name'} Â· {property.city || 'No city'}{property.state ? `, ${property.state}` : ''}
+          </p>
+        </div>
+        {!isEditing ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
+              onClick={onEdit}
+              aria-label={`Edit ${property.name}`}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
+              onClick={onDelete}
+              aria-label={`Delete ${property.name}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {isEditing ? (
+        <div className="mt-4 grid gap-3 border-t border-surface-border pt-4 transition-all duration-150">
+          <PropertyFormFields
+            idPrefix={`prop-card-${property.id}`}
+            propertyForm={propertyForm}
+            setPropertyForm={setPropertyForm}
+          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onCancelEdit}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={onSave} disabled={savingProperty || !propertyForm.name.trim()}>
+              {savingProperty ? 'Saving...' : 'Save property'}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 
 interface SortableCategoryPillProps {
   cat: string;
@@ -758,6 +959,7 @@ function WorkspaceTab({
   const [savingOrg, setSavingOrg] = useState(false);
   const [propertyForm, setPropertyForm] = useState<PropertyFormData>(EMPTY_PROPERTY_FORM);
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
   const [propertyPendingDelete, setPropertyPendingDelete] = useState<PropertyItem | null>(null);
   const [savingProperty, setSavingProperty] = useState(false);
@@ -790,6 +992,10 @@ function WorkspaceTab({
     shiftTemplates: 0,
   });
   const equipmentTypeCategoryOptions = ['Mowing', 'Transport', 'Chemical', 'Trimming', 'Maintenance', 'General'] as const;
+  const propertySensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const fetchWorkspaceData = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -978,6 +1184,7 @@ function WorkspaceTab({
   };
 
   const openPropertyDialog = () => {
+    setEditingCardId(null);
     resetPropertyForm();
     setPropertyDialogOpen(true);
   };
@@ -992,6 +1199,16 @@ function WorkspaceTab({
     if (saved) setPropertyDialogOpen(false);
   };
 
+  const cancelPropertyCardEdit = () => {
+    setEditingCardId(null);
+    resetPropertyForm();
+  };
+
+  const savePropertyCardEdit = async () => {
+    const saved = await saveProperty();
+    if (saved) setEditingCardId(null);
+  };
+
   const startPropertyEdit = (property: PropertyItem) => {
     setEditingPropertyId(property.id);
     setPropertyForm({
@@ -1003,7 +1220,44 @@ function WorkspaceTab({
       state: property.state ?? '',
       acreage: String(property.acreage ?? 0),
     });
-    setPropertyDialogOpen(true);
+  };
+
+  const handlePropertyDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (!supabase || !orgId || !over || active.id === over.id) return;
+    const oldIndex = properties.findIndex((property) => property.id === String(active.id));
+    const newIndex = properties.findIndex((property) => property.id === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(properties, oldIndex, newIndex);
+    const changedProperties = reordered
+      .map((property, index) => ({
+        property,
+        index,
+        previousIndex: properties.findIndex((candidate) => candidate.id === property.id),
+      }))
+      .filter(({ index, previousIndex }) => index !== previousIndex);
+
+    try {
+      const results = await Promise.all(
+        changedProperties.map(({ property, index }) =>
+          supabase
+            .from('properties')
+            .update({ sort_order: index })
+            .eq('id', property.id)
+            .eq('org_id', orgId),
+        ),
+      );
+      const updateError = results.find((result) => result.error)?.error;
+      if (updateError) throw new Error(updateError.message);
+      toast.success('Property order saved');
+    } catch (dragError) {
+      const message = dragError instanceof Error ? dragError.message : 'Unable to save property order';
+      toast.error(`Unable to save property order: ${message}`);
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ['properties'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', orgId] });
+      await queryClient.refetchQueries({ queryKey: ['properties'] });
+    }
   };
 
   const deleteProperty = async (propertyId: string) => {
@@ -1720,20 +1974,29 @@ function WorkspaceTab({
         {properties.length === 0 ? (
           <p className="text-sm text-text-muted">No properties yet. Add your first property.</p>
         ) : (
-          <div className="space-y-3 pr-1">
-            {properties.map((property) => (
-              <div key={property.id} className="flex items-center gap-3 rounded-xl border border-surface-border px-4 py-3 hover:bg-surface-hover">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-text-primary">{property.name}</p>
-                  <p className="text-xs text-text-muted">
-                    {property.short_name || 'No short name'} · {property.city || 'No city'}{property.state ? `, ${property.state}` : ''}
-                  </p>
-                </div>
-                <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => startPropertyEdit(property)} aria-label={`Edit ${property.name}`}><Pencil className="h-4 w-4" /></button>
-                <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => setPropertyPendingDelete(property)} aria-label={`Delete ${property.name}`}><Trash2 className="h-4 w-4" /></button>
+          <DndContext sensors={propertySensors} collisionDetection={closestCenter} onDragEnd={handlePropertyDragEnd}>
+            <SortableContext items={properties.map((property) => property.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-3 pr-1">
+                {properties.map((property) => (
+                  <SortablePropertyCard
+                    key={property.id}
+                    property={property}
+                    isEditing={editingCardId === property.id}
+                    propertyForm={propertyForm}
+                    setPropertyForm={setPropertyForm}
+                    savingProperty={savingProperty}
+                    onEdit={() => {
+                      setEditingCardId(property.id);
+                      startPropertyEdit(property);
+                    }}
+                    onCancelEdit={cancelPropertyCardEdit}
+                    onSave={() => void savePropertyCardEdit()}
+                    onDelete={() => setPropertyPendingDelete(property)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         )}
       </SettingsCard>
 
@@ -1745,100 +2008,11 @@ function WorkspaceTab({
               {editingPropertyId ? 'Edit the selected property details' : 'Add a new property to your organization'}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
-            <label htmlFor="prop-name" className="grid gap-1.5 text-xs font-medium text-text-muted">
-              Property name *
-              <input
-                id="prop-name"
-                name="property_name"
-                required
-                className={settingsInputClass}
-                placeholder="Springfield Park Course"
-                value={propertyForm.name}
-                onChange={(event) => setPropertyForm((current) => ({ ...current, name: event.target.value }))}
-              />
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label htmlFor="prop-short" className="grid gap-1.5 text-xs font-medium text-text-muted">
-                Short name *
-                <input
-                  id="prop-short"
-                  name="short_name"
-                  required
-                  className={settingsInputClass}
-                  placeholder="SPC"
-                  value={propertyForm.shortName}
-                  onChange={(event) => setPropertyForm((current) => ({ ...current, shortName: event.target.value }))}
-                />
-              </label>
-              <label htmlFor="prop-initials" className="grid gap-1.5 text-xs font-medium text-text-muted">
-                Logo initials *
-                <input
-                  id="prop-initials"
-                  name="logo_initials"
-                  required
-                  className={settingsInputClass}
-                  maxLength={3}
-                  placeholder="GC"
-                  value={propertyForm.logoInitials}
-                  onChange={(event) => setPropertyForm((current) => ({ ...current, logoInitials: event.target.value.toUpperCase() }))}
-                />
-              </label>
-            </div>
-            <label htmlFor="prop-color" className="grid gap-1.5 text-xs font-medium text-text-muted">
-              Brand color *
-              <div className="flex items-center gap-3">
-                <input
-                  id="prop-color"
-                  name="color"
-                  type="color"
-                  className="h-10 w-14 cursor-pointer rounded-lg border border-surface-border bg-surface-base p-1"
-                  value={propertyForm.color}
-                  onChange={(event) => setPropertyForm((current) => ({ ...current, color: event.target.value }))}
-                  aria-label="Property brand color"
-                />
-                <span className="text-sm uppercase text-text-secondary">{propertyForm.color}</span>
-              </div>
-            </label>
-            <div className="grid gap-3 sm:grid-cols-[1fr_100px]">
-              <label htmlFor="prop-city" className="grid gap-1.5 text-xs font-medium text-text-muted">
-                City
-                <input
-                  id="prop-city"
-                  name="city"
-                  className={settingsInputClass}
-                  placeholder="Springfield"
-                  value={propertyForm.city}
-                  onChange={(event) => setPropertyForm((current) => ({ ...current, city: event.target.value }))}
-                />
-              </label>
-              <label htmlFor="prop-state" className="grid gap-1.5 text-xs font-medium text-text-muted">
-                State
-                <input
-                  id="prop-state"
-                  name="state"
-                  className={settingsInputClass}
-                  maxLength={2}
-                  placeholder="OH"
-                  value={propertyForm.state}
-                  onChange={(event) => setPropertyForm((current) => ({ ...current, state: event.target.value.toUpperCase() }))}
-                />
-              </label>
-            </div>
-            <label htmlFor="prop-acreage" className="grid gap-1.5 text-xs font-medium text-text-muted">
-              Acreage
-              <input
-                id="prop-acreage"
-                name="acreage"
-                className={settingsInputClass}
-                type="number"
-                min={0}
-                step="0.1"
-                value={propertyForm.acreage}
-                onChange={(event) => setPropertyForm((current) => ({ ...current, acreage: event.target.value }))}
-              />
-            </label>
-          </div>
+          <PropertyFormFields
+            idPrefix="prop-dialog"
+            propertyForm={propertyForm}
+            setPropertyForm={setPropertyForm}
+          />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closePropertyDialog}>
               Cancel
@@ -1848,7 +2022,7 @@ function WorkspaceTab({
               onClick={() => void handleSaveProperty()}
               disabled={savingProperty || !propertyForm.name.trim()}
             >
-              {savingProperty ? 'Saving...' : editingPropertyId ? 'Save property' : 'Save property'}
+              {savingProperty ? 'Saving...' : 'Save property'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1875,7 +2049,6 @@ function WorkspaceTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
 
       <SettingsCard
         title="Standard Operating Procedures"
