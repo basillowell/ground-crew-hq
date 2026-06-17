@@ -387,6 +387,7 @@
 | id                     | uuid        | NO       | gen_random_uuid() |
 | name                   | text        | NO       |              |
 | short_name             | text        | NO       |              |
+| sort_order             | integer     | NO       | 0            |
 | logo_initials          | text        | NO       | 'GC'         |
 | color                  | text        | NO       | '#166534'    |
 | city                   | text        | NO       | ''           |
@@ -398,6 +399,8 @@
 | created_at             | timestamptz | NO       | now()        |
 | org_id                 | uuid        | YES      |              |
 | weather_location_label | text        | YES      |              |
+
+sort_order persists manual drag-and-drop ordering, ascending.
 
 RLS:
 - INSERT uses an `org_id` membership check only because a new row has no existing property `id`.

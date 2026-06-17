@@ -1262,7 +1262,7 @@ async function fetchEmployees(
 
 async function fetchProperties(orgId?: string): Promise<Property[]> {
   const client = ensureSupabase();
-  let query = client.from('properties').select('*').order('name');
+  let query = client.from('properties').select('*').order('sort_order', { ascending: true });
   if (orgId) query = query.eq('org_id', orgId);
   const { data, error } = await query;
   if (error) throw error;

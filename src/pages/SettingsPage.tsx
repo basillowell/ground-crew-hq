@@ -74,6 +74,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
 
@@ -749,6 +758,7 @@ function WorkspaceTab({
   const [savingOrg, setSavingOrg] = useState(false);
   const [propertyForm, setPropertyForm] = useState<PropertyFormData>(EMPTY_PROPERTY_FORM);
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
+  const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
   const [propertyPendingDelete, setPropertyPendingDelete] = useState<PropertyItem | null>(null);
   const [savingProperty, setSavingProperty] = useState(false);
   const savingPropertyRef = useRef(false);
@@ -897,23 +907,23 @@ function WorkspaceTab({
   };
 
   const saveProperty = async () => {
-    if (savingPropertyRef.current) return;
+    if (savingPropertyRef.current) return false;
     const storeOrgId = orgId;
     const name = propertyForm.name.trim();
     const shortName = propertyForm.shortName.trim();
     const logoInitials = propertyForm.logoInitials.trim().slice(0, 3).toUpperCase();
     if (!name || !shortName || !logoInitials) {
       toast.error('Property name, short name, and logo initials are required.');
-      return;
+      return false;
     }
     if (!supabase || !storeOrgId) {
       toast.error('Organization context is unavailable.');
-      return;
+      return false;
     }
     const acreage = Number(propertyForm.acreage || '0');
     if (!Number.isFinite(acreage) || acreage < 0) {
       toast.error('Acreage must be 0 or greater.');
-      return;
+      return false;
     }
     const payload = {
       name,
@@ -946,23 +956,40 @@ function WorkspaceTab({
           .insert({
             id: propertyId,
             ...payload,
+            sort_order: properties.length,
           });
         saveError = result.error;
       }
       if (saveError) {
         setError(saveError.message);
         toast.error(`Failed to save property: ${saveError.message}`);
-        return;
+        return false;
       }
       await queryClient.invalidateQueries({ queryKey: ['properties'] });
       await queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] });
       await queryClient.refetchQueries({ queryKey: ['properties'] });
       toast.success(editingPropertyId ? 'Property updated successfully' : 'Property added successfully');
       resetPropertyForm();
+      return true;
     } finally {
       savingPropertyRef.current = false;
       setSavingProperty(false);
     }
+  };
+
+  const openPropertyDialog = () => {
+    resetPropertyForm();
+    setPropertyDialogOpen(true);
+  };
+
+  const closePropertyDialog = () => {
+    setPropertyDialogOpen(false);
+    resetPropertyForm();
+  };
+
+  const handleSaveProperty = async () => {
+    const saved = await saveProperty();
+    if (saved) setPropertyDialogOpen(false);
   };
 
   const startPropertyEdit = (property: PropertyItem) => {
@@ -976,6 +1003,7 @@ function WorkspaceTab({
       state: property.state ?? '',
       acreage: String(property.acreage ?? 0),
     });
+    setPropertyDialogOpen(true);
   };
 
   const deleteProperty = async (propertyId: string) => {
@@ -1680,9 +1708,17 @@ function WorkspaceTab({
         </div>
       </SettingsCard>
 
-      <SettingsCard title={`Properties (${properties.length})`}>
+      <SettingsCard
+        title={`Properties (${properties.length})`}
+        action={
+          <Button type="button" size="sm" onClick={openPropertyDialog}>
+            <Plus className="h-4 w-4" />
+            Add property
+          </Button>
+        }
+      >
         {properties.length === 0 ? (
-          <p className="text-sm text-text-muted">No properties yet. Add your first property below.</p>
+          <p className="text-sm text-text-muted">No properties yet. Add your first property.</p>
         ) : (
           <div className="space-y-3 pr-1">
             {properties.map((property) => (
@@ -1699,119 +1735,124 @@ function WorkspaceTab({
             ))}
           </div>
         )}
-        <div className="mt-4 grid max-w-lg gap-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
-              {editingPropertyId ? 'Edit property' : 'Add property'}
-            </p>
-            {editingPropertyId ? (
-              <button type="button" className="text-xs text-text-muted hover:text-text-primary" onClick={resetPropertyForm}>
-                Cancel edit
-              </button>
-            ) : null}
-          </div>
-          <label htmlFor="prop-name" className="grid gap-1.5 text-xs font-medium text-text-muted">
-            Property name *
-            <input
-              id="prop-name"
-              name="property_name"
-              required
-              className={settingsInputClass}
-              placeholder="Springfield Park Course"
-              value={propertyForm.name}
-              onChange={(event) => setPropertyForm((current) => ({ ...current, name: event.target.value }))}
-            />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label htmlFor="prop-short" className="grid gap-1.5 text-xs font-medium text-text-muted">
-              Short name *
-              <input
-                id="prop-short"
-                name="short_name"
-                required
-                className={settingsInputClass}
-                placeholder="SPC"
-                value={propertyForm.shortName}
-                onChange={(event) => setPropertyForm((current) => ({ ...current, shortName: event.target.value }))}
-              />
-            </label>
-            <label htmlFor="prop-initials" className="grid gap-1.5 text-xs font-medium text-text-muted">
-              Logo initials *
-              <input
-                id="prop-initials"
-                name="logo_initials"
-                required
-                className={settingsInputClass}
-                maxLength={3}
-                placeholder="GC"
-                value={propertyForm.logoInitials}
-                onChange={(event) => setPropertyForm((current) => ({ ...current, logoInitials: event.target.value.toUpperCase() }))}
-              />
-            </label>
-          </div>
-          <label htmlFor="prop-color" className="grid gap-1.5 text-xs font-medium text-text-muted">
-            Brand color *
-            <div className="flex items-center gap-3">
-              <input
-                id="prop-color"
-                name="color"
-                type="color"
-                className="h-10 w-14 cursor-pointer rounded-lg border border-surface-border bg-surface-base p-1"
-                value={propertyForm.color}
-                onChange={(event) => setPropertyForm((current) => ({ ...current, color: event.target.value }))}
-                aria-label="Property brand color"
-              />
-              <span className="text-sm uppercase text-text-secondary">{propertyForm.color}</span>
-            </div>
-          </label>
-          <div className="grid gap-3 sm:grid-cols-[1fr_100px]">
-            <label htmlFor="prop-city" className="grid gap-1.5 text-xs font-medium text-text-muted">
-              City
-              <input
-                id="prop-city"
-                name="city"
-                className={settingsInputClass}
-                placeholder="Springfield"
-                value={propertyForm.city}
-                onChange={(event) => setPropertyForm((current) => ({ ...current, city: event.target.value }))}
-              />
-            </label>
-            <label htmlFor="prop-state" className="grid gap-1.5 text-xs font-medium text-text-muted">
-              State
-              <input
-                id="prop-state"
-                name="state"
-                className={settingsInputClass}
-                maxLength={2}
-                placeholder="OH"
-                value={propertyForm.state}
-                onChange={(event) => setPropertyForm((current) => ({ ...current, state: event.target.value.toUpperCase() }))}
-              />
-            </label>
-          </div>
-          <label htmlFor="prop-acreage" className="grid gap-1.5 text-xs font-medium text-text-muted">
-            Acreage
-            <input
-              id="prop-acreage"
-              name="acreage"
-              className={settingsInputClass}
-              type="number"
-              min={0}
-              step="0.1"
-              value={propertyForm.acreage}
-              onChange={(event) => setPropertyForm((current) => ({ ...current, acreage: event.target.value }))}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => void saveProperty()}
-            disabled={savingProperty || (!editingPropertyId && !propertyForm.name.trim())}
-            className="w-fit rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright disabled:opacity-60"
-          >
-            {savingProperty ? 'Saving...' : editingPropertyId ? 'Save Property' : 'Add Property'}
-          </button>
-        </div>
       </SettingsCard>
+
+      <Dialog open={propertyDialogOpen} onOpenChange={(open) => { if (open) setPropertyDialogOpen(true); else closePropertyDialog(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingPropertyId ? 'Edit property' : 'Add property'}</DialogTitle>
+            <DialogDescription>
+              {editingPropertyId ? 'Edit the selected property details' : 'Add a new property to your organization'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <label htmlFor="prop-name" className="grid gap-1.5 text-xs font-medium text-text-muted">
+              Property name *
+              <input
+                id="prop-name"
+                name="property_name"
+                required
+                className={settingsInputClass}
+                placeholder="Springfield Park Course"
+                value={propertyForm.name}
+                onChange={(event) => setPropertyForm((current) => ({ ...current, name: event.target.value }))}
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label htmlFor="prop-short" className="grid gap-1.5 text-xs font-medium text-text-muted">
+                Short name *
+                <input
+                  id="prop-short"
+                  name="short_name"
+                  required
+                  className={settingsInputClass}
+                  placeholder="SPC"
+                  value={propertyForm.shortName}
+                  onChange={(event) => setPropertyForm((current) => ({ ...current, shortName: event.target.value }))}
+                />
+              </label>
+              <label htmlFor="prop-initials" className="grid gap-1.5 text-xs font-medium text-text-muted">
+                Logo initials *
+                <input
+                  id="prop-initials"
+                  name="logo_initials"
+                  required
+                  className={settingsInputClass}
+                  maxLength={3}
+                  placeholder="GC"
+                  value={propertyForm.logoInitials}
+                  onChange={(event) => setPropertyForm((current) => ({ ...current, logoInitials: event.target.value.toUpperCase() }))}
+                />
+              </label>
+            </div>
+            <label htmlFor="prop-color" className="grid gap-1.5 text-xs font-medium text-text-muted">
+              Brand color *
+              <div className="flex items-center gap-3">
+                <input
+                  id="prop-color"
+                  name="color"
+                  type="color"
+                  className="h-10 w-14 cursor-pointer rounded-lg border border-surface-border bg-surface-base p-1"
+                  value={propertyForm.color}
+                  onChange={(event) => setPropertyForm((current) => ({ ...current, color: event.target.value }))}
+                  aria-label="Property brand color"
+                />
+                <span className="text-sm uppercase text-text-secondary">{propertyForm.color}</span>
+              </div>
+            </label>
+            <div className="grid gap-3 sm:grid-cols-[1fr_100px]">
+              <label htmlFor="prop-city" className="grid gap-1.5 text-xs font-medium text-text-muted">
+                City
+                <input
+                  id="prop-city"
+                  name="city"
+                  className={settingsInputClass}
+                  placeholder="Springfield"
+                  value={propertyForm.city}
+                  onChange={(event) => setPropertyForm((current) => ({ ...current, city: event.target.value }))}
+                />
+              </label>
+              <label htmlFor="prop-state" className="grid gap-1.5 text-xs font-medium text-text-muted">
+                State
+                <input
+                  id="prop-state"
+                  name="state"
+                  className={settingsInputClass}
+                  maxLength={2}
+                  placeholder="OH"
+                  value={propertyForm.state}
+                  onChange={(event) => setPropertyForm((current) => ({ ...current, state: event.target.value.toUpperCase() }))}
+                />
+              </label>
+            </div>
+            <label htmlFor="prop-acreage" className="grid gap-1.5 text-xs font-medium text-text-muted">
+              Acreage
+              <input
+                id="prop-acreage"
+                name="acreage"
+                className={settingsInputClass}
+                type="number"
+                min={0}
+                step="0.1"
+                value={propertyForm.acreage}
+                onChange={(event) => setPropertyForm((current) => ({ ...current, acreage: event.target.value }))}
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closePropertyDialog}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleSaveProperty()}
+              disabled={savingProperty || !propertyForm.name.trim()}
+            >
+              {savingProperty ? 'Saving...' : editingPropertyId ? 'Save property' : 'Save property'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={Boolean(propertyPendingDelete)} onOpenChange={(open) => { if (!open) setPropertyPendingDelete(null); }}>
         <AlertDialogContent>
