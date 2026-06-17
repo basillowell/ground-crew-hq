@@ -400,6 +400,12 @@ export default function WorkflowPage() {
 
   const saveAddTask = async (employeeId: string) => {
     if (!supabase || !orgId) return;
+    if (!propertyId) {
+      toast.error('Select a specific property before adding a task', {
+        description: 'You have "All Properties" selected. Switch to a property in the top dropdown first.',
+      });
+      return;
+    }
     const draft = addTaskDrafts[employeeId];
     if (!draft?.taskId) {
       toast.error('Select a task before saving.');
