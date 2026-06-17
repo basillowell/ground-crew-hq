@@ -210,9 +210,13 @@ interface UsageStats {
 
 interface StandardOperatingProcedure {
   id: string;
+  description: string | null;
+  procedure_body: string | null;
   title: string;
-  category: 'Mowing' | 'Irrigation' | 'Chemical Application' | 'Bunker' | 'Equipment' | 'General' | 'Other';
-  items: string[];
+  category: string | null;
+  estimated_hours: number | null;
+  color: string | null;
+  is_active: boolean;
 }
 
 interface WeatherLocationItem {
@@ -706,34 +710,7 @@ function WorkspaceTab({
   currentPropertyId: string;
 }) {
   const { theme, setTheme } = useTheme();
-  const SOP_STORAGE_KEY = 'ground-crew-sops';
-  const sopCategoryOptions: StandardOperatingProcedure['category'][] = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
-  const defaultSops: StandardOperatingProcedure[] = [
-    {
-      id: 'sop-mowing-greens',
-      title: 'Mowing Greens',
-      category: 'Mowing',
-      items: ['Verify height', 'Check fuel', 'Alternate direction', 'Clean after', 'Report damage'],
-    },
-    {
-      id: 'sop-spray-application',
-      title: 'Spray Application',
-      category: 'Chemical Application',
-      items: ['Check wind', 'Verify label', 'Calibrate', 'Wear PPE', 'Log in Chemical Logs', 'Record weather'],
-    },
-    {
-      id: 'sop-irrigation-check',
-      title: 'Irrigation Check',
-      category: 'Irrigation',
-      items: ['Walk zones', 'Check leaks', 'Verify run times', 'Adjust for rain', 'Report issues'],
-    },
-    {
-      id: 'sop-bunker-maintenance',
-      title: 'Bunker Maintenance',
-      category: 'Bunker',
-      items: ['Rake all', 'Check drainage', 'Repair washouts', 'Edge lips', 'Report sand levels'],
-    },
-  ];
+  const sopCategoryOptions = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -782,13 +759,16 @@ function WorkspaceTab({
   const [editingEquipmentTypeName, setEditingEquipmentTypeName] = useState('');
   const [loadingDemoData, setLoadingDemoData] = useState(false);
   const [sops, setSops] = useState<StandardOperatingProcedure[]>([]);
+  const [sopsLoading, setSopsLoading] = useState(false);
+  const [sopsError, setSopsError] = useState<string | null>(null);
+  const [sopsTimedOut, setSopsTimedOut] = useState(false);
   const [newSopTitle, setNewSopTitle] = useState('');
-  const [newSopCategory, setNewSopCategory] = useState<StandardOperatingProcedure['category']>('General');
+  const [newSopCategory, setNewSopCategory] = useState('General');
   const [newSopChecklist, setNewSopChecklist] = useState('');
   const [showSopForm, setShowSopForm] = useState(false);
   const [editingSopId, setEditingSopId] = useState<string | null>(null);
   const [editingSopTitle, setEditingSopTitle] = useState('');
-  const [editingSopCategory, setEditingSopCategory] = useState<StandardOperatingProcedure['category']>('General');
+  const [editingSopCategory, setEditingSopCategory] = useState('General');
   const [editingSopChecklist, setEditingSopChecklist] = useState('');
   const [usageStats, setUsageStats] = useState<UsageStats>({
     properties: 0,
@@ -1414,55 +1394,85 @@ function WorkspaceTab({
   const setupComplete = setupChecklist.every((item) => item.done);
 
 
+  const fetchSops = useCallback(async () => {
+    if (!supabase || !orgId) {
+      setSops([]);
+      setSopsLoading(false);
+      return;
+    }
+
+    setSopsLoading(true);
+    setSopsError(null);
+    setSopsTimedOut(false);
+
+    const { data, error: fetchError } = await supabase
+      .from('sops')
+      .select('id, title, description, procedure_body, category, estimated_hours, color, is_active')
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true });
+
+    if (fetchError) {
+      setSopsError(fetchError.message);
+      setSops([]);
+      setSopsLoading(false);
+      setSopsTimedOut(false);
+      return;
+    }
+
+    setSops((data ?? []) as StandardOperatingProcedure[]);
+    setSopsLoading(false);
+    setSopsTimedOut(false);
+  }, [orgId]);
+
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const raw = window.localStorage.getItem(SOP_STORAGE_KEY);
-    if (!raw) {
-      window.localStorage.setItem(SOP_STORAGE_KEY, JSON.stringify(defaultSops));
-      setSops(defaultSops);
+    void fetchSops();
+  }, [fetchSops]);
+
+  useEffect(() => {
+    if (!sopsLoading) {
+      setSopsTimedOut(false);
       return;
     }
-    try {
-      const parsed = JSON.parse(raw) as StandardOperatingProcedure[];
-      if (!Array.isArray(parsed)) {
-        window.localStorage.setItem(SOP_STORAGE_KEY, JSON.stringify(defaultSops));
-        setSops(defaultSops);
-        return;
-      }
-      setSops(parsed);
-    } catch {
-      window.localStorage.setItem(SOP_STORAGE_KEY, JSON.stringify(defaultSops));
-      setSops(defaultSops);
-    }
-  }, []);
+    const timer = window.setTimeout(() => {
+      setSopsTimedOut(true);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [sopsLoading]);
 
-  const persistSops = (nextSops: StandardOperatingProcedure[]) => {
-    setSops(nextSops);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(SOP_STORAGE_KEY, JSON.stringify(nextSops));
-    }
-  };
-
-  const addSop = () => {
+  const addSop = async () => {
     const title = newSopTitle.trim();
-    const items = newSopChecklist
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (!title || items.length === 0) {
-      toast.error('Enter a title and at least one checklist item.');
+    const procedureBody = newSopChecklist.trim();
+    if (!title || !procedureBody) {
+      toast.error('Enter a title and procedure steps.');
       return;
     }
-    const nextSops = [
-      ...sops,
-      {
-        id: crypto.randomUUID(),
+    if (!supabase || !orgId) {
+      toast.error('Organization context is unavailable.');
+      return;
+    }
+
+    const { data, error: insertError } = await supabase
+      .from('sops')
+      .insert({
         title,
-        category: newSopCategory,
-        items,
-      },
-    ];
-    persistSops(nextSops);
+        org_id: orgId,
+        description: null,
+        procedure_body: procedureBody,
+        category: newSopCategory || null,
+        estimated_hours: 0,
+        color: null,
+        is_active: true,
+      })
+      .select('id, title, description, procedure_body, category, estimated_hours, color, is_active')
+      .single();
+
+    if (insertError) {
+      toast.error(insertError.message);
+      return;
+    }
+
+    setSops((current) => [...current, data as StandardOperatingProcedure]);
     setNewSopTitle('');
     setNewSopCategory('General');
     setNewSopChecklist('');
@@ -1473,37 +1483,81 @@ function WorkspaceTab({
   const startSopEdit = (sop: StandardOperatingProcedure) => {
     setEditingSopId(sop.id);
     setEditingSopTitle(sop.title);
-    setEditingSopCategory(sop.category);
-    setEditingSopChecklist(sop.items.join('\n'));
+    setEditingSopCategory(sop.category ?? 'General');
+    setEditingSopChecklist(sop.procedure_body ?? '');
   };
 
-  const saveSopEdit = (sopId: string) => {
+  const saveSopEdit = async (sopId: string) => {
     const title = editingSopTitle.trim();
-    const items = editingSopChecklist
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (!title || items.length === 0) {
-      toast.error('Enter a title and at least one checklist item.');
+    const procedureBody = editingSopChecklist.trim();
+    if (!title || !procedureBody) {
+      toast.error('Enter a title and procedure steps.');
       return;
     }
-    const nextSops = sops.map((sop) =>
-      sop.id === sopId
-        ? { ...sop, title, category: editingSopCategory, items }
-        : sop,
+    if (!supabase || !orgId) {
+      toast.error('Organization context is unavailable.');
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('sops')
+      .update({
+        title,
+        description: null,
+        procedure_body: procedureBody,
+        category: editingSopCategory || null,
+        estimated_hours: 0,
+        color: null,
+      })
+      .eq('id', sopId)
+      .eq('org_id', orgId);
+
+    if (updateError) {
+      toast.error(updateError.message);
+      return;
+    }
+
+    setSops((current) =>
+      current.map((sop) =>
+        sop.id === sopId
+          ? {
+              ...sop,
+              title,
+              description: null,
+              procedure_body: procedureBody,
+              category: editingSopCategory || null,
+              estimated_hours: 0,
+              color: null,
+            }
+          : sop,
+      ),
     );
-    persistSops(nextSops);
     setEditingSopId(null);
     setEditingSopTitle('');
     setEditingSopChecklist('');
     toast.success(`SOP updated: ${title}`);
   };
 
-  const deleteSop = (sopId: string, title: string) => {
+  const deleteSop = async (sopId: string, title: string) => {
     const confirmed = window.confirm(`Delete SOP "${title}"?`);
     if (!confirmed) return;
-    const nextSops = sops.filter((sop) => sop.id !== sopId);
-    persistSops(nextSops);
+    if (!supabase || !orgId) {
+      toast.error('Organization context is unavailable.');
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('sops')
+      .update({ is_active: false })
+      .eq('id', sopId)
+      .eq('org_id', orgId);
+
+    if (updateError) {
+      toast.error(updateError.message);
+      return;
+    }
+
+    setSops((current) => current.filter((sop) => sop.id !== sopId));
     toast.success(`SOP deleted: ${title}`);
   };
 
@@ -1795,8 +1849,43 @@ function WorkspaceTab({
           ) : null
         }
       >
-        {sops.length === 0 && !showSopForm ? (
-          <p className="text-sm text-text-muted">No SOPs yet. Add your first SOP above.</p>
+        {sopsLoading && !sopsTimedOut ? (
+          <div className="grid gap-3">
+            {[0, 1, 2].map((row) => (
+              <div key={`sop-skeleton-${row}`} className="rounded-xl border border-surface-border bg-surface-elevated p-4">
+                <div className="h-4 w-1/3 animate-pulse rounded bg-surface-border" />
+                <div className="mt-2 h-3 w-1/4 animate-pulse rounded bg-surface-border" />
+              </div>
+            ))}
+          </div>
+        ) : sopsError || sopsTimedOut ? (
+          <div className="rounded-xl border border-status-warning/30 bg-status-warning/10 p-4">
+            <p className="text-sm font-medium text-status-warning">Failed to load SOPs</p>
+            <p className="mt-1 text-xs text-text-muted">
+              {sopsError ?? 'The request took longer than expected.'}
+            </p>
+            <button
+              type="button"
+              className="mt-3 rounded-lg border border-surface-border bg-surface-card px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover"
+              onClick={() => {
+                setSopsTimedOut(false);
+                void fetchSops();
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : sops.length === 0 && !showSopForm ? (
+          <div className="rounded-xl border border-dashed border-surface-border bg-surface-elevated p-6 text-center">
+            <p className="text-sm font-medium text-text-primary">No SOPs yet. Create your first SOP.</p>
+            <button
+              type="button"
+              className="mt-3 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright"
+              onClick={() => setShowSopForm(true)}
+            >
+              Add SOP
+            </button>
+          </div>
         ) : (
           <div className="grid gap-3">
             {sops.map((sop) => (
@@ -1804,14 +1893,14 @@ function WorkspaceTab({
                 {editingSopId === sop.id ? (
                   <div className="grid gap-3">
                     <input className={settingsInputClass} value={editingSopTitle} onChange={(event) => setEditingSopTitle(event.target.value)} placeholder="SOP title" />
-                    <select className={settingsInputClass} value={editingSopCategory} onChange={(event) => setEditingSopCategory(event.target.value as StandardOperatingProcedure['category'])}>
+                    <select className={settingsInputClass} value={editingSopCategory} onChange={(event) => setEditingSopCategory(event.target.value)}>
                       {sopCategoryOptions.map((category) => (
                         <option key={`sop-edit-category-${category}`} value={category}>{category}</option>
                       ))}
                     </select>
-                    <textarea className={settingsInputClass} value={editingSopChecklist} onChange={(event) => setEditingSopChecklist(event.target.value)} rows={5} placeholder="One checklist item per line" />
+                    <textarea className={settingsInputClass} value={editingSopChecklist} onChange={(event) => setEditingSopChecklist(event.target.value)} rows={5} placeholder="Procedure steps" />
                     <div className="flex gap-2">
-                      <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={() => saveSopEdit(sop.id)}>Save</button>
+                      <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={() => void saveSopEdit(sop.id)}>Save</button>
                       <button className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover" onClick={() => { setEditingSopId(null); setEditingSopTitle(''); setEditingSopChecklist(''); }}>Cancel</button>
                     </div>
                   </div>
@@ -1819,11 +1908,13 @@ function WorkspaceTab({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-text-primary">{sop.title}</p>
-                      <p className="mt-0.5 text-xs text-text-muted">{sop.category} · {sop.items.length} item{sop.items.length === 1 ? '' : 's'}</p>
+                      <p className="mt-0.5 text-xs text-text-muted">
+                        {sop.category ?? 'General'} - {(sop.procedure_body ?? '').split('\n').filter((line) => line.trim()).length} step{(sop.procedure_body ?? '').split('\n').filter((line) => line.trim()).length === 1 ? '' : 's'}
+                      </p>
                     </div>
                     <div className="flex gap-1">
                       <button className="rounded-lg p-2 text-text-muted hover:bg-surface-card hover:text-text-primary" onClick={() => startSopEdit(sop)} aria-label={`Edit ${sop.title}`}><Pencil className="h-4 w-4" /></button>
-                      <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => deleteSop(sop.id, sop.title)} aria-label={`Delete ${sop.title}`}><Trash2 className="h-4 w-4" /></button>
+                      <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deleteSop(sop.id, sop.title)} aria-label={`Delete ${sop.title}`}><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
                 )}
@@ -1835,14 +1926,14 @@ function WorkspaceTab({
           <div className="mt-4 grid gap-3 border-t border-surface-border pt-4">
             <p className="text-sm font-medium text-text-primary">Add SOP</p>
             <input className={settingsInputClass} value={newSopTitle} onChange={(event) => setNewSopTitle(event.target.value)} placeholder="SOP title" />
-            <select className={settingsInputClass} value={newSopCategory} onChange={(event) => setNewSopCategory(event.target.value as StandardOperatingProcedure['category'])}>
+            <select className={settingsInputClass} value={newSopCategory} onChange={(event) => setNewSopCategory(event.target.value)}>
               {sopCategoryOptions.map((category) => (
                 <option key={`sop-category-${category}`} value={category}>{category}</option>
               ))}
             </select>
-            <textarea className={settingsInputClass} value={newSopChecklist} onChange={(event) => setNewSopChecklist(event.target.value)} rows={5} placeholder="Checklist items (one per line)" />
+            <textarea className={settingsInputClass} value={newSopChecklist} onChange={(event) => setNewSopChecklist(event.target.value)} rows={5} placeholder="Procedure steps" />
             <div className="flex gap-2">
-              <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={addSop}>Save</button>
+              <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright" onClick={() => void addSop()}>Save</button>
               <button className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover" onClick={() => { setShowSopForm(false); setNewSopTitle(''); setNewSopCategory('General'); setNewSopChecklist(''); }}>Cancel</button>
             </div>
           </div>
