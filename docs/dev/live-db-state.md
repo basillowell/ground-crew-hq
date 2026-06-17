@@ -542,6 +542,19 @@ RLS:
 
 ---
 
+## task_categories
+| column     | type        | nullable | default |
+|------------|-------------|----------|---------|
+| id         | uuid        | NO       | gen_random_uuid() |
+| org_id     | uuid        | NO       |         |
+| name       | text        | NO       |         |
+| sort_order | integer     | NO       | 0       |
+| created_at | timestamptz | NO       | now()   |
+
+Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — categories are now org-wide and shared across devices/users.
+
+---
+
 ## task_requests
 | column      | type        | nullable | default    |
 |-------------|-------------|----------|------------|
@@ -777,5 +790,5 @@ RLS:
 
 ---
 
-## Table count: 41
+## Table count: 42
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl

@@ -34,7 +34,6 @@ import {
   Trash2,
   Users,
   Wrench,
-  X,
 } from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
 import { RecurringTasksSection } from '@/components/settings/RecurringTasksSection';
@@ -51,7 +50,6 @@ import {
 import {
   SortableContext,
   arrayMove,
-  rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -135,6 +133,12 @@ interface TaskLibraryItem {
   category: string | null;
   priority: number | null;
   estimated_hours: number | null;
+}
+
+interface TaskCategoryItem {
+  id: string;
+  name: string;
+  sort_order: number;
 }
 
 interface RecurringTaskRule {
@@ -613,16 +617,14 @@ function SortablePropertyCard({
   );
 }
 
-
-interface SortableCategoryPillProps {
-  cat: string;
-  idx: number;
+interface SortableTaskCategoryCardProps {
+  category: TaskCategoryItem;
   taskCount: number;
   isEditing: boolean;
   editValue: string;
   isConfirmDelete: boolean;
   onEditStart: () => void;
-  onEditChange: (v: string) => void;
+  onEditChange: (value: string) => void;
   onEditSave: () => void;
   onEditCancel: () => void;
   onDeleteRequest: () => void;
@@ -630,69 +632,113 @@ interface SortableCategoryPillProps {
   onDeleteCancel: () => void;
 }
 
-function SortableCategoryPill({
-  cat, idx: _idx, taskCount, isEditing, editValue, isConfirmDelete,
-  onEditStart, onEditChange, onEditSave, onEditCancel,
-  onDeleteRequest, onDeleteConfirm, onDeleteCancel,
-}: SortableCategoryPillProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat });
+function SortableTaskCategoryCard({
+  category,
+  taskCount,
+  isEditing,
+  editValue,
+  isConfirmDelete,
+  onEditStart,
+  onEditChange,
+  onEditSave,
+  onEditCancel,
+  onDeleteRequest,
+  onDeleteConfirm,
+  onDeleteCancel,
+}: SortableTaskCategoryCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: category.id,
+    disabled: isEditing,
+  });
+
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`flex flex-col items-start gap-1 ${isDragging ? 'opacity-50' : ''}`}
+      className={`rounded-xl border border-surface-border px-4 py-3 transition-opacity ${
+        isDragging ? 'opacity-50 bg-surface-hover' : 'hover:bg-surface-hover'
+      }`}
     >
-      <div
-        className={`group flex max-w-[180px] items-center gap-1.5 rounded-full border px-3 py-1.5 transition-colors ${
-          isEditing ? 'border-brand bg-muted/40' : 'border-surface-border bg-muted/40 hover:border-surface-hover'
-        }`}
-      >
-        <button
-          type="button"
-          className="cursor-grab text-text-muted/40 hover:text-text-muted active:cursor-grabbing"
-          aria-label={`Reorder ${cat}`}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-3 w-3" />
-        </button>
-        {isConfirmDelete ? (
-          <span className="flex items-center gap-1 text-xs">
-            {taskCount > 0 && (
-              <span className="text-text-muted">{cat} used by {taskCount} task{taskCount !== 1 ? 's' : ''} —{' '}</span>
-            )}
-            <span className="text-text-muted">Remove?</span>
-            <button type="button" onClick={onDeleteConfirm} className="font-medium text-status-warning hover:underline">Yes</button>
-            <button type="button" onClick={onDeleteCancel} className="text-text-muted hover:underline">No</button>
-          </span>
-        ) : isEditing ? (
-          <>
+      <div className="flex items-start gap-3">
+        {!isEditing ? (
+          <button
+            type="button"
+            className="flex min-h-11 min-w-11 cursor-grab items-center justify-center rounded-lg text-text-muted hover:bg-surface-elevated hover:text-text-primary active:cursor-grabbing"
+            aria-label={`Reorder ${category.name}`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1 py-1">
+          <p className="truncate text-sm font-medium text-text-primary">{category.name}</p>
+          <p className="text-xs text-text-muted">
+            {taskCount} task{taskCount !== 1 ? 's' : ''} using this category
+          </p>
+        </div>
+        {!isEditing && !isConfirmDelete ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
+              onClick={onEditStart}
+              aria-label={`Edit ${category.name}`}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
+              onClick={onDeleteRequest}
+              aria-label={`Delete ${category.name}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {isEditing ? (
+        <div className="mt-4 grid gap-3 border-t border-surface-border pt-4 transition-all duration-150">
+          <label className="grid gap-1.5 text-xs font-medium text-text-muted">
+            Category name
             <input
               autoFocus
-              className="w-28 bg-transparent text-xs text-text-primary focus:outline-none"
+              className={settingsInputClass}
               value={editValue}
-              onChange={(e) => onEditChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') onEditSave();
-                if (e.key === 'Escape') onEditCancel();
+              onChange={(event) => onEditChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') onEditSave();
+                if (event.key === 'Escape') onEditCancel();
               }}
             />
-            <button type="button" onClick={onEditSave} className="shrink-0 text-xs text-brand hover:text-brand-bright">Save</button>
-          </>
-        ) : (
-          <>
-            <span className="truncate text-xs font-medium text-text-primary">{cat}</span>
-            <button type="button" onClick={onEditStart} className="shrink-0 rounded p-0.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-text-primary" aria-label={`Edit ${cat}`}>
-              <Pencil className="h-2.5 w-2.5" />
-            </button>
-            <button type="button" onClick={onDeleteRequest} className="shrink-0 rounded p-0.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-status-warning" aria-label={`Delete ${cat}`}>
-              <X className="h-2.5 w-2.5" />
-            </button>
-          </>
-        )}
-      </div>
-      {taskCount > 0 ? (
-        <span className="pl-6 text-xs text-text-muted/60">{taskCount} task{taskCount !== 1 ? 's' : ''}</span>
+          </label>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onEditCancel}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={onEditSave} disabled={!editValue.trim()}>
+              Save category
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {isConfirmDelete ? (
+        <div className="mt-4 grid gap-3 border-t border-surface-border pt-4">
+          <p className="text-sm text-text-muted">
+            {taskCount > 0
+              ? `${taskCount} task${taskCount !== 1 ? 's' : ''} will fall back to General.`
+              : 'Delete this category?'}
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onDeleteCancel}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={onDeleteConfirm}>
+              Delete category
+            </Button>
+          </div>
+        </div>
       ) : null}
     </div>
   );
@@ -3369,60 +3415,113 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   const propertiesQuery = useProperties(orgId ?? undefined);
   const properties = propertiesQuery.data ?? [];
   const { data: rawTasks = [], isLoading: tasksLoading } = useTasks(undefined, orgId ?? undefined);
+  const {
+    data: categoriesData = [],
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useQuery<TaskCategoryItem[]>({
+    queryKey: ['task-categories', orgId],
+    queryFn: async () => {
+      if (!supabase || !orgId) return [];
+      const { data, error } = await supabase
+        .from('task_categories')
+        .select('id, name, sort_order')
+        .eq('org_id', orgId)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as TaskCategoryItem[];
+    },
+    enabled: Boolean(orgId),
+  });
   const taskSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const DEFAULT_TASK_CATEGORIES = [
-    'Mowing',
-    'Irrigation',
-    'Chemical Application',
-    'Trimming',
-    'Bunker Maintenance',
-    'Aeration',
-    'Fertilization',
-    'General',
-    'Equipment Maintenance',
-    'Other',
-  ];
-  const taskCategoriesKey = orgId ? `gcrew-task-categories-${orgId}` : null;
-  const [taskCategoryOptions, setTaskCategoryOptions] = useState<string[]>(DEFAULT_TASK_CATEGORIES);
-  const [editingCategoryIdx, setEditingCategoryIdx] = useState<number | null>(null);
+  const taskCategories = categoriesData;
+  const taskCategoryNames = taskCategories.map((category) => category.name);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryValue, setEditingCategoryValue] = useState('');
-  const [deletingCategoryIdx, setDeletingCategoryIdx] = useState<number | null>(null);
+  const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState('');
-
-  useEffect(() => {
-    if (!taskCategoriesKey) return;
-    try {
-      const stored = localStorage.getItem(taskCategoriesKey);
-      if (stored) setTaskCategoryOptions(JSON.parse(stored) as string[]);
-    } catch { /* use defaults */ }
-  }, [taskCategoriesKey]);
-
-  const saveCategories = (cats: string[]) => {
-    setTaskCategoryOptions(cats);
-    if (taskCategoriesKey) localStorage.setItem(taskCategoriesKey, JSON.stringify(cats));
+  const invalidateTaskCategories = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['task-categories', orgId] });
   };
-  const commitCategoryRename = (idx: number) => {
+
+  const commitCategoryRename = async (category: TaskCategoryItem) => {
+    if (!supabase || !orgId) return;
     const trimmed = editingCategoryValue.trim();
     if (!trimmed) return;
-    const next = [...taskCategoryOptions];
-    next[idx] = trimmed;
-    saveCategories(next);
-    setEditingCategoryIdx(null);
+    const { error: tasksUpdateError } = await supabase
+      .from('tasks')
+      .update({ category: trimmed })
+      .eq('category', category.name)
+      .eq('org_id', orgId);
+    if (tasksUpdateError) {
+      toast.error(`Failed to update tasks for category: ${tasksUpdateError.message}`);
+      return;
+    }
+    const { error: categoryUpdateError } = await supabase
+      .from('task_categories')
+      .update({ name: trimmed })
+      .eq('id', category.id)
+      .eq('org_id', orgId);
+    if (categoryUpdateError) {
+      toast.error(`Failed to rename category: ${categoryUpdateError.message}`);
+      return;
+    }
+    await invalidateTaskCategories();
+    await queryClient.invalidateQueries({ queryKey: ['tasks', orgId] });
+    setEditingCategoryId(null);
+    setEditingCategoryValue('');
+    toast.success(`Category renamed: ${trimmed}`);
   };
-  const commitDeleteCategory = (idx: number) => {
-    saveCategories(taskCategoryOptions.filter((_, i) => i !== idx));
-    setDeletingCategoryIdx(null);
+
+  const commitDeleteCategory = async (category: TaskCategoryItem, taskCount: number) => {
+    if (!supabase || !orgId) return;
+    if (taskCount > 0) {
+      const { error: tasksUpdateError } = await supabase
+        .from('tasks')
+        .update({ category: 'General' })
+        .eq('category', category.name)
+        .eq('org_id', orgId);
+      if (tasksUpdateError) {
+        toast.error(`Failed to reassign tasks: ${tasksUpdateError.message}`);
+        return;
+      }
+    }
+    const { error: deleteError } = await supabase
+      .from('task_categories')
+      .delete()
+      .eq('id', category.id)
+      .eq('org_id', orgId);
+    if (deleteError) {
+      toast.error(`Failed to delete category: ${deleteError.message}`);
+      return;
+    }
+    await invalidateTaskCategories();
+    await queryClient.invalidateQueries({ queryKey: ['tasks', orgId] });
+    setDeletingCategoryId(null);
+    toast.success(`Category deleted: ${category.name}`);
   };
-  const commitAddCategory = () => {
+
+  const commitAddCategory = async () => {
+    if (!supabase || !orgId) return;
     const trimmed = newCategoryInput.trim();
     if (!trimmed) return;
-    saveCategories([...taskCategoryOptions, trimmed]);
+    const { error: insertError } = await supabase.from('task_categories').insert({
+      org_id: orgId,
+      name: trimmed,
+      sort_order: taskCategories.length,
+    });
+    if (insertError) {
+      toast.error(`Failed to add category: ${insertError.message}`);
+      return;
+    }
+    await invalidateTaskCategories();
     setShowAddCategory(false);
     setNewCategoryInput('');
+    toast.success(`Category added: ${trimmed}`);
   };
 
   const displayCategory = (category: string | null | undefined) =>
@@ -3651,12 +3750,29 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     toast.success('Task priority order saved');
   };
 
-  const handleCategoryDragEnd = ({ active, over }: DragEndEvent) => {
-    if (!over || active.id === over.id) return;
-    const oldIdx = taskCategoryOptions.indexOf(String(active.id));
-    const newIdx = taskCategoryOptions.indexOf(String(over.id));
-    if (oldIdx < 0 || newIdx < 0) return;
-    saveCategories(arrayMove(taskCategoryOptions, oldIdx, newIdx));
+  const handleCategoryDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (!supabase || !orgId || !over || active.id === over.id) return;
+    const oldIndex = taskCategories.findIndex((category) => category.id === String(active.id));
+    const newIndex = taskCategories.findIndex((category) => category.id === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const reordered = arrayMove(taskCategories, oldIndex, newIndex);
+    const results = await Promise.all(
+      reordered.map((category, index) =>
+        supabase
+          .from('task_categories')
+          .update({ sort_order: index })
+          .eq('id', category.id)
+          .eq('org_id', orgId),
+      ),
+    );
+    const updateError = results.find((result) => result.error)?.error;
+    if (updateError) {
+      toast.error(`Unable to save category order: ${updateError.message}`);
+      void invalidateTaskCategories();
+      return;
+    }
+    void invalidateTaskCategories();
+    toast.success('Category order saved');
   };
 
   const setRecurringEnabled = (taskId: string, enabled: boolean) => {
@@ -3806,60 +3922,89 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
                   <p className="mt-0.5 text-xs text-text-muted">Categories organize your task library and workboard dispatch</p>
                 </div>
               </div>
-              <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
-                <SortableContext items={taskCategoryOptions} strategy={rectSortingStrategy}>
-                  <div className="flex flex-wrap gap-2">
-                    {taskCategoryOptions.map((cat, idx) => {
-                      const taskCount = tasks.filter((t) => t.category === cat).length;
-                      return (
-                        <SortableCategoryPill
-                          key={cat}
-                          cat={cat}
-                          idx={idx}
-                          taskCount={taskCount}
-                          isEditing={editingCategoryIdx === idx}
-                          editValue={editingCategoryValue}
-                          isConfirmDelete={deletingCategoryIdx === idx}
-                          onEditStart={() => { setEditingCategoryIdx(idx); setEditingCategoryValue(cat); }}
-                          onEditChange={setEditingCategoryValue}
-                          onEditSave={() => commitCategoryRename(idx)}
-                          onEditCancel={() => setEditingCategoryIdx(null)}
-                          onDeleteRequest={() => setDeletingCategoryIdx(idx)}
-                          onDeleteConfirm={() => commitDeleteCategory(idx)}
-                          onDeleteCancel={() => setDeletingCategoryIdx(null)}
-                        />
-                      );
-                    })}
+              {categoriesLoading ? (
+                <div className="h-24 animate-pulse rounded-xl bg-surface-elevated" />
+              ) : categoriesError ? (
+                <ErrorRetry
+                  message={`Failed to load task categories: ${categoriesError instanceof Error ? categoriesError.message : 'Unknown error'}`}
+                  onRetry={() => void invalidateTaskCategories()}
+                />
+              ) : (
+                <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
+                  <SortableContext items={taskCategories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
+                    <div className="grid gap-3">
+                      {taskCategories.length === 0 ? (
+                        <p className="rounded-xl border border-dashed border-surface-border px-4 py-3 text-sm text-text-muted">
+                          No task categories yet. Add one below.
+                        </p>
+                      ) : null}
+                      {taskCategories.map((category) => {
+                        const taskCount = tasks.filter((task) => task.category === category.name).length;
+                        return (
+                          <SortableTaskCategoryCard
+                            key={category.id}
+                            category={category}
+                            taskCount={taskCount}
+                            isEditing={editingCategoryId === category.id}
+                            editValue={editingCategoryValue}
+                            isConfirmDelete={deletingCategoryId === category.id}
+                            onEditStart={() => {
+                              setDeletingCategoryId(null);
+                              setEditingCategoryId(category.id);
+                              setEditingCategoryValue(category.name);
+                            }}
+                            onEditChange={setEditingCategoryValue}
+                            onEditSave={() => void commitCategoryRename(category)}
+                            onEditCancel={() => {
+                              setEditingCategoryId(null);
+                              setEditingCategoryValue('');
+                            }}
+                            onDeleteRequest={() => {
+                              setEditingCategoryId(null);
+                              setDeletingCategoryId(category.id);
+                            }}
+                            onDeleteConfirm={() => void commitDeleteCategory(category, taskCount)}
+                            onDeleteCancel={() => setDeletingCategoryId(null)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              )}
+              {!categoriesLoading && !categoriesError ? (
+                <div className="mt-3">
                     {showAddCategory ? (
-                      <div className="flex flex-col items-start gap-1">
-                        <div className="flex items-center gap-1.5 rounded-full border border-brand/40 bg-muted/40 px-3 py-1.5">
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-brand/40 bg-surface-elevated px-4 py-3">
                           <input
                             autoFocus
-                            className="w-28 bg-transparent text-xs text-text-primary placeholder:text-text-muted focus:outline-none"
+                            className={`${settingsInputClass} max-w-xs`}
                             placeholder="Category name"
                             value={newCategoryInput}
-                            onChange={(e) => setNewCategoryInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') commitAddCategory();
-                              if (e.key === 'Escape') setShowAddCategory(false);
+                            onChange={(event) => setNewCategoryInput(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') void commitAddCategory();
+                              if (event.key === 'Escape') setShowAddCategory(false);
                             }}
                           />
-                          <button type="button" onClick={commitAddCategory} className="shrink-0 text-xs text-brand hover:text-brand-bright">Add</button>
-                        </div>
-                        <span className="pl-1 text-xs text-text-muted/60">New</span>
+                          <Button type="button" onClick={() => void commitAddCategory()} disabled={!newCategoryInput.trim()}>
+                            Add
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => { setShowAddCategory(false); setNewCategoryInput(''); }}>
+                            Cancel
+                          </Button>
                       </div>
                     ) : (
-                      <button
+                      <Button
                         type="button"
                         onClick={() => { setShowAddCategory(true); setNewCategoryInput(''); }}
-                        className="flex items-center gap-1 rounded-full border border-dashed border-surface-border px-3 py-1.5 text-xs text-text-muted transition-colors hover:border-brand hover:text-brand"
+                        variant="outline"
                       >
-                        <Plus className="h-3 w-3" /> Add Category
-                      </button>
+                        <Plus className="h-4 w-4" /> Add category
+                      </Button>
                     )}
-                  </div>
-                </SortableContext>
-              </DndContext>
+                </div>
+              ) : null}
             </div>
             <div className="mt-3 flex flex-wrap gap-2 border-t border-dashed border-surface-border pt-3">
               <input
@@ -3874,7 +4019,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
               >
-                {taskCategoryOptions.map((c) => <option key={`inline-cat-${c}`} value={c}>{displayCategory(c)}</option>)}
+                {taskCategoryNames.map((categoryName) => <option key={`inline-cat-${categoryName}`} value={categoryName}>{displayCategory(categoryName)}</option>)}
               </select>
               <input
                 type="number"
@@ -3927,7 +4072,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
                   ? setEditDraft((current) => ({ ...current, category: event.target.value }))
                   : setNewCategory(event.target.value)}
               >
-                {taskCategoryOptions.map((category) => (
+                {taskCategoryNames.map((category) => (
                   <option key={`new-task-category-${category}`} value={category}>{displayCategory(category)}</option>
                 ))}
               </select>
