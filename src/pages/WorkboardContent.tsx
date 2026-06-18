@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
@@ -148,36 +147,35 @@ function TimeSelect({
 
   return (
     <div className={`mt-1 grid grid-cols-[1fr_1fr_1.15fr] gap-1 ${className}`}>
-      <Select value={parts.hour} onValueChange={(next) => updatePart({ hour: next })}>
-        <SelectTrigger className="h-10 min-w-0 px-2 text-xs">
-          <SelectValue aria-label={`${parts.hour} hour`} />
-        </SelectTrigger>
-        <SelectContent>
-          {TIME_HOURS.map((hour) => (
-            <SelectItem key={hour} value={hour}>{hour}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select value={parts.minute} onValueChange={(next) => updatePart({ minute: next })}>
-        <SelectTrigger className="h-10 min-w-0 px-2 text-xs">
-          <SelectValue aria-label={`${parts.minute} minutes`} />
-        </SelectTrigger>
-        <SelectContent>
-          {TIME_MINUTES.map((minute) => (
-            <SelectItem key={minute} value={minute}>{minute}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select value={parts.period} onValueChange={(next) => updatePart({ period: next })}>
-        <SelectTrigger className="h-10 min-w-0 px-2 text-xs">
-          <SelectValue aria-label={parts.period} />
-        </SelectTrigger>
-        <SelectContent>
-          {TIME_PERIODS.map((period) => (
-            <SelectItem key={period} value={period}>{period}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <select
+        value={parts.hour}
+        onChange={(event) => updatePart({ hour: event.target.value })}
+        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+        aria-label="Hour"
+      >
+        {TIME_HOURS.map((hour) => (
+          <option key={hour} value={hour}>{hour}</option>
+        ))}
+      </select>
+      <select
+        value={parts.minute}
+        onChange={(event) => updatePart({ minute: event.target.value })}
+        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+        aria-label="Minute"
+      >
+        {TIME_MINUTES.map((minute) => (
+          <option key={minute} value={minute}>{minute}</option>
+        ))}
+      </select>
+      <select
+        value={parts.period}
+        onChange={(event) => updatePart({ period: event.target.value })}
+        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+        aria-label="AM or PM"
+      >
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
     </div>
   );
 }
