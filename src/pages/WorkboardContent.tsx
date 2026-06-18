@@ -4645,6 +4645,7 @@ export default function WorkboardContent() {
                       employee={lane.employee}
                       assignments={lane.employeeAssignments}
                       tasks={taskList}
+                      properties={properties}
                       orderIndex={index}
                       isDragging={draggingEmployeeId === lane.employee.id}
                       isDropTarget={dropTargetEmployeeId === lane.employee.id}

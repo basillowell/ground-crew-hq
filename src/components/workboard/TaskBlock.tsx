@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { Task, Assignment } from '@/data/seedData';
+import type { Task, Assignment, Property } from '@/data/seedData';
 import { Pencil, X } from 'lucide-react';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,6 +10,7 @@ import { formatTime } from '@/utils/formatTime';
 interface TaskBlockProps {
   task: Task;
   assignment: Assignment;
+  properties: Property[];
   priorityIndex?: number;
   onEdit?: () => void;
   onRemove?: () => void;
@@ -36,6 +37,7 @@ function statusContainerClass(status: string) {
 export function TaskBlock({
   task,
   assignment,
+  properties,
   priorityIndex,
   onEdit,
   onRemove,
@@ -52,7 +54,7 @@ export function TaskBlock({
   const status = normalizeStatus(assignment.status);
   const assignmentRecord = assignment as Assignment & Record<string, unknown>;
 
-  const locationLabel = String(assignmentRecord.area ?? assignmentRecord.location ?? 'Unspecified');
+  const propertyLabel = properties.find((property) => property.id === assignment.propertyId)?.name ?? 'No property';
   const estimatedHours = useMemo(() => {
     const explicit = Number(assignmentRecord.estimatedHours ?? assignmentRecord.estimated_hours ?? 0);
     if (Number.isFinite(explicit) && explicit > 0) return explicit;
@@ -115,19 +117,33 @@ export function TaskBlock({
 
   return (
     <div
-      className={`grid h-[44px] min-h-[44px] grid-cols-[1fr_auto] items-center gap-3 overflow-hidden rounded-xl border px-3 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)}`}
+      className={`grid min-h-[58px] grid-cols-[1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)}`}
       draggable={Boolean(draggable)}
       onDragStart={draggable ? onDragStart : undefined}
       onDragEnter={draggable ? onDragEnter : undefined}
       onDragOver={draggable ? (event) => event.preventDefault() : undefined}
       onDrop={draggable ? onDrop : undefined}
     >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 overflow-hidden">
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden">
           <span className={`truncate text-sm font-semibold ${status === 'done' ? 'line-through text-muted-foreground' : ''}`} style={{ color: status === 'done' ? undefined : task.color }}>
             {task.name}
           </span>
-          <Badge variant="outline" className="shrink-0 text-[10px]">{locationLabel}</Badge>
+          <Badge variant="outline" className="shrink-0 text-[10px]">{propertyLabel}</Badge>
+          <Badge
+            variant="outline"
+            className={
+              status === 'in-progress'
+                ? 'shrink-0 border-blue-200 text-blue-700'
+                : status === 'done'
+                  ? 'shrink-0 border-green-200 text-green-700'
+                  : 'shrink-0 border-surface-border text-text-secondary'
+            }
+          >
+            {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned'}
+          </Badge>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
           <span className="shrink-0 text-[11px] text-muted-foreground">
             est {estimatedHours > 0 ? `${estimatedHours.toFixed(1)}h` : '—'} →{' '}
             <span className={actualHoursTone}>{actualHours != null ? `${actualHours.toFixed(1)}h actual` : '—'}</span>
@@ -139,22 +155,10 @@ export function TaskBlock({
           <span className="truncate text-[11px] text-muted-foreground">
             {formatTime(assignment.startTime)} · {assignment.duration}m · {equipment ? equipment.unitNumber : 'None'}
           </span>
-          <Badge
-            variant="outline"
-            className={
-              status === 'in-progress'
-                ? 'border-blue-200 text-blue-700'
-                : status === 'done'
-                  ? 'border-green-200 text-green-700'
-                  : 'border-surface-border text-text-secondary'
-            }
-          >
-            {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned'}
-          </Badge>
         </div>
       </div>
 
-      <div className="flex items-start gap-1">
+      <div className="flex items-start gap-1 pt-0.5">
         {onEdit ? (
           <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 rounded-full" onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" />

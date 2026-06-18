@@ -5,13 +5,14 @@ import { AvatarInitials } from '@/components/shared';
 import { TaskBlock } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Loader2, Pencil, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { Employee, Assignment, Task } from '@/data/seedData';
+import type { Employee, Assignment, Task, Property } from '@/data/seedData';
 import { storedIsoToWallClock, storedIsoToWallClockLabel } from '@/lib/timeWorkflow';
 
 interface EmployeeRowProps {
   employee: Employee;
   assignments: Assignment[];
   tasks: Task[];
+  properties: Property[];
   shiftLabel?: string;
   laneSummary?: string;
   laneWarning?: string;
@@ -63,6 +64,7 @@ export function EmployeeRow({
   employee,
   assignments: employeeAssignments,
   tasks,
+  properties,
   shiftLabel,
   laneSummary: _laneSummary,
   laneWarning,
@@ -222,6 +224,7 @@ export function EmployeeRow({
                         }
                       }
                       assignment={assignment}
+                      properties={properties}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
                       weatherWarnings={weatherWarningsByAssignment?.[assignment.id ?? ''] ?? []}
                       draggable
