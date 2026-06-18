@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
@@ -102,6 +103,85 @@ function formatMinutesAsHoursAndMinutes(totalMinutes: number) {
   return `${hours}h ${minutes}m`;
 }
 
+const TIME_HOURS = Array.from({ length: 12 }, (_, index) => String(index + 1));
+const TIME_MINUTES = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, '0'));
+const TIME_PERIODS = ['AM', 'PM'] as const;
+
+function parseTimeSelectValue(value?: string) {
+  const [rawHour, rawMinute] = String(value || '05:30').split(':');
+  const hour24 = Number(rawHour);
+  const minute = Number(rawMinute);
+  const safeHour24 = Number.isFinite(hour24) && hour24 >= 0 && hour24 <= 23 ? hour24 : 5;
+  const safeMinute = Number.isFinite(minute) && minute >= 0 && minute <= 59 ? Math.round(minute / 5) * 5 : 30;
+  const period = safeHour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = safeHour24 % 12 === 0 ? 12 : safeHour24 % 12;
+  return {
+    hour: String(hour12),
+    minute: String(safeMinute === 60 ? 55 : safeMinute).padStart(2, '0'),
+    period,
+  };
+}
+
+function composeTimeSelectValue(hour: string, minute: string, period: string) {
+  const hourNumber = Number(hour);
+  const safeHour = Number.isFinite(hourNumber) ? hourNumber : 5;
+  const hour24 = period === 'PM'
+    ? (safeHour === 12 ? 12 : safeHour + 12)
+    : (safeHour === 12 ? 0 : safeHour);
+  return `${String(hour24).padStart(2, '0')}:${minute}`;
+}
+
+function TimeSelect({
+  value,
+  onChange,
+  className = '',
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const parts = parseTimeSelectValue(value);
+  const updatePart = (next: Partial<typeof parts>) => {
+    const merged = { ...parts, ...next };
+    onChange(composeTimeSelectValue(merged.hour, merged.minute, merged.period));
+  };
+
+  return (
+    <div className={`mt-1 grid grid-cols-[1fr_1fr_1.15fr] gap-1 ${className}`}>
+      <Select value={parts.hour} onValueChange={(next) => updatePart({ hour: next })}>
+        <SelectTrigger className="h-10 min-w-0 px-2 text-xs">
+          <SelectValue aria-label={`${parts.hour} hour`} />
+        </SelectTrigger>
+        <SelectContent>
+          {TIME_HOURS.map((hour) => (
+            <SelectItem key={hour} value={hour}>{hour}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={parts.minute} onValueChange={(next) => updatePart({ minute: next })}>
+        <SelectTrigger className="h-10 min-w-0 px-2 text-xs">
+          <SelectValue aria-label={`${parts.minute} minutes`} />
+        </SelectTrigger>
+        <SelectContent>
+          {TIME_MINUTES.map((minute) => (
+            <SelectItem key={minute} value={minute}>{minute}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={parts.period} onValueChange={(next) => updatePart({ period: next })}>
+        <SelectTrigger className="h-10 min-w-0 px-2 text-xs">
+          <SelectValue aria-label={parts.period} />
+        </SelectTrigger>
+        <SelectContent>
+          {TIME_PERIODS.map((period) => (
+            <SelectItem key={period} value={period}>{period}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function normalizeAssignmentStatus(status?: string) {
   const value = String(status ?? '').toLowerCase();
   if (value === 'in_progress' || value === 'in-progress') return 'in-progress';
@@ -155,6 +235,7 @@ type TaskRowDraft = {
   equipmentId: string;
   startTime: string;
   status: 'planned' | 'in_progress' | 'done';
+  hoursOverride: string;
 };
 
 function makeEmptyTaskRow(startTime = '05:30', propertyId = ''): TaskRowDraft {
@@ -165,6 +246,7 @@ function makeEmptyTaskRow(startTime = '05:30', propertyId = ''): TaskRowDraft {
     equipmentId: '',
     startTime,
     status: 'planned',
+    hoursOverride: '',
   };
 }
 
@@ -3392,7 +3474,10 @@ export default function WorkboardContent() {
             continue;
           }
         }
-        const estimatedHours = Number(selectedTask?.estimated_hours ?? 0);
+        const overrideValue = Number(taskRow.hoursOverride);
+        const estimatedHours = taskRow.hoursOverride.trim() && Number.isFinite(overrideValue) && overrideValue > 0
+          ? overrideValue
+          : Number(selectedTask?.estimated_hours ?? 0);
         const estimatedMinutes = Math.round(estimatedHours * 60);
         if (shiftMinutes > 0 && assignedMinutes + pendingMinutes + estimatedMinutes > shiftMinutes) {
           toast('Assigned tasks exceed shift hours', {
@@ -4770,22 +4855,18 @@ export default function WorkboardContent() {
                                     <div className="relative z-20 mt-2 flex flex-wrap items-end gap-2 rounded-md border bg-background/70 p-2 pointer-events-auto">
                                       <label className="text-[10px] text-muted-foreground">
                                         Start
-                                        <Input
-                                          type="time"
+                                        <TimeSelect
                                           value={timelineEditStart}
-                                          onChange={(event) => setTimelineEditStart(event.target.value)}
-                                          className="ml-1 h-10 w-32 border-border bg-background text-foreground"
-                                          style={{ colorScheme: 'dark' }}
+                                          onChange={setTimelineEditStart}
+                                          className="ml-1 w-36"
                                         />
                                       </label>
                                       <label className="text-[10px] text-muted-foreground">
                                         Complete
-                                        <Input
-                                          type="time"
+                                        <TimeSelect
                                           value={timelineEditEnd}
-                                          onChange={(event) => setTimelineEditEnd(event.target.value)}
-                                          className="ml-1 h-10 w-32 border-border bg-background text-foreground"
-                                          style={{ colorScheme: 'dark' }}
+                                          onChange={setTimelineEditEnd}
+                                          className="ml-1 w-36"
                                         />
                                       </label>
                                       <button
@@ -5413,15 +5494,12 @@ export default function WorkboardContent() {
 
             <div>
               <label className="text-xs text-muted-foreground">Start time</label>
-              <Input
-                type="time"
+              <TimeSelect
                 value={assignmentDraft.startTime}
-                className="mt-1 border-border bg-background text-foreground"
-                onChange={(e) => {
+                onChange={(value) => {
                   setIsAssignmentModalDirty(true);
-                  setAssignmentDraft({ ...assignmentDraft, startTime: e.target.value });
+                  setAssignmentDraft({ ...assignmentDraft, startTime: value });
                 }}
-                data-testid="input-assignment-start"
               />
               <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(assignmentDraft.startTime)}</div>
             </div>
@@ -5465,7 +5543,9 @@ export default function WorkboardContent() {
                     + Add another task
                   </button>
                 </div>
-                {taskRows.map((row, index) => (
+                {taskRows.map((row, index) => {
+                  const selectedTask = taskLibrary.find((task) => task.id === row.taskId) ?? null;
+                  return (
                   <div key={row.id} className="rounded-lg border bg-muted/20 p-3">
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-xs font-medium text-muted-foreground">Task {index + 1}</span>
@@ -5503,7 +5583,7 @@ export default function WorkboardContent() {
                           ))}
                         </select>
                       </div>
-                      <div className="col-span-2">
+                      <div>
                         <label className="text-xs text-muted-foreground">Task</label>
                         <select
                           value={row.taskId}
@@ -5536,6 +5616,21 @@ export default function WorkboardContent() {
                           <option value="__manage_task_library__">+ Manage task library</option>
                         </select>
                       </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Hours (optional)</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.25}
+                          value={row.hoursOverride}
+                          placeholder={`Default: ${selectedTask?.estimated_hours ?? 0}h`}
+                          onChange={(e) => {
+                            setIsAssignmentModalDirty(true);
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, hoursOverride: e.target.value } : item)));
+                          }}
+                          className="mt-1 h-10 border-border bg-background text-foreground"
+                        />
+                      </div>
                       <div className="col-span-2">
                         <label className="text-xs text-muted-foreground">Equipment</label>
                         <select
@@ -5557,15 +5652,12 @@ export default function WorkboardContent() {
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground">Start time</label>
-                        <Input
-                          type="time"
+                        <TimeSelect
                           value={row.startTime}
-                          className="mt-1 border-border bg-background text-foreground"
-                          onChange={(e) => {
+                          onChange={(value) => {
                             setIsAssignmentModalDirty(true);
-                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, startTime: e.target.value } : item)));
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, startTime: value } : item)));
                           }}
-                          data-testid="input-assignment-start"
                         />
                         <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(row.startTime)}</div>
                       </div>
@@ -5587,7 +5679,8 @@ export default function WorkboardContent() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {taskLibraryError ? (
                   <button
                     type="button"
