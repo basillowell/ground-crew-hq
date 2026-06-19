@@ -50,6 +50,7 @@ import {
 import {
   SortableContext,
   arrayMove,
+  rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -655,15 +656,17 @@ function SortableTaskCategoryCard({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`rounded-xl border border-surface-border px-4 py-3 transition-opacity ${
+      className={`rounded-xl border border-surface-border px-3 py-2 transition-opacity ${
+        isEditing ? 'w-full max-w-sm' : 'w-auto'
+      } ${
         isDragging ? 'opacity-50 bg-surface-hover' : 'hover:bg-surface-hover'
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-2">
         {!isEditing ? (
           <button
             type="button"
-            className="flex min-h-11 min-w-11 cursor-grab items-center justify-center rounded-lg text-text-muted hover:bg-surface-elevated hover:text-text-primary active:cursor-grabbing"
+            className="flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-lg text-text-muted hover:bg-surface-elevated hover:text-text-primary active:cursor-grabbing"
             aria-label={`Reorder ${category.name}`}
             {...attributes}
             {...listeners}
@@ -671,17 +674,16 @@ function SortableTaskCategoryCard({
             <GripVertical className="h-4 w-4" />
           </button>
         ) : null}
-        <div className="min-w-0 flex-1 py-1">
-          <p className="truncate text-sm font-medium text-text-primary">{category.name}</p>
-          <p className="text-xs text-text-muted">
-            {taskCount} task{taskCount !== 1 ? 's' : ''} using this category
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-text-primary">
+            {category.name} <span className="text-xs text-text-muted">· {taskCount}</span>
           </p>
         </div>
         {!isEditing && !isConfirmDelete ? (
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
+              className="rounded-lg p-1.5 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
               onClick={onEditStart}
               aria-label={`Edit ${category.name}`}
             >
@@ -689,7 +691,7 @@ function SortableTaskCategoryCard({
             </button>
             <button
               type="button"
-              className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
+              className="rounded-lg p-1.5 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
               onClick={onDeleteRequest}
               aria-label={`Delete ${category.name}`}
             >
@@ -3948,8 +3950,8 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
                 />
               ) : (
                 <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
-                  <SortableContext items={taskCategories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
-                    <div className="grid gap-3">
+                  <SortableContext items={taskCategories.map((category) => category.id)} strategy={rectSortingStrategy}>
+                    <div className="flex flex-wrap gap-2">
                       {taskCategories.length === 0 ? (
                         <p className="rounded-xl border border-dashed border-surface-border px-4 py-3 text-sm text-text-muted">
                           No task categories yet. Add one below.
