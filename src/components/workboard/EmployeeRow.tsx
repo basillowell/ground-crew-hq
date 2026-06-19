@@ -2,6 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AvatarInitials } from '@/components/shared';
+import { TimeSelect } from '@/components/TimeSelect';
 import { TaskBlock } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Loader2, Pencil, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -294,24 +295,14 @@ export function EmployeeRow({
                     </div>
                     {editingTimelineAssignmentId === assignment.id && onSaveAssignmentTimes ? (
                       <div className="relative z-20 mx-2 mb-1 flex flex-wrap items-end gap-2 rounded-lg border bg-muted/20 p-2 pointer-events-auto">
-                        <label className="text-[10px] text-muted-foreground">
-                          Start
-                          <input
-                            type="time"
-                            value={timelineStartInput}
-                            onChange={(event) => setTimelineStartInput(event.target.value)}
-                            className="ml-1 h-10 w-32 rounded border px-2 text-sm"
-                          />
-                        </label>
-                        <label className="text-[10px] text-muted-foreground">
-                          Complete
-                          <input
-                            type="time"
-                            value={timelineEndInput}
-                            onChange={(event) => setTimelineEndInput(event.target.value)}
-                            className="ml-1 h-10 w-32 rounded border px-2 text-sm"
-                          />
-                        </label>
+                        <div className="w-40">
+                          <span className="text-[10px] text-muted-foreground">Start</span>
+                          <TimeSelect value={timelineStartInput} onChange={setTimelineStartInput} />
+                        </div>
+                        <div className="w-40">
+                          <span className="text-[10px] text-muted-foreground">Complete</span>
+                          <TimeSelect value={timelineEndInput} onChange={setTimelineEndInput} />
+                        </div>
                         <Button
                           type="button"
                           size="sm"
