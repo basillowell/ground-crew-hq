@@ -87,6 +87,10 @@ function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, 
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
 }
 
+function getDefaultStartTimeForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
+  return getShiftForEmployee(scheduleList, employeeId, date)?.shiftStart ?? '05:30';
+}
+
 function timeToMinutes(value?: string) {
   if (!value) return 0;
   const [hours, minutes] = value.split(':').map(Number);
@@ -3264,17 +3268,18 @@ export default function WorkboardContent() {
   function openAssignmentDialog(employeeId: string) {
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
+    const defaultStartTime = getDefaultStartTimeForEmployee(scheduleList, targetEmployeeId, boardDate);
     const targetPropertyId =
       effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id ?? '';
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
-    setTaskRows([makeEmptyTaskRow('05:30', effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
+    setTaskRows([makeEmptyTaskRow(defaultStartTime, effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
     setAssignmentDraft({
       employeeId: targetEmployeeId,
       propertyId: targetPropertyId,
       taskId: '',
       equipmentId: '',
-      startTime: '05:30',
+      startTime: defaultStartTime,
       status: 'planned',
       notes: '',
     });
@@ -3322,15 +3327,16 @@ export default function WorkboardContent() {
     setLinkedRequestTitle(request.title);
     const targetTaskId = request.taskId || taskList[0]?.id || '';
     const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
+    const defaultStartTime = getDefaultStartTimeForEmployee(scheduleList, targetEmployeeId, boardDate);
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
-    setTaskRows([{ ...makeEmptyTaskRow('05:30', (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : request.propertyId) ?? ''), taskId: targetTaskId }]);
+    setTaskRows([{ ...makeEmptyTaskRow(defaultStartTime, (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : request.propertyId) ?? ''), taskId: targetTaskId }]);
     setAssignmentDraft({
       employeeId: targetEmployeeId,
       propertyId: (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id) ?? '',
       taskId: targetTaskId,
       equipmentId: '',
-      startTime: '05:30',
+      startTime: defaultStartTime,
       status: 'planned',
       notes: request.description ?? '',
     });
@@ -3347,12 +3353,12 @@ export default function WorkboardContent() {
       setAssignmentDialogOpen(false);
       setLinkedRequestId(null);
       setLinkedRequestTitle(null);
-      setTaskRows([makeEmptyTaskRow('05:30', effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
+      setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
       setWeatherConflictOverride(false);
       setIsAssignmentModalDirty(false);
       return true;
     },
-    [effectivePropertyId, isAssignmentModalDirty],
+    [assignmentDraft.employeeId, boardDate, effectivePropertyId, isAssignmentModalDirty, scheduleList],
   );
 
   useEffect(() => {
@@ -3681,7 +3687,7 @@ export default function WorkboardContent() {
     setLinkedRequestId(null);
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
-    setTaskRows([makeEmptyTaskRow('05:30', effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
+    setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
     setWeatherConflictOverride(false);
     setIsAssignmentModalDirty(false);
     closeAssignmentDialog(true);
@@ -5397,6 +5403,10 @@ export default function WorkboardContent() {
                 onChange={(e) => {
                   setIsAssignmentModalDirty(true);
                   setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value });
+                  setTaskRows((current) => current.map((row) => ({
+                    ...row,
+                    startTime: getDefaultStartTimeForEmployee(scheduleList, e.target.value, boardDate),
+                  })));
                 }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 data-testid="select-assignment-employee"
@@ -5533,7 +5543,7 @@ export default function WorkboardContent() {
                       setTaskRows((current) => [
                         ...current,
                         makeEmptyTaskRow(
-                          current[current.length - 1]?.startTime || '05:30',
+                          getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate),
                           effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '',
                         ),
                       ]);
