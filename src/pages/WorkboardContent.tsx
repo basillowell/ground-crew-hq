@@ -1852,6 +1852,9 @@ export default function WorkboardContent() {
         setSavingTimelineAssignmentId(null);
         return;
       }
+      triggerAssignmentFlash(assignment.id, 'complete');
+      toast.success(`Completed ${assignment.title || 'task'}`);
+      setSavingTimelineAssignmentId(null);
       const hasSpecificProperty = effectivePropertyId && effectivePropertyId !== 'all';
       const propertyForEvent = hasSpecificProperty ? effectivePropertyId : null;
       const assignmentRecord = assignment as Assignment & Record<string, unknown>;
@@ -1885,7 +1888,7 @@ export default function WorkboardContent() {
           if (rollbackError) {
             toast.error(`Task completion rollback failed: ${rollbackError.message}`);
           }
-          toast.error(`Failed to complete task: ${clockError.message}`);
+          toast.error(`Clock event could not be logged; task completion was rolled back: ${clockError.message}`);
           setSavingTimelineAssignmentId(null);
           return;
         }
@@ -1914,9 +1917,6 @@ export default function WorkboardContent() {
         }
       }
 
-      triggerAssignmentFlash(assignment.id, 'complete');
-      toast.success(`Completed ${assignment.title || 'task'}`);
-      setSavingTimelineAssignmentId(null);
     },
     [currentUser?.orgId, effectivePropertyId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, syncTimelineCaches, triggerAssignmentFlash],
   );
@@ -1963,38 +1963,39 @@ export default function WorkboardContent() {
           payload.actual_hours = Number(((endMinutes - startMinutes) / 60).toFixed(2));
         }
       }
+      const previousTimes = getCanonicalActualTimes(assignment);
+      const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+      const previousActualHours =
+        typeof assignmentRecord.actual_hours === 'number'
+          ? Number(assignmentRecord.actual_hours)
+          : typeof assignment.actualHours === 'number'
+            ? Number(assignment.actualHours)
+            : undefined;
+      const returnedStartAt = startInput ? startTs : previousTimes.canonicalStartAt;
+      const returnedCompletedAt = endInput ? endTs : previousTimes.canonicalCompletedAt;
+      const derivedHours = typeof payload.actual_hours === 'number' ? Number(payload.actual_hours) : undefined;
 
       setSavingTimelineAssignmentId(assignment.id);
-      const { data, error } = await supabase
-        .from('assignments')
-        .update(payload)
-        .eq('id', assignment.id)
-        .eq('org_id', currentUser.orgId)
-        .select('id, actual_start_at, actual_completed_at, actual_hours')
-        .single();
-      if (error) {
-        toast.error(`Failed to save times: ${error.message}`);
-        setSavingTimelineAssignmentId(null);
-        return false;
-      }
-      const returnedStartAt = typeof data?.actual_start_at === 'string' ? data.actual_start_at : startTs;
-      const returnedCompletedAt =
-        typeof data?.actual_completed_at === 'string'
-          ? data.actual_completed_at
-          : endInput
-            ? endTs
-            : getCanonicalActualTimes(assignment).canonicalCompletedAt;
-      const derivedHours =
-        typeof data?.actual_hours === 'number'
-          ? Number(data.actual_hours)
-          : typeof payload.actual_hours === 'number'
-            ? Number(payload.actual_hours)
-            : undefined;
       syncTimelineCaches(assignment.id, {
         actualStartAt: startInput ? returnedStartAt : undefined,
         actualCompletedAt: endInput ? returnedCompletedAt : undefined,
         actualHours: derivedHours,
       });
+      const { error } = await supabase
+        .from('assignments')
+        .update(payload)
+        .eq('id', assignment.id)
+        .eq('org_id', currentUser.orgId);
+      if (error) {
+        syncTimelineCaches(assignment.id, {
+          actualStartAt: previousTimes.canonicalStartAt,
+          actualCompletedAt: previousTimes.canonicalCompletedAt,
+          actualHours: previousActualHours,
+        });
+        toast.error(`Failed to save times: ${error.message}`);
+        setSavingTimelineAssignmentId(null);
+        return false;
+      }
       if (import.meta.env.DEV) {
         console.debug('[workboard:actual-times-save]', {
           assignmentId: assignment.id,
