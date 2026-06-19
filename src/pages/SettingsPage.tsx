@@ -3555,6 +3555,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   const [newCategory, setNewCategory] = useState('General');
   const [newPriority, setNewPriority] = useState<'1' | '2' | '3'>('2');
   const [newEstimatedHours, setNewEstimatedHours] = useState('1');
+  const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [editDraft, setEditDraft] = useState({
@@ -3567,6 +3568,18 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   const signalTaskLibraryUpdate = () => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('ground-crew-task-library-updated-at', String(Date.now()));
+  };
+
+  const resetNewTaskForm = () => {
+    setNewName('');
+    setNewCategory('General');
+    setNewPriority('2');
+    setNewEstimatedHours('1');
+  };
+
+  const closeAddTaskDialog = () => {
+    setAddTaskDialogOpen(false);
+    resetNewTaskForm();
   };
 
   const dayOptions = [
@@ -3658,10 +3671,8 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
       return;
     }
     void queryClient.invalidateQueries({ queryKey: ['tasks', orgId ?? undefined] });
-    setNewName('');
-    setNewCategory('General');
-    setNewPriority('2');
-    setNewEstimatedHours('1');
+    resetNewTaskForm();
+    setAddTaskDialogOpen(false);
     setTaskPanelOpen(false);
     signalTaskLibraryUpdate();
     toast.success(`Task added: ${newName.trim()}`);
@@ -3870,6 +3881,12 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
       <SettingsCard
         title="Task Library"
         subtitle="Reusable tasks for daily workflow planning. Drag to reorder priority."
+        action={
+          <Button type="button" size="sm" onClick={() => setAddTaskDialogOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add task
+          </Button>
+        }
       >
         {tasksLoading && tasks.length === 0 ? (
           showTimeout && !hasTaskLibraryResult ? <LoadingTimeoutFallback /> : <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />
@@ -4006,42 +4023,62 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
                 </div>
               ) : null}
             </div>
-            <div className="mt-3 flex flex-wrap gap-2 border-t border-dashed border-surface-border pt-3">
+          </>
+        )}
+      </SettingsCard>
+
+      <Dialog open={addTaskDialogOpen} onOpenChange={(open) => { if (open) setAddTaskDialogOpen(true); else closeAddTaskDialog(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add task</DialogTitle>
+            <DialogDescription className="sr-only">
+              Add a reusable task to the task library
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Task name</span>
               <input
-                className={`${settingsInputClass} min-w-[140px] flex-1`}
+                className={settingsInputClass}
                 placeholder="New task name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) void addTask(); }}
               />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Category</span>
               <select
-                className={`${settingsInputClass} w-44`}
+                className={settingsInputClass}
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
               >
-                {taskCategoryNames.map((categoryName) => <option key={`inline-cat-${categoryName}`} value={categoryName}>{displayCategory(categoryName)}</option>)}
+                {taskCategoryNames.map((categoryName) => <option key={`dialog-cat-${categoryName}`} value={categoryName}>{displayCategory(categoryName)}</option>)}
               </select>
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Hours</span>
               <input
                 type="number"
                 step="0.25"
                 min="0.25"
-                className={`${settingsInputClass} w-20`}
+                className={settingsInputClass}
                 placeholder="hrs"
                 value={newEstimatedHours}
                 onChange={(e) => setNewEstimatedHours(e.target.value)}
               />
-              <button
-                type="button"
-                onClick={() => void addTask()}
-                disabled={!newName.trim()}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright disabled:opacity-50"
-              >
-                <Plus className="h-4 w-4" /> Add
-              </button>
-            </div>
-          </>
-        )}
-      </SettingsCard>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeAddTaskDialog}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void addTask()} disabled={!newName.trim()}>
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={taskPanelOpen} onOpenChange={(open) => (open ? setTaskPanelOpen(true) : cancelEditTask())}>
         <SheetContent className="overflow-y-auto border-surface-border bg-surface-elevated text-text-primary sm:max-w-md">
