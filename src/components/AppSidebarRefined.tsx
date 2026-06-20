@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Calendar,
   CalendarDays,
   ClipboardList,
   HelpCircle,
@@ -56,6 +57,7 @@ type NavItemProps = NavItemConfig & {
 const primaryOperations: NavItemConfig[] = [
   { label: 'Command Center', href: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
   { label: 'Dispatch', href: '/app/dispatch', icon: CalendarDays, moduleId: 'workflow' },
+  { label: 'Scheduler', href: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
   { label: 'Workflow', href: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
 ];
 
