@@ -3958,8 +3958,11 @@ export default function WorkboardContent() {
       return;
     }
     if (savingNote) return;
-    if (!supabase || !effectivePropertyId || effectivePropertyId === 'all' || !currentUser?.orgId || !noteDraft.content.trim()) {
-      toast.error('Select a property and enter a note before saving.');
+    const notePropertyId = effectivePropertyId && effectivePropertyId !== 'all'
+      ? effectivePropertyId
+      : (activeProperty?.id ?? properties[0]?.id ?? null);
+    if (!supabase || !notePropertyId || !currentUser?.orgId || !noteDraft.content.trim()) {
+      toast.error('Add a property in Settings before saving notes, and enter a note before saving.');
       return;
     }
     setSavingNote(true);
@@ -3970,7 +3973,7 @@ export default function WorkboardContent() {
         type: noteDraft.type,
         title: noteTitle,
         content: noteDraft.content.trim(),
-        property_id: effectivePropertyId,
+        property_id: notePropertyId,
         org_id: currentUser.orgId,
         created_by: currentUser.employeeId ?? null,
         location: noteDraft.location.trim() || null,
