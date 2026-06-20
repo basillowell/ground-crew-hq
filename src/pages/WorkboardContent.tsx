@@ -27,6 +27,7 @@ import {
 } from '@/data/seedData';
 import {
   AlertCircle,
+  Calendar,
   ClipboardCopy,
   ChevronDown,
   ChevronUp,
@@ -4089,13 +4090,16 @@ export default function WorkboardContent() {
             <div className="flex min-w-max items-center gap-3">
           <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-elevated px-3 py-1.5">
             <span className="text-[10px] uppercase tracking-wider text-text-muted">Board Date</span>
-            <input
-              type="date"
-              value={boardDate}
-              onChange={(e) => setBoardDate(e.target.value)}
-              className="h-8 rounded-md border border-surface-border bg-surface-base px-2 text-sm text-text-primary"
-              data-testid="input-board-date"
-            />
+            <div className="relative flex items-center">
+              <input
+                type="date"
+                value={boardDate}
+                onChange={(e) => setBoardDate(e.target.value)}
+                className="h-8 rounded-md border border-surface-border bg-surface-base px-2 pr-7 text-sm text-text-primary"
+                data-testid="input-board-date"
+              />
+              <Calendar className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-text-muted" />
+            </div>
             {boardDate !== todayDateKey ? (
               <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setBoardDate(todayDateKey)}>
                 Today
@@ -5734,12 +5738,15 @@ export default function WorkboardContent() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Date</label>
-              <Input
-                type="date"
-                value={quickTaskDraft.date}
-                onChange={(event) => setQuickTaskDraft((current) => ({ ...current, date: event.target.value }))}
-                className="mt-1 border-border bg-background text-foreground"
-              />
+              <div className="relative mt-1 flex items-center">
+                <Input
+                  type="date"
+                  value={quickTaskDraft.date}
+                  onChange={(event) => setQuickTaskDraft((current) => ({ ...current, date: event.target.value }))}
+                  className="border-border bg-background pr-7 text-foreground"
+                />
+                <Calendar className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-text-muted" />
+              </div>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Location</label>
