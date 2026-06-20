@@ -114,8 +114,8 @@ export default {
           to: { height: "0" },
         },
         "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 0px rgba(163,230,53,0)" },
-          "50%": { boxShadow: "0 0 20px rgba(163,230,53,0.4)" },
+          "0%, 100%": { boxShadow: "0 0 0px rgba(110,211,145,0)" },
+          "50%": { boxShadow: "0 0 18px rgba(110,211,145,0.35)" },
         },
       },
       animation: {

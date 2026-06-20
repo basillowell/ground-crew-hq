@@ -8,19 +8,19 @@ All colors MUST be HSL.
 
 /* ── Design token CSS variables (dark defaults; overridden by html.light) ── */
 :root {
-  --surface-base: 12 15 13;       /* #0c0f0d */
-  --surface-card: 19 26 21;       /* #131a15 */
-  --surface-elevated: 26 37 32;   /* #1a2520 */
-  --surface-border: 36 48 41;     /* #243029 */
-  --surface-hover: 30 44 36;      /* #1e2c24 */
-  --brand-default: 132 204 22;    /* #84cc16 */
-  --brand-bright: 163 230 53;     /* #a3e635 */
-  --brand-dim: 77 124 15;         /* #4d7c0f */
-  --brand-ghost: 26 46 16;        /* #1a2e10 */
-  --text-primary: 240 244 240;    /* #f0f4f0 */
-  --text-secondary: 143 169 143;  /* #8fa98f */
-  --text-muted: 85 107 85;        /* #556b55 */
-  --text-inverse: 10 15 12;       /* #0a0f0c */
+  --surface-base: 17 20 18;       /* #111413 - lifted near-black, no green tint */
+  --surface-card: 24 30 26;       /* #181e1a */
+  --surface-elevated: 32 40 35;   /* #202823 */
+  --surface-border: 44 54 47;     /* #2c362f */
+  --surface-hover: 30 38 33;      /* #1e2621 */
+  --brand-default: 74 184 110;    /* #4ab86e - emerald/moss, calmer than chartreuse */
+  --brand-bright: 110 211 145;    /* #6ed391 - bright variant for CTAs */
+  --brand-dim: 45 122 76;         /* #2d7a4c */
+  --brand-ghost: 18 44 30;        /* #122c1e */
+  --text-primary: 241 245 241;    /* #f1f5f1 - near-white, slight warm */
+  --text-secondary: 148 163 184;  /* #94a3b8 - pure slate-400, no green tint */
+  --text-muted: 71 85 105;        /* #475569 - slate-600 */
+  --text-inverse: 17 20 18;       /* #111413 */
 }
 
 html.light {
@@ -33,7 +33,7 @@ html.light {
   --text-secondary: 61 92 61;     /* #3d5c3d */
   --text-muted: 107 140 107;      /* #6b8c6b */
   --text-inverse: 240 244 240;    /* #f0f4f0 */
-  --brand-ghost: 240 249 218;     /* #f0f9da — light lime tint */
+  --brand-ghost: 220 245 232;     /* #dcf5e8 - light emerald tint */
   /* shadcn/ui overrides for light mode */
   --background: 120 15% 97%;
   --foreground: 147 27% 8%;
@@ -52,12 +52,12 @@ html.light {
 
 @layer base {
   :root {
-    --hq-green-900: #0B2F1F;
-    --hq-green-800: #123D2A;
-    --hq-green-700: #185A3A;
-    --hq-green-600: #227A4D;
-    --hq-green-500: #2FA866;
-    --hq-green-100: #EAF6EF;
+    --hq-green-900: #0d2a1a;
+    --hq-green-800: #183d28;
+    --hq-green-700: #225838;
+    --hq-green-600: #2d7a4c;
+    --hq-green-500: #4ab86e;
+    --hq-green-100: #d1f5e2;
     --hq-ink: #111827;
     --hq-slate: #334155;
     --hq-muted: #64748B;
@@ -70,44 +70,44 @@ html.light {
     --status-info: #3b82f6;
     --status-muted: #94a3b8;
 
-    --background: 140 11.111% 5.294%;
+    --background: 150 8% 7.3%;
     --foreground: 120 15.385% 94.902%;
 
-    --card: 141.818 21.569% 10%;
+    --card: 150 11% 10.6%;
     --card-foreground: 120 15.385% 94.902%;
 
-    --popover: 141.176 23.288% 14.314%;
+    --popover: 150 12% 12.5%;
     --popover-foreground: 120 15.385% 94.902%;
 
-    --primary: 83.736 80.531% 44.314%;
+    --primary: 145 48% 56%;
     --primary-foreground: 144 20% 4.902%;
 
-    --secondary: 141.176 23.288% 14.314%;
+    --secondary: 150 12% 12.5%;
     --secondary-foreground: 120 15.385% 94.902%;
 
-    --muted: 141.176 23.288% 14.314%;
+    --muted: 150 12% 12.5%;
     --muted-foreground: 120 13.131% 61.176%;
 
-    --accent: 148.235 21.519% 15.49%;
+    --accent: 150 13% 14%;
     --accent-foreground: 120 15.385% 94.902%;
 
     --destructive: 0 84.236% 60.196%;
     --destructive-foreground: 120 15.385% 94.902%;
 
-    --border: 138.261 23.232% 19.412%;
-    --input: 138.261 23.232% 19.412%;
-    --ring: 83.736 80.531% 44.314%;
+    --border: 150 10% 19%;
+    --input: 150 10% 19%;
+    --ring: 145 48% 56%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 147 27% 8%;
+    --sidebar-background: 150 12% 7%;
     --sidebar-foreground: 215 20% 65%;
-    --sidebar-primary: 83 78% 56%;
+    --sidebar-primary: 145 50% 63%;
     --sidebar-primary-foreground: 0 0% 0%;
-    --sidebar-accent: 132 22% 18%;
+    --sidebar-accent: 150 13% 16%;
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 0 0% 100% / 0.06;
-    --sidebar-ring: 83 78% 56%;
+    --sidebar-ring: 145 50% 63%;
     --sidebar-muted: 215 20% 65%;
 
     --success: 152 55% 38%;
