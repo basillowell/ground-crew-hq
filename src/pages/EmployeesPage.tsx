@@ -450,7 +450,8 @@ export default function EmployeesPage() {
     setShiftDialogOpen(false);
     setEditingShiftId(null);
     await refetchMonthEntries();
-  }, [editingShiftId, isReadOnly, orgId, refetchMonthEntries, shiftDraft]);
+    await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
+  }, [editingShiftId, isReadOnly, orgId, queryClient, refetchMonthEntries, shiftDraft]);
 
   const monthlyEmployeeStats = useMemo(() => {
     const byEmployee = new Map<string, { scheduled: number; off: number; sick: number; vacation: number }>();
