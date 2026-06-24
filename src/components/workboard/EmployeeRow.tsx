@@ -5,7 +5,7 @@ import { AvatarInitials } from '@/components/shared';
 import { TimeSelect } from '@/components/TimeSelect';
 import { TaskBlock } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Loader2, Pencil, Play, Plus } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { Employee, Assignment, Task, Property } from '@/data/seedData';
 import { storedIsoToWallClock, storedIsoToWallClockLabel } from '@/lib/timeWorkflow';
 
@@ -94,24 +94,6 @@ export function EmployeeRow({
   const [timelineStartInput, setTimelineStartInput] = useState('');
   const [timelineEndInput, setTimelineEndInput] = useState('');
   const sortedAssignments = [...employeeAssignments];
-  const addTaskButtonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const el = addTaskButtonRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const topElement = document.elementFromPoint(centerX, centerY);
-    console.log('[DIAG-RECT] Add Task button', {
-      employeeId: employee.id,
-      rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
-      computedPointerEvents: window.getComputedStyle(el).pointerEvents,
-      elementAtCenter: topElement,
-      isButtonItself: topElement === el,
-      elementAtCenterClassName: topElement instanceof HTMLElement ? topElement.className : null,
-    });
-  }, [employee.id, sortedAssignments.length]);
 
   const formatLabel = (value?: string | null) => {
     if (!value) return '';
@@ -345,15 +327,10 @@ export function EmployeeRow({
           {sortedAssignments.length > 0 ? (
             <div className="mt-3 flex justify-end">
               <Button
-                ref={addTaskButtonRef}
                 variant="ghost"
                 size="sm"
                 className="h-8 border border-dashed border-border px-3 text-xs text-muted-foreground"
-                data-testid={`button-add-task-${employee.id}`}
-                onClick={() => {
-                  console.log('[DIAG] Add Task button clicked', { employeeId: employee.id, hasOnAddTask: Boolean(onAddTask) });
-                  onAddTask?.(employee.id);
-                }}
+                onClick={() => onAddTask?.(employee.id)}
               >
                 <Plus className="mr-1 h-3 w-3" /> Add Task
               </Button>

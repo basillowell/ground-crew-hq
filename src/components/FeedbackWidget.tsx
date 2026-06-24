@@ -55,10 +55,10 @@ export function FeedbackWidget({ pagePath }: FeedbackWidgetProps) {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex items-end justify-end">
+    <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex items-end justify-end">
       <div
         className={`w-[300px] rounded-xl border border-surface-border bg-surface-card p-3 shadow-xl transition-all duration-200 ${
-          open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
+          open ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
         }`}
       >
         <h3 className="mb-2 text-sm font-semibold text-text-primary">Share Feedback</h3>
@@ -119,7 +119,7 @@ export function FeedbackWidget({ pagePath }: FeedbackWidgetProps) {
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="ml-2 rounded-full bg-brand-dim p-3 text-text-primary shadow-lg hover:bg-brand-dim/90"
+        className="pointer-events-auto ml-2 rounded-full bg-brand-dim p-3 text-text-primary shadow-lg hover:bg-brand-dim/90"
         aria-label="Open feedback form"
       >
         <MessageCircle className="h-5 w-5" />
