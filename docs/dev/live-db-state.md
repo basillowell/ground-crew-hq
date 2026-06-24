@@ -322,7 +322,7 @@
 | column      | type        | nullable | default   |
 |-------------|-------------|----------|-----------|
 | id          | uuid        | NO       | gen_random_uuid() |
-| property_id | uuid        | NO       |           |
+| property_id | uuid        | YES      |           |
 | type        | text        | NO       | 'general' |
 | title       | text        | NO       |           |
 | content     | text        | NO       | ''        |
@@ -330,6 +330,10 @@
 | created_by  | uuid        | YES      |           |
 | created_at  | timestamptz | NO       | now()     |
 | org_id      | uuid        | YES      |           |
+| employee_id | uuid        | YES      |           |
+| assignment_id | uuid        | YES      |           |
+
+Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> property-scoped (property_id set) -> employee-scoped (+ employee_id) -> task-scoped (+ assignment_id). A CHECK constraint (notes_scope_chain_check) enforces that employee_id/assignment_id can only be set when property_id is also set. RLS was updated so org-wide notes (property_id IS NULL) are usable by org admin/manager for writes and any org member for reads — property-scoped notes continue using the existing can_manage_property/can_read_property functions unchanged.
 
 ---
 

@@ -52,7 +52,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useNotes, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { fetchNwsWeather } from '@/lib/weather/providers';
 import {
   getOperationalTimezone,
@@ -73,10 +73,6 @@ const GanttTimeline = lazy(() =>
 const EmployeeRow = lazy(() =>
   import('@/components/workboard/EmployeeRow').then((module) => ({ default: module.EmployeeRow })),
 );
-const NotesPanel = lazy(() =>
-  import('@/components/workboard/NotesPanel').then((module) => ({ default: module.NotesPanel })),
-);
-
 function SafeSection({ children, fallback = null }: { children: ReactNode; fallback?: ReactNode }) {
   try {
     return <>{children}</>;
@@ -350,6 +346,23 @@ function normalizeWorkLocation(row: Record<string, unknown>): WorkLocation {
   };
 }
 
+function normalizeWorkboardNote(row: Record<string, unknown>): WorkboardScopedNote {
+  const createdAt = String(row.created_at ?? '');
+  return {
+    id: String(row.id ?? ''),
+    type: (row.type ?? 'general') as Note['type'],
+    title: String(row.title ?? 'Note'),
+    content: String(row.content ?? ''),
+    author: row.created_by ? String(row.created_by) : 'System',
+    date: row.date ? String(row.date) : createdAt ? createdAt.slice(0, 10) : '',
+    location: row.location ? String(row.location) : undefined,
+    propertyId: row.property_id ? String(row.property_id) : null,
+    employeeId: row.employee_id ? String(row.employee_id) : null,
+    assignmentId: row.assignment_id ? String(row.assignment_id) : null,
+    createdAt,
+  };
+}
+
 const PRIORITY_LABEL: Record<string, string> = { high: 'High', medium: 'Med', low: 'Low' };
 const PRIORITY_COLOR: Record<string, string> = {
   high: 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800',
@@ -382,6 +395,15 @@ type WorkOrderBoardItem = {
   priority: string;
   source: 'work_order' | 'schedule_fallback';
   employeeName?: string;
+};
+
+type NoteScope = 'org' | 'property' | 'employee' | 'task';
+
+type WorkboardScopedNote = Note & {
+  propertyId: string | null;
+  employeeId: string | null;
+  assignmentId: string | null;
+  createdAt: string;
 };
 
 type TaskLibraryItem = {
@@ -546,6 +568,10 @@ export default function WorkboardContent() {
   const [taskTemplateDialogOpen, setTaskTemplateDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [noteScope, setNoteScope] = useState<NoteScope>('org');
+  const [selectedNotePropertyId, setSelectedNotePropertyId] = useState('');
+  const [selectedNoteEmployeeId, setSelectedNoteEmployeeId] = useState('');
+  const [selectedNoteAssignmentId, setSelectedNoteAssignmentId] = useState('');
   const [linkedRequestId, setLinkedRequestId] = useState<string | null>(null);
   const [linkedRequestTitle, setLinkedRequestTitle] = useState<string | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
@@ -669,13 +695,12 @@ export default function WorkboardContent() {
   const focusedPropertyId = workflowParams.get('property') || '';
   const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
 
-  const openNoteDialog = (type: Note['type']) => {
-    const noteLabel = type === 'alert' ? 'Alert' : `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
-    setNoteDraft((current) => ({
-      ...current,
-      type,
-      title: current.title.trim() ? current.title : `${noteLabel} note - ${boardDate}`,
-    }));
+  const openNoteDialog = () => {
+    setSelectedNotePropertyId((current) =>
+      current || (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : (properties[0]?.id ?? '')),
+    );
+    setSelectedNoteEmployeeId((current) => current || (scheduledEmployees[0]?.id ?? ''));
+    setSelectedNoteAssignmentId((current) => current || (dayAssignments[0]?.id ?? ''));
     setNoteDialogOpen(true);
   };
 
@@ -702,7 +727,23 @@ export default function WorkboardContent() {
   } = useTasks(undefined, authOrgId ?? undefined);
   const showTaskLoading = isLoadingTasks && taskOptions.length === 0;
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
-  const notesQuery = useNotes(effectivePropertyId, orgId);
+  const notesQuery = useQuery({
+    queryKey: ['notes', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as WorkboardScopedNote[];
+      const { data, error } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((row) => normalizeWorkboardNote(row as Record<string, unknown>));
+    },
+    staleTime: 1000 * 60 * 5,
+    retry: 3,
+    retryDelay: 1000,
+  });
   const departmentsQuery = useDepartmentOptions(orgId);
   const taskLibraryError = (tasksError as { message?: string } | null)?.message ?? null;
 
@@ -1549,6 +1590,76 @@ export default function WorkboardContent() {
     () => (scheduledEmployees.length > 0 ? scheduledEmployees : employeeList.filter((e) => e.status === 'active')),
     [scheduledEmployees, employeeList],
   );
+
+  const selectedPropertyNoteId = effectivePropertyId && effectivePropertyId !== 'all'
+    ? effectivePropertyId
+    : selectedNotePropertyId;
+  const selectedNoteEmployee = scheduledEmployees.find((employee) => employee.id === selectedNoteEmployeeId) ?? null;
+  const selectedEmployeeNotePropertyId =
+    selectedNoteEmployee
+      ? getShiftForEmployee(scheduleList, selectedNoteEmployee.id, boardDate)?.propertyId ?? selectedNoteEmployee.propertyId ?? null
+      : null;
+  const selectedNoteAssignment = dayAssignments.find((assignment) => assignment.id === selectedNoteAssignmentId) ?? null;
+  const selectedAssignmentNotePropertyId = selectedNoteAssignment?.propertyId ?? null;
+  const orgWideNotes = useMemo(
+    () => noteList.filter((note) => !note.propertyId && !note.employeeId && !note.assignmentId),
+    [noteList],
+  );
+  const propertyScopedNotes = useMemo(
+    () =>
+      selectedPropertyNoteId
+        ? noteList.filter(
+            (note) =>
+              note.propertyId === selectedPropertyNoteId &&
+              !note.employeeId &&
+              !note.assignmentId,
+          )
+        : [],
+    [noteList, selectedPropertyNoteId],
+  );
+  const employeeScopedNotes = useMemo(
+    () =>
+      selectedEmployeeNotePropertyId && selectedNoteEmployeeId
+        ? noteList.filter(
+            (note) =>
+              note.propertyId === selectedEmployeeNotePropertyId &&
+              note.employeeId === selectedNoteEmployeeId &&
+              !note.assignmentId,
+          )
+        : [],
+    [noteList, selectedEmployeeNotePropertyId, selectedNoteEmployeeId],
+  );
+  const taskScopedNotes = useMemo(
+    () =>
+      selectedAssignmentNotePropertyId && selectedNoteAssignmentId
+        ? noteList.filter(
+            (note) =>
+              note.propertyId === selectedAssignmentNotePropertyId &&
+              note.assignmentId === selectedNoteAssignmentId,
+          )
+        : [],
+    [noteList, selectedAssignmentNotePropertyId, selectedNoteAssignmentId],
+  );
+  const visibleScopedNotes = useMemo(() => {
+    if (noteScope === 'property') return propertyScopedNotes;
+    if (noteScope === 'employee') return employeeScopedNotes;
+    if (noteScope === 'task') return taskScopedNotes;
+    return orgWideNotes;
+  }, [employeeScopedNotes, noteScope, orgWideNotes, propertyScopedNotes, taskScopedNotes]);
+  const propertyNameById = useMemo(
+    () => new Map(properties.map((property) => [property.id, property.name])),
+    [properties],
+  );
+  const taskNameById = useMemo(
+    () => new Map(taskList.map((task) => [task.id, task.name])),
+    [taskList],
+  );
+  const noteScopeTabs: Array<{ id: NoteScope; label: string; count: number }> = [
+    { id: 'org', label: 'Org-wide', count: orgWideNotes.length },
+    { id: 'property', label: 'Property', count: propertyScopedNotes.length },
+    { id: 'employee', label: 'Employee', count: employeeScopedNotes.length },
+    { id: 'task', label: 'Task', count: taskScopedNotes.length },
+  ];
 
   const upsertAssignmentInCache = useCallback(
     (nextAssignment: Assignment) => {
@@ -3958,13 +4069,50 @@ export default function WorkboardContent() {
       return;
     }
     if (savingNote) return;
-    const notePropertyId = effectivePropertyId && effectivePropertyId !== 'all'
-      ? effectivePropertyId
-      : (activeProperty?.id ?? properties[0]?.id ?? null);
-    if (!supabase || !notePropertyId || !currentUser?.orgId || !noteDraft.content.trim()) {
-      toast.error('Add a property in Settings before saving notes, and enter a note before saving.');
+    if (!supabase || !orgId || !noteDraft.content.trim()) {
+      toast.error('Enter a note before saving.');
       return;
     }
+
+    let scopePayload: { property_id: string | null; employee_id: string | null; assignment_id: string | null };
+    if (noteScope === 'org') {
+      scopePayload = {
+        property_id: null,
+        employee_id: null,
+        assignment_id: null,
+      };
+    } else if (noteScope === 'property') {
+      if (!selectedPropertyNoteId) {
+        toast.error('Choose a property before saving this note.');
+        return;
+      }
+      scopePayload = {
+        property_id: selectedPropertyNoteId,
+        employee_id: null,
+        assignment_id: null,
+      };
+    } else if (noteScope === 'employee') {
+      if (!selectedEmployeeNotePropertyId || !selectedNoteEmployeeId) {
+        toast.error('Choose a scheduled employee before saving this note.');
+        return;
+      }
+      scopePayload = {
+        property_id: selectedEmployeeNotePropertyId,
+        employee_id: selectedNoteEmployeeId,
+        assignment_id: null,
+      };
+    } else {
+      if (!selectedAssignmentNotePropertyId || !selectedNoteAssignmentId) {
+        toast.error('Choose a task before saving this note.');
+        return;
+      }
+      scopePayload = {
+        property_id: selectedAssignmentNotePropertyId,
+        employee_id: null,
+        assignment_id: selectedNoteAssignmentId,
+      };
+    }
+
     setSavingNote(true);
     const noteLabel = noteDraft.type === 'alert' ? 'Alert' : `${noteDraft.type.charAt(0).toUpperCase()}${noteDraft.type.slice(1)}`;
     const noteTitle = noteDraft.title.trim() || `${noteLabel} note - ${boardDate}`;
@@ -3973,9 +4121,11 @@ export default function WorkboardContent() {
         type: noteDraft.type,
         title: noteTitle,
         content: noteDraft.content.trim(),
-        property_id: notePropertyId,
-        org_id: currentUser.orgId,
-        created_by: currentUser.employeeId ?? null,
+        property_id: scopePayload.property_id,
+        employee_id: scopePayload.employee_id,
+        assignment_id: scopePayload.assignment_id,
+        org_id: orgId,
+        created_by: currentUser?.employeeId ?? null,
         location: noteDraft.location.trim() || null,
       });
       if (error) {
@@ -3983,7 +4133,6 @@ export default function WorkboardContent() {
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ['notes'] });
-      setNoteDialogOpen(false);
       setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
       toast.success('Note saved');
     } finally {
@@ -5000,28 +5149,18 @@ export default function WorkboardContent() {
             ) : null}
           </div>
 
-          <div className="rounded-2xl border">
-            <button
-              type="button"
-              className="flex min-h-11 w-full items-center justify-between px-3 py-2"
-              onClick={() => toggleMobileSection('notes')}
-            >
-              <span className="text-sm font-semibold">Notes</span>
-              {mobileSectionsOpen.notes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-            {mobileSectionsOpen.notes ? (
-              <div className="border-t px-3 py-2">
-                <SafeSection fallback={<div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">Notes are temporarily unavailable.</div>}>
-                  <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
-                    <NotesPanel
-                      notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-                      onAddNote={openNoteDialog}
-                    />
-                  </Suspense>
-                </SafeSection>
-              </div>
-            ) : null}
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 w-full justify-between"
+            onClick={openNoteDialog}
+          >
+            <span className="inline-flex items-center gap-2">
+              <StickyNote className="h-4 w-4" />
+              Notes
+            </span>
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
+          </Button>
 
         </div>
       </div>
@@ -5142,19 +5281,19 @@ export default function WorkboardContent() {
         </div>
 
         {/* Notes */}
-        <div className="p-4 flex-1">
-          <div className="flex items-center gap-2 mb-3">
-            <StickyNote className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Notes</h3>
-          </div>
-          <SafeSection fallback={<div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">Notes are temporarily unavailable.</div>}>
-            <Suspense fallback={<div className="h-32 animate-pulse rounded-xl bg-muted/40" />}>
-              <NotesPanel
-                notes={noteList.filter((n) => n.date === boardDate || n.type === 'general')}
-                onAddNote={openNoteDialog}
-              />
-            </Suspense>
-          </SafeSection>
+        <div className="border-b p-4 flex-shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 w-full justify-between"
+            onClick={openNoteDialog}
+          >
+            <span className="inline-flex items-center gap-2">
+              <StickyNote className="h-4 w-4" />
+              Notes
+            </span>
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
+          </Button>
         </div>
       </div>
 
@@ -5955,66 +6094,182 @@ export default function WorkboardContent() {
       </Dialog>
 
       <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-lg">
+        <DialogContent role="dialog" aria-modal="true" aria-describedby="notes-dialog-desc" className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Board Note</DialogTitle>
-            <DialogDescription id="dialog-desc" className="sr-only">
-              Add a board note with type, location, and message details.
+            <DialogTitle className="flex items-center justify-between gap-3">
+              <span>Notes</span>
+              <Badge variant="secondary" className="h-6 px-2 text-xs">{noteList.length}</Badge>
+            </DialogTitle>
+            <DialogDescription id="notes-dialog-desc" className="sr-only">
+              Review and add notes by organization, property, employee, or task scope.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Type</label>
-              <select
-                value={noteDraft.type}
-                onChange={(e) => setNoteDraft({ ...noteDraft, type: e.target.value as Note['type'] })}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="daily">Daily</option>
-                <option value="general">General</option>
-                <option value="geo">Geo</option>
-                <option value="alert">Alert</option>
-              </select>
+
+          <div className="space-y-4">
+            <div className="flex gap-1">
+              {noteScopeTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setNoteScope(tab.id)}
+                  className={`flex-1 rounded-lg py-1 text-[11px] font-medium transition-colors ${
+                    noteScope === tab.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </button>
+              ))}
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Author</label>
-              <Input value={noteDraft.author} onChange={(e) => setNoteDraft({ ...noteDraft, author: e.target.value })} className="mt-1" />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Title</label>
-              <Input value={noteDraft.title} onChange={(e) => setNoteDraft({ ...noteDraft, title: e.target.value })} className="mt-1" />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Location</label>
-              {propertyWorkLocations.length > 0 ? (
+
+            {noteScope === 'property' ? (
+              <div>
+                <label className="text-xs text-muted-foreground">Property</label>
+                {effectivePropertyId === 'all' ? (
+                  <select
+                    value={selectedNotePropertyId}
+                    onChange={(e) => setSelectedNotePropertyId(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Choose a property</option>
+                    {properties.map((property) => (
+                      <option key={property.id} value={property.id}>
+                        {property.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="mt-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    {propertyNameById.get(selectedPropertyNoteId) ?? activeProperty?.name ?? 'Current property'}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {noteScope === 'employee' ? (
+              <div>
+                <label className="text-xs text-muted-foreground">Scheduled employee</label>
                 <select
-                  value={noteDraft.location}
-                  onChange={(e) => setNoteDraft({ ...noteDraft, location: e.target.value })}
+                  value={selectedNoteEmployeeId}
+                  onChange={(e) => setSelectedNoteEmployeeId(e.target.value)}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  <option value="">General board note</option>
-                  {propertyWorkLocations.map((l) => (
-                    <option key={l.id} value={l.name}>{l.name}</option>
-                  ))}
+                  <option value="">Choose a scheduled employee</option>
+                  {scheduledEmployees.map((employee) => {
+                    const shift = getShiftForEmployee(scheduleList, employee.id, boardDate);
+                    const propertyName = propertyNameById.get(shift?.propertyId ?? employee.propertyId ?? '') ?? 'Property';
+                    return (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.firstName} {employee.lastName} - {propertyName}
+                      </option>
+                    );
+                  })}
                 </select>
-              ) : (
-                <Input value={noteDraft.location} onChange={(e) => setNoteDraft({ ...noteDraft, location: e.target.value })} className="mt-1" />
-              )}
+              </div>
+            ) : null}
+
+            {noteScope === 'task' ? (
+              <div>
+                <label className="text-xs text-muted-foreground">Today&apos;s assignment</label>
+                <select
+                  value={selectedNoteAssignmentId}
+                  onChange={(e) => setSelectedNoteAssignmentId(e.target.value)}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Choose a task</option>
+                  {dayAssignments.map((assignment) => {
+                    if (!assignment.id) return null;
+                    const taskLabel = assignment.title || taskNameById.get(assignment.taskId) || 'Task';
+                    const employeeLabel = employeeNameById.get(assignment.employeeId) ?? 'Unassigned';
+                    return (
+                      <option key={assignment.id} value={assignment.id}>
+                        {taskLabel} - {employeeLabel}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Visible notes</p>
+              <div className="max-h-56 space-y-2 overflow-auto rounded-md border p-2">
+                {visibleScopedNotes.length === 0 ? (
+                  <div className="rounded-md border border-dashed bg-muted/20 p-4 text-center text-xs text-muted-foreground">
+                    No notes in this scope yet.
+                  </div>
+                ) : (
+                  visibleScopedNotes.map((note) => (
+                    <div key={note.id} className="rounded-md border bg-card p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{note.title}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{note.date}</p>
+                        </div>
+                        <Badge variant={note.type === 'alert' ? 'destructive' : 'secondary'} className="shrink-0 text-[10px] capitalize">
+                          {note.type}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">{note.content}</p>
+                      {note.location ? <p className="mt-2 text-xs text-muted-foreground">Location: {note.location}</p> : null}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Content</label>
-              <textarea
-                value={noteDraft.content}
-                onChange={(e) => setNoteDraft({ ...noteDraft, content: e.target.value })}
-                className="mt-1 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
+
+            <div className="grid grid-cols-2 gap-3 border-t pt-4">
+              <div>
+                <label className="text-xs text-muted-foreground">Type</label>
+                <select
+                  value={noteDraft.type}
+                  onChange={(e) => setNoteDraft({ ...noteDraft, type: e.target.value as Note['type'] })}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="daily">Daily</option>
+                  <option value="general">General</option>
+                  <option value="geo">Geo</option>
+                  <option value="alert">Alert</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Title</label>
+                <Input value={noteDraft.title} onChange={(e) => setNoteDraft({ ...noteDraft, title: e.target.value })} className="mt-1" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-muted-foreground">Location</label>
+                {propertyWorkLocations.length > 0 ? (
+                  <select
+                    value={noteDraft.location}
+                    onChange={(e) => setNoteDraft({ ...noteDraft, location: e.target.value })}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">No specific location</option>
+                    {propertyWorkLocations.map((l) => (
+                      <option key={l.id} value={l.name}>{l.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input value={noteDraft.location} onChange={(e) => setNoteDraft({ ...noteDraft, location: e.target.value })} className="mt-1" />
+                )}
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-muted-foreground">Content</label>
+                <textarea
+                  value={noteDraft.content}
+                  onChange={(e) => setNoteDraft({ ...noteDraft, content: e.target.value })}
+                  className="mt-1 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setNoteDialogOpen(false)} disabled={savingNote}>Cancel</Button>
-            <Button onClick={saveNote} disabled={savingNote || !noteDraft.content.trim()}>
-              {savingNote ? 'Saving...' : 'Save Note'}
-            </Button>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setNoteDialogOpen(false)} disabled={savingNote}>Close</Button>
+              <Button onClick={saveNote} disabled={savingNote || !noteDraft.content.trim()}>
+                {savingNote ? 'Saving...' : 'Add Note'}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
