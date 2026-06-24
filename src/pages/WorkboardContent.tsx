@@ -4788,7 +4788,27 @@ export default function WorkboardContent() {
                         void startAssignmentTimeline(assignment);
                       }}
                       onCompleteAssignment={(assignment, employeeAssignments) => {
-                        void completeAssignmentTimeline(assignment, employeeAssignments);
+                        void completeAssignmentTimeline(assignment, employeeAssignments).then(() => {
+                          setTimeout(() => {
+                            const btn = document.querySelector(`[data-testid="button-add-task-${assignment.employeeId}"]`);
+                            if (btn instanceof HTMLElement) {
+                              const rect = btn.getBoundingClientRect();
+                              const centerX = rect.left + rect.width / 2;
+                              const centerY = rect.top + rect.height / 2;
+                              const topElement = document.elementFromPoint(centerX, centerY);
+                              console.log('[DIAG-POST-COMPLETE]', {
+                                employeeId: assignment.employeeId,
+                                rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+                                pointerEvents: window.getComputedStyle(btn).pointerEvents,
+                                isButtonItself: topElement === btn,
+                                topElementClassName: topElement instanceof HTMLElement ? topElement.className : null,
+                                disabled: (btn as HTMLButtonElement).disabled,
+                              });
+                            } else {
+                              console.log('[DIAG-POST-COMPLETE] button not found in DOM', { employeeId: assignment.employeeId });
+                            }
+                          }, 300);
+                        });
                       }}
                       onSaveAssignmentTimes={(assignment, employeeAssignments, startInput, endInput) => {
                         void saveAssignmentTimelineTimes(assignment, employeeAssignments, startInput, endInput);
