@@ -4061,7 +4061,8 @@ export default function WorkboardContent() {
             <p>This is your daily operations board. Assign tasks to scheduled crew and track progress in real-time.</p>
             <button
               type="button"
-              className="text-xs font-medium text-blue-700 hover:text-blue-900"
+              aria-label="Dismiss workflow help"
+              className="rounded-full p-2 text-xs font-medium text-blue-700 hover:text-blue-900"
               onClick={() => {
                 window.localStorage.setItem('ground-crew-first-visit-workboard-dismissed', 'true');
                 setShowFirstVisitHint(false);
@@ -5492,8 +5493,8 @@ export default function WorkboardContent() {
                       {taskRows.length > 1 ? (
                         <button
                           type="button"
-                          className="text-lg leading-none text-muted-foreground hover:text-foreground"
                           aria-label={`Remove task ${index + 1}`}
+                          className="rounded-full p-2 text-lg leading-none text-muted-foreground hover:text-foreground"
                           onClick={() => {
                             setIsAssignmentModalDirty(true);
                             setTaskRows((current) => current.filter((item) => item.id !== row.id));

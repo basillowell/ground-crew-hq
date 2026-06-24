@@ -160,12 +160,12 @@ export function TaskBlock({
 
       <div className="flex items-start gap-1 pt-0.5">
         {onEdit ? (
-          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 rounded-full" onClick={onEdit}>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full p-2" onClick={onEdit} aria-label="Edit task">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         ) : null}
         {onRemove ? (
-          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 rounded-full" onClick={onRemove}>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full p-2" onClick={onRemove} aria-label="Remove task">
             <X className="h-3.5 w-3.5" />
           </Button>
         ) : null}
