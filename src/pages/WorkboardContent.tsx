@@ -5129,48 +5129,6 @@ export default function WorkboardContent() {
           )}
         </div>
 
-        {/* Scheduled crew summary */}
-        <div className="border-b p-4 flex-shrink-0">
-          <div className="flex items-center gap-2 mb-3">
-            <Users className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Scheduled Crew</h3>
-            <Badge variant="outline" className="ml-auto text-[10px]">{scheduledEmployees.length}</Badge>
-          </div>
-          {scheduledEmployees.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No shifts entered for this date.</p>
-          ) : (
-            <div className="space-y-1.5 max-h-52 overflow-auto">
-              {orderedDispatchBoard.map((lane) => {
-                const tasksCount = lane.employeeAssignments.length;
-                const coverPct = lane.shiftMinutes > 0 ? Math.round((lane.assignedMinutes / lane.shiftMinutes) * 100) : 0;
-                return (
-                  <div
-                    key={lane.employee.id}
-                    className="flex items-center gap-2 rounded-xl bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/60 transition-colors"
-                    onClick={() => openAssignmentDialog(lane.employee.id)}
-                    data-testid={`row-crew-${lane.employee.id}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate">
-                        {lane.employee.firstName} {lane.employee.lastName}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : 'No shift'} · {tasksCount} task{tasksCount !== 1 ? 's' : ''}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className={`text-[10px] font-semibold ${coverPct >= 80 ? 'text-green-600' : coverPct >= 40 ? 'text-amber-600' : 'text-muted-foreground'}`}>
-                        {lane.shiftMinutes > 0 ? `${coverPct}%` : '—'}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">covered</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
         <div className="border-b bg-muted/30 px-3 py-2 text-sm md:hidden">
           <div className="overflow-x-auto">
             <div className="min-w-max whitespace-nowrap font-medium text-muted-foreground">
