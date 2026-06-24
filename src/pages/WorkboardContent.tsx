@@ -637,6 +637,8 @@ export default function WorkboardContent() {
   const [endOfDayReportGenerating, setEndOfDayReportGenerating] = useState(false);
   const [isGeneratingTaskNotes, setIsGeneratingTaskNotes] = useState(false);
   const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
+  const boardDateInputRef = useRef<HTMLInputElement>(null);
+  const quickTaskDateInputRef = useRef<HTMLInputElement>(null);
   const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -4245,13 +4247,28 @@ export default function WorkboardContent() {
             <span className="text-[10px] uppercase tracking-wider text-text-muted">Board Date</span>
             <div className="relative flex items-center">
               <input
+                ref={boardDateInputRef}
                 type="date"
                 value={boardDate}
                 onChange={(e) => setBoardDate(e.target.value)}
                 className="h-8 rounded-md border border-surface-border bg-surface-base px-2 pr-7 text-sm text-text-primary"
                 data-testid="input-board-date"
               />
-              <Calendar className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-text-muted" />
+              <button
+                type="button"
+                onClick={() => {
+                  const input = boardDateInputRef.current;
+                  if (input && typeof input.showPicker === 'function') {
+                    input.showPicker();
+                  } else {
+                    input?.focus();
+                  }
+                }}
+                className="absolute right-2 flex items-center justify-center text-text-muted hover:text-text-primary"
+                aria-label="Open date picker"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+              </button>
             </div>
             {boardDate !== todayDateKey ? (
               <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setBoardDate(todayDateKey)}>
@@ -4306,7 +4323,7 @@ export default function WorkboardContent() {
               <Button
                 size="sm"
                 className="h-9 shrink-0"
-                onClick={openQuickTaskDialog}
+                onClick={() => openAssignmentDialog('')}
                 data-testid="button-open-add-task"
               >
                 Add Task
@@ -5722,12 +5739,27 @@ export default function WorkboardContent() {
               <label className="text-xs text-muted-foreground">Date</label>
               <div className="relative mt-1 flex items-center">
                 <Input
+                  ref={quickTaskDateInputRef}
                   type="date"
                   value={quickTaskDraft.date}
                   onChange={(event) => setQuickTaskDraft((current) => ({ ...current, date: event.target.value }))}
                   className="border-border bg-background pr-7 text-foreground"
                 />
-                <Calendar className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-text-muted" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = quickTaskDateInputRef.current;
+                    if (input && typeof input.showPicker === 'function') {
+                      input.showPicker();
+                    } else {
+                      input?.focus();
+                    }
+                  }}
+                  className="absolute right-2 flex items-center justify-center text-text-muted hover:text-text-primary"
+                  aria-label="Open date picker"
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
             <div>
