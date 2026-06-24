@@ -124,6 +124,20 @@ org_id membership only - never the admin's own employee.property_id.
 An admin manages their whole org, not just the one property their own
 employee record happens to be pinned to.
 
+**Rule 18 — Hierarchical scope columns must be nullable, not faked**
+When building drill-down features (org → property → employee → task),
+each narrower scope column is a nullable FK, never forced NOT NULL with
+a fallback anchor. RLS must explicitly handle the NULL case at each
+level — don't assume an existing property-scoped helper function
+handles NULL correctly without checking.
+
+**Rule 19 — Click targets scale to context, not uniformly**
+Desktop-dense admin/settings surfaces may use compact controls. Primary
+actionable buttons on touch-driven operational surfaces (Workboard,
+Workflow, Dispatch) need a minimum ~36-40px hit area regardless of
+visual size — achieved via padding/invisible hit-area expansion, not by
+literally enlarging icons and changing visual density.
+
 ---
 
 ## Coding Rules
