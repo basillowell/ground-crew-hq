@@ -70,9 +70,19 @@ type TeammateCard = {
   firstName: string;
   lastName: string;
   role: string | null;
+  phone: string | null;
+  isPresent: boolean;
   shiftStart: string | null;
   shiftEnd: string | null;
   tasks: FieldAssignment[];
+};
+
+type FieldDataCache = {
+  assignments: FieldAssignment[];
+  shift: ShiftEntry | null;
+  teammates: TeammateCard[];
+  propertyName: string;
+  cachedAt: string;
 };
 
 type DeferredInstallPromptEvent = Event & {
@@ -93,13 +103,19 @@ type FieldSyncQueueItem =
         property_id: string;
         org_id: string;
         event_type: 'clock_in' | 'clock_out' | 'break';
-        location_lat: number;
-        location_lng: number;
+        location_lat: number | null;
+        location_lng: number | null;
       };
     };
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function nextDateKey(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
 }
 
 function isUuid(value: string | null | undefined): value is string {
@@ -172,11 +188,42 @@ function formatElapsedTime(startTimestamp: string | null, now: Date): string {
   return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
 }
 
+function buildActualHoursDraft(assignments: FieldAssignment[]) {
+  const nextActualDraft: Record<string, string> = {};
+  assignments.forEach((assignment) => {
+    nextActualDraft[assignment.id] = String(assignment.actualHours ?? assignment.estimatedHours ?? 0);
+  });
+  return nextActualDraft;
+}
+
+function fieldCacheKey(orgId: string, employeeId: string, dateKey: string) {
+  return `field-cache-${orgId}-${employeeId}-${dateKey}`;
+}
+
+function readFieldCache(key: string): FieldDataCache | null {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as FieldDataCache;
+  } catch {
+    return null;
+  }
+}
+
+function writeFieldCache(key: string, value: Omit<FieldDataCache, 'cachedAt'>) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify({ ...value, cachedAt: new Date().toISOString() }));
+  } catch (cacheError) {
+    console.warn('Unable to cache field data:', cacheError);
+  }
+}
+
 function ClockInCard({
   isClockedIn,
   isOnBreak,
   elapsedLabel,
   propertyName,
+  scheduledWindowLabel,
   saving,
   onClockIn,
   onClockOut,
@@ -189,6 +236,7 @@ function ClockInCard({
   isOnBreak: boolean;
   elapsedLabel: string;
   propertyName: string;
+  scheduledWindowLabel?: string;
   saving: boolean;
   onClockIn: () => void;
   onClockOut: () => void;
@@ -206,6 +254,9 @@ function ClockInCard({
             <MapPin className="h-4 w-4 text-brand-bright" />
             <span>{propertyName}</span>
           </div>
+          {scheduledWindowLabel ? (
+            <p className="mt-1 text-xs font-medium text-text-muted">Scheduled: {scheduledWindowLabel}</p>
+          ) : null}
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-elevated">
           <Clock3 className="h-5 w-5 text-brand-bright" />
@@ -287,6 +338,7 @@ export default function MobileFieldWorkspacePage() {
   const [needsPhotoBase64, setNeedsPhotoBase64] = useState<string | null>(null);
   const [language, setLanguage] = useState<FieldLanguage>('en');
   const [isOfflineData, setIsOfflineData] = useState(false);
+  const [offlineDataMessage, setOfflineDataMessage] = useState<string | null>(null);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -405,6 +457,7 @@ export default function MobileFieldWorkspacePage() {
       });
       toast.success(`Synced ${synced} offline change${synced === 1 ? '' : 's'}`);
       setIsOfflineData(false);
+      setOfflineDataMessage(null);
     }
   }, [employeeId, loadSyncQueue, orgId, queryClient, saveSyncQueue]);
 
@@ -423,13 +476,26 @@ export default function MobileFieldWorkspacePage() {
 
     setLoading(true);
     setError(null);
+    const cacheKey = fieldCacheKey(orgId, employeeId, boardDate);
+    const employeeRow = employees.find((employee) => employee.id === employeeId) ?? null;
     if (!navigator.onLine) {
+      const cachedFieldData = readFieldCache(cacheKey);
+      if (cachedFieldData) {
+        setAssignments(cachedFieldData.assignments);
+        setShift(cachedFieldData.shift);
+        setTeammates(cachedFieldData.teammates);
+        setPropertyName(cachedFieldData.propertyName);
+        setActualHoursDraft(buildActualHoursDraft(cachedFieldData.assignments));
+        setIsOfflineData(true);
+        setOfflineDataMessage('Showing offline data from earlier today.');
+        setLoading(false);
+        return;
+      }
       setError('You are offline. Field data loads from Supabase once you are back online.');
       setLoading(false);
       return;
     }
 
-    const employeeRow = employees.find((employee) => employee.id === employeeId) ?? null;
     const [{ data: shiftRows, error: shiftError }, { data: assignmentRows, error: assignmentsError }, { data: taskRows, error: tasksError }, { data: clockRows, error: clockError }] = await Promise.all([
       supabase
         .from('schedule_entries')
@@ -494,15 +560,14 @@ export default function MobileFieldWorkspacePage() {
     }
 
     const shiftRow = shiftRows?.[0];
-    setShift(
-      shiftRow
-        ? {
-            propertyId: shiftRow.property_id ? String(shiftRow.property_id) : null,
-            shiftStart: String(shiftRow.shift_start ?? '').slice(0, 5),
-            shiftEnd: String(shiftRow.shift_end ?? '').slice(0, 5),
-          }
-        : null,
-    );
+    const nextShift = shiftRow
+      ? {
+          propertyId: shiftRow.property_id ? String(shiftRow.property_id) : null,
+          shiftStart: String(shiftRow.shift_start ?? '').slice(0, 5),
+          shiftEnd: String(shiftRow.shift_end ?? '').slice(0, 5),
+        }
+      : null;
+    setShift(nextShift);
 
     const normalizedAssignments: FieldAssignment[] = (assignmentRows ?? []).map((row) => ({
       id: String(row.id),
@@ -522,6 +587,7 @@ export default function MobileFieldWorkspacePage() {
     }));
     setAssignments(normalizedAssignments);
 
+    const fieldPropertyId = nextShift?.propertyId ?? currentUser?.propertyId ?? null;
     const teammateScheduleQuery = supabase
       .from('schedule_entries')
       .select('employee_id, shift_start, shift_end, status')
@@ -533,14 +599,30 @@ export default function MobileFieldWorkspacePage() {
       .eq('org_id', orgId)
       .eq('date', boardDate)
       .order('order_index', { ascending: true });
-    if (currentUser?.propertyId) {
-      void teammateScheduleQuery.eq('property_id', currentUser.propertyId);
-      void teammateAssignmentsQuery.eq('property_id', currentUser.propertyId);
+    if (fieldPropertyId) {
+      void teammateScheduleQuery.eq('property_id', fieldPropertyId);
+      void teammateAssignmentsQuery.eq('property_id', fieldPropertyId);
     }
     const [{ data: teammateScheduleRows }, { data: teammateAssignmentRows }] = await Promise.all([
       teammateScheduleQuery,
       teammateAssignmentsQuery,
     ]);
+    let teammateClockRows: Array<{ employee_id: string | null; event_type: string | null; timestamp: string | null }> = [];
+    if (fieldPropertyId) {
+      const { data: presenceRows } = await supabase
+        .from('clock_events')
+        .select('employee_id, event_type, timestamp')
+        .eq('org_id', orgId)
+        .eq('property_id', fieldPropertyId)
+        .gte('timestamp', `${boardDate}T00:00:00.000Z`)
+        .lt('timestamp', `${nextDateKey(boardDate)}T00:00:00.000Z`)
+        .order('timestamp', { ascending: false });
+      teammateClockRows = (presenceRows ?? []).map((row) => ({
+        employee_id: row.employee_id ? String(row.employee_id) : null,
+        event_type: row.event_type ? String(row.event_type) : null,
+        timestamp: row.timestamp ? String(row.timestamp) : null,
+      }));
+    }
     const teammateRows = (teammateScheduleRows ?? []).filter((row) => {
       if (!row.employee_id) return false;
       if (String(row.employee_id) === employeeId) return false;
@@ -557,9 +639,16 @@ export default function MobileFieldWorkspacePage() {
             firstName: employee.firstName,
             lastName: employee.lastName,
             role: employee.role || null,
+            phone: employee.phone || null,
           },
         ]),
     );
+    const latestPresenceByEmployee = new Map<string, string>();
+    teammateClockRows.forEach((row) => {
+      const teammateId = row.employee_id ? String(row.employee_id) : '';
+      if (!teammateId || latestPresenceByEmployee.has(teammateId)) return;
+      latestPresenceByEmployee.set(teammateId, String(row.event_type ?? ''));
+    });
     const groupedTeammateTasks = new Map<string, FieldAssignment[]>();
     (teammateAssignmentRows ?? []).forEach((row) => {
       const teammateId = row.employee_id ? String(row.employee_id) : '';
@@ -581,23 +670,25 @@ export default function MobileFieldWorkspacePage() {
       });
       groupedTeammateTasks.set(teammateId, list);
     });
-    setTeammates(
-      teammateRows
-        .map((row) => {
-          const teammateId = String(row.employee_id);
-          const profile = teammateEmployeeMap.get(teammateId);
-          return {
-            employeeId: teammateId,
-            firstName: profile?.firstName ?? 'Crew',
-            lastName: profile?.lastName ?? '',
-            role: profile?.role ?? null,
-            shiftStart: row.shift_start ? String(row.shift_start).slice(0, 5) : null,
-            shiftEnd: row.shift_end ? String(row.shift_end).slice(0, 5) : null,
-            tasks: (groupedTeammateTasks.get(teammateId) ?? []).sort((a, b) => a.orderIndex - b.orderIndex),
-          };
-        })
-        .sort((a, b) => String(a.shiftStart ?? '').localeCompare(String(b.shiftStart ?? ''))),
-    );
+    const nextTeammates = teammateRows
+      .map((row) => {
+        const teammateId = String(row.employee_id);
+        const profile = teammateEmployeeMap.get(teammateId);
+        const latestEventType = latestPresenceByEmployee.get(teammateId);
+        return {
+          employeeId: teammateId,
+          firstName: profile?.firstName ?? 'Crew',
+          lastName: profile?.lastName ?? '',
+          role: profile?.role ?? null,
+          phone: profile?.phone ?? null,
+          isPresent: latestEventType === 'clock_in' || latestEventType === 'break',
+          shiftStart: row.shift_start ? String(row.shift_start).slice(0, 5) : null,
+          shiftEnd: row.shift_end ? String(row.shift_end).slice(0, 5) : null,
+          tasks: (groupedTeammateTasks.get(teammateId) ?? []).sort((a, b) => a.orderIndex - b.orderIndex),
+        };
+      })
+      .sort((a, b) => String(a.shiftStart ?? '').localeCompare(String(b.shiftStart ?? '')));
+    setTeammates(nextTeammates);
 
     const normalizedClockEvents: ClockEventRecord[] = (clockRows ?? []).map((row) => ({
       id: String(row.id),
@@ -606,11 +697,7 @@ export default function MobileFieldWorkspacePage() {
     }));
     setClockEvents(normalizedClockEvents);
 
-    const nextActualDraft: Record<string, string> = {};
-    normalizedAssignments.forEach((assignment) => {
-      nextActualDraft[assignment.id] = String(assignment.actualHours ?? assignment.estimatedHours ?? 0);
-    });
-    setActualHoursDraft(nextActualDraft);
+    setActualHoursDraft(buildActualHoursDraft(normalizedAssignments));
 
     const taskMap: Record<string, TaskMeta> = {};
     (taskRows ?? []).forEach((row) => {
@@ -627,15 +714,22 @@ export default function MobileFieldWorkspacePage() {
       propertiesById.set(property.id, property.name);
     });
 
+    let nextPropertyName = 'Assigned Property';
     if (shiftRow?.property_id && propertiesById.has(String(shiftRow.property_id))) {
-      setPropertyName(propertiesById.get(String(shiftRow.property_id)) ?? 'Assigned Property');
+      nextPropertyName = propertiesById.get(String(shiftRow.property_id)) ?? 'Assigned Property';
     } else if (currentUser?.propertyId && propertiesById.has(String(currentUser.propertyId))) {
-      setPropertyName(propertiesById.get(String(currentUser.propertyId)) ?? 'Assigned Property');
-    } else {
-      setPropertyName('Assigned Property');
+      nextPropertyName = propertiesById.get(String(currentUser.propertyId)) ?? 'Assigned Property';
     }
+    setPropertyName(nextPropertyName);
+    writeFieldCache(cacheKey, {
+      assignments: normalizedAssignments,
+      shift: nextShift,
+      teammates: nextTeammates,
+      propertyName: nextPropertyName,
+    });
 
     setIsOfflineData(false);
+    setOfflineDataMessage(null);
     setLoading(false);
   }, [LANG_STORAGE_KEY, boardDate, currentUser?.propertyId, employeeId, employees, orgId, properties]);
 
@@ -699,6 +793,7 @@ export default function MobileFieldWorkspacePage() {
       });
       setSaving(assignment.id, false);
       setIsOfflineData(true);
+      setOfflineDataMessage(null);
       return;
     }
 
@@ -716,6 +811,7 @@ export default function MobileFieldWorkspacePage() {
         payload,
       });
       setIsOfflineData(true);
+      setOfflineDataMessage(null);
       return;
     }
 
@@ -805,18 +901,19 @@ export default function MobileFieldWorkspacePage() {
       const liveEmployee = employees.find((entry) => entry.id === employeeId);
       const resolvedEmployeeId = liveEmployee?.id ?? employee?.id ?? employeeId;
 
-      let position: GeolocationPosition;
+      let position: GeolocationPosition | null = null;
       try {
         position = await getCurrentPosition();
       } catch (locationError) {
-        const message = locationError instanceof GeolocationPositionError
-          ? 'Location permission is required to use the time clock.'
-          : locationError instanceof Error
-            ? locationError.message
-            : 'Unable to get your current location.';
-        toast.error(message);
-        return;
+        console.warn('Clock event proceeding without GPS:', locationError);
       }
+      const locationLat = position?.coords.latitude ?? null;
+      const locationLng = position?.coords.longitude ?? null;
+      const notifyMissingLocation = () => {
+        if (locationLat == null || locationLng == null) {
+          toast.info('Clock event logged without location data.');
+        }
+      };
 
       setClockActionSaving(true);
       const optimisticEvent: ClockEventRecord = {
@@ -834,8 +931,8 @@ export default function MobileFieldWorkspacePage() {
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
-            location_lat: position.coords.latitude,
-            location_lng: position.coords.longitude,
+            location_lat: locationLat,
+            location_lng: locationLng,
           },
         });
         queryClient.setQueryData(
@@ -844,6 +941,7 @@ export default function MobileFieldWorkspacePage() {
         );
         setClockActionSaving(false);
         setIsOfflineData(true);
+        setOfflineDataMessage(null);
         toast.success(
           eventType === 'clock_in'
             ? 'Clock in saved offline'
@@ -851,6 +949,7 @@ export default function MobileFieldWorkspacePage() {
               ? 'Clock out saved offline'
               : 'Break saved offline',
         );
+        notifyMissingLocation();
         return;
       }
 
@@ -861,8 +960,8 @@ export default function MobileFieldWorkspacePage() {
           property_id: propertyId,
           org_id: orgId,
           event_type: eventType,
-          location_lat: position.coords.latitude,
-          location_lng: position.coords.longitude,
+          location_lat: locationLat,
+          location_lng: locationLng,
         })
         .select('id, event_type, timestamp')
         .single();
@@ -877,8 +976,8 @@ export default function MobileFieldWorkspacePage() {
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
-            location_lat: position.coords.latitude,
-            location_lng: position.coords.longitude,
+            location_lat: locationLat,
+            location_lng: locationLng,
           },
         });
         queryClient.setQueryData(
@@ -886,6 +985,7 @@ export default function MobileFieldWorkspacePage() {
           eventType,
         );
         setIsOfflineData(true);
+        setOfflineDataMessage(null);
         toast.success(
           eventType === 'clock_in'
             ? 'Clock in queued for sync'
@@ -893,6 +993,7 @@ export default function MobileFieldWorkspacePage() {
               ? 'Clock out queued for sync'
               : 'Break queued for sync',
         );
+        notifyMissingLocation();
         return;
       }
 
@@ -923,6 +1024,7 @@ export default function MobileFieldWorkspacePage() {
             ? `Clocked out at ${successTime}`
             : `Break started at ${successTime}`,
       );
+      notifyMissingLocation();
     },
     [
       currentUser?.propertyId,
@@ -1081,29 +1183,26 @@ export default function MobileFieldWorkspacePage() {
       }
       const propertyId = propertyIdRaw;
 
-      const previous = { ...assignment };
       const nowIso = new Date().toISOString();
-      const optimisticPatch: Partial<FieldAssignment> =
-        action === 'start'
-          ? {
-              status: 'in_progress',
-              actualStartAt: nowIso,
-            }
-          : (() => {
-              const startIso = assignment.actualStartAt ?? nowIso;
-              const startMs = Date.parse(startIso);
-              const endMs = Date.parse(nowIso);
-              const nextActualHours =
-                Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs
-                  ? Number(((endMs - startMs) / 3_600_000).toFixed(2))
-                  : assignment.actualHours ?? 0;
-              return {
-                status: 'completed',
-                actualCompletedAt: nowIso,
-                actualHours: nextActualHours,
-                completedAt: nowIso,
-              };
-            })();
+      if (action === 'complete') {
+        const startIso = assignment.actualStartAt ?? nowIso;
+        const startMs = Date.parse(startIso);
+        const endMs = Date.parse(nowIso);
+        const nextActualHours =
+          Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs
+            ? Number(((endMs - startMs) / 3_600_000).toFixed(2))
+            : assignment.actualHours ?? 0;
+        setActualHoursDraft((current) => ({ ...current, [assignment.id]: String(nextActualHours) }));
+        setShowOtherActualInputId(null);
+        setActiveDonePromptId(assignment.id);
+        return;
+      }
+
+      const previous = { ...assignment };
+      const optimisticPatch: Partial<FieldAssignment> = {
+        status: 'in_progress',
+        actualStartAt: nowIso,
+      };
 
       setSavingIds((current) => ({ ...current, [assignment.id]: true }));
       setAssignments((current) =>
@@ -1114,14 +1213,7 @@ export default function MobileFieldWorkspacePage() {
         ),
       );
 
-      const assignmentPayload: Record<string, unknown> =
-        action === 'start'
-          ? { status: 'in_progress', actual_start_at: nowIso }
-          : {
-              status: 'completed',
-              actual_completed_at: nowIso,
-              actual_hours: optimisticPatch.actualHours ?? 0,
-            };
+      const assignmentPayload: Record<string, unknown> = { status: 'in_progress', actual_start_at: nowIso };
 
       const { error: assignmentError } = await supabase
         .from('assignments')
@@ -1131,7 +1223,7 @@ export default function MobileFieldWorkspacePage() {
       if (assignmentError) {
         setAssignments((current) => current.map((row) => (row.id === previous.id ? previous : row)));
         setSavingIds((current) => ({ ...current, [assignment.id]: false }));
-        toast.error(`${action === 'start' ? 'Start' : 'Complete'} failed: ${assignmentError.message}`);
+        toast.error(`Start failed: ${assignmentError.message}`);
         return;
       }
 
@@ -1139,7 +1231,7 @@ export default function MobileFieldWorkspacePage() {
         employee_id: actingEmployeeId,
         property_id: propertyId,
         org_id: orgId,
-        event_type: action === 'start' ? 'clock_in' : 'clock_out',
+        event_type: 'clock_in',
       });
       if (clockError) {
         const { error: rollbackError } = await supabase
@@ -1157,17 +1249,36 @@ export default function MobileFieldWorkspacePage() {
         }
         setAssignments((current) => current.map((row) => (row.id === previous.id ? previous : row)));
         setSavingIds((current) => ({ ...current, [assignment.id]: false }));
-        toast.error(`${action === 'start' ? 'Start' : 'Complete'} failed: ${clockError.message}`);
+        toast.error(`Start failed: ${clockError.message}`);
         return;
       }
 
       setSavingIds((current) => ({ ...current, [assignment.id]: false }));
-      toast.success(action === 'start' ? `Started ${assignment.title}` : `Completed ${assignment.title}`);
+      toast.success(`Started ${assignment.title}`);
     },
     [currentUser?.propertyId, employee, employeeId, orgId, shift?.propertyId],
   );
 
   const syncQueueCount = loadSyncQueue().length;
+  const languageToggle = (
+    <div className="flex items-center gap-0.5 rounded-full border border-surface-border bg-surface-elevated px-1 py-0.5 text-xs font-medium">
+      <button
+        type="button"
+        className={`min-h-11 rounded-full px-3 transition-colors ${language === 'en' ? 'bg-brand-bright font-bold text-text-inverse' : 'text-text-muted'}`}
+        onClick={() => { setLanguage('en'); window.localStorage.setItem(LANG_STORAGE_KEY, 'en'); }}
+      >
+        EN
+      </button>
+      <span className="text-text-muted">|</span>
+      <button
+        type="button"
+        className={`min-h-11 rounded-full px-3 transition-colors ${language === 'es' ? 'bg-brand-bright font-bold text-text-inverse' : 'text-text-muted'}`}
+        onClick={() => { setLanguage('es'); window.localStorage.setItem(LANG_STORAGE_KEY, 'es'); }}
+      >
+        ES
+      </button>
+    </div>
+  );
 
   const displayOnlyLayout = (
     <div
@@ -1176,32 +1287,11 @@ export default function MobileFieldWorkspacePage() {
       onTouchMove={handlePullRefreshMove}
       onTouchEnd={() => void handlePullRefreshEnd()}
     >
-      {/* Language toggle */}
-      <div className="mb-3 flex items-center justify-end">
-        <div className="flex items-center gap-0.5 rounded-full border border-surface-border bg-surface-elevated px-1 py-0.5 text-xs font-medium">
-          <button
-            type="button"
-            className={`rounded-full px-2.5 py-1 transition-colors ${language === 'en' ? 'bg-brand-bright font-bold text-text-inverse' : 'text-text-muted'}`}
-            onClick={() => { setLanguage('en'); window.localStorage.setItem(LANG_STORAGE_KEY, 'en'); }}
-          >
-            EN
-          </button>
-          <span className="text-text-muted">|</span>
-          <button
-            type="button"
-            className={`rounded-full px-2.5 py-1 transition-colors ${language === 'es' ? 'bg-brand-bright font-bold text-text-inverse' : 'text-text-muted'}`}
-            onClick={() => { setLanguage('es'); window.localStorage.setItem(LANG_STORAGE_KEY, 'es'); }}
-          >
-            ES
-          </button>
-        </div>
-      </div>
-
       {/* Offline sync banner */}
       {isOfflineData && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
           <WifiOff className="h-4 w-4 shrink-0 text-yellow-400" />
-          <span className="text-sm text-yellow-300">Offline changes queued. Live data refreshes from Supabase when online.</span>
+          <span className="text-sm text-yellow-300">{offlineDataMessage ?? 'Offline changes queued. Live data refreshes from Supabase when online.'}</span>
         </div>
       )}
 
@@ -1227,6 +1317,7 @@ export default function MobileFieldWorkspacePage() {
         isOnBreak={isOnBreak}
         elapsedLabel={elapsedLabel}
         propertyName={propertyName}
+        scheduledWindowLabel={shift ? `${formatTime(shift.shiftStart)} - ${formatTime(shift.shiftEnd)}` : undefined}
         saving={clockActionSaving}
         onClockIn={() => void handleClockEvent('clock_in')}
         onClockOut={() => void handleClockEvent('clock_out')}
@@ -1297,6 +1388,76 @@ export default function MobileFieldWorkspacePage() {
                           </button>
                         )}
                       </div>
+                      {activeDonePromptId === assignment.id ? (
+                        <div className="mt-3 rounded-xl border border-surface-border bg-surface-card p-3">
+                          <p className="text-sm font-semibold text-text-primary">Confirm actual hours</p>
+                          <p className="mt-1 text-xs text-text-muted">Adjust the total before marking this task done.</p>
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            {QUICK_HOURS_OPTIONS.map((value) => (
+                              <button
+                                key={`${assignment.id}-hours-${value}`}
+                                type="button"
+                                className={`min-h-11 rounded-lg border px-3 text-sm font-semibold transition-colors ${
+                                  actualHoursDraft[assignment.id] === value
+                                    ? 'border-brand bg-brand/10 text-brand'
+                                    : 'border-surface-border text-text-secondary'
+                                }`}
+                                onClick={() => {
+                                  setActualHoursDraft((current) => ({ ...current, [assignment.id]: value }));
+                                  setShowOtherActualInputId(null);
+                                }}
+                              >
+                                {value}h
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              className={`min-h-11 rounded-lg border px-3 text-sm font-semibold transition-colors ${
+                                showOtherActualInputId === assignment.id
+                                  ? 'border-brand bg-brand/10 text-brand'
+                                  : 'border-surface-border text-text-secondary'
+                              }`}
+                              onClick={() => setShowOtherActualInputId(assignment.id)}
+                            >
+                              Other
+                            </button>
+                          </div>
+                          {showOtherActualInputId === assignment.id ? (
+                            <Input
+                              type="number"
+                              min="0"
+                              max="24"
+                              step="0.25"
+                              inputMode="decimal"
+                              className="mt-3 min-h-11 border-surface-border bg-surface-base"
+                              value={actualHoursDraft[assignment.id] ?? ''}
+                              onChange={(event) => setActualHoursDraft((current) => ({ ...current, [assignment.id]: event.target.value }))}
+                              aria-label="Actual hours"
+                            />
+                          ) : null}
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              className="min-h-11 rounded-lg border border-surface-border px-4 py-2 text-sm font-semibold text-text-secondary"
+                              onClick={() => {
+                                setActiveDonePromptId(null);
+                                setShowOtherActualInputId(null);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-brand-bright px-4 py-2 text-sm font-bold text-text-inverse disabled:opacity-50"
+                              disabled={Boolean(savingIds[assignment.id])}
+                              onClick={() => void completeTaskWithHours(assignment)}
+                            >
+                              {savingIds[assignment.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                              Confirm
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ))}
         </div>
@@ -1318,14 +1479,31 @@ export default function MobileFieldWorkspacePage() {
               ? <p className="text-sm text-text-muted">{t.noTeammates}</p>
               : teammates.map((teammate) => (
                   <div key={teammate.employeeId} className="rounded-xl border border-surface-border bg-surface-elevated/30 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <div>
-                        <p className="text-base font-semibold text-text-primary">{`${teammate.firstName} ${teammate.lastName}`.trim()}</p>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${teammate.isPresent ? 'bg-status-active' : 'bg-status-hold'}`}
+                            aria-label={teammate.isPresent ? 'Clocked in' : 'Not clocked in'}
+                            title={teammate.isPresent ? 'Clocked in' : 'Not clocked in'}
+                          />
+                          <p className="truncate text-base font-semibold text-text-primary">{`${teammate.firstName} ${teammate.lastName}`.trim()}</p>
+                        </div>
                         <p className="text-xs text-text-muted">{teammate.role || 'Crew'}</p>
                       </div>
-                      <p className="text-xs text-text-muted">
-                        {teammate.shiftStart && teammate.shiftEnd ? `${formatTime(teammate.shiftStart)}–${formatTime(teammate.shiftEnd)}` : 'No shift'}
-                      </p>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {teammate.phone ? (
+                          <a
+                            href={`tel:${teammate.phone}`}
+                            className="flex min-h-11 items-center justify-center rounded-lg border border-surface-border px-3 text-xs font-semibold text-brand"
+                          >
+                            Call
+                          </a>
+                        ) : null}
+                        <p className="text-xs text-text-muted">
+                          {teammate.shiftStart && teammate.shiftEnd ? `${formatTime(teammate.shiftStart)} - ${formatTime(teammate.shiftEnd)}` : 'No shift'}
+                        </p>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {teammate.tasks.length === 0 ? (
@@ -1345,6 +1523,17 @@ export default function MobileFieldWorkspacePage() {
                 ))}
         </div>
       </div>
+
+      <details className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold uppercase tracking-wide text-text-muted">
+          More
+          <span className="text-xs font-medium normal-case tracking-normal text-text-muted">Settings</span>
+        </summary>
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-surface-border pt-3">
+          <span className="text-sm font-medium text-text-secondary">Language</span>
+          {languageToggle}
+        </div>
+      </details>
 
     </div>
   );
