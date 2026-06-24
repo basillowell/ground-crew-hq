@@ -4312,6 +4312,19 @@ export default function WorkboardContent() {
                 Add Task
               </Button>
             ) : null}
+            {!isReadOnly ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0 gap-1.5"
+                onClick={openNoteDialog}
+                data-testid="button-open-notes"
+              >
+                <StickyNote className="h-3.5 w-3.5" />
+                Notes
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
+              </Button>
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" className="h-9 shrink-0 rounded-lg">
@@ -5162,138 +5175,6 @@ export default function WorkboardContent() {
             <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
           </Button>
 
-        </div>
-      </div>
-
-      <div className="w-80 border-l bg-card overflow-auto flex flex-col hidden lg:flex">
-
-        {/* Needs Queue */}
-        <div className="border-b p-4 flex-shrink-0">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ListChecks className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Needs Queue ({newRequestsCount})</h3>
-              {newRequestsCount > 0 && (
-                <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{newRequestsCount}</Badge>
-              )}
-            </div>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{boardDate}</span>
-          </div>
-
-          {/* Filter tabs */}
-          <div className="flex gap-1 mb-3">
-            {(['all', 'open', 'done'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setNeedsFilter(f)}
-                className={`flex-1 rounded-lg py-1 text-[11px] font-medium transition-colors ${
-                  needsFilter === f
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                }`}
-                data-testid={`filter-needs-${f}`}
-              >
-                {f === 'all'
-                  ? `All (${propertyRequests.length})`
-                  : f === 'open'
-                    ? `Open (${propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length})`
-                    : `Done (${propertyRequests.filter((r) => !isRequestOpen(String(r.status ?? ''))).length})`}
-              </button>
-            ))}
-          </div>
-
-          {filteredRequests.length === 0 ? (
-            <div className="rounded-2xl border border-dashed bg-muted/20 p-4 text-center">
-              <p className="text-xs text-muted-foreground">
-                {needsFilter === 'open' ? 'All needs have been handled.' : needsFilter === 'done' ? 'No completed needs yet.' : 'No needs logged for this date.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-72 overflow-auto pr-0.5">
-              {filteredRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className={`rounded-2xl border p-3 ${PRIORITY_COLOR[request.priority] ?? 'bg-muted/20 border-border'}`}
-                  data-testid={`card-request-${request.id}`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {STATUS_ICON[request.status]}
-                      <span className="text-sm font-medium truncate">{request.title}</span>
-                    </div>
-                    <Badge
-                      variant={request.priority === 'high' ? 'destructive' : request.priority === 'medium' ? 'secondary' : 'outline'}
-                      className="h-5 px-1.5 text-[10px] shrink-0"
-                    >
-                      {PRIORITY_LABEL[request.priority]}
-                    </Badge>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mb-2">
-                    {request.submittedBy && employeeNameById.get(request.submittedBy)
-                      ? employeeNameById.get(request.submittedBy)
-                      : request.requestedBy}
-                    {request.location || request.preferredLocation ? ` · ${request.location || request.preferredLocation}` : ''}
-                  </div>
-                  {request.description && (
-                    <div className="text-[11px] text-muted-foreground italic mb-2 line-clamp-2">{request.description}</div>
-                  )}
-                  <div className="text-[10px] text-muted-foreground mb-2">
-                    Created {formatRelativeTime(request.createdAt)}
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Button
-                      size="sm"
-                      className="h-7 text-[11px] flex-1"
-                      onClick={() => applyRequestToAssignment(request)}
-                      disabled={fallbackEligibleEmployees.length === 0 || !isRequestOpen(String(request.status ?? ''))}
-                      data-testid={`button-view-request-${request.id}`}
-                    >
-                      Assign
-                    </Button>
-                    {isRequestOpen(String(request.status ?? '')) ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[11px] px-2"
-                        onClick={() => dismissRequest(request.id)}
-                        data-testid={`button-dismiss-request-${request.id}`}
-                      >
-                        Dismiss
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="border-b bg-muted/30 px-3 py-2 text-sm md:hidden">
-          <div className="overflow-x-auto">
-            <div className="min-w-max whitespace-nowrap font-medium text-muted-foreground">
-              <span className="text-foreground">{scheduledEmployees.length} crew</span>
-              <span> · </span>
-              <span className="text-foreground">{dayAssignments.length} tasks</span>
-              <span> · </span>
-              <span className="text-foreground">{totalOpenMinutes} min covered</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div className="border-b p-4 flex-shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 w-full justify-between"
-            onClick={openNoteDialog}
-          >
-            <span className="inline-flex items-center gap-2">
-              <StickyNote className="h-4 w-4" />
-              Notes
-            </span>
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
-          </Button>
         </div>
       </div>
 
