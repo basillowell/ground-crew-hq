@@ -563,7 +563,6 @@ export default function WorkboardContent() {
   const [groupFilter, setGroupFilter] = useState('all');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
   const [isAssignmentModalDirty, setIsAssignmentModalDirty] = useState(false);
-  const [quickTaskDialogOpen, setQuickTaskDialogOpen] = useState(false);
   const [quickPlanDialogOpen, setQuickPlanDialogOpen] = useState(false);
   const [taskTemplateDialogOpen, setTaskTemplateDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
@@ -638,7 +637,6 @@ export default function WorkboardContent() {
   const [isGeneratingTaskNotes, setIsGeneratingTaskNotes] = useState(false);
   const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
   const boardDateInputRef = useRef<HTMLInputElement>(null);
-  const quickTaskDateInputRef = useRef<HTMLInputElement>(null);
   const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -686,13 +684,6 @@ export default function WorkboardContent() {
     location: '',
   });
   const [savingNote, setSavingNote] = useState(false);
-  const [quickTaskDraft, setQuickTaskDraft] = useState({
-    employeeId: '',
-    date: new Date().toLocaleDateString('en-CA'),
-    location: 'Primary zone',
-    notes: '',
-  });
-
   const workflowParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const focusedPropertyId = workflowParams.get('property') || '';
   const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
@@ -3325,18 +3316,6 @@ export default function WorkboardContent() {
     setAssignmentDialogOpen(true);
   }
 
-  function openQuickTaskDialog() {
-    const defaultEmployeeId = selectedEmployeeId || fallbackEligibleEmployees[0]?.id || '';
-    const defaultLocation = propertyWorkLocations[0]?.name ?? 'Primary zone';
-    setQuickTaskDraft({
-      employeeId: defaultEmployeeId,
-      date: boardDate,
-      location: defaultLocation,
-      notes: '',
-    });
-    setQuickTaskDialogOpen(true);
-  }
-
   function openEditAssignmentDialog(assignment: Assignment) {
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setEditingAssignmentId(assignment.id);
@@ -3425,7 +3404,6 @@ export default function WorkboardContent() {
     };
     const handleCloseModals = () => {
       if (assignmentDialogOpen) closeAssignmentDialog();
-      setQuickTaskDialogOpen(false);
       setQuickPlanDialogOpen(false);
       setTaskTemplateDialogOpen(false);
       setSendScheduleDialogOpen(false);
@@ -3904,81 +3882,6 @@ export default function WorkboardContent() {
     }
     toast.success('Task moved to a different crew member');
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
-  }
-
-  async function saveQuickTaskAssignment() {
-    if (isReadOnly) {
-      toast.info('Demo mode is read-only.');
-      return;
-    }
-    if (!supabase || !currentUser?.orgId || !quickTaskDraft.employeeId || !quickTaskDraft.notes.trim()) {
-      return;
-    }
-    const resolvedPropertyId =
-      (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ??
-      activeProperty?.id ??
-      null;
-    if (!resolvedPropertyId) {
-      toast.error('Missing property context.');
-      return;
-    }
-    const fallbackTaskId = taskLibrary.find((task) => isValidUuid(task.id))?.id ?? '';
-    if (!isValidUuid(fallbackTaskId)) {
-      toast.error('Quick task requires a valid task in the task library.');
-      return;
-    }
-    const orderIndex = assignmentList.filter(
-      (assignment) => assignment.employeeId === quickTaskDraft.employeeId && assignment.date === quickTaskDraft.date,
-    ).length;
-    const payload = {
-      id: makeId(),
-      org_id: currentUser.orgId,
-      employee_id: quickTaskDraft.employeeId,
-      property_id: resolvedPropertyId,
-      task_id: fallbackTaskId,
-      date: quickTaskDraft.date,
-      title: 'Quick task',
-      notes: quickTaskDraft.notes.trim(),
-      location: quickTaskDraft.location.trim() || null,
-      status: 'planned',
-      order_index: orderIndex,
-      start_time: '05:30',
-      estimated_hours: 0,
-    };
-    const validationError = validateAssignmentWritePayload({
-      employee_id: payload.employee_id,
-      task_id: payload.task_id,
-      org_id: payload.org_id,
-      date: payload.date,
-      status: payload.status,
-    });
-    if (validationError) {
-      toast.error(validationError);
-      return;
-    }
-    const { data, error } = await supabase.from('assignments').insert(payload).select().single();
-    if (error) {
-      console.error('[ASSIGNMENT ERROR]', { error, payload });
-      toast.error(`Task assignment failed: ${error.message}`);
-      return;
-    }
-    appendAssignmentToCaches({
-      id: String(data?.id ?? payload.id),
-      employeeId: String(data?.employee_id ?? payload.employee_id),
-      taskId: String(data?.task_id ?? payload.task_id),
-      equipmentId: data?.equipment_unit_id ? String(data.equipment_unit_id) : undefined,
-      date: String(data?.date ?? payload.date),
-      startTime: String(data?.start_time ?? payload.start_time),
-      estimatedHours: Number(data?.estimated_hours ?? 0),
-      duration: Math.round(Number(data?.estimated_hours ?? 0) * 60),
-      area: String(data?.location ?? payload.location ?? 'Primary zone'),
-      status: normalizeAssignmentStatus(String(data?.status ?? payload.status)) as Assignment['status'],
-    });
-    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
-    setQuickTaskDialogOpen(false);
-    toast.success('Task added to workflow', {
-      description: 'The new assignment is now visible on the workboard.',
-    });
   }
 
   async function approveRequestToAssignment(request: PendingTaskRequest) {
@@ -5707,85 +5610,6 @@ export default function WorkboardContent() {
               {editingAssignmentId ? 'Save Changes' : 'Dispatch'}
             </Button>
           </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={quickTaskDialogOpen} onOpenChange={setQuickTaskDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add Task</DialogTitle>
-            <DialogDescription id="dialog-desc" className="sr-only">
-              Add a quick task for an employee on the selected date.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Employee</label>
-              <select
-                value={quickTaskDraft.employeeId}
-                onChange={(event) => setQuickTaskDraft((current) => ({ ...current, employeeId: event.target.value }))}
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">Select employee</option>
-                {fallbackEligibleEmployees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.firstName} {employee.lastName}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Date</label>
-              <div className="relative mt-1 flex items-center">
-                <Input
-                  ref={quickTaskDateInputRef}
-                  type="date"
-                  value={quickTaskDraft.date}
-                  onChange={(event) => setQuickTaskDraft((current) => ({ ...current, date: event.target.value }))}
-                  className="border-border bg-background pr-7 text-foreground"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const input = quickTaskDateInputRef.current;
-                    if (input && typeof input.showPicker === 'function') {
-                      input.showPicker();
-                    } else {
-                      input?.focus();
-                    }
-                  }}
-                  className="absolute right-2 flex items-center justify-center text-text-muted hover:text-text-primary"
-                  aria-label="Open date picker"
-                >
-                  <Calendar className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Location</label>
-              <Input
-                value={quickTaskDraft.location}
-                onChange={(event) => setQuickTaskDraft((current) => ({ ...current, location: event.target.value }))}
-                className="mt-1"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-muted-foreground">Notes</label>
-              <textarea
-                value={quickTaskDraft.notes}
-                onChange={(event) => setQuickTaskDraft((current) => ({ ...current, notes: event.target.value }))}
-                className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setQuickTaskDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={saveQuickTaskAssignment} data-testid="button-save-quick-task">
-              Save Task
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
