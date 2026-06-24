@@ -247,12 +247,19 @@ export default function EmployeesPage() {
     enabled: Boolean(orgId && viewMode === 'availability'),
     retry: false,
     queryFn: async () => {
+      console.log('[DIAG-AVAIL] queryFn started', {
+        time: new Date().toISOString(),
+        orgId,
+        hasSession: Boolean(supabase),
+      });
       if (!orgId) return [] as ScheduleEntryRow[];
+      const fetchStart = performance.now();
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error('Availability request timed out after 10 seconds.')), 10_000);
       });
       try {
+        console.log('[DIAG-AVAIL] about to call supabase.from(schedule_entries)', { elapsedSinceStart: performance.now() - fetchStart });
         const result = await Promise.race([
           supabase
             .from('schedule_entries')
@@ -263,8 +270,12 @@ export default function EmployeesPage() {
             .order('date', { ascending: true }),
           timeout,
         ]);
+        console.log('[DIAG-AVAIL] supabase call resolved', { elapsedMs: performance.now() - fetchStart, hasError: Boolean(result.error) });
         if (result.error) throw result.error;
         return (result.data ?? []) as ScheduleEntryRow[];
+      } catch (err) {
+        console.log('[DIAG-AVAIL] caught error', { elapsedMs: performance.now() - fetchStart, err });
+        throw err;
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
       }
@@ -739,9 +750,13 @@ export default function EmployeesPage() {
           variant={viewMode === 'availability' ? 'default' : 'outline'}
           size="sm"
           className="h-9 rounded-lg"
-          onClick={() => {
+          onClick={async () => {
             setStatusFilter('active');
             setViewMode('availability');
+            console.log('[DIAG-AVAIL] auth state at tab open', {
+              orgId,
+              supabaseAuthSession: await supabase.auth.getSession(),
+            });
           }}
         >
           Availability
