@@ -13,11 +13,12 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
 import { createEvents, type EventAttributes } from 'ics';
-import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin, WifiOff } from 'lucide-react';
+import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin, MoreHorizontal, Users, WifiOff } from 'lucide-react';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { PageHeader } from '@/components/shared';
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
+type FieldTab = 'today' | 'team' | 'more';
 
 type FieldAssignment = {
   id: string;
@@ -344,6 +345,7 @@ export default function MobileFieldWorkspacePage() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
   const [teammates, setTeammates] = useState<TeammateCard[]>([]);
+  const [activeTab, setActiveTab] = useState<FieldTab>('today');
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
@@ -1172,6 +1174,13 @@ export default function MobileFieldWorkspacePage() {
     setTouchStartY(null);
   };
 
+  const handleTabSelect = (nextTab: FieldTab) => {
+    setActiveTab(nextTab);
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  };
+
   const handleMyTaskStatusAction = useCallback(
     async (assignment: FieldAssignment, action: 'start' | 'complete') => {
       if (!supabase || !orgId || !employeeId || !assignment.id) return;
@@ -1279,6 +1288,12 @@ export default function MobileFieldWorkspacePage() {
       </button>
     </div>
   );
+  const tabButtonClass = (tab: FieldTab) =>
+    `flex min-h-16 flex-col items-center justify-center rounded-xl border px-2 py-2 text-xs font-semibold transition-colors ${
+      activeTab === tab
+        ? 'border-brand/40 bg-surface-elevated text-text-primary'
+        : 'border-transparent text-text-muted hover:bg-surface-hover hover:text-text-primary'
+    }`;
 
   const displayOnlyLayout = (
     <div
@@ -1312,44 +1327,46 @@ export default function MobileFieldWorkspacePage() {
         </div>
       )}
 
-      <ClockInCard
-        isClockedIn={isClockedIn}
-        isOnBreak={isOnBreak}
-        elapsedLabel={elapsedLabel}
-        propertyName={propertyName}
-        scheduledWindowLabel={shift ? `${formatTime(shift.shiftStart)} - ${formatTime(shift.shiftEnd)}` : undefined}
-        saving={clockActionSaving}
-        onClockIn={() => void handleClockEvent('clock_in')}
-        onClockOut={() => void handleClockEvent('clock_out')}
-        onBreak={() => void handleClockEvent('break')}
-        clockInLabel={t.clockIn}
-        clockOutLabel={t.clockOut}
-        breakLabel={t.break}
-      />
+      {activeTab === 'today' ? (
+        <>
+          <ClockInCard
+            isClockedIn={isClockedIn}
+            isOnBreak={isOnBreak}
+            elapsedLabel={elapsedLabel}
+            propertyName={propertyName}
+            scheduledWindowLabel={shift ? `${formatTime(shift.shiftStart)} - ${formatTime(shift.shiftEnd)}` : undefined}
+            saving={clockActionSaving}
+            onClockIn={() => void handleClockEvent('clock_in')}
+            onClockOut={() => void handleClockEvent('clock_out')}
+            onBreak={() => void handleClockEvent('break')}
+            clockInLabel={t.clockIn}
+            clockOutLabel={t.clockOut}
+            breakLabel={t.break}
+          />
 
-      {pullDistance > 0 ? (
-        <div className="mb-2 flex h-8 items-center justify-center text-xs text-text-muted">
-          {refreshing ? 'Refreshing…' : pullDistance >= 64 ? 'Release to refresh' : 'Pull to refresh'}
-        </div>
-      ) : null}
+          {pullDistance > 0 ? (
+            <div className="mb-2 flex h-8 items-center justify-center text-xs text-text-muted">
+              {refreshing ? 'Refreshing…' : pullDistance >= 64 ? 'Release to refresh' : 'Pull to refresh'}
+            </div>
+          ) : null}
 
-      {/* Task progress bar */}
-      {!loading && assignments.length > 0 && (
-        <div className="mb-3">
-          <div className="mb-1.5 flex items-center justify-between text-xs text-text-muted">
-            <span>{doneCount} of {assignments.length} tasks complete</span>
-            <span>{completionPct}%</span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-surface-elevated">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${completionPct}%` }}
-            />
-          </div>
-        </div>
-      )}
+          {/* Task progress bar */}
+          {!loading && assignments.length > 0 && (
+            <div className="mb-3">
+              <div className="mb-1.5 flex items-center justify-between text-xs text-text-muted">
+                <span>{doneCount} of {assignments.length} tasks complete</span>
+                <span>{completionPct}%</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-surface-elevated">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${completionPct}%` }}
+                />
+              </div>
+            </div>
+          )}
 
-      <div className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
+          <div className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">{t.myTasks}</p>
           <p className="text-xs text-text-muted">{new Date().toLocaleDateString()}</p>
@@ -1462,10 +1479,11 @@ export default function MobileFieldWorkspacePage() {
                   ))}
         </div>
       </div>
+        </>
+      ) : null}
 
-      <div className="my-4 border-t border-surface-border" />
-
-      <div className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
+      {activeTab === 'team' ? (
+        <div className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
         <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">{t.teammates}</p>
         <div className="space-y-3">
           {loading
@@ -1523,17 +1541,82 @@ export default function MobileFieldWorkspacePage() {
                 ))}
         </div>
       </div>
+      ) : null}
 
-      <details className="mb-4 rounded-2xl border border-surface-border bg-surface-card p-4">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold uppercase tracking-wide text-text-muted">
-          More
-          <span className="text-xs font-medium normal-case tracking-normal text-text-muted">Settings</span>
-        </summary>
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-surface-border pt-3">
-          <span className="text-sm font-medium text-text-secondary">Language</span>
-          {languageToggle}
+      {activeTab === 'more' ? (
+        <div className="space-y-4">
+          {showInstallBanner ? (
+            <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+              <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">Install App</p>
+              <p className="mt-2 text-sm text-text-secondary">Add Ground Crew HQ to this device for faster field access.</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="flex min-h-11 items-center justify-center rounded-lg bg-brand-bright px-4 py-2 text-sm font-bold text-text-inverse"
+                  onClick={() => void triggerInstallPrompt()}
+                >
+                  Install
+                </button>
+                <button
+                  type="button"
+                  className="min-h-11 rounded-lg border border-surface-border px-4 py-2 text-sm font-semibold text-text-secondary"
+                  onClick={dismissInstallBanner}
+                >
+                  Later
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-4">
+            <div className="flex min-h-11 items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-text-muted">More</p>
+                <p className="mt-1 text-sm text-text-secondary">Field preferences</p>
+              </div>
+              {languageToggle}
+            </div>
+          </div>
         </div>
-      </details>
+      ) : null}
+
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-surface-border bg-surface-card/95 px-3 pb-3 pt-2 font-sans shadow-lg backdrop-blur">
+        <div className="mx-auto grid max-w-[520px] grid-cols-3 gap-1">
+          <button
+            type="button"
+            className={tabButtonClass('today')}
+            onClick={() => handleTabSelect('today')}
+            aria-current={activeTab === 'today' ? 'page' : undefined}
+          >
+            <Clock3 className="h-4 w-4" />
+            <span className="mt-1">Today</span>
+            {isClockedIn ? (
+              <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold text-brand">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-bright" />
+                <span className="font-mono">{elapsedLabel}</span>
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className={tabButtonClass('team')}
+            onClick={() => handleTabSelect('team')}
+            aria-current={activeTab === 'team' ? 'page' : undefined}
+          >
+            <Users className="h-4 w-4" />
+            <span className="mt-1">Team</span>
+          </button>
+          <button
+            type="button"
+            className={tabButtonClass('more')}
+            onClick={() => handleTabSelect('more')}
+            aria-current={activeTab === 'more' ? 'page' : undefined}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+            <span className="mt-1">More</span>
+          </button>
+        </div>
+      </nav>
 
     </div>
   );
