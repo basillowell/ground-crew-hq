@@ -330,7 +330,10 @@ export function EmployeeRow({
                 variant="ghost"
                 size="sm"
                 className="h-8 border border-dashed border-border px-3 text-xs text-muted-foreground"
-                onClick={() => onAddTask?.(employee.id)}
+                onClick={() => {
+                  console.log('[DIAG] Add Task button clicked', { employeeId: employee.id, hasOnAddTask: Boolean(onAddTask) });
+                  onAddTask?.(employee.id);
+                }}
               >
                 <Plus className="mr-1 h-3 w-3" /> Add Task
               </Button>

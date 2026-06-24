@@ -3302,6 +3302,7 @@ export default function WorkboardContent() {
   ]);
 
   function openAssignmentDialog(employeeId: string) {
+    console.log('[DIAG] openAssignmentDialog called', { employeeId, assignmentDialogOpen });
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
     const defaultStartTime = getDefaultStartTimeForEmployee(scheduleList, targetEmployeeId, boardDate);
@@ -3320,6 +3321,7 @@ export default function WorkboardContent() {
       notes: '',
     });
     setIsAssignmentModalDirty(false);
+    console.log('[DIAG] about to open dialog');
     setAssignmentDialogOpen(true);
   }
 
@@ -5265,6 +5267,7 @@ export default function WorkboardContent() {
       <Dialog
         open={assignmentDialogOpen}
         onOpenChange={(nextOpen) => {
+          console.log('[DIAG] Dialog onOpenChange fired', { nextOpen });
           if (nextOpen) {
             setAssignmentDialogOpen(true);
             return;
