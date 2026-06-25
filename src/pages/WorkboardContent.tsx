@@ -4668,6 +4668,7 @@ export default function WorkboardContent() {
                       isDragging={draggingEmployeeId === lane.employee.id}
                       isDropTarget={dropTargetEmployeeId === lane.employee.id}
                       shiftLabel={lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : undefined}
+                      shiftEndTime={lane.shift?.shiftEnd ?? null}
                       laneSummary={
                         lane.shift
                           ? `Est: ${lane.estimatedHours.toFixed(1)}h · Actual: ${lane.actualHours.toFixed(1)}h`

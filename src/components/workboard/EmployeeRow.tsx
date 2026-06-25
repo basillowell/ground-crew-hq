@@ -15,6 +15,7 @@ interface EmployeeRowProps {
   tasks: Task[];
   properties: Property[];
   shiftLabel?: string;
+  shiftEndTime: string | null;
   laneSummary?: string;
   laneWarning?: string;
   orderIndex?: number;
@@ -67,6 +68,7 @@ export function EmployeeRow({
   tasks,
   properties,
   shiftLabel,
+  shiftEndTime,
   laneSummary: _laneSummary,
   laneWarning,
   orderIndex,
@@ -226,6 +228,8 @@ export function EmployeeRow({
                       }
                       assignment={assignment}
                       properties={properties}
+                      shiftEndTime={shiftEndTime}
+                      operationalTimezone={operationalTimezone}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
                       weatherWarnings={weatherWarningsByAssignment?.[assignment.id ?? ''] ?? []}
                       draggable

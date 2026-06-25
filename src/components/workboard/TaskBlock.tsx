@@ -6,11 +6,14 @@ import { Pencil, X } from 'lucide-react';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatTime } from '@/utils/formatTime';
+import { wallClockToStoredIso } from '@/lib/timeWorkflow';
 
 interface TaskBlockProps {
   task: Task;
   assignment: Assignment;
   properties: Property[];
+  shiftEndTime: string | null;
+  operationalTimezone?: string;
   priorityIndex?: number;
   onEdit?: () => void;
   onRemove?: () => void;
@@ -34,10 +37,27 @@ function statusContainerClass(status: string) {
   return 'border-l-[3px] border-l-gray-400 bg-card';
 }
 
+function parseShiftEndToTimestamp(
+  shiftEndTime: string | null | undefined,
+  assignmentDate: string,
+  actualStartAt: string,
+  timezone: string,
+) {
+  const dateKey = String(assignmentDate ?? '').slice(0, 10);
+  const hhmm = String(shiftEndTime ?? '').trim().slice(0, 5);
+  if (!dateKey || !hhmm) return null;
+  const shiftEndMs = Date.parse(wallClockToStoredIso(dateKey, hhmm, timezone));
+  if (!Number.isFinite(shiftEndMs)) return null;
+  const startMs = Date.parse(actualStartAt);
+  return Number.isFinite(startMs) && shiftEndMs < startMs ? shiftEndMs + 86_400_000 : shiftEndMs;
+}
+
 export function TaskBlock({
   task,
   assignment,
   properties,
+  shiftEndTime,
+  operationalTimezone = 'America/New_York',
   priorityIndex,
   onEdit,
   onRemove,
@@ -87,18 +107,24 @@ export function TaskBlock({
         ? 'text-amber-700'
         : 'text-emerald-700';
 
-  const elapsedLabel = useMemo(() => {
+  const elapsedState = useMemo(() => {
     if (status !== 'in-progress' || !actualStartAt) return null;
     const startMs = Date.parse(actualStartAt);
     if (!Number.isFinite(startMs)) return null;
-    const elapsedMs = Math.max(0, nowMs - startMs);
+    const shiftEndMs = parseShiftEndToTimestamp(shiftEndTime, assignment.date, actualStartAt, operationalTimezone);
+    const cappedAtShiftEnd = shiftEndMs != null && nowMs > shiftEndMs;
+    const effectiveNow = cappedAtShiftEnd ? shiftEndMs : nowMs;
+    const elapsedMs = Math.max(0, effectiveNow - startMs);
     const totalMinutes = Math.floor(elapsedMs / 60_000);
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}`;
+    if (hours > 0) return { label: `${hours}:${String(minutes).padStart(2, '0')}`, cappedAtShiftEnd };
     const seconds = Math.floor((elapsedMs % 60_000) / 1_000);
-    return `${minutes}:${String(seconds).padStart(2, '0')}`;
-  }, [actualStartAt, nowMs, status]);
+    return { label: `${minutes}:${String(seconds).padStart(2, '0')}`, cappedAtShiftEnd };
+  }, [actualStartAt, assignment.date, nowMs, operationalTimezone, shiftEndTime, status]);
+
+  const elapsedLabel = elapsedState?.label ?? null;
+  const isElapsedCappedAtShiftEnd = Boolean(elapsedState?.cappedAtShiftEnd);
 
   const doneLabel = useMemo(() => {
     if (status !== 'done' || !actualCompletedAt) return null;
@@ -148,7 +174,17 @@ export function TaskBlock({
             est {estimatedHours > 0 ? `${estimatedHours.toFixed(1)}h` : '—'} →{' '}
             <span className={actualHoursTone}>{actualHours != null ? `${actualHours.toFixed(1)}h actual` : '—'}</span>
           </span>
-          {status === 'in-progress' && elapsedLabel ? <span className="shrink-0 text-[11px] text-muted-foreground">Live {elapsedLabel}</span> : null}
+          {status === 'in-progress' && elapsedLabel ? (
+            <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+              <span>Live {elapsedLabel}</span>
+              {isElapsedCappedAtShiftEnd ? (
+                <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 px-1.5 py-0 text-[10px] text-amber-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                  Past shift end
+                </Badge>
+              ) : null}
+            </span>
+          ) : null}
           {status === 'done' && doneLabel ? <span className="shrink-0 text-[11px] text-muted-foreground">{doneLabel}</span> : null}
           <Badge variant="outline" className="shrink-0 text-[10px]">{task.category}</Badge>
           {typeof priorityIndex === 'number' ? <Badge variant="secondary" className="shrink-0 text-[10px]">#{priorityIndex + 1}</Badge> : null}
