@@ -138,6 +138,14 @@ Workflow, Dispatch) need a minimum ~36-40px hit area regardless of
 visual size — achieved via padding/invisible hit-area expansion, not by
 literally enlarging icons and changing visual density.
 
+**Rule 20 — Commit and push are part of a successful session, not a separate step**
+If npm run build passes and the prompt's VERIFY step confirms the
+change matches what was described, commit AND push to origin/main in
+the same session — do not stop and wait for a separate push
+instruction. If the build fails, the verify step doesn't match, or
+scope is unclear, STOP without committing or pushing and report exactly
+what's blocking it with real command output.
+
 ---
 
 ## Coding Rules
