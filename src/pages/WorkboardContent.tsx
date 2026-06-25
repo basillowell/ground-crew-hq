@@ -5113,12 +5113,12 @@ export default function WorkboardContent() {
           }
         }}
       >
-        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-2xl">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-2xl">
+          <DialogDescription className="sr-only">
+            Review suggested tasks from the previous operating day and choose which assignments to apply to today&apos;s plan.
+          </DialogDescription>
           <DialogHeader>
             <DialogTitle>Last {quickPlanDayLabel}&apos;s Plan — Apply to today?</DialogTitle>
-            <DialogDescription id="dialog-desc" className="sr-only">
-              Review and apply the previous day&apos;s plan to today&apos;s schedule.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {quickPlanLoading ? (
@@ -5194,7 +5194,6 @@ export default function WorkboardContent() {
         }}
       >
         <DialogContent
-          aria-describedby="dialog-desc"
           role="dialog"
           aria-modal="true"
           className="sm:max-w-md max-h-[85vh] overflow-y-auto"
@@ -5207,14 +5206,14 @@ export default function WorkboardContent() {
             lastAssignmentModalTriggerRef.current?.focus();
           }}
         >
+          <DialogDescription className="sr-only">
+            Assign or edit crew work details, including property, task, equipment, timing, and dispatch notes.
+          </DialogDescription>
           <div className="flex h-full flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>
               {editingAssignmentId ? 'Edit Assignment' : linkedRequestId ? 'Dispatch Need to Crew' : 'Assign Task to Crew'}
             </DialogTitle>
-            <DialogDescription id="dialog-desc" className="sr-only">
-              Set task assignment details for crew dispatch.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto px-4 pb-3 md:px-0 md:pb-0">
@@ -5616,12 +5615,12 @@ export default function WorkboardContent() {
       </Dialog>
 
       <Dialog open={sendScheduleDialogOpen} onOpenChange={setSendScheduleDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-lg">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
+          <DialogDescription className="sr-only">
+            Select scheduled crew recipients and choose how to share today&apos;s work schedule.
+          </DialogDescription>
           <DialogHeader>
             <DialogTitle>Send today's schedule to crew</DialogTitle>
-            <DialogDescription id="dialog-desc" className="sr-only">
-              Choose recipients and share today&apos;s schedule.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="max-h-64 space-y-2 overflow-auto rounded-md border p-3">
@@ -5654,12 +5653,12 @@ export default function WorkboardContent() {
       </Dialog>
 
       <Dialog open={taskTemplateDialogOpen} onOpenChange={setTaskTemplateDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-2xl">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-2xl">
+          <DialogDescription className="sr-only">
+            Select task-library items and choose whether to apply the daily template to all scheduled crew or selected team members.
+          </DialogDescription>
           <DialogHeader>
             <DialogTitle>Apply Daily Task Template</DialogTitle>
-            <DialogDescription id="dialog-desc" className="sr-only">
-              Select template tasks and apply them to crew lanes.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-xl border bg-muted/20 p-3">
@@ -5791,14 +5790,14 @@ export default function WorkboardContent() {
 
       {/* ─── NOTE DIALOG ─── */}
       <Dialog open={endOfDayDialogOpen} onOpenChange={setEndOfDayDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" aria-describedby="dialog-desc" className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogDescription className="sr-only">
+            Review the generated end-of-day operations report and share it by copy, email, WhatsApp, or print.
+          </DialogDescription>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-4 w-4" /> End of Day Report
             </DialogTitle>
-            <DialogDescription id="dialog-desc" className="sr-only">
-              Review and share the generated end-of-day operations report.
-            </DialogDescription>
           </DialogHeader>
           {endOfDayReportGenerating ? (
             <div className="space-y-2 py-3">
@@ -5832,15 +5831,15 @@ export default function WorkboardContent() {
       </Dialog>
 
       <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
-        <DialogContent role="dialog" aria-modal="true" aria-describedby="notes-dialog-desc" className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent role="dialog" aria-modal="true" className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogDescription className="sr-only">
+            Review and add scoped notes across organization-wide, property, employee, and task contexts.
+          </DialogDescription>
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-3">
               <span>Notes</span>
               <Badge variant="secondary" className="h-6 px-2 text-xs">{noteList.length}</Badge>
             </DialogTitle>
-            <DialogDescription id="notes-dialog-desc" className="sr-only">
-              Review and add notes by organization, property, employee, or task scope.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
