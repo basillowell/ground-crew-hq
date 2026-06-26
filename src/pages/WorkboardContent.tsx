@@ -96,6 +96,19 @@ function timeToMinutes(value?: string) {
   return hours * 60 + minutes;
 }
 
+function addDaysToDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  if (![year, month, day].every(Number.isFinite)) return dateKey;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getIsoTimestampMs(value: string | null | undefined) {
+  const timestamp = new Date(String(value ?? '')).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
 function formatMinutesAsHoursAndMinutes(totalMinutes: number) {
   const safe = Math.max(0, totalMinutes);
   const hours = Math.floor(safe / 60);
@@ -148,6 +161,25 @@ type AssignmentTimelineMeta = {
   actualStartAt: string | null;
   actualCompletedAt: string | null;
   actualHours: number | null;
+};
+
+type WorkboardClockEventRow = {
+  id: string;
+  employeeId: string;
+  propertyId: string;
+  eventType: string;
+  timestamp: string;
+};
+
+type WorkboardBreakChip = {
+  id: string;
+  employeeId: string;
+  startIso: string;
+  endIso: string | null;
+  startLabel: string;
+  endLabel: string | null;
+  durationLabel: string | null;
+  sortMinutes: number;
 };
 
 type TaskRowDraft = {
@@ -360,6 +392,16 @@ function normalizeWorkboardNote(row: Record<string, unknown>): WorkboardScopedNo
     employeeId: row.employee_id ? String(row.employee_id) : null,
     assignmentId: row.assignment_id ? String(row.assignment_id) : null,
     createdAt,
+  };
+}
+
+function normalizeClockEvent(row: Record<string, unknown>): WorkboardClockEventRow {
+  return {
+    id: String(row.id ?? ''),
+    employeeId: String(row.employee_id ?? row.employeeId ?? ''),
+    propertyId: String(row.property_id ?? row.propertyId ?? ''),
+    eventType: String(row.event_type ?? row.eventType ?? ''),
+    timestamp: String(row.timestamp ?? ''),
   };
 }
 
@@ -586,6 +628,7 @@ export default function WorkboardContent() {
   const [actualHoursMenuAssignmentId, setActualHoursMenuAssignmentId] = useState<string | null>(null);
   const [actualHoursCustomInputByAssignment, setActualHoursCustomInputByAssignment] = useState<Record<string, string>>({});
   const [savingTimelineAssignmentId, setSavingTimelineAssignmentId] = useState<string | null>(null);
+  const [savingBreakEmployeeId, setSavingBreakEmployeeId] = useState<string | null>(null);
   const [timelineEditAssignmentId, setTimelineEditAssignmentId] = useState<string | null>(null);
   const [timelineEditStart, setTimelineEditStart] = useState('');
   const [timelineEditEnd, setTimelineEditEnd] = useState('');
@@ -1402,6 +1445,74 @@ export default function WorkboardContent() {
     [activeProperty],
   );
 
+  const breakClockEventsQuery = useQuery({
+    queryKey: ['workboard-break-clock-events', orgId ?? 'all-orgs', boardDate, effectivePropertyId ?? 'all', operationalTimezone],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as WorkboardClockEventRow[];
+      const startIso = wallClockToStoredIso(boardDate, '00:00', operationalTimezone);
+      const endIso = wallClockToStoredIso(addDaysToDateKey(boardDate, 1), '00:00', operationalTimezone);
+      if (!startIso || !endIso) return [] as WorkboardClockEventRow[];
+      let query = supabase
+        .from('clock_events')
+        .select('id, employee_id, property_id, event_type, timestamp, org_id')
+        .eq('org_id', orgId)
+        .in('event_type', ['break', 'clock_in'])
+        .gte('timestamp', startIso)
+        .lt('timestamp', endIso)
+        .order('timestamp', { ascending: true });
+      if (effectivePropertyId && effectivePropertyId !== 'all') {
+        query = query.eq('property_id', effectivePropertyId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []).map((row) => normalizeClockEvent(row as Record<string, unknown>));
+    },
+    staleTime: 1000 * 30,
+  });
+  const breakClockEvents = breakClockEventsQuery.data ?? [];
+  const breakChipsByEmployee = useMemo<Record<string, WorkboardBreakChip[]>>(() => {
+    const eventsByEmployee = new Map<string, WorkboardClockEventRow[]>();
+    for (const event of breakClockEvents) {
+      if (!event.employeeId || !event.timestamp) continue;
+      const current = eventsByEmployee.get(event.employeeId) ?? [];
+      current.push(event);
+      eventsByEmployee.set(event.employeeId, current);
+    }
+
+    const result: Record<string, WorkboardBreakChip[]> = {};
+    for (const [employeeId, events] of eventsByEmployee.entries()) {
+      const sortedEvents = [...events].sort((a, b) => (getIsoTimestampMs(a.timestamp) ?? 0) - (getIsoTimestampMs(b.timestamp) ?? 0));
+      result[employeeId] = sortedEvents
+        .filter((event) => event.eventType === 'break')
+        .map((breakEvent) => {
+          const startMs = getIsoTimestampMs(breakEvent.timestamp);
+          const nextClockIn = sortedEvents.find((event) => {
+            if (event.eventType !== 'clock_in') return false;
+            const eventMs = getIsoTimestampMs(event.timestamp);
+            return startMs !== null && eventMs !== null && eventMs > startMs;
+          });
+          const endMs = getIsoTimestampMs(nextClockIn?.timestamp ?? null);
+          const durationMinutes =
+            startMs !== null && endMs !== null
+              ? Math.max(0, Math.round((endMs - startMs) / 60000))
+              : null;
+          const startWallClock = storedIsoToWallClock(breakEvent.timestamp, operationalTimezone);
+          return {
+            id: breakEvent.id,
+            employeeId,
+            startIso: breakEvent.timestamp,
+            endIso: nextClockIn?.timestamp ?? null,
+            startLabel: storedIsoToWallClockLabel(breakEvent.timestamp, operationalTimezone),
+            endLabel: nextClockIn ? storedIsoToWallClockLabel(nextClockIn.timestamp, operationalTimezone) : null,
+            durationLabel: durationMinutes !== null ? formatMinutesAsHoursAndMinutes(durationMinutes) : null,
+            sortMinutes: startWallClock ? timeToMinutes(startWallClock) : 0,
+          };
+        });
+    }
+    return result;
+  }, [breakClockEvents, operationalTimezone]);
+
   const fetchWorkboardWeather = useCallback(async () => {
     if (!activeProperty?.latitude || !activeProperty?.longitude) {
       setWeatherSnapshot(null);
@@ -2154,6 +2265,77 @@ export default function WorkboardContent() {
     },
     [currentUser?.orgId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, queryClient, syncTimelineCaches],
   );
+
+  const logEmployeeBreak = useCallback(
+    async (employeeId: string, breakStartInput: string, breakEndInput: string) => {
+      if (!supabase || !currentUser?.orgId) return false;
+      if (!employeeId) {
+        toast.error('Select a crew member before logging a break.');
+        return false;
+      }
+      if (!breakStartInput || !breakEndInput) {
+        toast.error('Enter both break start and break end times.');
+        return false;
+      }
+      const startMinutes = timeToMinutes(breakStartInput);
+      const endMinutes = timeToMinutes(breakEndInput);
+      if (endMinutes <= startMinutes) {
+        toast.error('Break end must be after break start.');
+        return false;
+      }
+      const employeeShift = getShiftForEmployee(scheduleList, employeeId, boardDate);
+      const employee = employeeList.find((entry) => entry.id === employeeId) ?? null;
+      const propertyForEvent =
+        (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ??
+        employeeShift?.propertyId ??
+        employee?.propertyId ??
+        null;
+      if (!propertyForEvent || propertyForEvent === 'all') {
+        toast.error('Select a specific property before logging a break.');
+        return false;
+      }
+      const breakStartIso = wallClockToStoredIso(boardDate, breakStartInput, operationalTimezone);
+      const breakEndIso = wallClockToStoredIso(boardDate, breakEndInput, operationalTimezone);
+      if (!breakStartIso || !breakEndIso) {
+        toast.error('Could not save break times for this date.');
+        return false;
+      }
+
+      setSavingBreakEmployeeId(employeeId);
+      const { error } = await supabase.from('clock_events').insert([
+        {
+          employee_id: employeeId,
+          property_id: propertyForEvent,
+          org_id: currentUser.orgId,
+          event_type: 'break',
+          timestamp: breakStartIso,
+          location_lat: null,
+          location_lng: null,
+        },
+        {
+          employee_id: employeeId,
+          property_id: propertyForEvent,
+          org_id: currentUser.orgId,
+          event_type: 'clock_in',
+          timestamp: breakEndIso,
+          location_lat: null,
+          location_lng: null,
+        },
+      ]);
+      setSavingBreakEmployeeId(null);
+
+      if (error) {
+        toast.error(`Failed to log break: ${error.message}`);
+        return false;
+      }
+
+      toast.success('Break logged');
+      await queryClient.invalidateQueries({ queryKey: ['workboard-break-clock-events'] });
+      return true;
+    },
+    [boardDate, currentUser?.orgId, effectivePropertyId, employeeList, operationalTimezone, queryClient, scheduleList],
+  );
+
   const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
     if (workOrders.length > 0) {
       return workOrders.slice(0, 6).map((row) => ({
@@ -4702,6 +4884,7 @@ export default function WorkboardContent() {
                       onRemoveAssignment={removeAssignment}
                       weatherWarningsByAssignment={assignmentWeatherWarnings}
                       assignmentTimelineById={assignmentTimelineRecord}
+                      breakEvents={breakChipsByEmployee[lane.employee.id] ?? []}
                       operationalTimezone={operationalTimezone}
                       onStartAssignment={(assignment) => {
                         void startAssignmentTimeline(assignment);
@@ -4712,7 +4895,9 @@ export default function WorkboardContent() {
                       onSaveAssignmentTimes={(assignment, employeeAssignments, startInput, endInput) => {
                         void saveAssignmentTimelineTimes(assignment, employeeAssignments, startInput, endInput);
                       }}
+                      onLogBreak={logEmployeeBreak}
                       savingTimelineAssignmentId={savingTimelineAssignmentId}
+                      savingBreakEmployeeId={savingBreakEmployeeId}
                     />
                   </Suspense>
                 </SafeSection>

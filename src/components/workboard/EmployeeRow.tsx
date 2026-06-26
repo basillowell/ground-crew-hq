@@ -9,6 +9,17 @@ import { useState } from 'react';
 import type { Employee, Assignment, Task, Property } from '@/data/seedData';
 import { storedIsoToWallClock, storedIsoToWallClockLabel } from '@/lib/timeWorkflow';
 
+type EmployeeBreakChip = {
+  id: string;
+  employeeId: string;
+  startIso: string;
+  endIso: string | null;
+  startLabel: string;
+  endLabel: string | null;
+  durationLabel: string | null;
+  sortMinutes: number;
+};
+
 interface EmployeeRowProps {
   employee: Employee;
   assignments: Assignment[];
@@ -33,11 +44,14 @@ interface EmployeeRowProps {
   coveragePercent?: number;
   weatherWarningsByAssignment?: Record<string, Array<{ level: 'warning' | 'danger'; message: string }>>;
   assignmentTimelineById?: Record<string, { actualStartAt: string | null; actualCompletedAt: string | null }>;
+  breakEvents?: EmployeeBreakChip[];
   operationalTimezone?: string;
   onStartAssignment?: (assignment: Assignment) => Promise<void>;
   onCompleteAssignment?: (assignment: Assignment, employeeAssignments: Assignment[]) => Promise<void>;
   onSaveAssignmentTimes?: (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => void;
+  onLogBreak?: (employeeId: string, breakStartInput: string, breakEndInput: string) => Promise<boolean> | boolean;
   savingTimelineAssignmentId?: string | null;
+  savingBreakEmployeeId?: string | null;
 }
 
 function coverageBadgeClass(coveragePercent: number | undefined) {
@@ -86,15 +100,21 @@ export function EmployeeRow({
   coveragePercent,
   weatherWarningsByAssignment,
   assignmentTimelineById,
+  breakEvents = [],
   operationalTimezone = 'America/New_York',
   onStartAssignment,
   onCompleteAssignment,
   onSaveAssignmentTimes,
+  onLogBreak,
   savingTimelineAssignmentId,
+  savingBreakEmployeeId,
 }: EmployeeRowProps) {
   const [editingTimelineAssignmentId, setEditingTimelineAssignmentId] = useState<string | null>(null);
   const [timelineStartInput, setTimelineStartInput] = useState('');
   const [timelineEndInput, setTimelineEndInput] = useState('');
+  const [breakFormOpen, setBreakFormOpen] = useState(false);
+  const [breakStartInput, setBreakStartInput] = useState('');
+  const [breakEndInput, setBreakEndInput] = useState('');
   const sortedAssignments = [...employeeAssignments];
 
   const formatLabel = (value?: string | null) => {
@@ -136,6 +156,55 @@ export function EmployeeRow({
     if (ratio <= 1) return 'text-emerald-700';
     if (ratio < 1.25) return 'text-amber-700';
     return 'text-red-700';
+  };
+
+  const getAssignmentSortMinutes = (assignment: Assignment, fallbackIndex: number) => {
+    const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+    const timeline = assignmentTimelineById?.[assignment.id ?? ''];
+    const actualStartSource =
+      timeline?.actualStartAt ??
+      (typeof assignmentRecord.actual_start_at === 'string' ? String(assignmentRecord.actual_start_at) : null);
+    const actualStartTime = actualStartSource ? storedIsoToWallClock(actualStartSource, operationalTimezone) : '';
+    const plannedStartTime = String(assignment.startTime ?? '');
+    const sortSource = actualStartTime || plannedStartTime;
+    return sortSource ? timeToMinutes(sortSource) : fallbackIndex;
+  };
+
+  const timelineItems = [
+    ...sortedAssignments.map((assignment, index) => ({
+      type: 'assignment' as const,
+      assignment,
+      sortMinutes: getAssignmentSortMinutes(assignment, index),
+      sourceIndex: index,
+    })),
+    ...breakEvents.map((breakEvent, index) => ({
+      type: 'break' as const,
+      breakEvent,
+      sortMinutes: breakEvent.sortMinutes,
+      sourceIndex: sortedAssignments.length + index,
+    })),
+  ].sort((a, b) => a.sortMinutes - b.sortMinutes || a.sourceIndex - b.sourceIndex);
+
+  const isSavingBreak = savingBreakEmployeeId === employee.id;
+
+  const toggleBreakForm = () => {
+    setBreakFormOpen((current) => {
+      const next = !current;
+      if (next) {
+        setBreakStartInput('');
+        setBreakEndInput('');
+      }
+      return next;
+    });
+  };
+
+  const saveBreak = async () => {
+    const saved = await onLogBreak?.(employee.id, breakStartInput, breakEndInput);
+    if (saved) {
+      setBreakFormOpen(false);
+      setBreakStartInput('');
+      setBreakEndInput('');
+    }
   };
 
   return (
@@ -180,15 +249,50 @@ export function EmployeeRow({
           ) : null}
 
           <div className="space-y-2">
-            {sortedAssignments.length === 0 ? (
+            {timelineItems.length === 0 ? (
               <div className="rounded-xl border border-dashed px-3 py-5 text-center">
                 <p className="text-sm text-muted-foreground">No tasks assigned</p>
-                <Button variant="outline" size="sm" className="mt-3 h-9 rounded-lg" onClick={() => onAddTask?.(employee.id)}>
-                  + Assign Task
-                </Button>
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                  <Button variant="outline" size="sm" className="h-9 rounded-lg" onClick={() => onAddTask?.(employee.id)}>
+                    + Assign Task
+                  </Button>
+                  {onLogBreak ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 rounded-lg border border-dashed border-border px-3 text-xs text-muted-foreground"
+                      onClick={toggleBreakForm}
+                    >
+                      <Clock3 className="mr-1 h-3 w-3" /> Log Break
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : (
-              sortedAssignments.map((assignment) => {
+              timelineItems.map((item) => {
+                if (item.type === 'break') {
+                  const breakEvent = item.breakEvent;
+                  return (
+                    <div
+                      key={`break-${breakEvent.id}`}
+                      className="min-h-[44px] rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        <span className="font-medium text-foreground">Break:</span>
+                        {breakEvent.endLabel ? (
+                          <span>
+                            {breakEvent.startLabel} - {breakEvent.endLabel}
+                            {breakEvent.durationLabel ? ` (${breakEvent.durationLabel})` : ''}
+                          </span>
+                        ) : (
+                          <span>started {breakEvent.startLabel} (ongoing)</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                const assignment = item.assignment;
                 const task = tasks.find((item) => item.id === assignment.taskId);
                 const assignmentStatus = normalizeStatus(assignment.status);
                 const timeline = assignmentTimelineById?.[assignment.id ?? ''];
@@ -328,8 +432,18 @@ export function EmployeeRow({
             )}
           </div>
 
-          {sortedAssignments.length > 0 ? (
-            <div className="mt-3 flex justify-end">
+          {timelineItems.length > 0 ? (
+            <div className="mt-3 flex justify-end gap-2">
+              {onLogBreak ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 border border-dashed border-border px-3 text-xs text-muted-foreground"
+                  onClick={toggleBreakForm}
+                >
+                  <Clock3 className="mr-1 h-3 w-3" /> Log Break
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 size="sm"
@@ -337,6 +451,28 @@ export function EmployeeRow({
                 onClick={() => onAddTask?.(employee.id)}
               >
                 <Plus className="mr-1 h-3 w-3" /> Add Task
+              </Button>
+            </div>
+          ) : null}
+          {breakFormOpen && onLogBreak ? (
+            <div className="relative z-20 mt-3 flex flex-wrap items-end gap-2 rounded-lg border bg-muted/20 p-2 pointer-events-auto">
+              <div className="w-40">
+                <span className="text-[10px] text-muted-foreground">Break start</span>
+                <TimeSelect value={breakStartInput} onChange={setBreakStartInput} />
+              </div>
+              <div className="w-40">
+                <span className="text-[10px] text-muted-foreground">Break end</span>
+                <TimeSelect value={breakEndInput} onChange={setBreakEndInput} />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                className="h-10 rounded-lg bg-primary px-4 text-sm text-text-inverse hover:bg-primary/90"
+                onClick={() => void saveBreak()}
+                disabled={isSavingBreak}
+              >
+                {isSavingBreak ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Clock3 className="mr-1 h-3 w-3" />}
+                Save Break
               </Button>
             </div>
           ) : null}
