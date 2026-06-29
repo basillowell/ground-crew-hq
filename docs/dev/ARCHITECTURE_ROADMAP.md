@@ -26,9 +26,11 @@ overly aggressive blanket `retry: false` policy.
 - [x] Revisit `refetchOnWindowFocus: false` — consolidated to the
       native React Query mechanism, removed the custom
       visibilitychange listener
-- [ ] Replace blanket `retry: false` with a distinction between
+- [x] Replace blanket `retry: false` with a distinction between
       genuine application errors (no retry) and transient/timeout
-      errors (1-2 retries with backoff)
+      errors (1-2 retries with backoff) — removed from SchedulerPage.tsx
+      and EmployeesPage.tsx, both now inherit the global retry: 3 with
+      exponential backoff
 - [x] Research whether the currently pinned @supabase/supabase-js
       version is behind on lock-contention-related fixes — RESOLVED:
       this is a confirmed, currently unresolved upstream bug
