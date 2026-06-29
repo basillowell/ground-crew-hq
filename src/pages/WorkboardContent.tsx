@@ -81,6 +81,18 @@ function SafeSection({ children, fallback = null }: { children: ReactNode; fallb
   }
 }
 
+async function withWorkboardRequestTimeout<T>(request: PromiseLike<T>) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Workboard request timed out after 15 seconds.')), 15_000);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
 }
@@ -768,11 +780,13 @@ export default function WorkboardContent() {
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return [] as WorkboardScopedNote[];
-      const { data, error } = await supabase
-        .from('notes')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false });
+      const { data, error } = await withWorkboardRequestTimeout(
+        supabase
+          .from('notes')
+          .select('*')
+          .eq('org_id', orgId)
+          .order('created_at', { ascending: false }),
+      );
       if (error) throw error;
       return (data ?? []).map((row) => normalizeWorkboardNote(row as Record<string, unknown>));
     },
@@ -788,13 +802,15 @@ export default function WorkboardContent() {
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return [] as AvailableEquipmentItem[];
-      const { data, error } = await supabase
-        .from('equipment_units')
-        .select('id, name, unit_name, type, status, active, org_id')
-        .eq('org_id', orgId)
-        .eq('active', true)
-        .eq('status', 'available')
-        .order('unit_name', { ascending: true });
+      const { data, error } = await withWorkboardRequestTimeout(
+        supabase
+          .from('equipment_units')
+          .select('id, name, unit_name, type, status, active, org_id')
+          .eq('org_id', orgId)
+          .eq('active', true)
+          .eq('status', 'available')
+          .order('unit_name', { ascending: true }),
+      );
       if (error) throw error;
       return (data ?? []) as AvailableEquipmentItem[];
     },
@@ -809,7 +825,7 @@ export default function WorkboardContent() {
       let query = supabase.from('task_requests').select('*').order('priority', { ascending: true }).order('created_at', { ascending: false });
       if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
-      const { data, error } = await query;
+      const { data, error } = await withWorkboardRequestTimeout(query);
       if (error) throw error;
       return (data ?? []).map((row) => normalizeTaskRequest(row as Record<string, unknown>));
     },
@@ -822,11 +838,13 @@ export default function WorkboardContent() {
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return DEFAULT_ESCALATION_THRESHOLDS;
-      const { data, error } = await supabase
-        .from('scheduler_settings')
-        .select('escalation_config')
-        .eq('org_id', orgId)
-        .single();
+      const { data, error } = await withWorkboardRequestTimeout(
+        supabase
+          .from('scheduler_settings')
+          .select('escalation_config')
+          .eq('org_id', orgId)
+          .single(),
+      );
       if (error) {
         return DEFAULT_ESCALATION_THRESHOLDS;
       }
@@ -850,7 +868,7 @@ export default function WorkboardContent() {
         .order('created_at', { ascending: true });
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
       if (orgId) query = query.eq('org_id', orgId);
-      const { data, error } = await query;
+      const { data, error } = await withWorkboardRequestTimeout(query);
       if (error) throw error;
       return (data ?? []) as PendingTaskRequest[];
     },
@@ -872,7 +890,7 @@ export default function WorkboardContent() {
         if (effectivePropertyId && effectivePropertyId !== 'all') {
           locationQuery = locationQuery.eq('property', effectivePropertyId);
         }
-        const { data: locationRows, error: locationError } = await locationQuery;
+        const { data: locationRows, error: locationError } = await withWorkboardRequestTimeout(locationQuery);
         if (locationError) return [] as WeatherDailyLog[];
         const locationIds = (locationRows ?? [])
           .map((row) => String((row as { id?: unknown }).id ?? ''))
@@ -883,7 +901,7 @@ export default function WorkboardContent() {
           .select('*')
           .eq('date', boardDate)
           .in('location_id', locationIds);
-        const { data, error } = await query;
+        const { data, error } = await withWorkboardRequestTimeout(query);
         if (error) return [] as WeatherDailyLog[];
         return (data ?? []).map((row) => normalizeWeatherLog(row as Record<string, unknown>));
       } catch {
@@ -904,7 +922,7 @@ export default function WorkboardContent() {
         .eq('is_active', true);
       if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property', effectivePropertyId);
-      const { data, error } = await query;
+      const { data, error } = await withWorkboardRequestTimeout(query);
       if (error) return [] as WeatherLocation[];
       return (data ?? []).map((row) => normalizeWeatherLocation(row as Record<string, unknown>));
     },
@@ -918,7 +936,7 @@ export default function WorkboardContent() {
       let query = supabase.from('work_orders').select('*').order('created_at', { ascending: false });
       if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
-      const { data, error } = await query;
+      const { data, error } = await withWorkboardRequestTimeout(query);
       if (error) throw error;
       return (data ?? []) as Array<Record<string, unknown>>;
     },
@@ -932,7 +950,7 @@ export default function WorkboardContent() {
       if (!supabase) return [] as WorkLocation[];
       let query = supabase.from('work_locations').select('*');
       if (orgId) query = query.eq('org_id', orgId);
-      const { data, error } = await query;
+      const { data, error } = await withWorkboardRequestTimeout(query);
       if (error) return [] as WorkLocation[];
       return (data ?? []).map((row) => normalizeWorkLocation(row as Record<string, unknown>));
     },
@@ -1135,7 +1153,7 @@ export default function WorkboardContent() {
       if (effectivePropertyId && effectivePropertyId !== 'all') {
         query = query.or(`property_id.is.null,property_id.eq.${effectivePropertyId}`);
       }
-      const { data, error } = await query;
+      const { data, error } = await withWorkboardRequestTimeout(query);
       if (error) throw error;
       return (data ?? []) as RecurringTaskRuleRow[];
     },
@@ -1464,7 +1482,7 @@ export default function WorkboardContent() {
       if (effectivePropertyId && effectivePropertyId !== 'all') {
         query = query.eq('property_id', effectivePropertyId);
       }
-      const { data, error } = await query;
+      const { data, error } = await withWorkboardRequestTimeout(query);
       if (error) throw error;
       return (data ?? []).map((row) => normalizeClockEvent(row as Record<string, unknown>));
     },
