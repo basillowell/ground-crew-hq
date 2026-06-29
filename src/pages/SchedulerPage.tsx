@@ -200,7 +200,6 @@ export default function SchedulerPage() {
     queries: weekDays.map((day) => ({
       queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', orgId ?? 'all-orgs'],
       enabled: Boolean(orgId),
-      retry: false,
       queryFn: async () => {
         if (!supabase || !orgId) return [] as ScheduleEntry[];
         let timeoutId: ReturnType<typeof setTimeout> | undefined;

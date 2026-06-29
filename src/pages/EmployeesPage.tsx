@@ -263,7 +263,6 @@ export default function EmployeesPage() {
     queryKey: ['team-availability-shift-defaults', orgId ?? 'no-org'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
-    retry: false,
     queryFn: async () => {
       if (!supabase || !orgId) {
         return { start: FALLBACK_SHIFT_START, end: FALLBACK_SHIFT_END };
@@ -287,7 +286,6 @@ export default function EmployeesPage() {
   const monthEntriesQuery = useQuery({
     queryKey: ['team-availability', orgId ?? 'no-org', availabilityStartKey, availabilityEndKey],
     enabled: Boolean(orgId && viewMode === 'availability'),
-    retry: false,
     queryFn: async () => {
       if (!orgId) return [] as ScheduleEntryRow[];
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
