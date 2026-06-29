@@ -146,6 +146,27 @@ instruction. If the build fails, the verify step doesn't match, or
 scope is unclear, STOP without committing or pushing and report exactly
 what's blocking it with real command output.
 
+**Rule 21 — Don't add new Supabase auth-session callers outside AuthContext**
+Every getSession()/refreshSession() call competes for a single
+browser-level lock that Supabase's own auto-refresh cycle also depends
+on. A stuck/orphaned lock has been directly observed in production
+("Lock ... was not released within 5000ms... Forcefully acquiring the
+lock to recover") and can cascade into app-wide stale-data symptoms
+across unrelated pages. Do not add new calls to these methods outside
+what AuthContext.tsx already does internally — not even for
+diagnostic or visibility-triggered code. React to real query failures
+instead of proactively polling session state.
+
+**Rule 22 — Every Supabase queryFn needs a bounded timeout**
+A fetch with no timeout can hang indefinitely if a browser tab is
+backgrounded mid-request and never properly resumes — confirmed root
+cause of stale-data incidents on the Scheduler and Availability pages.
+Every queryFn that calls Supabase directly must wrap the call in a
+Promise.race against a 10-15 second timeout, matching the pattern
+already established in EmployeesPage.tsx and SchedulerPage.tsx. This
+applies to all new queries going forward, not just the ones already
+fixed.
+
 ---
 
 ## Coding Rules
@@ -166,6 +187,20 @@ Never just `setShowModal(false)` — always reset internal state too.
 **camelCase tables note:** As of the May 2026 migration, ALL tables are
 snake_case. There are no remaining camelCase columns. If you find a
 camelCase column reference in the code, it is a bug — fix it to snake_case.
+
+**Retry strategy:** `retry: false` is correct for genuine application
+errors (RLS denial, validation failure) that won't resolve by
+retrying. It is the wrong setting for transient/timeout-shaped
+failures (a request that times out due to tab backgrounding) — those
+should get 1-2 automatic retries with backoff before surfacing as an
+error. Don't apply `retry: false` blanket-wide across every query;
+distinguish by what kind of failure is actually expected.
+
+**Loading/skeleton gates:** Gate loading skeletons on genuine
+first-load only (`isLoading` with zero cached data) — never on every
+background `isFetching`. A slow or temporarily stuck background
+refetch must never wipe an already-successfully-rendered view; let the
+last good render persist while a refetch is in flight.
 
 ---
 
