@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Loader2, MoreHorizontal, Plus, UserCog, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,6 +33,12 @@ import {
 const EMPLOYEES_PER_PAGE = 20;
 const FALLBACK_SHIFT_START = '07:30';
 const FALLBACK_SHIFT_END = '16:00';
+const AVAILABILITY_STATUS_OPTIONS = [
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'off', label: 'Day Off' },
+  { value: 'vacation', label: 'Vacation' },
+  { value: 'sick', label: 'Sick' },
+];
 const FALLBACK_ROLES = [
   'Superintendent',
   'Assistant Superintendent',
@@ -101,6 +107,15 @@ type EditEmployeeDraft = {
   employment_type: string;
   language: string;
 };
+
+function parseAvailabilityCellKey(key: string) {
+  const separatorIndex = key.indexOf(':');
+  if (separatorIndex === -1) return null;
+  return {
+    employeeId: key.slice(0, separatorIndex),
+    date: key.slice(separatorIndex + 1),
+  };
+}
 
 function emptyAddDraft(): AddEmployeeDraft {
   return {
@@ -311,6 +326,19 @@ export default function EmployeesPage() {
     notes: '',
   });
   const [shiftSaving, setShiftSaving] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragSelection, setDragSelection] = useState<Set<string>>(new Set());
+  const [bulkShiftDialogOpen, setBulkShiftDialogOpen] = useState(false);
+  const [bulkShiftDraft, setBulkShiftDraft] = useState({
+    status: 'scheduled',
+    property_id: '',
+    shift_start: availabilityShiftStartDefault,
+    shift_end: availabilityShiftEndDefault,
+  });
+  const [bulkShiftSaving, setBulkShiftSaving] = useState(false);
+  const isDraggingRef = useRef(false);
+  const dragSelectionRef = useRef<Set<string>>(new Set());
+  const suppressNextAvailabilityClickRef = useRef(false);
 
   useEffect(() => {
     document.title = 'Team — Ground Crew HQ';
@@ -391,6 +419,13 @@ export default function EmployeesPage() {
     }
     return map;
   }, [monthEntries]);
+  const employeeById = useMemo(() => {
+    const map = new Map<string, EmployeeRow>();
+    for (const employee of employees) {
+      map.set(employee.id, employee);
+    }
+    return map;
+  }, [employees]);
 
   const openAvailabilityCell = useCallback((employee: EmployeeRow, dayKey: string) => {
     const existing = entryByEmployeeDay.get(`${employee.id}:${dayKey}`);
@@ -420,6 +455,77 @@ export default function EmployeesPage() {
     });
     setShiftDialogOpen(true);
   }, [availabilityShiftEndDefault, availabilityShiftStartDefault, entryByEmployeeDay, properties]);
+  const beginAvailabilityDrag = useCallback((event: MouseEvent<HTMLTableCellElement>, cellKey: string) => {
+    event.preventDefault();
+    const nextSelection = new Set([cellKey]);
+    dragSelectionRef.current = nextSelection;
+    isDraggingRef.current = true;
+    setDragSelection(nextSelection);
+    setIsDragging(true);
+  }, []);
+
+  const extendAvailabilityDrag = useCallback((cellKey: string) => {
+    if (!isDraggingRef.current) return;
+    setDragSelection((current) => {
+      if (current.has(cellKey)) return current;
+      const nextSelection = new Set(current);
+      nextSelection.add(cellKey);
+      dragSelectionRef.current = nextSelection;
+      return nextSelection;
+    });
+  }, []);
+
+  const openBulkShiftDialog = useCallback((selection: Set<string>) => {
+    const firstKey = selection.values().next().value as string | undefined;
+    const parsedFirstKey = firstKey ? parseAvailabilityCellKey(firstKey) : null;
+    const firstExistingEntry = firstKey ? entryByEmployeeDay.get(firstKey) : null;
+    const firstEmployee = parsedFirstKey ? employeeById.get(parsedFirstKey.employeeId) : null;
+    const defaultPropertyId = firstExistingEntry?.property_id || firstEmployee?.property_id || properties[0]?.id || '';
+    setBulkShiftDraft({
+      status: 'scheduled',
+      property_id: defaultPropertyId,
+      shift_start: availabilityShiftStartDefault,
+      shift_end: availabilityShiftEndDefault,
+    });
+    setBulkShiftDialogOpen(true);
+  }, [availabilityShiftEndDefault, availabilityShiftStartDefault, employeeById, entryByEmployeeDay, properties]);
+
+  const clearDragSelection = useCallback(() => {
+    const emptySelection = new Set<string>();
+    dragSelectionRef.current = emptySelection;
+    setDragSelection(emptySelection);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (!isDraggingRef.current) return;
+      const selection = new Set(dragSelectionRef.current);
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      suppressNextAvailabilityClickRef.current = true;
+      window.setTimeout(() => {
+        suppressNextAvailabilityClickRef.current = false;
+      }, 0);
+
+      if (selection.size > 1) {
+        setDragSelection(selection);
+        dragSelectionRef.current = selection;
+        openBulkShiftDialog(selection);
+        return;
+      }
+
+      const onlyKey = selection.values().next().value as string | undefined;
+      const parsedKey = onlyKey ? parseAvailabilityCellKey(onlyKey) : null;
+      const employee = parsedKey ? employeeById.get(parsedKey.employeeId) : null;
+      clearDragSelection();
+      if (employee && parsedKey) {
+        openAvailabilityCell(employee, parsedKey.date);
+      }
+    };
+
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, [clearDragSelection, employeeById, openAvailabilityCell, openBulkShiftDialog]);
 
   const statusCellClass = (status: string | null) => {
     const normalized = String(status ?? '').toLowerCase();
@@ -479,6 +585,103 @@ export default function EmployeesPage() {
     await refetchMonthEntries();
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
   }, [editingShiftId, isReadOnly, orgId, queryClient, refetchMonthEntries, shiftDraft]);
+  const bulkSelectionKeys = useMemo(() => Array.from(dragSelection), [dragSelection]);
+  const bulkSelectedEmployeeCount = useMemo(() => {
+    const selectedEmployees = new Set<string>();
+    for (const key of bulkSelectionKeys) {
+      const parsedKey = parseAvailabilityCellKey(key);
+      if (parsedKey) selectedEmployees.add(parsedKey.employeeId);
+    }
+    return selectedEmployees.size;
+  }, [bulkSelectionKeys]);
+
+  const saveBulkAvailabilityEntries = useCallback(async () => {
+    if (isReadOnly) return;
+    if (!supabase || !orgId) return;
+    if (bulkSelectionKeys.length < 2) return;
+    if (bulkShiftDraft.status === 'scheduled' && !bulkShiftDraft.property_id) {
+      toast.error('Property is required for scheduled shifts.');
+      return;
+    }
+
+    const rows: Array<{
+      id: string;
+      org_id: string;
+      employee_id: string;
+      property_id: string;
+      date: string;
+      shift_start: string;
+      shift_end: string;
+      status: string;
+      notes: string | null;
+    }> = [];
+
+    for (const key of bulkSelectionKeys) {
+      const parsedKey = parseAvailabilityCellKey(key);
+      if (!parsedKey) continue;
+
+      const existingEntry = entryByEmployeeDay.get(key);
+      const employee = employeeById.get(parsedKey.employeeId);
+      const fallbackPropertyId = existingEntry?.property_id || employee?.property_id || properties[0]?.id || '';
+      const propertyId = bulkShiftDraft.status === 'scheduled' ? bulkShiftDraft.property_id : fallbackPropertyId;
+
+      if (!propertyId) {
+        toast.error('A property is required for every selected availability entry.');
+        return;
+      }
+
+      rows.push({
+        id: existingEntry?.id ?? crypto.randomUUID(),
+        org_id: orgId,
+        employee_id: parsedKey.employeeId,
+        property_id: propertyId,
+        date: parsedKey.date,
+        shift_start: bulkShiftDraft.status === 'scheduled'
+          ? bulkShiftDraft.shift_start
+          : String(existingEntry?.shift_start ?? availabilityShiftStartDefault).slice(0, 5),
+        shift_end: bulkShiftDraft.status === 'scheduled'
+          ? bulkShiftDraft.shift_end
+          : String(existingEntry?.shift_end ?? availabilityShiftEndDefault).slice(0, 5),
+        status: bulkShiftDraft.status,
+        notes: existingEntry?.notes ?? null,
+      });
+    }
+
+    if (rows.length === 0) {
+      toast.error('No availability cells were selected.');
+      return;
+    }
+
+    setBulkShiftSaving(true);
+    const { error: upsertError } = await supabase
+      .from('schedule_entries')
+      .upsert(rows, { onConflict: 'id' });
+    setBulkShiftSaving(false);
+
+    if (upsertError) {
+      toast.error(`Failed to update availability: ${upsertError.message}`);
+      return;
+    }
+
+    toast.success(`Updated ${rows.length} availability cells`);
+    setBulkShiftDialogOpen(false);
+    clearDragSelection();
+    await refetchMonthEntries();
+    await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
+  }, [
+    availabilityShiftEndDefault,
+    availabilityShiftStartDefault,
+    bulkSelectionKeys,
+    bulkShiftDraft,
+    clearDragSelection,
+    employeeById,
+    entryByEmployeeDay,
+    isReadOnly,
+    orgId,
+    properties,
+    queryClient,
+    refetchMonthEntries,
+  ]);
 
   const monthlyEmployeeStats = useMemo(() => {
     const byEmployee = new Map<string, { scheduled: number; off: number; sick: number; vacation: number }>();
@@ -842,7 +1045,7 @@ export default function EmployeesPage() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-surface-border bg-surface-card">
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-xs" style={isDragging ? { userSelect: 'none' } : undefined}>
                 <thead className="bg-surface-elevated text-text-muted">
                   <tr>
                     <th className="sticky left-0 bg-muted/30 px-2 py-2 text-left font-medium">Employee</th>
@@ -858,13 +1061,26 @@ export default function EmployeesPage() {
                       <tr key={`cal-${employee.id}`} className="border-t border-surface-border transition-colors hover:bg-surface-hover">
                         <td className="sticky left-0 bg-surface-card px-2 py-2 font-medium text-text-primary">{name}</td>
                         {monthDays.map((day) => {
-                          const entry = entryByEmployeeDay.get(`${employee.id}:${day.key}`);
+                          const cellKey = `${employee.id}:${day.key}`;
+                          const entry = entryByEmployeeDay.get(cellKey);
+                          const isSelected = dragSelection.has(cellKey);
                           return (
-                            <td key={`${employee.id}-${day.key}`} className="px-1 py-1">
+                            <td
+                              key={cellKey}
+                              onMouseDown={(event) => beginAvailabilityDrag(event, cellKey)}
+                              onMouseEnter={() => extendAvailabilityDrag(cellKey)}
+                              className={`px-1 py-1 ${isSelected ? 'bg-primary/5 ring-2 ring-inset ring-primary/40' : ''}`}
+                            >
                               <button
                                 type="button"
-                                onClick={() => openAvailabilityCell(employee, day.key)}
-                                className={`h-7 w-9 rounded border text-[11px] ${statusCellClass(entry?.status ?? null)}`}
+                                onClick={() => {
+                                  if (suppressNextAvailabilityClickRef.current) {
+                                    suppressNextAvailabilityClickRef.current = false;
+                                    return;
+                                  }
+                                  openAvailabilityCell(employee, day.key);
+                                }}
+                                className={`h-7 w-9 rounded border text-[11px] ${statusCellClass(entry?.status ?? null)} ${isSelected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
                               >
                                 {entry ? (String(entry.status).slice(0, 1).toUpperCase()) : '—'}
                               </button>
@@ -1414,10 +1630,11 @@ export default function EmployeesPage() {
                 onChange={(event) => setShiftDraft((current) => ({ ...current, status: event.target.value }))}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="scheduled">Scheduled</option>
-                <option value="off">Day Off</option>
-                <option value="vacation">Vacation</option>
-                <option value="sick">Sick</option>
+                {AVAILABILITY_STATUS_OPTIONS.map((option) => (
+                  <option key={`shift-status-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -1431,6 +1648,98 @@ export default function EmployeesPage() {
             </Button>
             <Button onClick={() => void saveAvailabilityEntry()} disabled={shiftSaving}>
               {shiftSaving ? 'Saving...' : editingShiftId ? 'Save Shift' : 'Add Shift'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={bulkShiftDialogOpen && !isReadOnly}
+        onOpenChange={(open) => {
+          setBulkShiftDialogOpen(open);
+          if (!open && !bulkShiftSaving) {
+            clearDragSelection();
+          }
+        }}
+      >
+        <DialogContent aria-describedby="bulk-shift-dialog-desc" className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Apply Availability Status</DialogTitle>
+            <DialogDescription id="bulk-shift-dialog-desc" className="sr-only">
+              Apply one availability status to multiple selected employee date cells.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="rounded-md border border-dashed border-surface-border bg-surface-elevated p-3 text-sm text-text-muted">
+              {bulkSelectionKeys.length} cells selected across {bulkSelectedEmployeeCount} employees
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Status</label>
+              <select
+                value={bulkShiftDraft.status}
+                onChange={(event) => setBulkShiftDraft((current) => ({ ...current, status: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {AVAILABILITY_STATUS_OPTIONS.map((option) => (
+                  <option key={`bulk-shift-status-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {bulkShiftDraft.status === 'scheduled' ? (
+              <>
+                <div>
+                  <label className="text-xs text-muted-foreground">Property</label>
+                  <select
+                    value={bulkShiftDraft.property_id}
+                    onChange={(event) => setBulkShiftDraft((current) => ({ ...current, property_id: event.target.value }))}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Select property</option>
+                    {properties.map((property) => (
+                      <option key={`bulk-shift-property-${property.id}`} value={property.id}>
+                        {property.name ?? 'Unnamed Property'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Shift Start</label>
+                    <Input
+                      type="time"
+                      className="mt-1"
+                      value={bulkShiftDraft.shift_start}
+                      onChange={(event) => setBulkShiftDraft((current) => ({ ...current, shift_start: event.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Shift End</label>
+                    <Input
+                      type="time"
+                      className="mt-1"
+                      value={bulkShiftDraft.shift_end}
+                      onChange={(event) => setBulkShiftDraft((current) => ({ ...current, shift_end: event.target.value }))}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : null}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBulkShiftDialogOpen(false);
+                clearDragSelection();
+              }}
+              disabled={bulkShiftSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void saveBulkAvailabilityEntries()} disabled={bulkShiftSaving}>
+              {bulkShiftSaving ? 'Applying...' : `Apply to ${bulkSelectionKeys.length} cells`}
             </Button>
           </div>
         </DialogContent>
