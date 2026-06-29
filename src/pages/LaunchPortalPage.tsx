@@ -658,14 +658,14 @@ export default function LaunchPortalPage() {
           aria-describedby="dialog-desc"
           className="max-w-md border-surface-border bg-surface-card text-text-primary backdrop-blur-xl"
         >
+          <DialogDescription id="dialog-desc" className="sr-only">
+            Sign in, create a workspace account, or request a password reset for Ground Crew HQ.
+          </DialogDescription>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base text-text-primary">
               <ShieldCheck className="h-4 w-4 text-brand-bright" />
               {dialogTitles[authPanel]}
             </DialogTitle>
-            <DialogDescription id="dialog-desc" className="sr-only">
-              {dialogTitles[authPanel]}
-            </DialogDescription>
           </DialogHeader>
 
           {/* ── Panel: Sign In ── */}
