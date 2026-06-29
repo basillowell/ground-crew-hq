@@ -230,26 +230,16 @@ function AppRoutes() {
 }
 
 export default function App() {
-  const hiddenSinceRef = useRef<number | null>(null);
-
   useEffect(() => {
-    const STALE_THRESHOLD_MS = 20_000;
-
     function handleVisibilityChange() {
-      if (document.visibilityState === "hidden") {
-        hiddenSinceRef.current = Date.now();
-      } else if (document.visibilityState === "visible") {
-        const hiddenSince = hiddenSinceRef.current;
-        hiddenSinceRef.current = null;
-        if (hiddenSince && Date.now() - hiddenSince > STALE_THRESHOLD_MS) {
-          window.location.reload();
-        }
+      if (document.visibilityState === "visible") {
+        void queryClient.invalidateQueries();
       }
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
+  }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>
