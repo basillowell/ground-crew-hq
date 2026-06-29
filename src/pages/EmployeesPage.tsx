@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const EMPLOYEES_PER_PAGE = 20;
+const FALLBACK_SHIFT_START = '07:30';
 const FALLBACK_ROLES = [
   'Superintendent',
   'Assistant Superintendent',
@@ -242,24 +243,36 @@ export default function EmployeesPage() {
   const availabilityEndKey = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0)
     .toISOString()
     .slice(0, 10);
+  const availabilityShiftStartQuery = useQuery({
+    queryKey: ['team-availability-shift-start', orgId ?? 'no-org'],
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+    queryFn: async () => {
+      if (!supabase || !orgId) return FALLBACK_SHIFT_START;
+      const { data, error: settingsError } = await supabase
+        .from('scheduler_settings')
+        .select('operational_day_start')
+        .eq('org_id', orgId)
+        .single();
+
+      if (settingsError) throw settingsError;
+      return data?.operational_day_start?.slice(0, 5) ?? FALLBACK_SHIFT_START;
+    },
+  });
+  const availabilityShiftStartDefault = availabilityShiftStartQuery.data ?? FALLBACK_SHIFT_START;
+
   const monthEntriesQuery = useQuery({
     queryKey: ['team-availability', orgId ?? 'no-org', availabilityStartKey, availabilityEndKey],
     enabled: Boolean(orgId && viewMode === 'availability'),
     retry: false,
     queryFn: async () => {
-      console.log('[DIAG-AVAIL] queryFn started', {
-        time: new Date().toISOString(),
-        orgId,
-        hasSession: Boolean(supabase),
-      });
       if (!orgId) return [] as ScheduleEntryRow[];
-      const fetchStart = performance.now();
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error('Availability request timed out after 10 seconds.')), 10_000);
       });
       try {
-        console.log('[DIAG-AVAIL] about to call supabase.from(schedule_entries)', { elapsedSinceStart: performance.now() - fetchStart });
         const result = await Promise.race([
           supabase
             .from('schedule_entries')
@@ -270,12 +283,8 @@ export default function EmployeesPage() {
             .order('date', { ascending: true }),
           timeout,
         ]);
-        console.log('[DIAG-AVAIL] supabase call resolved', { elapsedMs: performance.now() - fetchStart, hasError: Boolean(result.error) });
         if (result.error) throw result.error;
         return (result.data ?? []) as ScheduleEntryRow[];
-      } catch (err) {
-        console.log('[DIAG-AVAIL] caught error', { elapsedMs: performance.now() - fetchStart, err });
-        throw err;
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
       }
@@ -289,7 +298,7 @@ export default function EmployeesPage() {
     employee_id: '',
     property_id: '',
     date: '',
-    shift_start: '07:30',
+    shift_start: availabilityShiftStartDefault,
     shift_end: '16:00',
     status: 'scheduled',
     notes: '',
@@ -384,7 +393,7 @@ export default function EmployeesPage() {
         employee_id: employee.id,
         property_id: existing.property_id || employee.property_id || properties[0]?.id || '',
         date: existing.date,
-        shift_start: String(existing.shift_start ?? '07:30').slice(0, 5),
+        shift_start: String(existing.shift_start ?? availabilityShiftStartDefault).slice(0, 5),
         shift_end: String(existing.shift_end ?? '16:00').slice(0, 5),
         status: existing.status || 'scheduled',
         notes: existing.notes ?? '',
@@ -397,13 +406,13 @@ export default function EmployeesPage() {
       employee_id: employee.id,
       property_id: employee.property_id || properties[0]?.id || '',
       date: dayKey,
-      shift_start: '07:30',
+      shift_start: availabilityShiftStartDefault,
       shift_end: '16:00',
       status: 'scheduled',
       notes: '',
     });
     setShiftDialogOpen(true);
-  }, [entryByEmployeeDay, properties]);
+  }, [availabilityShiftStartDefault, entryByEmployeeDay, properties]);
 
   const statusCellClass = (status: string | null) => {
     const normalized = String(status ?? '').toLowerCase();
@@ -750,13 +759,9 @@ export default function EmployeesPage() {
           variant={viewMode === 'availability' ? 'default' : 'outline'}
           size="sm"
           className="h-9 rounded-lg"
-          onClick={async () => {
+          onClick={() => {
             setStatusFilter('active');
             setViewMode('availability');
-            console.log('[DIAG-AVAIL] auth state at tab open', {
-              orgId,
-              supabaseAuthSession: await supabase.auth.getSession(),
-            });
           }}
         >
           Availability
@@ -826,7 +831,7 @@ export default function EmployeesPage() {
           ) : monthEntries.length === 0 ? (
             <div className="rounded-xl border border-dashed p-8 text-center">
               <p className="text-sm font-medium">No availability set for {availabilityMonthLabel}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Availability tracking coming soon.</p>
+              <p className="mt-1 text-xs text-muted-foreground">No shifts have been scheduled yet for this month.</p>
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-surface-border bg-surface-card">
