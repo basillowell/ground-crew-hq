@@ -230,6 +230,17 @@ function AppRoutes() {
 }
 
 export default function App() {
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void queryClient.invalidateQueries();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [queryClient]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
