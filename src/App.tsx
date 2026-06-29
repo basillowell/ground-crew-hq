@@ -114,19 +114,40 @@ class RouteErrorBoundary extends Component<
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { currentUser, isLoading } = useAuth();
+  const { currentUser, isLoading, authState, hasSession } = useAuth();
   const hasEverAuthed = useRef(false);
 
   if (currentUser) {
     hasEverAuthed.current = true;
   }
 
-  if (isLoading && !hasEverAuthed.current) {
-    return <RouteFallback />;
+  const authResolvedWithoutUsableSession =
+    authState === "no-session" ||
+    authState === "profile-missing" ||
+    authState === "profile-error";
+
+  // Hard-loaded app routes can briefly be ready without a profile while
+  // Supabase/session hydration is still catching up. Redirect only after a
+  // terminal auth state, not during restore.
+  const authStillRestoring =
+    !authResolvedWithoutUsableSession &&
+    (isLoading ||
+      hasSession ||
+      authState === "checking-session" ||
+      authState === "loading-profile" ||
+      authState === "authenticated" ||
+      authState === "network-timeout");
+
+  if (!currentUser && authStillRestoring) {
+    return hasEverAuthed.current ? <>{children}</> : <RouteFallback />;
   }
 
-  if (!isLoading && !currentUser) {
+  if (!currentUser && authResolvedWithoutUsableSession) {
     return <Navigate to="/" replace />;
+  }
+
+  if (!currentUser && !hasEverAuthed.current) {
+    return <RouteFallback />;
   }
 
   return <>{children}</>;
