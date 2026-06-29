@@ -203,24 +203,32 @@ export default function SchedulerPage() {
       retry: false,
       queryFn: async () => {
         if (!supabase || !orgId) return [] as ScheduleEntry[];
-        let query = supabase
-          .from('schedule_entries')
-          .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
-          .eq('org_id', orgId)
-          .eq('date', day.date)
-          .order('shift_start');
-        if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
-        const { data, error } = await query;
-        if (error) throw error;
-        return (data ?? []).map((row) => ({
-          id: String(row.id),
-          employeeId: String(row.employee_id),
-          date: String(row.date),
-          shiftStart: String(row.shift_start ?? '').slice(0, 5),
-          shiftEnd: String(row.shift_end ?? '').slice(0, 5),
-          status: (row.status ?? 'scheduled') as ScheduleEntry['status'],
-          notes: typeof row.notes === 'string' ? row.notes : null,
-        })) as (ScheduleEntry & { notes?: string | null })[];
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('Schedule request timed out after 15 seconds.')), 15_000);
+        });
+        try {
+          let query = supabase
+            .from('schedule_entries')
+            .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
+            .eq('org_id', orgId)
+            .eq('date', day.date)
+            .order('shift_start');
+          if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
+          const result = await Promise.race([query, timeout]);
+          if (result.error) throw result.error;
+          return (result.data ?? []).map((row) => ({
+            id: String(row.id),
+            employeeId: String(row.employee_id),
+            date: String(row.date),
+            shiftStart: String(row.shift_start ?? '').slice(0, 5),
+            shiftEnd: String(row.shift_end ?? '').slice(0, 5),
+            status: (row.status ?? 'scheduled') as ScheduleEntry['status'],
+            notes: typeof row.notes === 'string' ? row.notes : null,
+          })) as (ScheduleEntry & { notes?: string | null })[];
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
       },
       staleTime: 1000 * 60 * 5,
     })),
@@ -234,7 +242,8 @@ export default function SchedulerPage() {
     [propertyScope, storeEmployees],
   );
   const scheduleList = useMemo(() => weekScheduleQueries.flatMap((q) => q.data ?? []), [weekScheduleQueries]);
-  const isWeekScheduleLoading = Boolean(orgId) && weekScheduleQueries.some((q) => q.isLoading || q.isFetching);
+  const hasAnyScheduleData = weekScheduleQueries.some((q) => q.data !== undefined);
+  const isWeekScheduleLoading = Boolean(orgId) && !hasAnyScheduleData && weekScheduleQueries.some((q) => q.isLoading);
   const isLoading = isWeekScheduleLoading || employeesLoading || propertiesLoading;
   const queryErrorMessage =
     (orgId
