@@ -32,6 +32,7 @@ import {
 
 const EMPLOYEES_PER_PAGE = 20;
 const FALLBACK_SHIFT_START = '07:30';
+const FALLBACK_SHIFT_END = '16:00';
 const FALLBACK_ROLES = [
   'Superintendent',
   'Assistant Superintendent',
@@ -243,24 +244,30 @@ export default function EmployeesPage() {
   const availabilityEndKey = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0)
     .toISOString()
     .slice(0, 10);
-  const availabilityShiftStartQuery = useQuery({
-    queryKey: ['team-availability-shift-start', orgId ?? 'no-org'],
+  const availabilityShiftDefaultsQuery = useQuery({
+    queryKey: ['team-availability-shift-defaults', orgId ?? 'no-org'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
     retry: false,
     queryFn: async () => {
-      if (!supabase || !orgId) return FALLBACK_SHIFT_START;
+      if (!supabase || !orgId) {
+        return { start: FALLBACK_SHIFT_START, end: FALLBACK_SHIFT_END };
+      }
       const { data, error: settingsError } = await supabase
         .from('scheduler_settings')
-        .select('operational_day_start')
+        .select('operational_day_start, operational_day_end')
         .eq('org_id', orgId)
         .single();
 
       if (settingsError) throw settingsError;
-      return data?.operational_day_start?.slice(0, 5) ?? FALLBACK_SHIFT_START;
+      return {
+        start: data?.operational_day_start?.slice(0, 5) ?? FALLBACK_SHIFT_START,
+        end: data?.operational_day_end?.slice(0, 5) ?? FALLBACK_SHIFT_END,
+      };
     },
   });
-  const availabilityShiftStartDefault = availabilityShiftStartQuery.data ?? FALLBACK_SHIFT_START;
+  const availabilityShiftStartDefault = availabilityShiftDefaultsQuery.data?.start ?? FALLBACK_SHIFT_START;
+  const availabilityShiftEndDefault = availabilityShiftDefaultsQuery.data?.end ?? FALLBACK_SHIFT_END;
 
   const monthEntriesQuery = useQuery({
     queryKey: ['team-availability', orgId ?? 'no-org', availabilityStartKey, availabilityEndKey],
@@ -299,7 +306,7 @@ export default function EmployeesPage() {
     property_id: '',
     date: '',
     shift_start: availabilityShiftStartDefault,
-    shift_end: '16:00',
+    shift_end: availabilityShiftEndDefault,
     status: 'scheduled',
     notes: '',
   });
@@ -394,7 +401,7 @@ export default function EmployeesPage() {
         property_id: existing.property_id || employee.property_id || properties[0]?.id || '',
         date: existing.date,
         shift_start: String(existing.shift_start ?? availabilityShiftStartDefault).slice(0, 5),
-        shift_end: String(existing.shift_end ?? '16:00').slice(0, 5),
+        shift_end: String(existing.shift_end ?? availabilityShiftEndDefault).slice(0, 5),
         status: existing.status || 'scheduled',
         notes: existing.notes ?? '',
       });
@@ -407,12 +414,12 @@ export default function EmployeesPage() {
       property_id: employee.property_id || properties[0]?.id || '',
       date: dayKey,
       shift_start: availabilityShiftStartDefault,
-      shift_end: '16:00',
+      shift_end: availabilityShiftEndDefault,
       status: 'scheduled',
       notes: '',
     });
     setShiftDialogOpen(true);
-  }, [availabilityShiftStartDefault, entryByEmployeeDay, properties]);
+  }, [availabilityShiftEndDefault, availabilityShiftStartDefault, entryByEmployeeDay, properties]);
 
   const statusCellClass = (status: string | null) => {
     const normalized = String(status ?? '').toLowerCase();
