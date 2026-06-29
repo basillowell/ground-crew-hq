@@ -44,7 +44,7 @@ const queryClient = new QueryClient({
     queries: {
       gcTime: 1000 * 60 * 30,
       staleTime: 1000 * 60 * 5,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
       refetchOnReconnect: true,
       retry: 3,
       retryDelay: (attempt) =>
@@ -230,26 +230,6 @@ function AppRoutes() {
 }
 
 export default function App() {
-  useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        console.log("[DIAG-VIS] tab became visible", { time: new Date().toISOString() });
-        void supabase.auth.getSession().then(({ data, error }) => {
-          const session = data?.session;
-          console.log("[DIAG-VIS] session state at visibility change", {
-            hasSession: Boolean(session),
-            expiresAt: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
-            isExpired: session?.expires_at ? session.expires_at * 1000 < Date.now() : null,
-            error: error?.message ?? null,
-          });
-          void queryClient.invalidateQueries();
-        });
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -21,18 +21,27 @@ overly aggressive blanket `retry: false` policy.
       Invoicing, Chemical Logs, Safety)
 - [x] Add visibilitychange listener invalidating all queries on tab
       focus (root-level, App.tsx)
-- [ ] Remove the temporary [DIAG-VIS] getSession() diagnostic from
-      App.tsx now that it has served its purpose — it is itself a
-      competing caller for the auth lock (Rule 21)
-- [ ] Revisit `refetchOnWindowFocus: false` in the QueryClient config —
-      consider re-enabling with a tuned staleTime instead of relying
-      solely on the custom visibility listener
+- [x] Remove the temporary [DIAG-VIS] getSession() diagnostic from
+      App.tsx now that it has served its purpose
+- [x] Revisit `refetchOnWindowFocus: false` — consolidated to the
+      native React Query mechanism, removed the custom
+      visibilitychange listener
 - [ ] Replace blanket `retry: false` with a distinction between
       genuine application errors (no retry) and transient/timeout
       errors (1-2 retries with backoff)
-- [ ] Research whether the currently pinned @supabase/supabase-js
-      version is behind on lock-contention-related fixes; evaluate
-      upgrade risk before committing to one
+- [x] Research whether the currently pinned @supabase/supabase-js
+      version is behind on lock-contention-related fixes — RESOLVED:
+      this is a confirmed, currently unresolved upstream bug
+      (supabase/supabase#44642), not a version-lag issue. The exact
+      pinned version, exact stack (React+Vite+Vercel), and exact
+      error message match a known, open issue triggered by Chrome
+      tab suspension. No clean SDK-level fix exists yet. Our bounded
+      timeouts + query invalidation are the practical ceiling until
+      upstream resolves it. A more aggressive mitigation (forced
+      page reload after N seconds of inactivity) was identified in
+      the community thread but intentionally not implemented due to
+      its UX tradeoff (loses unsaved in-progress state) — pending
+      product decision.
 - [ ] Once the above are resolved, re-test the original repro
       (background the tab for several minutes via switching to a
       different OS-level app, not just a browser tab) and confirm no
