@@ -614,15 +614,30 @@ export default function SchedulerPage() {
       payload,
     });
 
-    const response = existing
-      ? await withSchedulerMutationTimeout(
-          supabase
-            .from('schedule_entries')
-            .update(payload)
-            .eq('id', existing.id)
-            .eq('org_id', currentUser.orgId),
-        )
-      : await withSchedulerMutationTimeout(supabase.from('schedule_entries').insert(payload));
+    let response;
+    if (existing) {
+      console.log('[DIAG-SAVE] calling .from().update() now', { time: new Date().toISOString() });
+      const updatePromise = supabase
+        .from('schedule_entries')
+        .update(payload)
+        .eq('id', existing.id)
+        .eq('org_id', currentUser.orgId);
+      console.log('[DIAG-SAVE] update() call returned a promise, about to await', { time: new Date().toISOString() });
+      response = await withSchedulerMutationTimeout(updatePromise);
+      console.log('[DIAG-SAVE] update() await resolved', {
+        time: new Date().toISOString(),
+        hasError: Boolean(response.error),
+      });
+    } else {
+      console.log('[DIAG-SAVE] calling .from().insert() now', { time: new Date().toISOString() });
+      const insertPromise = supabase.from('schedule_entries').insert(payload);
+      console.log('[DIAG-SAVE] insert() call returned a promise, about to await', { time: new Date().toISOString() });
+      response = await withSchedulerMutationTimeout(insertPromise);
+      console.log('[DIAG-SAVE] insert() await resolved', {
+        time: new Date().toISOString(),
+        hasError: Boolean(response.error),
+      });
+    }
 
     setIsSaving(false);
 
