@@ -442,13 +442,27 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const handleSignOut = async () => {
     queryClient.clear();
+    let redirectedByFallback = false;
+    const fallbackTimeoutId = window.setTimeout(() => {
+      redirectedByFallback = true;
+      navigate('/', { replace: true });
+    }, 5_000);
+
     try {
       window.localStorage.removeItem('ground-crew-query-cache-v3');
       window.localStorage.removeItem('ground-crew-query-cache-v2');
       window.localStorage.removeItem('ground-crew-query-cache');
     } catch { /* ignore */ }
-    await signOut();
-    navigate('/');
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Sign out failed:', error);
+    } finally {
+      window.clearTimeout(fallbackTimeoutId);
+      if (!redirectedByFallback) {
+        navigate('/', { replace: true });
+      }
+    }
   };
 
   const markAllNotificationsRead = () => {

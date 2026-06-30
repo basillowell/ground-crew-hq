@@ -747,7 +747,7 @@ function SortableTaskCategoryCard({
 }
 
 export default function SettingsPage() {
-  const { orgId, user, userRole, currentUser, currentPropertyId } = useAuth();
+  const { orgId, user, userRole, currentUser, currentPropertyId, signOut } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const location = useLocation();
   const [tab, setTab] = useState<Tab>('Operations');
@@ -830,6 +830,7 @@ export default function SettingsPage() {
           userRole={userRole}
           orgId={orgId}
           employeeName={currentUser?.fullName ?? ''}
+          onSignOut={signOut}
         />
       )}
       {tab === 'Help' && <HelpTab key="help" />}
@@ -858,15 +859,22 @@ function OperationsTab({
 
 type SettingsEquipmentType = { id: string; name: string; category: string | null };
 
-async function withSettingsRequestTimeout<T>(request: PromiseLike<T>): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Settings request timed out after 15 seconds.')), 15_000);
-  });
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withSettingsAbortControllerTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
-    return await Promise.race([request, timeout]);
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Settings request timed out after 15 seconds.');
+    }
+    throw error;
   } finally {
-    if (timeoutId) clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
   }
 }
 function EquipmentTab({ orgId }: { orgId: string | null }) {
@@ -880,7 +888,7 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return [];
-      const { data, error: fetchError } = await withSettingsRequestTimeout(
+      const { data, error: fetchError } = await withSettingsAbortControllerTimeout(
         supabase
           .from('equipment_types')
           .select('id, name, category')
@@ -995,11 +1003,13 @@ function WorkspaceTab({
     queryKey: ['organization-info', orgId ?? 'no-org'],
     queryFn: async () => {
       if (!supabase || !orgId) return null;
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('name, plan, subscription_status, created_at')
-        .eq('id', orgId)
-        .maybeSingle();
+      const { data, error } = await withSettingsAbortControllerTimeout(
+        supabase
+          .from('organizations')
+          .select('name, plan, subscription_status, created_at')
+          .eq('id', orgId)
+          .maybeSingle(),
+      );
       if (error) throw error;
       return data as OrganizationInfo | null;
     },
@@ -2990,13 +3000,14 @@ function AccessTab({
   userRole,
   orgId,
   employeeName,
+  onSignOut,
 }: {
   userEmail: string;
   userRole: string | null;
   orgId: string | null;
   employeeName: string;
+  onSignOut: () => Promise<void>;
 }) {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const propertiesQuery = useProperties(orgId ?? undefined);
   const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
@@ -3004,11 +3015,13 @@ function AccessTab({
     queryKey: ['organization-info', orgId ?? 'no-org'],
     queryFn: async () => {
       if (!supabase || !orgId) return null;
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('name, plan, subscription_status, created_at')
-        .eq('id', orgId)
-        .maybeSingle();
+      const { data, error } = await withSettingsAbortControllerTimeout(
+        supabase
+          .from('organizations')
+          .select('name, plan, subscription_status, created_at')
+          .eq('id', orgId)
+          .maybeSingle(),
+      );
       if (error) throw error;
       return data as OrganizationInfo | null;
     },
@@ -3102,6 +3115,12 @@ function AccessTab({
   }, [employeesQuery.isLoading, fetchOrganizationName, orgId, orgInfoQuery.isLoading, propertiesQuery.isLoading]);
 
   const handleSignOut = async () => {
+    let redirectedByFallback = false;
+    const fallbackTimeoutId = window.setTimeout(() => {
+      redirectedByFallback = true;
+      window.location.assign('/');
+    }, 5_000);
+
     try {
       queryClient.clear();
       window.localStorage.removeItem('ground-crew-query-cache-v3');
@@ -3112,11 +3131,14 @@ function AccessTab({
           window.localStorage.removeItem(key);
         }
       });
-      await supabase.auth.signOut();
-      window.location.assign('/');
+      await onSignOut();
     } catch (err) {
       console.error('Sign out failed:', err);
-      window.location.assign('/');
+    } finally {
+      window.clearTimeout(fallbackTimeoutId);
+      if (!redirectedByFallback) {
+        window.location.assign('/');
+      }
     }
   };
 
@@ -3441,11 +3463,13 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     queryKey: ['task-categories', orgId],
     queryFn: async () => {
       if (!supabase || !orgId) return [];
-      const { data, error } = await supabase
-        .from('task_categories')
-        .select('id, name, sort_order')
-        .eq('org_id', orgId)
-        .order('sort_order', { ascending: true });
+      const { data, error } = await withSettingsAbortControllerTimeout(
+        supabase
+          .from('task_categories')
+          .select('id, name, sort_order')
+          .eq('org_id', orgId)
+          .order('sort_order', { ascending: true }),
+      );
       if (error) throw error;
       return (data ?? []) as TaskCategoryItem[];
     },

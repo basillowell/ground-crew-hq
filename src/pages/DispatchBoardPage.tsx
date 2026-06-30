@@ -20,6 +20,27 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useEmployees, useProperties, useTasks } from '@/lib/supabase-queries';
 import { supabase } from '@/lib/supabase';
 
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withDispatchAbortControllerTimeout<T extends { error: unknown }>(
+  request: AbortableSupabaseRequest<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { data: null, error: new Error('Save timed out — please try again') } as T;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export default function DispatchBoardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -87,16 +108,18 @@ export default function DispatchBoardPage() {
 
     setIsSubmitting(true);
 
-    const { error } = await supabase.from('assignments').insert({
-      employee_id: selectedEmployeeId,
-      task_id: selectedTaskId || null,
-      property_id: selectedPropertyId,
-      org_id: orgId,
-      date: todayKey,
-      status: 'planned',
-      start_time: startTime || null,
-      estimated_hours: estimatedHours ? Number(estimatedHours) : null,
-    });
+    const { error } = await withDispatchAbortControllerTimeout(
+      supabase.from('assignments').insert({
+        employee_id: selectedEmployeeId,
+        task_id: selectedTaskId || null,
+        property_id: selectedPropertyId,
+        org_id: orgId,
+        date: todayKey,
+        status: 'planned',
+        start_time: startTime || null,
+        estimated_hours: estimatedHours ? Number(estimatedHours) : null,
+      }),
+    );
 
     setIsSubmitting(false);
 
