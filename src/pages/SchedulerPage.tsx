@@ -534,16 +534,27 @@ export default function SchedulerPage() {
   }, [dialogOpen, isReadOnly, openAddShift]);
 
   async function handleSaveShift() {
-    if (isReadOnly) return;
+    console.log('[DIAG-SAVE] handler called', { time: new Date().toISOString() });
+
+    if (isReadOnly) {
+      console.log('[DIAG-SAVE] blocked by guard: isReadOnly', { isReadOnly });
+      return;
+    }
     if (!draft.employeeId || !draft.date) {
+      console.log('[DIAG-SAVE] blocked by guard: missing employee/date', {
+        employeeId: draft.employeeId,
+        date: draft.date,
+      });
       toast.error('Select an employee and date before saving.');
       return;
     }
     if (!supabase) {
+      console.log('[DIAG-SAVE] blocked by guard: supabase unavailable', { hasSupabase: Boolean(supabase) });
       toast.error('Database connection not available.');
       return;
     }
     if (!currentUser?.orgId) {
+      console.log('[DIAG-SAVE] blocked by guard: missing orgId', { orgId: currentUser?.orgId ?? null });
       toast.error('Organization context unavailable.');
       return;
     }
@@ -551,6 +562,12 @@ export default function SchedulerPage() {
       const startMinutes = draft.shiftStart ? Number(draft.shiftStart.slice(0, 2)) * 60 + Number(draft.shiftStart.slice(3, 5)) : 0;
       const endMinutes = draft.shiftEnd ? Number(draft.shiftEnd.slice(0, 2)) * 60 + Number(draft.shiftEnd.slice(3, 5)) : 0;
       if (!draft.shiftStart || !draft.shiftEnd || endMinutes <= startMinutes) {
+        console.log('[DIAG-SAVE] blocked by guard: invalid scheduled shift time', {
+          shiftStart: draft.shiftStart,
+          shiftEnd: draft.shiftEnd,
+          startMinutes,
+          endMinutes,
+        });
         toast.error('Shift end must be after shift start.');
         return;
       }
@@ -564,6 +581,12 @@ export default function SchedulerPage() {
       currentUser?.propertyId ||
       null;
     if (!propertyId) {
+      console.log('[DIAG-SAVE] blocked by guard: missing propertyId', {
+        employeeId: draft.employeeId,
+        employeePropertyId: employee?.propertyId ?? null,
+        propertyScope,
+        currentUserPropertyId: currentUser?.propertyId ?? null,
+      });
       toast.error('Select a property before saving the shift.');
       return;
     }
@@ -585,6 +608,12 @@ export default function SchedulerPage() {
       org_id: currentUser.orgId,
     };
 
+    console.log('[DIAG-SAVE] about to call supabase insert/upsert', {
+      mode: existing ? 'update' : 'insert',
+      existingId: existing?.id ?? null,
+      payload,
+    });
+
     const response = existing
       ? await withSchedulerMutationTimeout(
           supabase
@@ -598,6 +627,7 @@ export default function SchedulerPage() {
     setIsSaving(false);
 
     if (response.error) {
+      console.log('[DIAG-SAVE] blocked by guard: response.error', { error: response.error });
       toast.error(`Failed to save shift: ${response.error.message}`);
       return;
     }
