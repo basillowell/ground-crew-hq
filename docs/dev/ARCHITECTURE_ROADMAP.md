@@ -3,7 +3,11 @@
 Created June 29, 2026, following a multi-session investigation into
 app-wide stale-data failures traced to a Supabase auth-js internal
 lock contention issue, compounded by missing query timeouts and an
-overly aggressive blanket `retry: false` policy.
+overly aggressive blanket `retry: false` policy. Updated June 30,
+2026 after two further root causes were found and fixed (Web Lock
+bypass, non-cancelling timeouts), and a third, intermittent
+write-side race condition was identified and documented as ongoing
+monitored risk rather than fully resolved.
 
 ## Status Legend
 - [ ] Not started
@@ -47,13 +51,24 @@ overly aggressive blanket `retry: false` policy.
       implemented, then reverted same day). This ruled out "just reload"
       as a viable fix and pointed investigation toward the actual root
       cause below.
-- [ ] PENDING USER VERIFICATION: re-test the original repro
-      (background the tab for several minutes via switching to a
-      different OS-level app) now that both the noOpLock fix
-      (70a1bff) and the AbortController fix (823a5d0) are live.
-      Specifically check pages/actions not yet validated against
-      these two fixes: Settings, Equipment, Invoicing, Chemical
-      Logs, and the Scheduler Add Shift save flow.
+- [x] User verification completed (June 30, 2026). Result: PARTIAL
+      SUCCESS. Reads (Scheduler, Workflow, Team, and after a
+      follow-up session, Settings/Dispatch) now reliably recover
+      after extended tab backgrounding. Writes (specifically the
+      Scheduler "Add Shift" save) are INTERMITTENTLY affected — see
+      Finding 3 below. This is downgraded from "blocking" to
+      "known, monitored, intermittent" rather than left unresolved
+      and undocumented.
+- [x] Extend AbortController coverage to SettingsPage.tsx (10
+      previously-unprotected queries — the most exposed page in the
+      app) and DispatchBoardPage.tsx (2 queries). Confirmed via
+      direct file inspection that CommandCenterOperationalPage.tsx,
+      SafetyPage.tsx, ReportsPage.tsx, and JobCostingPage.tsx make
+      no direct Supabase calls and needed no changes.
+- [ ] Sign-out button investigated — reported not reliably
+      redirecting to the landing page after clicking. Root cause
+      not yet confirmed; needs a dedicated follow-up session
+      separate from this investigation.
 
 ## Post-Roadmap Findings (June 29-30, 2026)
 
@@ -90,6 +105,41 @@ the underlying request — across SchedulerPage.tsx, EmployeesPage.tsx,
 EquipmentPage.tsx, InvoicingPage.tsx, ApplicationsPage.tsx, and
 WorkboardContent.tsx (including its previously-unprotected Add Shift
 save mutation). See commit 823a5d0.
+
+**Finding 3 — intermittent write failures (unresolved, monitored).**
+After Findings 1 and 2 shipped, the Scheduler "Add Shift" save was
+observed hanging indefinitely after tab backgrounding, with the
+[DIAG-SAVE] diagnostic confirming the handler reached
+`supabase.from('schedule_entries').insert()` but the actual HTTP
+request never appeared in a HAR capture — not pending, not failed,
+genuinely never sent. On a SEPARATE reproduction attempt (same code,
+same page, same backgrounding scenario), the identical save succeeded
+cleanly in 155ms (confirmed via HAR: `POST .../schedule_entries ->
+201`). Same code path, two different outcomes under the same
+conditions — this is a genuine intermittent race condition, not a
+deterministic bug, most likely tied to internal timing of Supabase's
+background token-refresh cycle relative to the exact moment a write
+is attempted.
+
+This was NOT fixed today. A race condition that fails roughly some
+fraction of attempts, deep inside a third-party auth library's
+internals, requires many repeated, carefully-timed reproductions to
+characterize before a real fix can be attempted responsibly — this is
+explicitly flagged as future work, not silently left undocumented.
+
+Mitigation already in place that reduces (but does not eliminate) user
+impact: the AbortController fix from Finding 2 means a save that does
+hang will at least time out after 15 seconds with a clear error
+message and a re-enabled form, rather than freezing the UI forever
+with no recovery path — the user can simply retry, and per this
+session's observation, a retry is likely to succeed since the failure
+appears to be timing-dependent rather than persistent.
+
+Future investigation, if this becomes a frequent pain point: capture
+multiple repeated HAR files across many Add Shift attempts immediately
+after backgrounding, specifically noting elapsed time since the tab
+became visible and elapsed time since the access token was last
+refreshed, to look for a correlating pattern before attempting a fix.
 
 ## Notes
 This file tracks architecture-level follow-up work distinct from
