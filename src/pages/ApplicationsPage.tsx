@@ -139,15 +139,36 @@ function numberValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-async function withChemicalLookupRequestTimeout<T>(request: PromiseLike<T>): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Chemical lookup request timed out after 15 seconds.')), 15_000);
-  });
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withChemicalLookupRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
-    return await Promise.race([request, timeout]);
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Chemical lookup request timed out after 15 seconds.');
+    }
+    throw error;
   } finally {
-    if (timeoutId) clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
+  }
+}
+async function withChemicalMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { data: null, error: new Error('Save timed out — please try again') } as T;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 function buildRestrictedEntry(
@@ -441,7 +462,9 @@ export default function ApplicationsPage() {
         console.debug('[chemical-save] started', { logId, payload: nextLogPayload, mixCount: nextMix.length });
       }
 
-      const { error: logError } = await supabase.from('chemical_application_logs').upsert(nextLogPayload);
+      const { error: logError } = await withChemicalMutationTimeout(
+        supabase.from('chemical_application_logs').upsert(nextLogPayload),
+      );
       if (logError) {
         if (import.meta.env.DEV) console.error('[chemical-save] main log error', logError);
         toast.error(`Failed to save application log: ${logError.message}`);
@@ -451,7 +474,9 @@ export default function ApplicationsPage() {
       if (import.meta.env.DEV) console.debug('[chemical-save] main log saved');
 
       for (const mix of nextMix) {
-        const { error } = await supabase.from('chemical_application_tank_mix_items').upsert(mix);
+        const { error } = await withChemicalMutationTimeout(
+          supabase.from('chemical_application_tank_mix_items').upsert(mix),
+        );
         if (error) {
           if (import.meta.env.DEV) console.error('[chemical-save] tank mix error', { mix, error });
           toast.error(`Failed to save tank mix item: ${error.message}`);

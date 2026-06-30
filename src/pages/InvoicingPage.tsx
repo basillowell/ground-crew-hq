@@ -43,15 +43,36 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-async function withInvoicesRequestTimeout<T>(request: PromiseLike<T>): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Invoices request timed out after 15 seconds.')), 15_000);
-  });
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withInvoicesRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
-    return await Promise.race([request, timeout]);
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Invoices request timed out after 15 seconds.');
+    }
+    throw error;
   } finally {
-    if (timeoutId) clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
+  }
+}
+async function withInvoicesMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { data: null, error: new Error('Save timed out — please try again') } as T;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 export default function InvoicingPage() {
@@ -90,10 +111,12 @@ export default function InvoicingPage() {
   const sendInvoice = async (id: string) => {
     setUpdating(id);
     const sentAt = new Date().toISOString();
-    const { error: err } = await supabase
-      .from('invoices')
-      .update({ status: 'sent', sent_at: sentAt })
-      .eq('id', id);
+    const { error: err } = await withInvoicesMutationTimeout(
+      supabase
+        .from('invoices')
+        .update({ status: 'sent', sent_at: sentAt })
+        .eq('id', id),
+    );
     setUpdating(null);
     if (err) { toast.error(err.message); return; }
     queryClient.setQueryData<Invoice[]>(invoicesQueryKey, (prev) =>
@@ -108,10 +131,12 @@ export default function InvoicingPage() {
   const markPaid = async (id: string) => {
     setUpdating(id);
     const paidAt = new Date().toISOString();
-    const { error: err } = await supabase
-      .from('invoices')
-      .update({ status: 'paid', paid_at: paidAt })
-      .eq('id', id);
+    const { error: err } = await withInvoicesMutationTimeout(
+      supabase
+        .from('invoices')
+        .update({ status: 'paid', paid_at: paidAt })
+        .eq('id', id),
+    );
     setUpdating(null);
     if (err) { toast.error(err.message); return; }
     queryClient.setQueryData<Invoice[]>(invoicesQueryKey, (prev) =>

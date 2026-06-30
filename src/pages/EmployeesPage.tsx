@@ -108,6 +108,43 @@ type EditEmployeeDraft = {
   language: string;
 };
 
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withEmployeesRequestTimeout<T>(
+  request: AbortableSupabaseRequest<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(timeoutMessage);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function withEmployeesMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { data: null, error: new Error('Save timed out — please try again') } as T;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 function parseAvailabilityCellKey(key: string) {
   const separatorIndex = key.indexOf(':');
   if (separatorIndex === -1) return null;
@@ -267,11 +304,15 @@ export default function EmployeesPage() {
       if (!supabase || !orgId) {
         return { start: FALLBACK_SHIFT_START, end: FALLBACK_SHIFT_END };
       }
-      const { data, error: settingsError } = await supabase
-        .from('scheduler_settings')
-        .select('operational_day_start, operational_day_end')
-        .eq('org_id', orgId)
-        .single();
+      const { data, error: settingsError } = await withEmployeesRequestTimeout(
+        supabase
+          .from('scheduler_settings')
+          .select('operational_day_start, operational_day_end')
+          .eq('org_id', orgId)
+          .single(),
+        15_000,
+        'Availability settings request timed out after 15 seconds.',
+      );
 
       if (settingsError) throw settingsError;
       return {
@@ -288,26 +329,19 @@ export default function EmployeesPage() {
     enabled: Boolean(orgId && viewMode === 'availability'),
     queryFn: async () => {
       if (!orgId) return [] as ScheduleEntryRow[];
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      const timeout = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Availability request timed out after 10 seconds.')), 10_000);
-      });
-      try {
-        const result = await Promise.race([
-          supabase
-            .from('schedule_entries')
-            .select('id, employee_id, property_id, date, shift_start, shift_end, status, notes')
-            .eq('org_id', orgId)
-            .gte('date', availabilityStartKey)
-            .lte('date', availabilityEndKey)
-            .order('date', { ascending: true }),
-          timeout,
-        ]);
-        if (result.error) throw result.error;
-        return (result.data ?? []) as ScheduleEntryRow[];
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-      }
+      const result = await withEmployeesRequestTimeout(
+        supabase
+          .from('schedule_entries')
+          .select('id, employee_id, property_id, date, shift_start, shift_end, status, notes')
+          .eq('org_id', orgId)
+          .gte('date', availabilityStartKey)
+          .lte('date', availabilityEndKey)
+          .order('date', { ascending: true }),
+        10_000,
+        'Availability request timed out after 10 seconds.',
+      );
+      if (result.error) throw result.error;
+      return (result.data ?? []) as ScheduleEntryRow[];
     },
   });
   const monthEntries = monthEntriesQuery.data ?? [];
@@ -373,12 +407,16 @@ export default function EmployeesPage() {
       return;
     }
 
-    const { data, error: rolesError } = await supabase
-      .from('workforce_roles')
-      .select('id, name')
-      .eq('org_id', orgId)
-      .eq('active', true)
-      .order('name', { ascending: true });
+    const { data, error: rolesError } = await withEmployeesRequestTimeout(
+      supabase
+        .from('workforce_roles')
+        .select('id, name')
+        .eq('org_id', orgId)
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      15_000,
+      'Workforce roles request timed out after 15 seconds.',
+    );
 
     if (rolesError) {
       console.error('Failed to load workforce roles', rolesError);
@@ -543,17 +581,19 @@ export default function EmployeesPage() {
     }
     setShiftSaving(true);
     if (editingShiftId) {
-      const { error: updateError } = await supabase
-        .from('schedule_entries')
-        .update({
-          property_id: shiftDraft.property_id,
-          shift_start: shiftDraft.shift_start,
-          shift_end: shiftDraft.shift_end,
-          status: shiftDraft.status,
-          notes: shiftDraft.notes || null,
-        })
-        .eq('id', editingShiftId)
-        .eq('org_id', orgId);
+      const { error: updateError } = await withEmployeesMutationTimeout(
+        supabase
+          .from('schedule_entries')
+          .update({
+            property_id: shiftDraft.property_id,
+            shift_start: shiftDraft.shift_start,
+            shift_end: shiftDraft.shift_end,
+            status: shiftDraft.status,
+            notes: shiftDraft.notes || null,
+          })
+          .eq('id', editingShiftId)
+          .eq('org_id', orgId),
+      );
       setShiftSaving(false);
       if (updateError) {
         toast.error(`Failed to update shift: ${updateError.message}`);
@@ -561,16 +601,18 @@ export default function EmployeesPage() {
       }
       toast.success('Shift updated');
     } else {
-      const { error: insertError } = await supabase.from('schedule_entries').insert({
-        org_id: orgId,
-        employee_id: shiftDraft.employee_id,
-        property_id: shiftDraft.property_id,
-        date: shiftDraft.date,
-        shift_start: shiftDraft.shift_start,
-        shift_end: shiftDraft.shift_end,
-        status: shiftDraft.status,
-        notes: shiftDraft.notes || null,
-      });
+      const { error: insertError } = await withEmployeesMutationTimeout(
+        supabase.from('schedule_entries').insert({
+          org_id: orgId,
+          employee_id: shiftDraft.employee_id,
+          property_id: shiftDraft.property_id,
+          date: shiftDraft.date,
+          shift_start: shiftDraft.shift_start,
+          shift_end: shiftDraft.shift_end,
+          status: shiftDraft.status,
+          notes: shiftDraft.notes || null,
+        }),
+      );
       setShiftSaving(false);
       if (insertError) {
         toast.error(`Failed to add shift: ${insertError.message}`);
@@ -651,9 +693,11 @@ export default function EmployeesPage() {
     }
 
     setBulkShiftSaving(true);
-    const { error: upsertError } = await supabase
-      .from('schedule_entries')
-      .upsert(rows, { onConflict: 'id' });
+    const { error: upsertError } = await withEmployeesMutationTimeout(
+      supabase
+        .from('schedule_entries')
+        .upsert(rows, { onConflict: 'id' }),
+    );
     setBulkShiftSaving(false);
 
     if (upsertError) {
@@ -724,20 +768,22 @@ export default function EmployeesPage() {
     if (!addDraft.first_name.trim() || !addDraft.last_name.trim()) return;
 
     setAddSaving(true);
-    const { error: insertError } = await supabase.from('employees').insert({
-      id: crypto.randomUUID(),
-      org_id: orgId,
-      first_name: addDraft.first_name.trim(),
-      last_name: addDraft.last_name.trim(),
-      role: (addDraft.role === '__other__' ? addDraft.role_other : addDraft.role).trim() || null,
-      department: (addDraft.department === '__other__' ? addDraft.department_other : addDraft.department).trim() || null,
-      property_id: addDraft.property_id || null,
-      status: addDraft.status,
-      active: addDraft.status === 'active',
-      hourly_rate: Math.max(0, Number(addDraft.hourly_rate || 0)),
-      employment_type: addDraft.employment_type || null,
-      language: addDraft.language || null,
-    });
+    const { error: insertError } = await withEmployeesMutationTimeout(
+      supabase.from('employees').insert({
+        id: crypto.randomUUID(),
+        org_id: orgId,
+        first_name: addDraft.first_name.trim(),
+        last_name: addDraft.last_name.trim(),
+        role: (addDraft.role === '__other__' ? addDraft.role_other : addDraft.role).trim() || null,
+        department: (addDraft.department === '__other__' ? addDraft.department_other : addDraft.department).trim() || null,
+        property_id: addDraft.property_id || null,
+        status: addDraft.status,
+        active: addDraft.status === 'active',
+        hourly_rate: Math.max(0, Number(addDraft.hourly_rate || 0)),
+        employment_type: addDraft.employment_type || null,
+        language: addDraft.language || null,
+      }),
+    );
     setAddSaving(false);
 
     if (insertError) {
@@ -778,22 +824,24 @@ export default function EmployeesPage() {
     if (!editDraft.first_name.trim() || !editDraft.last_name.trim()) return;
 
     setRowSavingId(employeeId);
-    const { error: updateError } = await supabase
-      .from('employees')
-      .update({
-        first_name: editDraft.first_name.trim(),
-        last_name: editDraft.last_name.trim(),
-        role: editDraft.role.trim() || null,
-        department: editDraft.department.trim() || null,
-        property_id: editDraft.property_id || null,
-        status: editDraft.status,
-        active: editDraft.status === 'active',
-        hourly_rate: Math.max(0, Number(editDraft.hourly_rate || 0)),
-        employment_type: editDraft.employment_type || null,
-        language: editDraft.language || null,
-      })
-      .eq('id', employeeId)
-      .eq('org_id', orgId);
+    const { error: updateError } = await withEmployeesMutationTimeout(
+      supabase
+        .from('employees')
+        .update({
+          first_name: editDraft.first_name.trim(),
+          last_name: editDraft.last_name.trim(),
+          role: editDraft.role.trim() || null,
+          department: editDraft.department.trim() || null,
+          property_id: editDraft.property_id || null,
+          status: editDraft.status,
+          active: editDraft.status === 'active',
+          hourly_rate: Math.max(0, Number(editDraft.hourly_rate || 0)),
+          employment_type: editDraft.employment_type || null,
+          language: editDraft.language || null,
+        })
+        .eq('id', employeeId)
+        .eq('org_id', orgId),
+    );
     setRowSavingId(null);
 
     if (updateError) {
@@ -815,11 +863,13 @@ export default function EmployeesPage() {
     if (!confirmed) return;
 
     setDeactivatingId(employee.id);
-    const { error: updateError } = await supabase
-      .from('employees')
-      .update({ status: 'inactive', active: false })
-      .eq('id', employee.id)
-      .eq('org_id', orgId);
+    const { error: updateError } = await withEmployeesMutationTimeout(
+      supabase
+        .from('employees')
+        .update({ status: 'inactive', active: false })
+        .eq('id', employee.id)
+        .eq('org_id', orgId),
+    );
     setDeactivatingId(null);
 
     if (updateError) {
@@ -839,11 +889,13 @@ export default function EmployeesPage() {
   ) => {
     if (isReadOnly || !supabase || !orgId) return;
     setDeactivatingId(employee.id);
-    const { error: updateError } = await supabase
-      .from('employees')
-      .update({ status, active: status === 'active' })
-      .eq('id', employee.id)
-      .eq('org_id', orgId);
+    const { error: updateError } = await withEmployeesMutationTimeout(
+      supabase
+        .from('employees')
+        .update({ status, active: status === 'active' })
+        .eq('id', employee.id)
+        .eq('org_id', orgId),
+    );
     setDeactivatingId(null);
 
     if (updateError) {
@@ -862,11 +914,13 @@ export default function EmployeesPage() {
     const name = `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Employee';
     setRemovingId(employee.id);
 
-    const { error: accessError } = await supabase
-      .from('app_users')
-      .delete()
-      .eq('employee_id', employee.id)
-      .eq('org_id', orgId);
+    const { error: accessError } = await withEmployeesMutationTimeout(
+      supabase
+        .from('app_users')
+        .delete()
+        .eq('employee_id', employee.id)
+        .eq('org_id', orgId),
+    );
     if (accessError) {
       setRemovingId(null);
       setError(accessError.message);
@@ -874,11 +928,13 @@ export default function EmployeesPage() {
       return;
     }
 
-    const { error: employeeError } = await supabase
-      .from('employees')
-      .update({ status: 'removed', active: false })
-      .eq('id', employee.id)
-      .eq('org_id', orgId);
+    const { error: employeeError } = await withEmployeesMutationTimeout(
+      supabase
+        .from('employees')
+        .update({ status: 'removed', active: false })
+        .eq('id', employee.id)
+        .eq('org_id', orgId),
+    );
     setRemovingId(null);
 
     if (employeeError) {

@@ -114,6 +114,39 @@ const STATUS_STYLES: Record<string, { cell: string; label: string; badge: string
   },
 };
 
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withSchedulerRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Schedule request timed out after 15 seconds.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function withSchedulerMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { data: null, error: new Error('Save timed out — please try again') } as T;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 export default function SchedulerPage() {
   const queryClient = useQueryClient();
   const { currentPropertyId, currentUser, userRole } = useAuth();
@@ -202,32 +235,24 @@ export default function SchedulerPage() {
       enabled: Boolean(orgId),
       queryFn: async () => {
         if (!supabase || !orgId) return [] as ScheduleEntry[];
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        const timeout = new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(() => reject(new Error('Schedule request timed out after 15 seconds.')), 15_000);
-        });
-        try {
-          let query = supabase
-            .from('schedule_entries')
-            .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
-            .eq('org_id', orgId)
-            .eq('date', day.date)
-            .order('shift_start');
-          if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
-          const result = await Promise.race([query, timeout]);
-          if (result.error) throw result.error;
-          return (result.data ?? []).map((row) => ({
-            id: String(row.id),
-            employeeId: String(row.employee_id),
-            date: String(row.date),
-            shiftStart: String(row.shift_start ?? '').slice(0, 5),
-            shiftEnd: String(row.shift_end ?? '').slice(0, 5),
-            status: (row.status ?? 'scheduled') as ScheduleEntry['status'],
-            notes: typeof row.notes === 'string' ? row.notes : null,
-          })) as (ScheduleEntry & { notes?: string | null })[];
-        } finally {
-          if (timeoutId) clearTimeout(timeoutId);
-        }
+        let query = supabase
+          .from('schedule_entries')
+          .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
+          .eq('org_id', orgId)
+          .eq('date', day.date)
+          .order('shift_start');
+        if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
+        const result = await withSchedulerRequestTimeout(query);
+        if (result.error) throw result.error;
+        return (result.data ?? []).map((row) => ({
+          id: String(row.id),
+          employeeId: String(row.employee_id),
+          date: String(row.date),
+          shiftStart: String(row.shift_start ?? '').slice(0, 5),
+          shiftEnd: String(row.shift_end ?? '').slice(0, 5),
+          status: (row.status ?? 'scheduled') as ScheduleEntry['status'],
+          notes: typeof row.notes === 'string' ? row.notes : null,
+        })) as (ScheduleEntry & { notes?: string | null })[];
       },
       staleTime: 1000 * 60 * 5,
     })),
@@ -561,12 +586,14 @@ export default function SchedulerPage() {
     };
 
     const response = existing
-      ? await supabase
-          .from('schedule_entries')
-          .update(payload)
-          .eq('id', existing.id)
-          .eq('org_id', currentUser.orgId)
-      : await supabase.from('schedule_entries').insert(payload);
+      ? await withSchedulerMutationTimeout(
+          supabase
+            .from('schedule_entries')
+            .update(payload)
+            .eq('id', existing.id)
+            .eq('org_id', currentUser.orgId),
+        )
+      : await withSchedulerMutationTimeout(supabase.from('schedule_entries').insert(payload));
 
     setIsSaving(false);
 
@@ -586,11 +613,13 @@ export default function SchedulerPage() {
     if (!supabase || !currentUser?.orgId) return;
     const existing = scheduleList.find((e) => e.employeeId === draft.employeeId && e.date === draft.date);
     if (!existing) { handleCloseModal(); return; }
-    const { error } = await supabase
-      .from('schedule_entries')
-      .delete()
-      .eq('id', existing.id)
-      .eq('org_id', currentUser.orgId);
+    const { error } = await withSchedulerMutationTimeout(
+      supabase
+        .from('schedule_entries')
+        .delete()
+        .eq('id', existing.id)
+        .eq('org_id', currentUser.orgId),
+    );
     if (error) { toast.error(`Failed to delete shift: ${error.message}`); return; }
     await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
     handleCloseModal(true);
@@ -658,15 +687,17 @@ export default function SchedulerPage() {
     });
 
     setTemplateActionSaving(true);
-    const { data, error } = await supabase
-      .from('schedule_week_templates')
-      .insert({
-        org_id: currentUser.orgId,
-        name,
-        template_data: templateData,
-      })
-      .select('id, name, template_data')
-      .single();
+    const { data, error } = await withSchedulerMutationTimeout(
+      supabase
+        .from('schedule_week_templates')
+        .insert({
+          org_id: currentUser.orgId,
+          name,
+          template_data: templateData,
+        })
+        .select('id, name, template_data')
+        .single(),
+    );
     setTemplateActionSaving(false);
 
     if (error) {
@@ -698,12 +729,14 @@ export default function SchedulerPage() {
     const weekEndDate = weekDays[6]?.date;
     if (!weekStartDate || !weekEndDate) return;
 
-    const { data: existingWeekEntries, error: existingError } = await supabase
-      .from('schedule_entries')
-      .select('date')
-      .eq('org_id', currentUser.orgId)
-      .gte('date', weekStartDate)
-      .lte('date', weekEndDate);
+    const { data: existingWeekEntries, error: existingError } = await withSchedulerMutationTimeout(
+      supabase
+        .from('schedule_entries')
+        .select('date')
+        .eq('org_id', currentUser.orgId)
+        .gte('date', weekStartDate)
+        .lte('date', weekEndDate),
+    );
     if (existingError) {
       toast.error(`Failed to apply week template: ${existingError.message}`);
       return;
@@ -740,7 +773,7 @@ export default function SchedulerPage() {
     }
 
     setTemplateActionSaving(true);
-    const { error } = await supabase.from('schedule_entries').insert(inserts);
+    const { error } = await withSchedulerMutationTimeout(supabase.from('schedule_entries').insert(inserts));
     setTemplateActionSaving(false);
     if (error) {
       toast.error(`Failed to apply week template: ${error.message}`);
@@ -781,12 +814,14 @@ export default function SchedulerPage() {
     const targetStartKey = toDateKey(targetWeekStartDate);
     const targetEndKey = toDateKey(targetWeekEndDate);
 
-    const { data: existingTargetWeekEntries, error: existingEntriesError } = await supabase
-      .from('schedule_entries')
-      .select('id, date')
-      .eq('org_id', currentUser.orgId)
-      .gte('date', targetStartKey)
-      .lte('date', targetEndKey);
+    const { data: existingTargetWeekEntries, error: existingEntriesError } = await withSchedulerMutationTimeout(
+      supabase
+        .from('schedule_entries')
+        .select('id, date')
+        .eq('org_id', currentUser.orgId)
+        .gte('date', targetStartKey)
+        .lte('date', targetEndKey),
+    );
 
     if (existingEntriesError) {
       setCopyWeekSaving(false);
@@ -821,7 +856,7 @@ export default function SchedulerPage() {
     }
 
     if (inserts.length > 0) {
-      const { error } = await supabase.from('schedule_entries').insert(inserts);
+      const { error } = await withSchedulerMutationTimeout(supabase.from('schedule_entries').insert(inserts));
       if (error) {
         setCopyWeekSaving(false);
         toast.error(`Failed to copy week: ${error.message}`);
@@ -830,12 +865,14 @@ export default function SchedulerPage() {
     }
 
     if (copyAssignmentsChecked) {
-      const { data: sourceAssignments, error: sourceAssignmentsError } = await supabase
-        .from('assignments')
-        .select('employee_id, property_id, task_id, date, title, location, status, notes, order_index, estimated_hours, actual_hours, start_time')
-        .eq('org_id', currentUser.orgId)
-        .gte('date', weekStartDate)
-        .lte('date', weekEndDate);
+      const { data: sourceAssignments, error: sourceAssignmentsError } = await withSchedulerMutationTimeout(
+        supabase
+          .from('assignments')
+          .select('employee_id, property_id, task_id, date, title, location, status, notes, order_index, estimated_hours, actual_hours, start_time')
+          .eq('org_id', currentUser.orgId)
+          .gte('date', weekStartDate)
+          .lte('date', weekEndDate),
+      );
 
       if (sourceAssignmentsError) {
         setCopyWeekSaving(false);
@@ -843,12 +880,14 @@ export default function SchedulerPage() {
         return;
       }
 
-      const { data: existingTargetAssignments, error: existingTargetAssignmentsError } = await supabase
-        .from('assignments')
-        .select('date')
-        .eq('org_id', currentUser.orgId)
-        .gte('date', targetStartKey)
-        .lte('date', targetEndKey);
+      const { data: existingTargetAssignments, error: existingTargetAssignmentsError } = await withSchedulerMutationTimeout(
+        supabase
+          .from('assignments')
+          .select('date')
+          .eq('org_id', currentUser.orgId)
+          .gte('date', targetStartKey)
+          .lte('date', targetEndKey),
+      );
 
       if (existingTargetAssignmentsError) {
         setCopyWeekSaving(false);
@@ -883,7 +922,9 @@ export default function SchedulerPage() {
       }
 
       if (assignmentInserts.length > 0) {
-        const { error: assignmentInsertError } = await supabase.from('assignments').insert(assignmentInserts);
+        const { error: assignmentInsertError } = await withSchedulerMutationTimeout(
+          supabase.from('assignments').insert(assignmentInserts),
+        );
         if (assignmentInsertError) {
           setCopyWeekSaving(false);
           toast.error(`Failed to copy assignments: ${assignmentInsertError.message}`);

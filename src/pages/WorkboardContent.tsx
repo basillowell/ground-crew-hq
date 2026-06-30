@@ -81,18 +81,39 @@ function SafeSection({ children, fallback = null }: { children: ReactNode; fallb
   }
 }
 
-async function withWorkboardRequestTimeout<T>(request: PromiseLike<T>) {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Workboard request timed out after 15 seconds.')), 15_000);
-  });
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withWorkboardRequestTimeout<T>(request: AbortableSupabaseRequest<T>) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
-    return await Promise.race([request, timeout]);
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Workboard request timed out after 15 seconds.');
+    }
+    throw error;
   } finally {
-    if (timeoutId) clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
   }
 }
 
+async function withWorkboardMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { data: null, error: new Error('Save timed out — please try again') } as T;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
 }
@@ -1294,7 +1315,7 @@ export default function WorkboardContent() {
       return;
     }
 
-    const { error } = await supabase.from('assignments').insert(inserts);
+    const { error } = await withWorkboardMutationTimeout(supabase.from('assignments').insert(inserts));
     if (error) {
       toast.error(`Failed to apply recurring tasks: ${error.message}`);
       return;
@@ -1833,11 +1854,11 @@ export default function WorkboardContent() {
         ),
       );
 
-      const { error } = await supabase
+      const { error } = await withWorkboardMutationTimeout(supabase
         .from('assignments')
         .update({ actual_hours: nextHours })
         .eq('id', assignment.id)
-        .eq('org_id', currentUser.orgId);
+        .eq('org_id', currentUser.orgId));
 
       if (error) {
         queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
@@ -1979,11 +2000,11 @@ export default function WorkboardContent() {
       const hasSpecificProperty = effectivePropertyId && effectivePropertyId !== 'all';
       const propertyForEvent = hasSpecificProperty ? effectivePropertyId : null;
       const employeeForEvent = assignment.employeeId || (typeof assignmentRecord.employee_id === 'string' ? assignmentRecord.employee_id : null);
-      const { error: assignmentError } = await supabase
+      const { error: assignmentError } = await withWorkboardMutationTimeout(supabase
         .from('assignments')
         .update({ status: 'in_progress', actual_start_at: nowIso })
         .eq('id', assignment.id)
-        .eq('org_id', currentUser.orgId);
+        .eq('org_id', currentUser.orgId));
       if (assignmentError) {
         syncTimelineCaches(assignment.id, { status: previousStatus, actualStartAt: previousStartAt });
         toast.error(`Failed to start task: ${assignmentError.message}`);
@@ -1991,7 +2012,7 @@ export default function WorkboardContent() {
         return;
       }
       if (propertyForEvent && employeeForEvent) {
-        const { error: clockError } = await supabase.from('clock_events').insert({
+        const { error: clockError } = await withWorkboardMutationTimeout(supabase.from('clock_events').insert({
           id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           org_id: currentUser.orgId,
           property_id: propertyForEvent,
@@ -2000,14 +2021,14 @@ export default function WorkboardContent() {
           timestamp: nowIso,
           location_lat: null,
           location_lng: null,
-        });
+        }));
         if (clockError) {
           syncTimelineCaches(assignment.id, { status: previousStatus, actualStartAt: previousStartAt });
-          const { error: rollbackError } = await supabase
+          const { error: rollbackError } = await withWorkboardMutationTimeout(supabase
             .from('assignments')
             .update({ status: previousStatus, actual_start_at: previousStartAt })
             .eq('id', assignment.id)
-            .eq('org_id', currentUser.orgId);
+            .eq('org_id', currentUser.orgId));
           if (rollbackError) {
             toast.error(`Task start rollback failed: ${rollbackError.message}`);
           }
@@ -2071,11 +2092,11 @@ export default function WorkboardContent() {
         actualHours: typeof updatePayload.actual_hours === 'number' ? Number(updatePayload.actual_hours) : undefined,
       });
 
-      const { error } = await supabase
+      const { error } = await withWorkboardMutationTimeout(supabase
         .from('assignments')
         .update(updatePayload)
         .eq('id', assignment.id)
-        .eq('org_id', currentUser.orgId);
+        .eq('org_id', currentUser.orgId));
       if (error) {
         syncTimelineCaches(assignment.id, {
           status: previousStatus,
@@ -2094,7 +2115,7 @@ export default function WorkboardContent() {
       const assignmentRecord = assignment as Assignment & Record<string, unknown>;
       const employeeForEvent = assignment.employeeId || (typeof assignmentRecord.employee_id === 'string' ? assignmentRecord.employee_id : null);
       if (propertyForEvent && employeeForEvent) {
-        const { error: clockError } = await supabase.from('clock_events').insert({
+        const { error: clockError } = await withWorkboardMutationTimeout(supabase.from('clock_events').insert({
           id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           org_id: currentUser.orgId,
           property_id: propertyForEvent,
@@ -2103,14 +2124,14 @@ export default function WorkboardContent() {
           timestamp: nowIso,
           location_lat: null,
           location_lng: null,
-        });
+        }));
         if (clockError) {
           syncTimelineCaches(assignment.id, {
             status: previousStatus,
             actualCompletedAt: previousCompletedAt,
             actualHours: previousActualHours,
           });
-          const { error: rollbackError } = await supabase
+          const { error: rollbackError } = await withWorkboardMutationTimeout(supabase
             .from('assignments')
             .update({
               status: previousStatus,
@@ -2118,7 +2139,7 @@ export default function WorkboardContent() {
               actual_hours: previousActualHours,
             })
             .eq('id', assignment.id)
-            .eq('org_id', currentUser.orgId);
+            .eq('org_id', currentUser.orgId));
           if (rollbackError) {
             toast.error(`Task completion rollback failed: ${rollbackError.message}`);
           }
@@ -2138,11 +2159,11 @@ export default function WorkboardContent() {
       });
 
       if (nextTask?.id) {
-        const nextResult = await supabase
+        const nextResult = await withWorkboardMutationTimeout(supabase
           .from('assignments')
           .update({ status: 'in_progress', actual_start_at: nowIso })
           .eq('id', nextTask.id)
-          .eq('org_id', currentUser.orgId);
+          .eq('org_id', currentUser.orgId));
         if (!nextResult.error) {
           syncTimelineCaches(nextTask.id, { status: 'in_progress', actualStartAt: nowIso });
           triggerAssignmentFlash(nextTask.id, 'started');
@@ -2215,11 +2236,11 @@ export default function WorkboardContent() {
         actualCompletedAt: endInput ? returnedCompletedAt : undefined,
         actualHours: derivedHours,
       });
-      const { error } = await supabase
+      const { error } = await withWorkboardMutationTimeout(supabase
         .from('assignments')
         .update(payload)
         .eq('id', assignment.id)
-        .eq('org_id', currentUser.orgId);
+        .eq('org_id', currentUser.orgId));
       if (error) {
         syncTimelineCaches(assignment.id, {
           actualStartAt: previousTimes.canonicalStartAt,
@@ -2258,11 +2279,11 @@ export default function WorkboardContent() {
             ? storedIsoToWallClock(returnedCompletedAt, operationalTimezone)
             : endInput;
           if (!nextStartHHMM || (completionHHMM && timeToMinutes(nextStartHHMM) < timeToMinutes(completionHHMM))) {
-            const nextUpdate = await supabase
+            const nextUpdate = await withWorkboardMutationTimeout(supabase
               .from('assignments')
               .update({ actual_start_at: returnedCompletedAt ?? endTs })
               .eq('id', nextTask.id)
-              .eq('org_id', currentUser.orgId);
+              .eq('org_id', currentUser.orgId));
             if (!nextUpdate.error) {
               syncTimelineCaches(nextTask.id, { actualStartAt: returnedCompletedAt ?? endTs });
             } else {
@@ -2320,7 +2341,7 @@ export default function WorkboardContent() {
       }
 
       setSavingBreakEmployeeId(employeeId);
-      const { error } = await supabase.from('clock_events').insert([
+      const { error } = await withWorkboardMutationTimeout(supabase.from('clock_events').insert([
         {
           employee_id: employeeId,
           property_id: propertyForEvent,
@@ -2339,7 +2360,7 @@ export default function WorkboardContent() {
           location_lat: null,
           location_lng: null,
         },
-      ]);
+      ]));
       setSavingBreakEmployeeId(null);
 
       if (error) {
@@ -2681,12 +2702,12 @@ export default function WorkboardContent() {
     previousDate.setDate(previousDate.getDate() - 7);
     const previousDateKey = previousDate.toISOString().slice(0, 10);
 
-    const { data, error } = await supabase
+    const { data, error } = await withWorkboardMutationTimeout(supabase
       .from('assignments')
       .select('id, employee_id, task_id, title, estimated_hours, status, property_id')
       .eq('org_id', currentUser.orgId)
       .eq('date', previousDateKey)
-      .in('status', ['planned', 'in_progress', 'done']);
+      .in('status', ['planned', 'in_progress', 'done']));
 
     setQuickPlanLoading(false);
 
@@ -2797,7 +2818,7 @@ export default function WorkboardContent() {
     }
 
     setQuickPlanApplying(true);
-    const { error } = await supabase.from('assignments').insert(rowsToInsert);
+    const { error } = await withWorkboardMutationTimeout(supabase.from('assignments').insert(rowsToInsert));
     setQuickPlanApplying(false);
 
     if (error) {
@@ -2925,7 +2946,7 @@ export default function WorkboardContent() {
       return;
     }
 
-    const { error } = await supabase.from('assignments').insert(rowsToInsert);
+    const { error } = await withWorkboardMutationTimeout(supabase.from('assignments').insert(rowsToInsert));
     setApplyingTaskTemplate(false);
 
     if (error) {
@@ -3297,7 +3318,7 @@ export default function WorkboardContent() {
         created_by: currentUser?.appUserId ?? null,
         author: 'Operations Assistant',
       };
-      const { error } = await supabase.from('notes').insert(notePayload);
+      const { error } = await withWorkboardMutationTimeout(supabase.from('notes').insert(notePayload));
       if (error) {
         toast.error(`Failed to archive report: ${error.message}`);
       } else {
@@ -3756,10 +3777,10 @@ export default function WorkboardContent() {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await withWorkboardMutationTimeout(supabase
         .from('assignments')
         .insert(rowsToInsert)
-        .select();
+        .select());
 
       if (error) {
         console.error('[ASSIGNMENT ERROR]', { error, payload: rowsToInsert });
@@ -3855,11 +3876,11 @@ export default function WorkboardContent() {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await withWorkboardMutationTimeout(supabase
         .from('assignments')
         .upsert(basePayload)
         .select()
-        .single();
+        .single());
 
       if (error) {
         console.error('[ASSIGNMENT ERROR]', { error, payload: basePayload });
@@ -3885,14 +3906,14 @@ export default function WorkboardContent() {
     }
 
     if (linkedRequestId) {
-      const { error: linkedRequestError } = await supabase
+      const { error: linkedRequestError } = await withWorkboardMutationTimeout(supabase
         .from('task_requests')
         .update({
           status: 'assigned',
           task_id: linkedRequestTaskId,
           org_id: currentUser?.orgId ?? null,
         })
-        .eq('id', linkedRequestId);
+        .eq('id', linkedRequestId));
       if (linkedRequestError) {
         toast.error(`Failed to update linked request: ${linkedRequestError.message}`);
       }
@@ -3924,7 +3945,7 @@ export default function WorkboardContent() {
 
     const timeoutId = window.setTimeout(async () => {
       delete pendingDeleteTimeoutsRef.current[assignmentId];
-      const { error } = await supabase.from('assignments').delete().eq('id', assignmentId).eq('org_id', currentUser.orgId);
+      const { error } = await withWorkboardMutationTimeout(supabase.from('assignments').delete().eq('id', assignmentId).eq('org_id', currentUser.orgId));
       if (error) {
         console.error('[ASSIGNMENT ERROR]', { error, payload: { id: assignmentId } });
         upsertAssignmentInCache(assignmentToRemove);
@@ -3961,11 +3982,11 @@ export default function WorkboardContent() {
     if (!supabase) return;
     const confirmed = window.confirm('Dismiss this request?');
     if (!confirmed) return;
-    const { error } = await supabase
+    const { error } = await withWorkboardMutationTimeout(supabase
       .from('task_requests')
       .update({ status: 'dismissed' })
       .eq('id', requestId)
-      .eq('org_id', currentUser?.orgId ?? '');
+      .eq('org_id', currentUser?.orgId ?? ''));
     if (error) {
       toast.error(`Failed to dismiss request: ${error.message}`);
       return;
@@ -4034,7 +4055,7 @@ export default function WorkboardContent() {
       }),
     );
 
-    const { error } = await supabase.from('assignments').upsert(orderUpdates, { onConflict: 'id' });
+    const { error } = await withWorkboardMutationTimeout(supabase.from('assignments').upsert(orderUpdates, { onConflict: 'id' }));
 
     if (error) {
       console.error('[ASSIGNMENT ERROR]', { error, payload: orderUpdates });
@@ -4073,7 +4094,7 @@ export default function WorkboardContent() {
       }),
     );
 
-    const { error } = await supabase.from('assignments').upsert(orderUpdates, { onConflict: 'id' });
+    const { error } = await withWorkboardMutationTimeout(supabase.from('assignments').upsert(orderUpdates, { onConflict: 'id' }));
     if (error) {
       console.error('[ASSIGNMENT ERROR]', { error, payload: orderUpdates });
       toast.error(`Task move failed: ${error.message}`);
@@ -4131,7 +4152,7 @@ export default function WorkboardContent() {
       toast.error(validationError);
       return;
     }
-    const { data: assignmentRow, error: assignmentError } = await supabase.from('assignments').insert(payload).select().single();
+    const { data: assignmentRow, error: assignmentError } = await withWorkboardMutationTimeout(supabase.from('assignments').insert(payload).select().single());
     if (assignmentError) {
       console.error('[ASSIGNMENT ERROR]', { error: assignmentError, payload });
       toast.error(`Task assignment failed: ${assignmentError.message}`);
@@ -4150,11 +4171,11 @@ export default function WorkboardContent() {
       status: normalizeAssignmentStatus(String(assignmentRow?.status ?? payload.status)) as Assignment['status'],
     });
 
-    const { error: requestError } = await supabase
+    const { error: requestError } = await withWorkboardMutationTimeout(supabase
       .from('task_requests')
       .update({ status: 'approved' })
       .eq('id', request.id)
-      .eq('org_id', currentUser.orgId);
+      .eq('org_id', currentUser.orgId));
     if (requestError) {
       toast.error(`Assignment created but request update failed: ${requestError.message}`);
       return;
@@ -4222,7 +4243,7 @@ export default function WorkboardContent() {
     const noteLabel = noteDraft.type === 'alert' ? 'Alert' : `${noteDraft.type.charAt(0).toUpperCase()}${noteDraft.type.slice(1)}`;
     const noteTitle = noteDraft.title.trim() || `${noteLabel} note - ${boardDate}`;
     try {
-      const { error } = await supabase.from('notes').insert({
+      const { error } = await withWorkboardMutationTimeout(supabase.from('notes').insert({
         type: noteDraft.type,
         title: noteTitle,
         content: noteDraft.content.trim(),
@@ -4232,7 +4253,7 @@ export default function WorkboardContent() {
         org_id: orgId,
         created_by: currentUser?.employeeId ?? null,
         location: noteDraft.location.trim() || null,
-      });
+      }));
       if (error) {
         toast.error(`Failed to save note: ${error.message}`);
         return;

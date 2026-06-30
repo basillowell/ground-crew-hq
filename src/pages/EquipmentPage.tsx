@@ -120,18 +120,38 @@ function emptyAddDraft(): AddDraft {
   };
 }
 
-async function withEquipmentRequestTimeout<T>(request: PromiseLike<T>): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Equipment request timed out after 15 seconds.')), 15_000);
-  });
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withEquipmentRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
-    return await Promise.race([request, timeout]);
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Equipment request timed out after 15 seconds.');
+    }
+    throw error;
   } finally {
-    if (timeoutId) clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
   }
 }
-
+async function withEquipmentMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { data: null, error: new Error('Save timed out — please try again') } as T;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 export default function EquipmentPage() {
   const { currentUser, currentPropertyId, userRole } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
@@ -165,7 +185,10 @@ export default function EquipmentPage() {
         unitsQuery.eq('property_id', propertyId);
       }
 
-      const [unitsResult, typesResult] = await withEquipmentRequestTimeout(Promise.all([unitsQuery, typesQuery]));
+      const [unitsResult, typesResult] = await Promise.all([
+        withEquipmentRequestTimeout(unitsQuery),
+        withEquipmentRequestTimeout(typesQuery),
+      ]);
       if (unitsResult.error || typesResult.error) {
         throw new Error(unitsResult.error?.message ?? typesResult.error?.message ?? 'Could not load equipment data.');
       }
@@ -306,7 +329,7 @@ export default function EquipmentPage() {
       last_serviced: addDraft.lastServiced || null,
     };
 
-    const { error: insertError } = await supabase.from('equipment_units').insert(payload);
+    const { error: insertError } = await withEquipmentMutationTimeout(supabase.from('equipment_units').insert(payload));
     setAddSaving(false);
     if (insertError) {
       setError(insertError.message);
@@ -356,7 +379,9 @@ export default function EquipmentPage() {
       org_id: orgId,
     };
 
-    const { error: updateError } = await supabase.from('equipment_units').update(payload).eq('id', id).eq('org_id', orgId);
+    const { error: updateError } = await withEquipmentMutationTimeout(
+      supabase.from('equipment_units').update(payload).eq('id', id).eq('org_id', orgId),
+    );
     setRowSavingId(null);
     if (updateError) {
       setError(updateError.message);
@@ -373,7 +398,9 @@ export default function EquipmentPage() {
     if (isReadOnly) return;
     if (!supabase || !orgId) return;
     setDeleteId(id);
-    const { error: deleteError } = await supabase.from('equipment_units').delete().eq('id', id).eq('org_id', orgId);
+    const { error: deleteError } = await withEquipmentMutationTimeout(
+      supabase.from('equipment_units').delete().eq('id', id).eq('org_id', orgId),
+    );
     setDeleteId(null);
     if (deleteError) {
       setError(deleteError.message);
