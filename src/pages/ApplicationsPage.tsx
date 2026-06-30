@@ -39,7 +39,7 @@ import {
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import ChemicalSettings from '@/pages/settings/ChemicalSettings';
 import { useChemicalLogs } from '@/hooks/useChemicalLogs';
@@ -139,6 +139,17 @@ function numberValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+async function withChemicalLookupRequestTimeout<T>(request: PromiseLike<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Chemical lookup request timed out after 15 seconds.')), 15_000);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 function buildRestrictedEntry(
   draft: ApplicationDraft,
   products: ChemicalProduct[],
@@ -166,9 +177,43 @@ export default function ApplicationsPage() {
   const logsQuery = useChemicalLogs(orgScope, propertyScope);
   const productsQuery = useChemicalProducts();
   const mixItemsQuery = useChemicalApplicationTankMixItems();
+  const applicationAreasQuery = useQuery<ApplicationArea[]>({
+    queryKey: ['chemical-application-areas', orgScope ?? 'no-org'],
+    enabled: Boolean(orgScope),
+    queryFn: async () => {
+      if (!supabase || !orgScope) return [];
+      const { data, error } = await withChemicalLookupRequestTimeout(
+        supabase
+          .from('application_areas')
+          .select('*')
+          .eq('org_id', orgScope)
+          .order('name'),
+      );
+      if (error) throw error;
+      return (data ?? []) as ApplicationArea[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const weatherLocationsQuery = useQuery<WeatherLocation[]>({
+    queryKey: ['chemical-weather-locations', orgScope ?? 'no-org', propertyScope ?? 'all-properties'],
+    enabled: Boolean(orgScope),
+    queryFn: async () => {
+      if (!supabase || !orgScope) return [];
+      let query = supabase
+        .from('weather_locations')
+        .select('id, name, property, area, latitude, longitude, org_id, is_active')
+        .eq('org_id', orgScope)
+        .eq('is_active', true);
+      if (propertyScope) query = query.eq('property', propertyScope);
+      const { data, error } = await withChemicalLookupRequestTimeout(query.order('name'));
+      if (error) throw error;
+      return (data ?? []) as WeatherLocation[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
 
-  const [applicationAreas, setApplicationAreas] = useState<ApplicationArea[]>([]);
-  const [weatherLocations, setWeatherLocations] = useState<WeatherLocation[]>([]);
+  const applicationAreas = applicationAreasQuery.data ?? [];
+  const weatherLocations = weatherLocationsQuery.data ?? [];
   const employees = employeesQuery.data ?? [];
   const equipmentUnits = equipmentUnitsQuery.data ?? [];
   const properties = propertiesQuery.data ?? [];
@@ -190,48 +235,6 @@ export default function ApplicationsPage() {
   useEffect(() => {
     document.title = 'Chemical Logs — Ground Crew HQ';
   }, []);
-
-  useEffect(() => {
-    if (!orgScope) return;
-    let isMounted = true;
-
-    async function loadApplicationAreas() {
-      const { data, error } = await supabase
-        .from('application_areas')
-        .select('*')
-        .eq('org_id', orgScope)
-        .order('name');
-      if (!isMounted) return;
-      if (error) {
-        setApplicationAreas([]);
-        return;
-      }
-      setApplicationAreas(((data ?? []) as ApplicationArea[]));
-    }
-
-    async function loadWeatherLocations() {
-      let query = supabase
-        .from('weather_locations')
-        .select('id, name, property, area, latitude, longitude, org_id, is_active')
-        .eq('org_id', orgScope)
-        .eq('is_active', true);
-      if (propertyScope) query = query.eq('property', propertyScope);
-      const { data, error } = await query.order('name');
-      if (!isMounted) return;
-      if (error) {
-        setWeatherLocations([]);
-        return;
-      }
-      setWeatherLocations(((data ?? []) as WeatherLocation[]));
-    }
-
-    void loadApplicationAreas();
-    void loadWeatherLocations();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [orgScope, propertyScope]);
 
   useEffect(() => {
     if (!applicationAreas.length && !employees.length && !equipmentUnits.length && !weatherLogs.length && !chemicalProducts.length) {

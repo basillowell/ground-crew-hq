@@ -856,35 +856,51 @@ function OperationsTab({
   );
 }
 
+type SettingsEquipmentType = { id: string; name: string; category: string | null };
+
+async function withSettingsRequestTimeout<T>(request: PromiseLike<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Settings request timed out after 15 seconds.')), 15_000);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 function EquipmentTab({ orgId }: { orgId: string | null }) {
-  const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string; category: string | null }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const equipmentTypesQueryKey = useMemo(
+    () => ['settings-equipment-types', orgId ?? 'no-org'] as const,
+    [orgId],
+  );
+  const equipmentTypesQuery = useQuery<SettingsEquipmentType[]>({
+    queryKey: equipmentTypesQueryKey,
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      if (!supabase || !orgId) return [];
+      const { data, error: fetchError } = await withSettingsRequestTimeout(
+        supabase
+          .from('equipment_types')
+          .select('id, name, category')
+          .eq('org_id', orgId)
+          .eq('active', true)
+          .order('name', { ascending: true }),
+      );
+      if (fetchError) throw fetchError;
+      return (data ?? []) as SettingsEquipmentType[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const equipmentTypes = equipmentTypesQuery.data ?? [];
+  const loading = equipmentTypesQuery.isLoading && !equipmentTypesQuery.data;
+  const error = equipmentTypesQuery.error instanceof Error ? equipmentTypesQuery.error.message : null;
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState('General');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const categoryOptions = ['Mowing', 'Transport', 'Chemical', 'Trimming', 'Maintenance', 'General'] as const;
-
-  const fetchTypes = useCallback(async () => {
-    if (!supabase || !orgId) return;
-    setLoading(true);
-    setError(null);
-    const { data, error: fetchError } = await supabase
-      .from('equipment_types')
-      .select('id, name, category')
-      .eq('org_id', orgId)
-      .eq('active', true)
-      .order('name', { ascending: true });
-    if (fetchError) { setError(fetchError.message); setLoading(false); return; }
-    setEquipmentTypes((data ?? []) as Array<{ id: string; name: string; category: string | null }>);
-    setLoading(false);
-  }, [orgId]);
-
-  useEffect(() => {
-    if (!orgId) return;
-    void fetchTypes();
-  }, [fetchTypes, orgId]);
 
   const addType = async () => {
     if (!supabase || !orgId || !newName.trim()) return;
@@ -894,7 +910,7 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
     if (insertError) { toast.error(`Failed to add: ${insertError.message}`); return; }
     setNewName('');
     toast.success('Equipment type added');
-    void fetchTypes();
+    void queryClient.invalidateQueries({ queryKey: equipmentTypesQueryKey });
   };
 
   const saveEdit = async (id: string) => {
@@ -904,7 +920,7 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
     if (updateError) { toast.error(`Failed to update: ${updateError.message}`); return; }
     setEditingId(null); setEditingName('');
     toast.success('Updated');
-    void fetchTypes();
+    void queryClient.invalidateQueries({ queryKey: equipmentTypesQueryKey });
   };
 
   const deactivate = async (id: string, name: string) => {
@@ -913,11 +929,11 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
       .from('equipment_types').update({ active: false }).eq('id', id).eq('org_id', orgId);
     if (updateError) { toast.error(`Failed to remove: ${updateError.message}`); return; }
     toast.success(`Removed ${name}`);
-    void fetchTypes();
+    void queryClient.invalidateQueries({ queryKey: equipmentTypesQueryKey });
   };
 
   if (loading) return <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />;
-  if (error) return <ErrorRetry message={error} onRetry={() => void fetchTypes()} />;
+  if (error) return <ErrorRetry message={error} onRetry={() => void equipmentTypesQuery.refetch()} />;
 
   return (
     <div className="space-y-4">

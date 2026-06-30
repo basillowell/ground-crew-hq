@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -40,6 +41,11 @@ type EquipmentTypeRow = {
 };
 
 type EquipmentStatus = 'available' | 'in_use' | 'maintenance' | 'retired';
+
+type EquipmentPageData = {
+  units: EquipmentUnitRow[];
+  types: EquipmentTypeRow[];
+};
 
 type AddDraft = {
   name: string;
@@ -114,17 +120,70 @@ function emptyAddDraft(): AddDraft {
   };
 }
 
+async function withEquipmentRequestTimeout<T>(request: PromiseLike<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Equipment request timed out after 15 seconds.')), 15_000);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export default function EquipmentPage() {
   const { currentUser, currentPropertyId, userRole } = useAuth();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const orgId = currentUser?.orgId ?? '';
   const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null;
 
-  const [units, setUnits] = useState<EquipmentUnitRow[]>([]);
-  const [types, setTypes] = useState<EquipmentTypeRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const equipmentQueryKey = useMemo(
+    () => ['equipment-page-data', orgId || 'no-org', propertyId ?? 'all-properties'] as const,
+    [orgId, propertyId],
+  );
+  const equipmentQuery = useQuery<EquipmentPageData>({
+    queryKey: equipmentQueryKey,
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      if (!supabase || !orgId) return { units: [], types: [] };
 
+      const unitsQuery = supabase
+        .from('equipment_units')
+        .select('id, property_id, name, type, status, location, last_serviced, org_id, equipment_type_id, unit_name, notes, active')
+        .eq('org_id', orgId)
+        .order('unit_name', { ascending: true });
+
+      const typesQuery = supabase
+        .from('equipment_types')
+        .select('id, org_id, property_id, name, short_name, category, active')
+        .eq('org_id', orgId)
+        .order('name', { ascending: true });
+
+      if (propertyId) {
+        unitsQuery.eq('property_id', propertyId);
+      }
+
+      const [unitsResult, typesResult] = await withEquipmentRequestTimeout(Promise.all([unitsQuery, typesQuery]));
+      if (unitsResult.error || typesResult.error) {
+        throw new Error(unitsResult.error?.message ?? typesResult.error?.message ?? 'Could not load equipment data.');
+      }
+
+      return {
+        units: (unitsResult.data ?? []) as EquipmentUnitRow[],
+        types: (typesResult.data ?? []) as EquipmentTypeRow[],
+      };
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const units = equipmentQuery.data?.units ?? [];
+  const types = equipmentQuery.data?.types ?? [];
+  const loading = equipmentQuery.isLoading && !equipmentQuery.data;
+  const loadError = equipmentQuery.error instanceof Error ? equipmentQuery.error.message : null;
+  const [error, setError] = useState<string | null>(null);
+  const displayError = error ?? loadError;
   const [addOpen, setAddOpen] = useState(false);
   const [addSaving, setAddSaving] = useState(false);
   const [addDraft, setAddDraft] = useState<AddDraft>(emptyAddDraft);
@@ -138,54 +197,6 @@ export default function EquipmentPage() {
   useEffect(() => {
     document.title = 'Equipment — Ground Crew HQ';
   }, []);
-
-  const fetchEquipment = useCallback(async () => {
-    if (!supabase || !orgId) {
-      setLoading(true);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const unitsQuery = supabase
-      .from('equipment_units')
-      .select('id, property_id, name, type, status, location, last_serviced, org_id, equipment_type_id, unit_name, notes, active')
-      .eq('org_id', orgId)
-      .order('unit_name', { ascending: true });
-
-    const typesQuery = supabase
-      .from('equipment_types')
-      .select('id, org_id, property_id, name, short_name, category, active')
-      .eq('org_id', orgId)
-      .order('name', { ascending: true });
-
-    if (propertyId) {
-      unitsQuery.eq('property_id', propertyId);
-    }
-
-    const [{ data: unitsData, error: unitsError }, { data: typesData, error: typesError }] = await Promise.all([
-      unitsQuery,
-      typesQuery,
-    ]);
-
-    if (unitsError || typesError) {
-      setError(unitsError?.message ?? typesError?.message ?? 'Could not load equipment data.');
-      setUnits([]);
-      setTypes([]);
-      setLoading(false);
-      return;
-    }
-
-    setUnits((unitsData ?? []) as EquipmentUnitRow[]);
-    setTypes((typesData ?? []) as EquipmentTypeRow[]);
-    setLoading(false);
-  }, [orgId, propertyId]);
-
-  useEffect(() => {
-    if (!orgId) return;
-    void fetchEquipment();
-  }, [fetchEquipment, orgId]);
 
   const typeNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -304,9 +315,10 @@ export default function EquipmentPage() {
     }
 
     cancelAdd();
-    await fetchEquipment();
+    setError(null);
+    await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
     toast.success(`Added equipment: ${addDraft.name.trim()}`);
-  }, [addDraft, cancelAdd, fetchEquipment, isReadOnly, orgId, propertyId, typeNameById]);
+  }, [addDraft, cancelAdd, equipmentQueryKey, isReadOnly, orgId, propertyId, queryClient, typeNameById]);
 
   const startEdit = useCallback((row: EquipmentUnitRow & { displayName: string; displayType: string; normalizedStatus: EquipmentStatus }) => {
     setEditingId(row.id);
@@ -352,9 +364,10 @@ export default function EquipmentPage() {
       return;
     }
     cancelEdit();
-    await fetchEquipment();
+    setError(null);
+    await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
     toast.success(`Updated equipment: ${editDraft.name.trim()}`);
-  }, [cancelEdit, editDraft, fetchEquipment, isReadOnly, orgId, typeNameById]);
+  }, [cancelEdit, editDraft, equipmentQueryKey, isReadOnly, orgId, queryClient, typeNameById]);
 
   const removeRow = useCallback(async (id: string) => {
     if (isReadOnly) return;
@@ -367,9 +380,10 @@ export default function EquipmentPage() {
       toast.error(`Failed to delete equipment: ${deleteError.message}`);
       return;
     }
-    await fetchEquipment();
+    setError(null);
+    await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
     toast.success('Equipment deleted');
-  }, [fetchEquipment, isReadOnly, orgId]);
+  }, [equipmentQueryKey, isReadOnly, orgId, queryClient]);
 
   if (!orgId || loading) {
     return (
@@ -413,7 +427,7 @@ export default function EquipmentPage() {
         </div>
       </PageHeader>
 
-      {error ? <ErrorRetry message={error} onRetry={() => void fetchEquipment()} /> : null}
+      {displayError ? <ErrorRetry message={displayError} onRetry={() => { setError(null); void equipmentQuery.refetch(); }} /> : null}
 
       {viewMode === 'list' ? (
       <>

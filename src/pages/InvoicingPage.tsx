@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useProperties } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -42,13 +43,43 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+async function withInvoicesRequestTimeout<T>(request: PromiseLike<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Invoices request timed out after 15 seconds.')), 15_000);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 export default function InvoicingPage() {
   const { orgId } = useAuth();
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
 
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const invoicesQueryKey = useMemo(() => ['invoices', orgId ?? 'no-org'] as const, [orgId]);
+  const invoicesQuery = useQuery<Invoice[]>({
+    queryKey: invoicesQueryKey,
+    enabled: Boolean(orgId) && !propertiesLoading,
+    queryFn: async () => {
+      if (!supabase || !orgId) return [];
+      const { data, error: err } = await withInvoicesRequestTimeout(
+        supabase
+          .from('invoices')
+          .select('id, org_id, property_id, employee_id, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at')
+          .eq('org_id', orgId)
+          .order('created_at', { ascending: false }),
+      );
+      if (err) throw err;
+      return (data as Invoice[]) ?? [];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+  const invoices = invoicesQuery.data ?? [];
+  const loading = invoicesQuery.isLoading && !invoicesQuery.data;
+  const error = invoicesQuery.error instanceof Error ? invoicesQuery.error.message : null;
   const [activeTab, setActiveTab] = useState<InvoiceTab>('Draft');
   const [updating, setUpdating] = useState<string | null>(null);
 
@@ -56,61 +87,39 @@ export default function InvoicingPage() {
     document.title = 'Invoicing — Ground Crew HQ';
   }, []);
 
-  const fetchInvoices = useCallback(async () => {
-    if (!orgId) return;
-    setLoading(true);
-    setError(null);
-    const timer = window.setTimeout(() => setError('Request timed out after 8 seconds.'), 8000);
-    try {
-      const { data, error: err } = await supabase
-        .from('invoices')
-        .select('id, org_id, property_id, employee_id, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false });
-      if (err) throw err;
-      setInvoices((data as Invoice[]) ?? []);
-    } catch (e) {
-      setError((e as Error).message || 'Failed to load invoices');
-    } finally {
-      clearTimeout(timer);
-      setLoading(false);
-    }
-  }, [orgId]);
-
-  useEffect(() => {
-    if (!orgId || propertiesLoading) return;
-    void fetchInvoices();
-  }, [fetchInvoices, orgId, propertiesLoading]);
-
   const sendInvoice = async (id: string) => {
     setUpdating(id);
+    const sentAt = new Date().toISOString();
     const { error: err } = await supabase
       .from('invoices')
-      .update({ status: 'sent', sent_at: new Date().toISOString() })
+      .update({ status: 'sent', sent_at: sentAt })
       .eq('id', id);
     setUpdating(null);
     if (err) { toast.error(err.message); return; }
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.id === id ? { ...inv, status: 'sent', sent_at: new Date().toISOString() } : inv,
+    queryClient.setQueryData<Invoice[]>(invoicesQueryKey, (prev) =>
+      (prev ?? []).map((inv) =>
+        inv.id === id ? { ...inv, status: 'sent', sent_at: sentAt } : inv,
       ),
     );
+    void queryClient.invalidateQueries({ queryKey: invoicesQueryKey });
     toast.success('Invoice sent');
   };
 
   const markPaid = async (id: string) => {
     setUpdating(id);
+    const paidAt = new Date().toISOString();
     const { error: err } = await supabase
       .from('invoices')
-      .update({ status: 'paid', paid_at: new Date().toISOString() })
+      .update({ status: 'paid', paid_at: paidAt })
       .eq('id', id);
     setUpdating(null);
     if (err) { toast.error(err.message); return; }
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.id === id ? { ...inv, status: 'paid', paid_at: new Date().toISOString() } : inv,
+    queryClient.setQueryData<Invoice[]>(invoicesQueryKey, (prev) =>
+      (prev ?? []).map((inv) =>
+        inv.id === id ? { ...inv, status: 'paid', paid_at: paidAt } : inv,
       ),
     );
+    void queryClient.invalidateQueries({ queryKey: invoicesQueryKey });
     toast.success('Invoice marked as paid');
   };
 
@@ -146,7 +155,7 @@ export default function InvoicingPage() {
   if (error) {
     return (
       <div className="p-6">
-        <ErrorRetry message={error} onRetry={() => void fetchInvoices()} />
+        <ErrorRetry message={error} onRetry={() => void invoicesQuery.refetch()} />
       </div>
     );
   }
