@@ -534,27 +534,18 @@ export default function SchedulerPage() {
   }, [dialogOpen, isReadOnly, openAddShift]);
 
   async function handleSaveShift() {
-    console.log('[DIAG-SAVE] handler called', { time: new Date().toISOString() });
-
     if (isReadOnly) {
-      console.log('[DIAG-SAVE] blocked by guard: isReadOnly', { isReadOnly });
       return;
     }
     if (!draft.employeeId || !draft.date) {
-      console.log('[DIAG-SAVE] blocked by guard: missing employee/date', {
-        employeeId: draft.employeeId,
-        date: draft.date,
-      });
       toast.error('Select an employee and date before saving.');
       return;
     }
     if (!supabase) {
-      console.log('[DIAG-SAVE] blocked by guard: supabase unavailable', { hasSupabase: Boolean(supabase) });
       toast.error('Database connection not available.');
       return;
     }
     if (!currentUser?.orgId) {
-      console.log('[DIAG-SAVE] blocked by guard: missing orgId', { orgId: currentUser?.orgId ?? null });
       toast.error('Organization context unavailable.');
       return;
     }
@@ -562,12 +553,6 @@ export default function SchedulerPage() {
       const startMinutes = draft.shiftStart ? Number(draft.shiftStart.slice(0, 2)) * 60 + Number(draft.shiftStart.slice(3, 5)) : 0;
       const endMinutes = draft.shiftEnd ? Number(draft.shiftEnd.slice(0, 2)) * 60 + Number(draft.shiftEnd.slice(3, 5)) : 0;
       if (!draft.shiftStart || !draft.shiftEnd || endMinutes <= startMinutes) {
-        console.log('[DIAG-SAVE] blocked by guard: invalid scheduled shift time', {
-          shiftStart: draft.shiftStart,
-          shiftEnd: draft.shiftEnd,
-          startMinutes,
-          endMinutes,
-        });
         toast.error('Shift end must be after shift start.');
         return;
       }
@@ -581,12 +566,6 @@ export default function SchedulerPage() {
       currentUser?.propertyId ||
       null;
     if (!propertyId) {
-      console.log('[DIAG-SAVE] blocked by guard: missing propertyId', {
-        employeeId: draft.employeeId,
-        employeePropertyId: employee?.propertyId ?? null,
-        propertyScope,
-        currentUserPropertyId: currentUser?.propertyId ?? null,
-      });
       toast.error('Select a property before saving the shift.');
       return;
     }
@@ -608,41 +587,66 @@ export default function SchedulerPage() {
       org_id: currentUser.orgId,
     };
 
-    console.log('[DIAG-SAVE] about to call supabase insert/upsert', {
-      mode: existing ? 'update' : 'insert',
-      existingId: existing?.id ?? null,
-      payload,
-    });
+    const saveShiftAttempt = (signal: AbortSignal) => {
+      const request = existing
+        ? supabase
+            .from('schedule_entries')
+            .update(payload)
+            .eq('id', existing.id)
+            .eq('org_id', currentUser.orgId)
+        : supabase.from('schedule_entries').insert(payload);
 
-    let response;
-    if (existing) {
-      console.log('[DIAG-SAVE] calling .from().update() now', { time: new Date().toISOString() });
-      const updatePromise = supabase
-        .from('schedule_entries')
-        .update(payload)
-        .eq('id', existing.id)
-        .eq('org_id', currentUser.orgId);
-      console.log('[DIAG-SAVE] update() call returned a promise, about to await', { time: new Date().toISOString() });
-      response = await withSchedulerMutationTimeout(updatePromise);
-      console.log('[DIAG-SAVE] update() await resolved', {
-        time: new Date().toISOString(),
-        hasError: Boolean(response.error),
-      });
-    } else {
-      console.log('[DIAG-SAVE] calling .from().insert() now', { time: new Date().toISOString() });
-      const insertPromise = supabase.from('schedule_entries').insert(payload);
-      console.log('[DIAG-SAVE] insert() call returned a promise, about to await', { time: new Date().toISOString() });
-      response = await withSchedulerMutationTimeout(insertPromise);
-      console.log('[DIAG-SAVE] insert() await resolved', {
-        time: new Date().toISOString(),
-        hasError: Boolean(response.error),
-      });
+      return request.abortSignal(signal);
+    };
+
+    type ShiftSaveResponse = Awaited<ReturnType<typeof saveShiftAttempt>>;
+
+    const saveShiftWithRetry = async (): Promise<ShiftSaveResponse> => {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8_000);
+        try {
+          const result = await saveShiftAttempt(controller.signal);
+          if (result.error) {
+            return result;
+          }
+          return result;
+        } catch (error) {
+          const isAbort = error instanceof Error && error.name === 'AbortError';
+          if (attempt === 1 && isAbort) {
+            console.warn('Shift save timed out, retrying once automatically...');
+            continue;
+          }
+          if (isAbort) {
+            return { data: null, error: new Error('Save timed out — please try again') } as ShiftSaveResponse;
+          }
+          throw error;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      }
+
+      return { data: null, error: new Error('Save timed out — please try again') } as ShiftSaveResponse;
+    };
+
+    let response: ShiftSaveResponse;
+    try {
+      response = await saveShiftWithRetry();
+    } catch (error) {
+      setIsSaving(false);
+      const message =
+        error instanceof Error
+          ? error.message
+          : error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string'
+            ? (error as { message: string }).message
+            : 'Save timed out — please try again';
+      toast.error(`Failed to save shift: ${message}`);
+      return;
     }
 
     setIsSaving(false);
 
     if (response.error) {
-      console.log('[DIAG-SAVE] blocked by guard: response.error', { error: response.error });
       toast.error(`Failed to save shift: ${response.error.message}`);
       return;
     }
@@ -652,7 +656,6 @@ export default function SchedulerPage() {
     const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : 'crew member';
     toast.success(existing ? `Shift updated for ${employeeName}` : `Shift added for ${employeeName}`);
   }
-
   async function handleDeleteShift() {
     if (isReadOnly) return;
     if (!supabase || !currentUser?.orgId) return;
