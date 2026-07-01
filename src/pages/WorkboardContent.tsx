@@ -3950,8 +3950,9 @@ export default function WorkboardContent() {
       }
     }
 
-    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
-    void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
+    void Promise.all(
+      [['assignments'], ['task-requests']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    );
     setLinkedRequestId(null);
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
