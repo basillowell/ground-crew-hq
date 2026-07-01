@@ -3639,20 +3639,15 @@ export default function WorkboardContent() {
   }, [assignmentDialogOpen, closeAssignmentDialog, fallbackEligibleEmployees, isReadOnly, openAssignmentDialog, selectedEmployeeId]);
 
   async function saveAssignment(ignoreWeatherConflict = false) {
-    console.log('[DIAG-DISPATCH] handler called', { time: new Date().toISOString() });
-    console.log('[DIAG-DISPATCH] checking guard: isReadOnly', { value: isReadOnly });
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
       return;
     }
-    console.log('[DIAG-DISPATCH] checking guard: supabase available', { value: Boolean(supabase) });
     if (!supabase) return;
-    console.log('[DIAG-DISPATCH] checking guard: orgId', { value: currentUser?.orgId ?? null });
     if (!currentUser?.orgId) {
       toast.error('Missing organization context.');
       return;
     }
-    console.log('[DIAG-DISPATCH] checking guard: valid assignment date', { value: isValidAssignmentDate(boardDate), boardDate });
     if (!isValidAssignmentDate(boardDate)) {
       toast.error('Invalid assignment date.');
       return;
@@ -3660,20 +3655,10 @@ export default function WorkboardContent() {
     const resolvedPropertyId = editingAssignmentId
       ? (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ?? assignmentDraft.propertyId ?? null
       : null;
-    console.log('[DIAG-DISPATCH] checking guard: editing assignment property resolved', {
-      editingAssignmentId,
-      resolvedPropertyId,
-    });
     if (editingAssignmentId && !resolvedPropertyId) {
       toast.error('No property available for assignment.');
       return;
     }
-
-    console.log('[DIAG-DISPATCH] checking guard: weather conflict override', {
-      hasSprayConflict: dispatchWeatherConflict.hasSprayConflict,
-      weatherConflictOverride,
-      ignoreWeatherConflict,
-    });
     if (dispatchWeatherConflict.hasSprayConflict && !weatherConflictOverride && !ignoreWeatherConflict) {
       toast.warning('Weather conflict detected. Review warning before dispatching.');
       return;
@@ -3682,15 +3667,10 @@ export default function WorkboardContent() {
     let linkedRequestTaskId: string | null = editingAssignmentId ? assignmentDraft.taskId || null : null;
 
     if (!editingAssignmentId) {
-      console.log('[DIAG-DISPATCH] checking guard: assignment employee selected', { value: assignmentDraft.employeeId });
       if (!assignmentDraft.employeeId) {
         toast.error('Select a crew member.');
         return;
       }
-      console.log('[DIAG-DISPATCH] checking guard: at least one task row selected', {
-        value: taskRows.some((row) => Boolean(row.taskId)),
-        taskRows,
-      });
       if (taskRows.every((row) => !row.taskId)) {
         toast.error('Add at least one task.');
         return;
@@ -3698,10 +3678,6 @@ export default function WorkboardContent() {
       const employee =
         scheduledEmployees.find((entry) => entry.id === assignmentDraft.employeeId) ??
         fallbackEligibleEmployees.find((entry) => entry.id === assignmentDraft.employeeId);
-      console.log('[DIAG-DISPATCH] checking guard: selected employee found', {
-        employeeId: assignmentDraft.employeeId,
-        value: Boolean(employee),
-      });
       if (!employee) {
         toast.error('Selected crew member not found.');
         return;
@@ -3717,10 +3693,8 @@ export default function WorkboardContent() {
       let pendingMinutes = 0;
 
       for (const taskRow of taskRows) {
-        console.log('[DIAG-DISPATCH] checking guard: task row has taskId', { taskRow });
         if (!taskRow.taskId) continue;
         const propertyIdForRow = taskRow.propertyId || activeProperty?.id || properties[0]?.id || null;
-        console.log('[DIAG-DISPATCH] checking guard: task row property resolved', { taskRow, propertyIdForRow });
         if (!propertyIdForRow) {
           toast.warning('Skipped a task: no property selected.');
           continue;
@@ -3728,10 +3702,6 @@ export default function WorkboardContent() {
         const selectedTask = taskLibrary.find((task) => task.id === taskRow.taskId) ?? null;
         const selectedTaskName = selectedTask?.name ?? 'Task';
         const selectedTaskId = String(selectedTask?.id ?? '').trim();
-        console.log('[DIAG-DISPATCH] checking guard: task row task id is valid uuid', {
-          selectedTaskId,
-          selectedTaskName,
-        });
         if (!isValidUuid(selectedTaskId)) {
           toast.warning(`Skipped ${selectedTaskName}: invalid task.`);
           continue;
@@ -3739,11 +3709,6 @@ export default function WorkboardContent() {
         if (taskRow.equipmentId) {
           const selectedEquipment = availableEquipment.find((unit) => unit.id === taskRow.equipmentId);
           const isReady = selectedEquipment && String(selectedEquipment.status ?? '').toLowerCase() === 'available' && selectedEquipment.active !== false;
-          console.log('[DIAG-DISPATCH] checking guard: task row equipment ready', {
-            equipmentId: taskRow.equipmentId,
-            isReady: Boolean(isReady),
-            selectedEquipment,
-          });
           if (!isReady) {
             toast.warning(`Skipped ${selectedTaskName}: equipment is not ready.`);
             continue;
@@ -3783,11 +3748,6 @@ export default function WorkboardContent() {
           date: String(row.date ?? ''),
           status: String(row.status ?? ''),
         });
-        console.log('[DIAG-DISPATCH] checking guard: task row payload validation', {
-          selectedTaskName,
-          validationError,
-          row,
-        });
         if (validationError) {
           toast.warning(`Skipped ${selectedTaskName}: ${validationError}`);
           continue;
@@ -3810,35 +3770,58 @@ export default function WorkboardContent() {
           status: normalizeAssignmentStatus(writeStatus) as Assignment['status'],
         });
       }
-
-      console.log('[DIAG-DISPATCH] checking guard: rows to insert available', {
-        value: rowsToInsert.length,
-        rowsToInsert,
-      });
       if (rowsToInsert.length === 0) {
         toast.error('No valid assignments to dispatch.');
         return;
       }
+      const dispatchAssignmentWithRetry = async (rows: typeof rowsToInsert) => {
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8_000);
+          try {
+            const result = await supabase
+              .from('assignments')
+              .insert(rows)
+              .select()
+              .abortSignal(controller.signal);
+            if (result.error) {
+              throw result.error;
+            }
+            return result;
+          } catch (err) {
+            const isAbort = err instanceof Error && err.name === 'AbortError';
+            if (attempt === 1 && isAbort) {
+              console.warn('[DISPATCH] insert timed out, retrying once...');
+              continue;
+            }
+            throw err;
+          } finally {
+            clearTimeout(timeoutId);
+          }
+        }
 
-      console.log('[DIAG-DISPATCH] about to call supabase insert', { payload: rowsToInsert });
-      const { data, error } = await withWorkboardMutationTimeout(supabase
-        .from('assignments')
-        .insert(rowsToInsert)
-        .select());
-      console.log('[DIAG-DISPATCH] insert returned', {
-        time: new Date().toISOString(),
-        hasError: Boolean(error),
-        rowCount: data?.length ?? 0,
-      });
+        throw new Error('Save timed out — please try again');
+      };
 
-      console.log('[DIAG-DISPATCH] checking guard: insert error', { error });
+      let data: Array<Record<string, unknown>> | null = null;
+      let error: { message: string } | null = null;
+      try {
+        const result = await dispatchAssignmentWithRetry(rowsToInsert);
+        data = (result.data ?? []) as Array<Record<string, unknown>>;
+      } catch (err) {
+        const maybeMessage = err && typeof err === 'object' && 'message' in err
+          ? (err as { message?: unknown }).message
+          : null;
+        error = { message: typeof maybeMessage === 'string' ? maybeMessage : 'Task assignment failed.' };
+      }
+
       if (error) {
         console.error('[ASSIGNMENT ERROR]', { error, payload: rowsToInsert });
         toast.error(`Task assignment failed: ${error.message}`);
         return;
       }
 
-      const insertedRows = (data ?? []) as Array<Record<string, unknown>>;
+      const insertedRows = data ?? [];
       if (insertedRows.length > 0) {
         insertedRows.forEach((row) => {
           appendAssignmentToCaches({
@@ -3860,19 +3843,10 @@ export default function WorkboardContent() {
       const employeeName = `${employee.firstName} ${employee.lastName}`.trim() || 'crew member';
       toast.success(`${rowsToInsert.length} tasks assigned to ${employeeName}.`);
     } else {
-      console.log('[DIAG-DISPATCH] checking guard: edit draft has task and employee', {
-        taskId: assignmentDraft.taskId,
-        employeeId: assignmentDraft.employeeId,
-      });
       if (!assignmentDraft.taskId || !assignmentDraft.employeeId) return;
       if (assignmentDraft.equipmentId) {
         const selectedEquipment = availableEquipment.find((unit) => unit.id === assignmentDraft.equipmentId);
         const isReady = selectedEquipment && String(selectedEquipment.status ?? '').toLowerCase() === 'available' && selectedEquipment.active !== false;
-        console.log('[DIAG-DISPATCH] checking guard: edit equipment ready', {
-          equipmentId: assignmentDraft.equipmentId,
-          isReady: Boolean(isReady),
-          selectedEquipment,
-        });
         if (!isReady) {
           toast.error('Selected equipment is not ready for assignment.');
           return;
@@ -3892,10 +3866,6 @@ export default function WorkboardContent() {
       const selectedTask = taskLibrary.find((task) => task.id === assignmentDraft.taskId) ?? null;
       const selectedTaskName = linkedRequestTitle ?? selectedTask?.name ?? 'Task';
       const selectedTaskId = String(selectedTask?.id ?? '').trim();
-      console.log('[DIAG-DISPATCH] checking guard: edit selected task id is valid uuid', {
-        selectedTaskId,
-        selectedTaskName,
-      });
       if (!isValidUuid(selectedTaskId)) {
         toast.error('Selected task is invalid. Please reselect the task.');
         return;
@@ -3934,28 +3904,15 @@ export default function WorkboardContent() {
         date: String(basePayload.date ?? ''),
         status: String(basePayload.status ?? ''),
       });
-      console.log('[DIAG-DISPATCH] checking guard: edit payload validation', {
-        validationError,
-        basePayload,
-      });
       if (validationError) {
         toast.error(validationError);
         return;
       }
-
-      console.log('[DIAG-DISPATCH] about to call supabase upsert', { payload: basePayload });
       const { data, error } = await withWorkboardMutationTimeout(supabase
         .from('assignments')
         .upsert(basePayload)
         .select()
         .single());
-      console.log('[DIAG-DISPATCH] upsert returned', {
-        time: new Date().toISOString(),
-        hasError: Boolean(error),
-        rowId: data?.id ?? null,
-      });
-
-      console.log('[DIAG-DISPATCH] checking guard: upsert error', { error });
       if (error) {
         console.error('[ASSIGNMENT ERROR]', { error, payload: basePayload });
         toast.error(`Task assignment failed: ${error.message}`);
