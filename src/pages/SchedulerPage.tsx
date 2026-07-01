@@ -651,8 +651,18 @@ export default function SchedulerPage() {
       return;
     }
 
-    await queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
-    handleCloseModal(true);
+    setDialogOpen(false);
+    setIsShiftModalDirty(false);
+    setSelectedTemplateId('');
+    setDraft({
+      employeeId: activeEmployees[0]?.id ?? '',
+      date: weekDays[0]?.date ?? weekStart,
+      shiftStart: schedulerDefaults.start || '07:30',
+      shiftEnd: schedulerDefaults.end || '16:00',
+      status: 'scheduled',
+      notes: '',
+    });
+    void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
     const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : 'crew member';
     toast.success(existing ? `Shift updated for ${employeeName}` : `Shift added for ${employeeName}`);
   }
