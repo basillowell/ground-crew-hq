@@ -22,6 +22,24 @@ const noOpLock = async <T>(
 ): Promise<T> => {
   return await fn();
 };
+// Uses cookie storage instead of localStorage for session persistence.
+// Cookies survive tab backgrounding and Chrome's memory saver without
+// going through the Web Lock refresh cycle that causes session-staleness.
+// Same reliability model as server-side session apps (e.g. ASB Task Tracker)
+// without requiring a backend rewrite. Authorized exception per CODERULES
+// Rule 4/21 - see ARCHITECTURE_ROADMAP.md.
+const cookieStorage = {
+  getItem: (key: string) => {
+    const match = document.cookie.match(new RegExp('(^| )' + key + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  },
+  setItem: (key: string, value: string) => {
+    document.cookie = `${key}=${encodeURIComponent(value)}; path=/; max-age=86400; SameSite=Lax; Secure`;
+  },
+  removeItem: (key: string) => {
+    document.cookie = `${key}=; path=/; max-age=0`;
+  },
+};
 
 export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey);
 export const supabaseConfigError = hasSupabaseConfig
@@ -34,6 +52,7 @@ export const supabase = hasSupabaseConfig
         persistSession: true,
         autoRefreshToken: true,
         lock: noOpLock,
+        storage: cookieStorage,
       },
       realtime: { params: { eventsPerSecond: 2 } },
     })
