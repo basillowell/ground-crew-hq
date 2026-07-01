@@ -6,6 +6,7 @@ import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
 const pkg = require("./package.json") as { version: string };
+const disableServiceWorker = process.env.NODE_ENV !== "production" || process.env.VERCEL_ENV === "preview";
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
@@ -23,6 +24,7 @@ export default defineConfig(() => ({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      disable: disableServiceWorker,
       includeAssets: ["favicon.svg", "favicon.ico"],
       manifest: {
         name: "Ground Crew HQ",
