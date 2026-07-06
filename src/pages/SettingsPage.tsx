@@ -179,7 +179,6 @@ interface PropertyItem {
   longitude: number | null;
   acreage: number | null;
   status: string | null;
-  weather_location_label: string | null;
   created_at: string | null;
 }
 
@@ -207,7 +206,6 @@ function toPropertyItem(property: LiveProperty, orgId: string | null): PropertyI
     longitude: property.longitude ?? null,
     acreage: property.acreage ?? null,
     status: property.status ?? null,
-    weather_location_label: null,
     created_at: null,
   };
 }
@@ -217,7 +215,6 @@ interface UsageStats {
   employees: number;
   tasks: number;
   scheduleEntriesThisMonth: number;
-  weatherLocations: number;
   departments: number;
   shiftTemplates: number;
 }
@@ -231,22 +228,6 @@ interface StandardOperatingProcedure {
   estimated_hours: number | null;
   color: string | null;
   is_active: boolean;
-}
-
-interface WeatherLocationItem {
-  id: string;
-  name: string;
-  property?: string | null;
-  area?: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  is_active?: boolean | null;
-}
-
-interface WeatherDisplayPrefsRow {
-  id?: string;
-  org_id: string;
-  enabled_widgets?: string[] | null;
 }
 
 function PlaceholderCard({ text }: { text: string }) {
@@ -1061,7 +1042,6 @@ function WorkspaceTab({
     employees: 0,
     tasks: 0,
     scheduleEntriesThisMonth: 0,
-    weatherLocations: 0,
     departments: 0,
     shiftTemplates: 0,
   });
@@ -1088,7 +1068,6 @@ function WorkspaceTab({
     const [
       { count: tasksCount, error: tasksError },
       { count: scheduleCount, error: scheduleError },
-      { count: weatherCount, error: weatherError },
       { count: shiftTemplatesCount, error: shiftTemplatesError },
       { data: equipmentTypesData, error: equipmentTypesError },
     ] = await Promise.all([
@@ -1099,16 +1078,14 @@ function WorkspaceTab({
         .eq('org_id', orgId)
         .gte('date', monthStartKey)
         .lte('date', monthEndKey),
-      supabase.from('weather_locations').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('is_active', true),
       supabase.from('shift_templates').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('active', true),
       supabase.from('equipment_types').select('id, name, category').eq('org_id', orgId).eq('active', true).order('name', { ascending: true }),
     ]);
 
-    if (tasksError || scheduleError || weatherError || shiftTemplatesError || equipmentTypesError) {
+    if (tasksError || scheduleError || shiftTemplatesError || equipmentTypesError) {
       setError(
         tasksError?.message ??
           scheduleError?.message ??
-          weatherError?.message ??
           shiftTemplatesError?.message ??
           equipmentTypesError?.message ??
           'Unable to load workspace settings',
@@ -1126,7 +1103,6 @@ function WorkspaceTab({
       employees: employeesQuery.data?.length ?? 0,
       tasks: tasksCount ?? 0,
       scheduleEntriesThisMonth: scheduleCount ?? 0,
-      weatherLocations: weatherCount ?? 0,
       departments: departmentsQuery.data?.length ?? 0,
       shiftTemplates: shiftTemplatesCount ?? 0,
     });
@@ -1741,7 +1717,6 @@ function WorkspaceTab({
       href: '/app/settings?tab=Operations',
     },
     { label: 'Add property', done: usageStats.properties > 0, href: '/app/settings?tab=Operations' },
-    { label: 'Configure weather', done: usageStats.weatherLocations > 0, href: '/app/settings?tab=Operations' },
     { label: 'Add departments', done: usageStats.departments > 0, href: '/app/settings?tab=Workforce' },
     { label: 'Add employees', done: usageStats.employees > 0, href: '/app/employees' },
     { label: 'Create shift templates', done: usageStats.shiftTemplates > 0, href: '/app/scheduler' },
@@ -2569,428 +2544,6 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
       <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
         <p className="text-sm text-text-muted">To change employee roles, go to the <span className="text-brand">Employees</span> page.</p>
       </div>
-    </div>
-  );
-}
-
-function WeatherTab({ orgId }: { orgId: string | null }) {
-  const propertiesQuery = useProperties(orgId ?? undefined);
-  const [locations, setLocations] = useState<WeatherLocationItem[]>([]);
-  const properties = useMemo(
-    () =>
-      (propertiesQuery.data ?? [])
-        .map(({ id, name }) => ({ id, name }))
-        .sort((left, right) => left.name.localeCompare(right.name)),
-    [propertiesQuery.data],
-  );
-  const [prefs, setPrefs] = useState<{ show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }>({
-    show_hourly: true,
-    show_forecast: true,
-    show_rainfall: true,
-  });
-  const [loading, setLoading] = useState(true);
-  const [savingPrefs, setSavingPrefs] = useState(false);
-  const [savingLocation, setSavingLocation] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
-  const [stationName, setStationName] = useState('');
-  const [stationArea, setStationArea] = useState('Main Course');
-  const [stationPropertyId, setStationPropertyId] = useState('');
-  const [locationMethod, setLocationMethod] = useState<'zip' | 'coords' | 'geo'>('zip');
-  const [zipCode, setZipCode] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
-  const [zipLookupLoading, setZipLookupLoading] = useState(false);
-
-  const areaOptions = ['Main Course', 'Practice Range', 'Maintenance Yard', 'North Fields', 'South Fields', 'Custom'] as const;
-
-  const resetForm = () => {
-    setEditingLocationId(null);
-    setStationName('');
-    setStationArea('Main Course');
-    setStationPropertyId(properties[0]?.id ?? '');
-    setLocationMethod('zip');
-    setZipCode('');
-    setLatitude('');
-    setLongitude('');
-  };
-
-  const fetchWeatherSettings = useCallback(async () => {
-    if (!supabase || !orgId) return;
-    setLoading(true);
-    setError(null);
-    const [{ data: locationData, error: locationError }, { data: prefsData, error: prefsError }] = await Promise.all([
-      supabase
-        .from('weather_locations')
-        .select('id, name, property, area, latitude, longitude, org_id, is_active')
-        .eq('org_id', orgId)
-        .order('name', { ascending: true }),
-      supabase
-        .from('weather_display_prefs')
-        .select('id, org_id, enabled_widgets')
-        .eq('org_id', orgId)
-        .maybeSingle(),
-    ]);
-
-    if (locationError || prefsError) {
-      setError(locationError?.message ?? prefsError?.message ?? 'Unable to load weather settings');
-      setLoading(false);
-      return;
-    }
-
-    setLocations((locationData ?? []) as WeatherLocationItem[]);
-    const enabledWidgets = ((prefsData as WeatherDisplayPrefsRow | null)?.enabled_widgets ?? []) as string[];
-    const hasWidgets = enabledWidgets.length > 0;
-    setPrefs({
-      show_hourly: hasWidgets ? enabledWidgets.includes('hourly-forecast') || enabledWidgets.includes('hourly_forecast') : true,
-      show_forecast: hasWidgets ? enabledWidgets.includes('daily-forecast') || enabledWidgets.includes('7day_forecast') : true,
-      show_rainfall: hasWidgets ? enabledWidgets.includes('rain') || enabledWidgets.includes('precipitation') : true,
-    });
-    if (!stationPropertyId && properties.length > 0) {
-      setStationPropertyId(properties[0].id);
-    }
-    setLoading(false);
-  }, [orgId, properties, stationPropertyId]);
-
-  useEffect(() => {
-    if (!orgId) return;
-    if (propertiesQuery.isLoading) return;
-    void fetchWeatherSettings();
-  }, [fetchWeatherSettings, orgId, propertiesQuery.isLoading]);
-
-  const savePrefs = useCallback(async (nextPrefs: { show_hourly: boolean; show_forecast: boolean; show_rainfall: boolean }) => {
-    if (!supabase || !orgId) return;
-    setSavingPrefs(true);
-    setError(null);
-    const enabledWidgets = [
-      ...(nextPrefs.show_hourly ? ['hourly-forecast'] : []),
-      ...(nextPrefs.show_forecast ? ['daily-forecast'] : []),
-      ...(nextPrefs.show_rainfall ? ['rain'] : []),
-    ];
-    const { error: upsertError } = await supabase
-      .from('weather_display_prefs')
-      .upsert(
-        {
-          org_id: orgId,
-          enabled_widgets: enabledWidgets,
-        },
-        { onConflict: 'org_id' },
-      );
-    setSavingPrefs(false);
-    if (upsertError) {
-      setError(upsertError.message);
-      toast.error(`Failed to save weather display preferences: ${upsertError.message}`);
-      return;
-    }
-    toast.success('Weather display preferences saved');
-  }, [orgId]);
-
-  const updatePref = (key: 'show_hourly' | 'show_forecast' | 'show_rainfall', checked: boolean) => {
-    const next = { ...prefs, [key]: checked };
-    setPrefs(next);
-    void savePrefs(next);
-  };
-
-  const toggleActive = async (locationId: string, nextActive: boolean) => {
-    if (!supabase || !orgId) return;
-    const { error: updateError } = await supabase
-      .from('weather_locations')
-      .update({ is_active: nextActive })
-      .eq('id', locationId)
-      .eq('org_id', orgId);
-    if (updateError) {
-      setError(updateError.message);
-      toast.error(`Failed to update station status: ${updateError.message}`);
-      return;
-    }
-    setLocations((current) => current.map((location) => (location.id === locationId ? { ...location, is_active: nextActive } : location)));
-    toast.success(`Station ${nextActive ? 'activated' : 'deactivated'}`);
-  };
-
-  const beginEdit = (location: WeatherLocationItem) => {
-    setEditingLocationId(location.id);
-    setStationName(location.name ?? '');
-    setStationArea(location.area ?? 'Main Course');
-    setStationPropertyId((location as WeatherLocationItem & { property?: string }).property ?? '');
-    setLatitude(location.latitude != null ? String(location.latitude) : '');
-    setLongitude(location.longitude != null ? String(location.longitude) : '');
-    setLocationMethod('coords');
-  };
-
-  const deleteLocation = async (locationId: string) => {
-    if (!supabase || !orgId) return;
-    const confirmed = window.confirm('Delete this weather station?');
-    if (!confirmed) return;
-    const { error: deleteError } = await supabase.from('weather_locations').delete().eq('id', locationId).eq('org_id', orgId);
-    if (deleteError) {
-      setError(deleteError.message);
-      toast.error(`Failed to delete station: ${deleteError.message}`);
-      return;
-    }
-    setLocations((current) => current.filter((location) => location.id !== locationId));
-    toast.success('Weather station deleted');
-  };
-
-  const fillCoordinatesFromZip = async () => {
-    if (!zipCode.trim()) return;
-    setZipLookupLoading(true);
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(zipCode.trim())}&country=US&format=json`);
-      const payload = (await response.json()) as Array<{ lat: string; lon: string }>;
-      const first = payload[0];
-      if (!first) {
-        toast.error('No coordinates found for that zip code.');
-        setZipLookupLoading(false);
-        return;
-      }
-      setLatitude(String(Number(first.lat).toFixed(4)));
-      setLongitude(String(Number(first.lon).toFixed(4)));
-      toast.success(`Coordinates loaded for ZIP ${zipCode.trim()}`);
-    } catch (lookupError) {
-      const message = lookupError instanceof Error ? lookupError.message : 'Lookup failed';
-      toast.error(`ZIP lookup failed: ${message}`);
-    } finally {
-      setZipLookupLoading(false);
-    }
-  };
-
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not available on this device.');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLatitude(position.coords.latitude.toFixed(4));
-        setLongitude(position.coords.longitude.toFixed(4));
-        toast.success('Current location loaded');
-      },
-      (geoError) => toast.error(`Unable to get location: ${geoError.message}`),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
-    );
-  };
-
-  const saveStation = async () => {
-    if (!supabase || !orgId || !stationName.trim()) return;
-    if (!stationPropertyId) {
-      toast.error('Select a property.');
-      return;
-    }
-    const lat = Number(latitude);
-    const lng = Number(longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      toast.error('Enter valid latitude and longitude.');
-      return;
-    }
-
-    setSavingLocation(true);
-    setError(null);
-    if (editingLocationId) {
-      const { error: updateError } = await supabase
-        .from('weather_locations')
-        .update({
-          name: stationName.trim(),
-          area: stationArea,
-          latitude: lat,
-          longitude: lng,
-          property: stationPropertyId,
-        })
-        .eq('id', editingLocationId)
-        .eq('org_id', orgId);
-      setSavingLocation(false);
-      if (updateError) {
-        setError(updateError.message);
-        toast.error(`Failed to update weather station: ${updateError.message}`);
-        return;
-      }
-      toast.success(`Weather station updated: ${stationName.trim()}`);
-      await fetchWeatherSettings();
-      resetForm();
-      return;
-    }
-
-    const newId =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const { error: insertError } = await supabase.from('weather_locations').insert({
-      id: newId,
-      name: stationName.trim(),
-      area: stationArea,
-      latitude: lat,
-      longitude: lng,
-      property: stationPropertyId,
-      org_id: orgId,
-      is_active: true,
-    });
-    setSavingLocation(false);
-    if (insertError) {
-      setError(insertError.message);
-      toast.error(`Failed to add weather station: ${insertError.message}`);
-      return;
-    }
-    toast.success(`Weather station added: ${stationName.trim()}`);
-    await fetchWeatherSettings();
-    resetForm();
-  };
-
-  if (!orgId || loading) return <PageSkeleton />;
-
-  if (error) {
-    return (
-      <ErrorRetry message={`Failed to load: ${error}`} onRetry={() => void fetchWeatherSettings()} />
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <SettingsCard title="Weather Stations">
-        {locations.length === 0 ? (
-          <p className="text-sm text-text-muted">No weather stations configured yet.</p>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-surface-border">
-            {locations.map((location) => (
-              <div key={location.id} className="flex items-start justify-between gap-3 border-b border-surface-border px-4 py-3 last:border-0 hover:bg-surface-hover">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-text-primary">{location.name}</p>
-                  <p className="mt-0.5 text-xs text-text-muted">
-                    {(location as WeatherLocationItem & { property?: string }).property ?? 'No property'} · {location.area ?? 'General'}
-                  </p>
-                  <p className="mt-0.5 text-xs text-text-muted">
-                    {location.latitude ?? '—'}, {location.longitude ?? '—'}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-secondary">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(location.is_active)}
-                      onChange={(event) => void toggleActive(location.id, event.target.checked)}
-                      className="rounded"
-                    />
-                    {location.is_active ? 'Active' : 'Inactive'}
-                  </label>
-                  <button
-                    onClick={() => beginEdit(location)}
-                    className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary"
-                    aria-label={`Edit ${location.name}`}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => void deleteLocation(location.id)}
-                    className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning"
-                    aria-label={`Delete ${location.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SettingsCard>
-
-      <SettingsCard title={editingLocationId ? 'Edit Station' : 'Add Station'}>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Station name</span>
-            <input className={settingsInputClass} value={stationName} onChange={(event) => setStationName(event.target.value)} placeholder="Sarasota Polo Club" />
-          </label>
-          <label className="grid gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Area</span>
-            <select className={settingsInputClass} value={stationArea} onChange={(event) => setStationArea(event.target.value)}>
-              {areaOptions.map((area) => (
-                <option key={`area-option-${area}`} value={area}>{area}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Property</span>
-            <select className={settingsInputClass} value={stationPropertyId} onChange={(event) => setStationPropertyId(event.target.value)}>
-              <option value="">Select property</option>
-              {properties.map((property) => (
-                <option key={`weather-property-${property.id}`} value={property.id}>{property.name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-4">
-          {(['zip', 'coords', 'geo'] as const).map((method) => (
-            <label key={method} className="flex cursor-pointer items-center gap-1.5 text-sm text-text-secondary">
-              <input type="radio" checked={locationMethod === method} onChange={() => setLocationMethod(method)} />
-              {method === 'zip' ? 'Enter zip code' : method === 'coords' ? 'Enter coordinates' : 'Use my location'}
-            </label>
-          ))}
-        </div>
-
-        {locationMethod === 'zip' ? (
-          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-            <input className={settingsInputClass} value={zipCode} onChange={(event) => setZipCode(event.target.value)} onBlur={() => void fillCoordinatesFromZip()} placeholder="ZIP code" />
-            <button
-              onClick={() => void fillCoordinatesFromZip()}
-              className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover disabled:opacity-60"
-              disabled={zipLookupLoading}
-            >
-              {zipLookupLoading ? 'Looking up...' : 'Lookup'}
-            </button>
-          </div>
-        ) : null}
-
-        {locationMethod === 'geo' ? (
-          <button
-            onClick={useCurrentLocation}
-            className="mt-3 w-fit rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover"
-          >
-            Use My Location
-          </button>
-        ) : null}
-
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Latitude</span>
-            <input className={settingsInputClass} type="number" step="0.0001" value={latitude} onChange={(event) => setLatitude(event.target.value)} />
-          </label>
-          <label className="grid gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Longitude</span>
-            <input className={settingsInputClass} type="number" step="0.0001" value={longitude} onChange={(event) => setLongitude(event.target.value)} />
-          </label>
-        </div>
-
-        <div className="mt-4 flex gap-2">
-          <button
-            onClick={() => void saveStation()}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse hover:bg-brand-bright disabled:opacity-60"
-            disabled={savingLocation || !stationName.trim()}
-          >
-            {savingLocation ? 'Saving...' : editingLocationId ? 'Save Changes' : 'Save Station'}
-          </button>
-          {editingLocationId ? (
-            <button
-              onClick={resetForm}
-              className="rounded-lg border border-surface-border bg-surface-card px-4 py-2 text-sm text-text-secondary hover:bg-surface-hover"
-            >
-              Cancel Edit
-            </button>
-          ) : null}
-        </div>
-      </SettingsCard>
-
-      <SettingsCard title={`Display Preferences${savingPrefs ? ' · Saving…' : ''}`}>
-        <div className="space-y-3">
-          {([
-            { key: 'show_hourly' as const, label: 'Show hourly forecast' },
-            { key: 'show_forecast' as const, label: 'Show 7-day forecast' },
-            { key: 'show_rainfall' as const, label: 'Show rainfall data' },
-          ]).map(({ key, label }) => (
-            <label key={key} className="flex cursor-pointer items-center gap-3 text-sm text-text-secondary">
-              <input type="checkbox" checked={prefs[key]} onChange={(event) => updatePref(key, event.target.checked)} className="rounded" />
-              {label}
-            </label>
-          ))}
-        </div>
-      </SettingsCard>
     </div>
   );
 }
