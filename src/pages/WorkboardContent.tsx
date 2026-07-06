@@ -614,6 +614,12 @@ export default function WorkboardContent() {
   const timelineSaveWarnedRef = useRef<Record<string, boolean>>({});
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
   const assignmentFlashTimeoutsRef = useRef<Record<string, number>>({});
+  const pendingRealtimeInvalidationsRef = useRef<{
+    assignments: boolean;
+    taskRequests: boolean;
+    scheduleEntries: boolean;
+    timeoutId: number | null;
+  }>({ assignments: false, taskRequests: false, scheduleEntries: false, timeoutId: null });
   const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
   const [selectedTemplateTaskIds, setSelectedTemplateTaskIds] = useState<string[]>([]);
   const [selectedTemplateEmployeeIds, setSelectedTemplateEmployeeIds] = useState<string[]>([]);
@@ -679,6 +685,33 @@ export default function WorkboardContent() {
       delete assignmentFlashTimeoutsRef.current[assignmentId];
     }, 2200);
   }, []);
+
+  const queueRealtimeInvalidation = useCallback((queryKey: 'assignments' | 'task-requests' | 'schedule-entries') => {
+    const pending = pendingRealtimeInvalidationsRef.current;
+    if (queryKey === 'assignments') pending.assignments = true;
+    if (queryKey === 'task-requests') pending.taskRequests = true;
+    if (queryKey === 'schedule-entries') pending.scheduleEntries = true;
+    if (pending.timeoutId !== null) return;
+
+    pending.timeoutId = window.setTimeout(() => {
+      const shouldInvalidateAssignments = pending.assignments;
+      const shouldInvalidateTaskRequests = pending.taskRequests;
+      const shouldInvalidateScheduleEntries = pending.scheduleEntries;
+      pending.assignments = false;
+      pending.taskRequests = false;
+      pending.scheduleEntries = false;
+      pending.timeoutId = null;
+
+      const invalidations = [
+        ...(shouldInvalidateAssignments ? [queryClient.invalidateQueries({ queryKey: ['assignments'] })] : []),
+        ...(shouldInvalidateTaskRequests ? [queryClient.invalidateQueries({ queryKey: ['task-requests'] })] : []),
+        ...(shouldInvalidateScheduleEntries ? [queryClient.invalidateQueries({ queryKey: ['schedule-entries'] })] : []),
+      ];
+      if (invalidations.length > 0) {
+        void Promise.all(invalidations);
+      }
+    }, 0);
+  }, [queryClient]);
 
   const laneOrderStorageKey = useMemo(
     () => `workflow-lane-order:${boardDate}:${department}:${groupFilter}`,
@@ -1173,7 +1206,9 @@ export default function WorkboardContent() {
     }
     sessionStorage.setItem(sessionKey, 'true');
     toast.success(`Assigned ${inserts.length} recurring tasks to ${targetCrewCount} crew members`);
-    await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    }, 0);
   }, [
     assignmentsQuery.isLoading,
     authOrgId,
@@ -1260,15 +1295,15 @@ export default function WorkboardContent() {
                 toast.success(`${fullName} ${actionLabel} ${taskLabel}`);
               }
             }
-            void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+            queueRealtimeInvalidation('assignments');
           },
         )
         .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests', filter: `org_id=eq.${orgId}` }, () => {
           setLastRealtimeRefreshAt(Date.now());
-          void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
+          queueRealtimeInvalidation('task-requests');
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `org_id=eq.${orgId}` }, () => {
-          void queryClient.invalidateQueries({ queryKey: ['schedule-entries'] });
+          queueRealtimeInvalidation('schedule-entries');
         })
         .subscribe();
     }, 5000);
@@ -1277,7 +1312,7 @@ export default function WorkboardContent() {
       window.clearTimeout(timer);
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [currentUser?.authUser?.id, orgId, queryClient, triggerAssignmentFlash]);
+  }, [currentUser?.authUser?.id, orgId, queueRealtimeInvalidation, triggerAssignmentFlash]);
 
   useEffect(
     () => () => {
@@ -1285,6 +1320,10 @@ export default function WorkboardContent() {
       pendingDeleteTimeoutsRef.current = {};
       Object.values(assignmentFlashTimeoutsRef.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
       assignmentFlashTimeoutsRef.current = {};
+      if (pendingRealtimeInvalidationsRef.current.timeoutId !== null) {
+        window.clearTimeout(pendingRealtimeInvalidationsRef.current.timeoutId);
+        pendingRealtimeInvalidationsRef.current.timeoutId = null;
+      }
     },
     [],
   );
@@ -1649,7 +1688,9 @@ export default function WorkboardContent() {
       }
 
       toast.success(`Logged ${nextHours.toFixed(1)}h for ${assignment.title || 'task'}`);
-      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      }, 0);
     },
     [assignmentsQuery.queryKey, currentUser?.orgId, queryClient],
   );
@@ -2071,8 +2112,10 @@ export default function WorkboardContent() {
       } else {
         toast.success('Times saved');
       }
-      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
       setSavingTimelineAssignmentId(null);
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      }, 0);
       return true;
     },
     [currentUser?.orgId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, queryClient, syncTimelineCaches],
@@ -2142,7 +2185,9 @@ export default function WorkboardContent() {
       }
 
       toast.success('Break logged');
-      await queryClient.invalidateQueries({ queryKey: ['workboard-break-clock-events'] });
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['workboard-break-clock-events'] });
+      }, 0);
       return true;
     },
     [boardDate, currentUser?.orgId, effectivePropertyId, employeeList, operationalTimezone, queryClient, scheduleList],
@@ -2550,7 +2595,9 @@ export default function WorkboardContent() {
     setQuickPlanSuggestions([]);
     setSelectedQuickPlanIds([]);
     setQuickPlanEmptyMessage(null);
-    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    }, 0);
   }, [
     activeProperty?.id,
     authOrgId,
@@ -2675,7 +2722,9 @@ export default function WorkboardContent() {
     setSelectedTemplateEmployeeIds([]);
     setApplyTemplateToAllCrew(true);
     toast.success(`Applied ${selectedTasks.length} tasks to ${targetEmployeeIds.length} crew members.`);
-    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    }, 0);
   }, [
     activeProperty?.id,
     applyTemplateToAllCrew,
@@ -2962,7 +3011,9 @@ export default function WorkboardContent() {
       if (error) {
         toast.error(`Failed to archive report: ${error.message}`);
       } else {
-        void queryClient.invalidateQueries({ queryKey: ['notes'] });
+        window.setTimeout(() => {
+          void queryClient.invalidateQueries({ queryKey: ['notes'] });
+        }, 0);
       }
     }
     setEndOfDayReportGenerating(false);
@@ -3576,15 +3627,17 @@ export default function WorkboardContent() {
       }
     }
 
-    void Promise.all(
-      [['assignments'], ['task-requests']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-    );
     setLinkedRequestId(null);
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
     setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
     setIsAssignmentModalDirty(false);
     closeAssignmentDialog(true);
+    window.setTimeout(() => {
+      void Promise.all(
+        [['assignments'], ['task-requests']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      );
+    }, 0);
   }
 
   async function removeAssignment(assignmentId: string) {
@@ -3610,7 +3663,9 @@ export default function WorkboardContent() {
         return;
       }
       toast.success('Task removed');
-      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      }, 0);
     }, 3000);
 
     pendingDeleteTimeoutsRef.current[assignmentId] = timeoutId;
@@ -3653,7 +3708,9 @@ export default function WorkboardContent() {
         request.id === requestId ? { ...request, status: 'dismissed' } : request,
       ),
     );
-    await queryClient.invalidateQueries({ queryKey: ['task-requests'] });
+    window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['task-requests'] });
+    }, 0);
     toast.success('Request dismissed');
   }
 
@@ -3717,7 +3774,9 @@ export default function WorkboardContent() {
     if (error) {
       console.error('[ASSIGNMENT ERROR]', { error, payload: orderUpdates });
       toast.error(`Task order update failed: ${error.message}`);
-      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      }, 0);
       return;
     }
 
@@ -3726,7 +3785,9 @@ export default function WorkboardContent() {
     } else {
       toast.success('Task moved to a different crew member');
     }
-    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    }, 0);
   }
 
   async function moveTaskToEmployeeLane(sourceEmployeeId: string, targetEmployeeId: string, draggedAssignmentId: string) {
@@ -3755,11 +3816,15 @@ export default function WorkboardContent() {
     if (error) {
       console.error('[ASSIGNMENT ERROR]', { error, payload: orderUpdates });
       toast.error(`Task move failed: ${error.message}`);
-      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      }, 0);
       return;
     }
     toast.success('Task moved to a different crew member');
-    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    }, 0);
   }
 
   async function approveRequestToAssignment(request: PendingTaskRequest) {
@@ -3920,9 +3985,11 @@ export default function WorkboardContent() {
         toast.error(`Failed to save note: ${error.message}`);
         return;
       }
-      await queryClient.invalidateQueries({ queryKey: ['notes'] });
       setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
       toast.success('Note saved');
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['notes'] });
+      }, 0);
     } finally {
       setSavingNote(false);
     }
