@@ -254,6 +254,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[AUTH-EVENT]', event, {
+        hasSession: Boolean(session),
+        hasUser: Boolean(session?.user),
+        currentAuthState: authStateRef.current,
+        hasCurrentUser: hasCurrentUserRef.current,
+        time: new Date().toISOString(),
+      });
+
       if (event === 'SIGNED_OUT' || !session) {
         useAppStore.getState().reset();
         setUser(null);
@@ -276,7 +284,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === 'TOKEN_REFRESHED' && session?.user) {
+        console.log('[AUTH-EVENT] TOKEN_REFRESHED guard check', {
+          hasCurrentUser: hasCurrentUserRef.current,
+          orgIdIsNull: !orgId,
+        });
         if (!currentUser || !orgId) {
+          console.log('[AUTH-EVENT] TOKEN_REFRESHED calling loadAppUser');
           await loadAppUser(session.user.id, session.user);
         }
       }
