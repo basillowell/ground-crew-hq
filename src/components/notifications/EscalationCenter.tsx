@@ -47,22 +47,6 @@ const escalationRules: EscalationRule[] = [
     isActive: true,
   },
   {
-    id: 'esc-3',
-    severity: 'warning',
-    condition: 'rain or gust event near planned spray window',
-    message: 'Rain expected - review spray operations for {property}',
-    notifyRoles: ['admin', 'manager'],
-    isActive: true,
-  },
-  {
-    id: 'esc-4',
-    severity: 'info',
-    condition: 'weather station offline or stale',
-    message: 'Primary weather feed needs review',
-    notifyRoles: ['admin'],
-    isActive: true,
-  },
-  {
     id: 'esc-5',
     severity: 'critical',
     condition: 'scheduled crew without assignments',

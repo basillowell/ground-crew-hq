@@ -20,9 +20,6 @@ import {
   shiftTemplates,
   taskRequests,
   tasks,
-  weatherDailyLogs,
-  weatherLocations,
-  weatherStations,
   workLocations,
   type ApplicationArea,
   type AppUser,
@@ -45,9 +42,6 @@ import {
   type ShiftTemplate,
   type Task,
   type TaskRequest,
-  type WeatherDailyLog,
-  type WeatherLocation,
-  type WeatherStation,
   type WorkLocation,
 } from '@/data/seedData';
 import {
@@ -72,9 +66,6 @@ import {
   loadShiftTemplates as loadShiftTemplatesLocal,
   loadTaskRequests as loadTaskRequestsLocal,
   loadTasks as loadTasksLocal,
-  loadWeatherDailyLogs as loadWeatherDailyLogsLocal,
-  loadWeatherLocations as loadWeatherLocationsLocal,
-  loadWeatherStations as loadWeatherStationsLocal,
   loadWorkLocations as loadWorkLocationsLocal,
   loadCurrentAppUserId as loadCurrentAppUserIdLocal,
   loadCurrentPropertyId as loadCurrentPropertyIdLocal,
@@ -99,9 +90,6 @@ import {
   saveShiftTemplates as saveShiftTemplatesLocal,
   saveTaskRequests as saveTaskRequestsLocal,
   saveTasks as saveTasksLocal,
-  saveWeatherDailyLogs as saveWeatherDailyLogsLocal,
-  saveWeatherLocations as saveWeatherLocationsLocal,
-  saveWeatherStations as saveWeatherStationsLocal,
   saveWorkLocations as saveWorkLocationsLocal,
   saveCurrentAppUserId as saveCurrentAppUserIdLocal,
   saveCurrentPropertyId as saveCurrentPropertyIdLocal,
@@ -159,12 +147,6 @@ const collections = {
     loadLocal: loadEquipmentUnitsLocal,
     saveLocal: saveEquipmentUnitsLocal,
   } satisfies CollectionConfig<EquipmentUnit>,
-  weatherDailyLogs: {
-    table: 'weather_daily_logs',
-    seed: weatherDailyLogs,
-    loadLocal: loadWeatherDailyLogsLocal,
-    saveLocal: saveWeatherDailyLogsLocal,
-  } satisfies CollectionConfig<WeatherDailyLog>,
   manualRainfallEntries: {
     table: 'manual_rainfall_entries',
     seed: manualRainfallEntries,
@@ -183,18 +165,6 @@ const collections = {
     loadLocal: loadChemicalApplicationTankMixItemsLocal,
     saveLocal: saveChemicalApplicationTankMixItemsLocal,
   } satisfies CollectionConfig<ChemicalApplicationTankMixItem>,
-  weatherLocations: {
-    table: 'weather_locations',
-    seed: weatherLocations,
-    loadLocal: loadWeatherLocationsLocal,
-    saveLocal: saveWeatherLocationsLocal,
-  } satisfies CollectionConfig<WeatherLocation>,
-  weatherStations: {
-    table: 'weather_stations',
-    seed: weatherStations,
-    loadLocal: loadWeatherStationsLocal,
-    saveLocal: saveWeatherStationsLocal,
-  } satisfies CollectionConfig<WeatherStation>,
   chemicalProducts: {
     table: 'chemical_products',
     seed: chemicalProducts,
@@ -306,22 +276,6 @@ function normalizeTaskRequest(request: TaskRequest): TaskRequest {
   };
 }
 
-function normalizeWeatherLocation(location: WeatherLocation): WeatherLocation {
-  return {
-    ...location,
-    propertyId: location.propertyId ?? '',
-    address: location.address ?? '',
-  };
-}
-
-function normalizeWeatherStation(station: WeatherStation): WeatherStation {
-  return {
-    ...station,
-    providerType: station.providerType ?? 'manual',
-    stationCategory: station.stationCategory ?? (station.providerType === 'manual' ? 'manual' : 'regional-grid'),
-    timeZone: station.timeZone ?? '',
-  };
-}
 
 function getCurrentClubId() {
   const currentUserId = loadCurrentAppUserIdLocal();
@@ -488,12 +442,9 @@ export async function initializeDataStore() {
     hydrateCollection(collections.assignments),
     hydrateCollection(collections.notes),
     hydrateCollection(collections.equipmentUnits),
-    hydrateCollection(collections.weatherDailyLogs),
     hydrateCollection(collections.manualRainfallEntries),
     hydrateCollection(collections.chemicalApplicationLogs),
     hydrateCollection(collections.chemicalApplicationTankMixItems),
-    hydrateCollection(collections.weatherLocations),
-    hydrateCollection(collections.weatherStations),
     hydrateCollection(collections.chemicalProducts),
     hydrateCollection(collections.applicationAreas),
     hydrateCollection(collections.programSettings),
@@ -558,13 +509,6 @@ export function saveEquipmentUnits(value: EquipmentUnit[]) {
   syncCollection(collections.equipmentUnits, value);
 }
 
-export function loadWeatherDailyLogs() {
-  return collections.weatherDailyLogs.loadLocal();
-}
-
-export function saveWeatherDailyLogs(value: WeatherDailyLog[]) {
-  syncCollection(collections.weatherDailyLogs, value);
-}
 
 export function loadManualRainfallEntries() {
   return collections.manualRainfallEntries.loadLocal();
@@ -590,21 +534,6 @@ export function saveChemicalApplicationTankMixItems(value: ChemicalApplicationTa
   syncCollection(collections.chemicalApplicationTankMixItems, value);
 }
 
-export function loadWeatherLocations() {
-  return collections.weatherLocations.loadLocal().map(normalizeWeatherLocation);
-}
-
-export function saveWeatherLocations(value: WeatherLocation[]) {
-  syncCollection(collections.weatherLocations, value.map(normalizeWeatherLocation));
-}
-
-export function loadWeatherStations() {
-  return collections.weatherStations.loadLocal().map(normalizeWeatherStation);
-}
-
-export function saveWeatherStations(value: WeatherStation[]) {
-  syncCollection(collections.weatherStations, value.map(normalizeWeatherStation));
-}
 
 export function loadChemicalProducts() {
   return collections.chemicalProducts.loadLocal();

@@ -10,7 +10,6 @@ import type {
   Property,
   ScheduleEntry,
   Task,
-  WeatherLocation,
 } from '@/data/seedData';
 import type {
   Employee as StoreEmployee,
@@ -37,7 +36,6 @@ type DashboardData = {
   scheduleEntriesLast30: ScheduleEntry[];
   equipmentUnits: EquipmentUnit[];
   tasks: Task[];
-  weatherLocations: WeatherLocation[];
   notes: Note[];
   clockEvents: ClockEvent[];
 };
@@ -133,18 +131,6 @@ function normalizeTask(row: any): Task {
   };
 }
 
-function normalizeWeatherLocation(row: any): WeatherLocation {
-  return {
-    id: String(row.id),
-    name: String(row.name ?? ''),
-    property: String(row.property ?? ''),
-    propertyId: row.property_id ?? row.propertyId ?? undefined,
-    area: String(row.area ?? ''),
-    latitude: typeof row.latitude === 'number' ? row.latitude : row.latitude ? Number(row.latitude) : undefined,
-    longitude: typeof row.longitude === 'number' ? row.longitude : row.longitude ? Number(row.longitude) : undefined,
-    address: row.address ?? undefined,
-  };
-}
 
 function normalizeNote(row: any): Note {
   return {
@@ -184,12 +170,6 @@ function normalizeProgramSettings(row: any): ProgramSettings {
     fontThemePreset: String(row.font_theme_preset ?? 'modern'),
     logoUrl: row.logo_url ?? undefined,
     defaultDepartment: String(row.default_department ?? 'Operations'),
-    weatherDefaultLocationName: row.weather_default_location_name ?? undefined,
-    weatherDefaultAddress: row.weather_default_address ?? undefined,
-    weatherDefaultLatitude: row.weather_default_latitude ?? undefined,
-    weatherDefaultLongitude: row.weather_default_longitude ?? undefined,
-    weatherPreferredProvider: row.weather_preferred_provider ?? undefined,
-    weatherEnabledPanels: row.weather_enabled_panels ?? undefined,
   };
 }
 
@@ -229,7 +209,6 @@ export function useDashboardData(params: UseDashboardDataParams) {
         scheduleRangeResult,
         equipmentResult,
         tasksResult,
-        weatherLocationsResult,
         notesResult,
         clockEventsResult,
       ] = await Promise.all([
@@ -242,18 +221,6 @@ export function useDashboardData(params: UseDashboardDataParams) {
         ),
         withProperty<any>(withOrg<any>(supabase.from('equipment_units').select('*').order('name'))),
         withProperty<any>(withOrg<any>(supabase.from('tasks').select('*').order('name'))),
-        (() => {
-          let weatherLocationsQuery = withOrg<any>(
-            supabase
-              .from('weather_locations')
-              .select('id, name, property, area, latitude, longitude, org_id, is_active')
-              .order('name'),
-          );
-          if (scopedPropertyId) {
-            weatherLocationsQuery = weatherLocationsQuery.eq('property', scopedPropertyId);
-          }
-          return weatherLocationsQuery;
-        })(),
         withProperty<any>(withOrg<any>(supabase.from('notes').select('*').order('created_at', { ascending: false }))),
         withProperty<any>(withOrg<any>(supabase.from('clock_events').select('*').order('timestamp', { ascending: false }))),
       ]);
@@ -264,7 +231,6 @@ export function useDashboardData(params: UseDashboardDataParams) {
         scheduleRangeResult.error ||
         equipmentResult.error ||
         tasksResult.error ||
-        weatherLocationsResult.error ||
         notesResult.error ||
         clockEventsResult.error;
 
@@ -283,7 +249,6 @@ export function useDashboardData(params: UseDashboardDataParams) {
         scheduleEntriesLast30: (scheduleRangeResult.data ?? []).map(normalizeScheduleEntry),
         equipmentUnits: (equipmentResult.data ?? []).map(normalizeEquipmentUnit),
         tasks: (tasksResult.data ?? []).map(normalizeTask),
-        weatherLocations: (weatherLocationsResult.data ?? []).map(normalizeWeatherLocation),
         notes: (notesResult.data ?? []).map(normalizeNote),
         clockEvents: (clockEventsResult.data ?? []).map(normalizeClockEvent),
       };

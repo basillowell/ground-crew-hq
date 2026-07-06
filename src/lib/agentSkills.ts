@@ -27,15 +27,6 @@ export const AGENT_SKILLS: AgentSkill[] = [
       'Use AGENTS.md and docs/skills/auth-skill.md. TASK: fix auth flow without bypassing Supabase security. Inspect AuthContext, LaunchPortalPage, App.tsx, supabase.ts first.',
   },
   {
-    id: 'weather',
-    title: 'Weather Skill',
-    description: 'Operational weather guidance with clear source, fallback, and setup behavior.',
-    docPath: 'docs/skills/weather-skill.md',
-    relatedPages: ['/app/weather', '/app/dashboard'],
-    recommendedCodexPromptTemplate:
-      'Use AGENTS.md and docs/skills/weather-skill.md. TASK: improve WeatherPage operational reliability. Keep existing data model and Supabase flow. No broad rewrite.',
-  },
-  {
     id: 'scheduler',
     title: 'Scheduler Skill',
     description: 'Weekly workforce planning rules for shifts, validation, and totals.',
@@ -91,7 +82,6 @@ export const AGENT_SKILLS: AgentSkill[] = [
       'scheduler',
       'workboard',
       'equipment',
-      'weather',
       'reports',
       'settings',
       'landing',

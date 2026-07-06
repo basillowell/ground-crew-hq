@@ -832,7 +832,7 @@ export default function WorkflowPage() {
               <Textarea
                 value={dailyNotes}
                 onChange={(e) => setDailyNotes(e.target.value)}
-                placeholder="Weather, constraints, crew notes..."
+                placeholder="Constraints, crew notes..."
                 className="mt-1 min-h-28"
               />
             </div>

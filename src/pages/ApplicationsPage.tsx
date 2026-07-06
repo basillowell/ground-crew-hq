@@ -18,7 +18,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import { PageHeader } from '@/components/shared';
-import { WeatherSnapshotCard } from '@/components/weather/WeatherSnapshotCard';
 import {
   type ApplicationArea,
   type ChemicalApplicationLog,
@@ -26,8 +25,6 @@ import {
   type ChemicalProduct,
   type Employee,
   type EquipmentUnit,
-  type WeatherDailyLog,
-  type WeatherLocation,
 } from '@/data/seedData';
 import {
   useChemicalApplicationTankMixItems,
@@ -35,7 +32,6 @@ import {
   useEmployees,
   useEquipmentUnits,
   useProperties,
-  useWeatherDailyLogs,
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
 import { useAuth } from '@/contexts/AuthContext';
@@ -69,8 +65,6 @@ type ApplicationDraft = {
   supervisorName: string;
   supervisorLicenseNumber: string;
   equipmentUsedId: string;
-  weatherLogId: string;
-  weatherConditionsSummary: string;
   windDirection: string;
   windSpeedAtApplication: string;
   temperatureAtApplication: string;
@@ -97,8 +91,6 @@ const emptyDraft: ApplicationDraft = {
   supervisorName: '',
   supervisorLicenseNumber: '',
   equipmentUsedId: '',
-  weatherLogId: '',
-  weatherConditionsSummary: '',
   windDirection: '',
   windSpeedAtApplication: '',
   temperatureAtApplication: '',
@@ -194,7 +186,6 @@ export default function ApplicationsPage() {
   const employeesQuery = useEmployees(propertyScope, orgScope);
   const propertiesQuery = useProperties(orgScope);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgScope);
-  const weatherLogsQuery = useWeatherDailyLogs();
   const logsQuery = useChemicalLogs(orgScope, propertyScope);
   const productsQuery = useChemicalProducts();
   const mixItemsQuery = useChemicalApplicationTankMixItems();
@@ -215,30 +206,12 @@ export default function ApplicationsPage() {
     },
     staleTime: 1000 * 60 * 5,
   });
-  const weatherLocationsQuery = useQuery<WeatherLocation[]>({
-    queryKey: ['chemical-weather-locations', orgScope ?? 'no-org', propertyScope ?? 'all-properties'],
-    enabled: Boolean(orgScope),
-    queryFn: async () => {
-      if (!supabase || !orgScope) return [];
-      let query = supabase
-        .from('weather_locations')
-        .select('id, name, property, area, latitude, longitude, org_id, is_active')
-        .eq('org_id', orgScope)
-        .eq('is_active', true);
-      if (propertyScope) query = query.eq('property', propertyScope);
-      const { data, error } = await withChemicalLookupRequestTimeout(query.order('name'));
-      if (error) throw error;
-      return (data ?? []) as WeatherLocation[];
-    },
-    staleTime: 1000 * 60 * 5,
-  });
 
   const applicationAreas = applicationAreasQuery.data ?? [];
-  const weatherLocations = weatherLocationsQuery.data ?? [];
+
   const employees = employeesQuery.data ?? [];
   const equipmentUnits = equipmentUnitsQuery.data ?? [];
   const properties = propertiesQuery.data ?? [];
-  const weatherLogs = weatherLogsQuery.data ?? [];
   const logs = logsQuery.data ?? [];
   const chemicalProducts = productsQuery.data ?? [];
   const mixItems = mixItemsQuery.data ?? [];
@@ -258,7 +231,7 @@ export default function ApplicationsPage() {
   }, []);
 
   useEffect(() => {
-    if (!applicationAreas.length && !employees.length && !equipmentUnits.length && !weatherLogs.length && !chemicalProducts.length) {
+    if (!applicationAreas.length && !employees.length && !equipmentUnits.length && !chemicalProducts.length) {
       return;
     }
     setDraft((current) => ({
@@ -266,7 +239,7 @@ export default function ApplicationsPage() {
       propertyId: current.propertyId || propertyScope || properties[0]?.id || '',
       applicatorId: current.applicatorId || employees[0]?.id || '',
       equipmentUsedId: current.equipmentUsedId || equipmentUnits[0]?.id || '',
-      weatherLogId: current.weatherLogId || weatherLogs[0]?.id || '',
+
     }));
     setDraftMixItems((current) =>
       current.map((item) => ({
@@ -278,7 +251,7 @@ export default function ApplicationsPage() {
           ?? item.rateUnit,
       })),
     );
-  }, [chemicalProducts, employees, equipmentUnits, properties, propertyScope, weatherLogs]);
+  }, [chemicalProducts, employees, equipmentUnits, properties, propertyScope]);
 
   useEffect(() => {
     if (!draft.applicatorId) return;
@@ -302,35 +275,6 @@ export default function ApplicationsPage() {
       return matchesDate && matchesProperty && matchesApplicator && matchesProduct;
     });
   }, [filterApplicator, filterDate, filterProduct, filterProperty, logs, mixItems]);
-
-  const snapshotLocation =
-    weatherLocations.find((location) => location.property === draft.propertyId) ?? weatherLocations[0];
-  const selectedAreaIdForProperty = useMemo(
-    () => applicationAreas.find((area) => area.property === draft.propertyId)?.id ?? '',
-    [applicationAreas, draft.propertyId],
-  );
-  const locationWeatherLogs = weatherLogs
-    .filter((log) => log.locationId === snapshotLocation?.id)
-    .sort((left, right) => right.date.localeCompare(left.date));
-  const snapshotLog =
-    locationWeatherLogs.find((log) => log.id === draft.weatherLogId) ?? locationWeatherLogs[0];
-
-  useEffect(() => {
-    if (!dialogOpen || !snapshotLog) return;
-    setDraft((current) => ({
-      ...current,
-      weatherLogId: current.weatherLogId || snapshotLog.id,
-      weatherConditionsSummary:
-        current.weatherConditionsSummary ||
-        `${snapshotLog.currentConditions}; forecast: ${snapshotLog.forecast}`,
-      temperatureAtApplication:
-        current.temperatureAtApplication || String(snapshotLog.temperature),
-      humidityAtApplication:
-        current.humidityAtApplication || String(snapshotLog.humidity),
-      windSpeedAtApplication:
-        current.windSpeedAtApplication || String(snapshotLog.wind),
-    }));
-  }, [dialogOpen, snapshotLog]);
 
   const totalApplications = filteredLogs.length;
   const totalArea = filteredLogs.reduce((sum, log) => sum + (log.areaTreated ?? 0), 0);
@@ -401,7 +345,7 @@ export default function ApplicationsPage() {
     setSaving(true);
 
     const logId = crypto.randomUUID();
-    const weatherSource = weatherLogs.find((log) => log.id === draft.weatherLogId) ?? snapshotLog;
+
     const restrictedEntryUntil = buildRestrictedEntry(draft, chemicalProducts, draftMixItems);
     const applicationTimestamp = `${draft.applicationDate}T${draft.startTime}:00-04:00`;
     const nextLogPayload: Record<string, string | number | boolean | null> = {
@@ -423,22 +367,10 @@ export default function ApplicationsPage() {
       supervisor_name: draft.supervisorName.trim(),
       supervisor_license_number: draft.supervisorLicenseNumber.trim(),
       equipment_used_id: draft.equipmentUsedId || null,
-      weather_log_id: draft.weatherLogId || weatherSource?.id || null,
-      weather_conditions_summary:
-        draft.weatherConditionsSummary ||
-        (weatherSource
-          ? `${weatherSource.currentConditions}; forecast: ${weatherSource.forecast}`
-          : ''),
       wind_direction: draft.windDirection,
-      wind_speed_at_application: numberValue(
-        draft.windSpeedAtApplication || String(weatherSource?.wind ?? 0)
-      ),
-      temperature_at_application: numberValue(
-        draft.temperatureAtApplication || String(weatherSource?.temperature ?? 0)
-      ),
-      humidity_at_application: numberValue(
-        draft.humidityAtApplication || String(weatherSource?.humidity ?? 0)
-      ),
+      wind_speed_at_application: numberValue(draft.windSpeedAtApplication),
+      temperature_at_application: numberValue(draft.temperatureAtApplication),
+      humidity_at_application: numberValue(draft.humidityAtApplication),
       restricted_entry_until: restrictedEntryUntil,
       site_conditions: draft.siteConditions,
       notes: draft.notes,
@@ -495,7 +427,7 @@ export default function ApplicationsPage() {
         propertyId: propertyScope || properties[0]?.id || '',
         applicatorId: employees[0]?.id ?? '',
         equipmentUsedId: equipmentUnits[0]?.id ?? '',
-        weatherLogId: locationWeatherLogs[0]?.id ?? '',
+
       });
       setDraftMixItems([
         {
@@ -526,7 +458,6 @@ export default function ApplicationsPage() {
       'carrier_volume_gal',
       'total_mix_volume_gal',
       'area_treated',
-      'weather',
       'wind_direction',
       'wind_speed_mph',
       'temperature_f',
@@ -560,7 +491,6 @@ export default function ApplicationsPage() {
         quoteCsv(log.carrierVolume),
         quoteCsv(log.totalMixVolume ?? 0),
         quoteCsv(`${log.areaTreated} ${log.areaUnit}`),
-        quoteCsv(log.weatherConditionsSummary ?? ''),
         quoteCsv(log.windDirection ?? ''),
         quoteCsv(log.windSpeedAtApplication ?? 0),
         quoteCsv(log.temperatureAtApplication ?? 0),
@@ -580,7 +510,7 @@ export default function ApplicationsPage() {
       'applicator_name',
       'area_treated',
       'application_rate',
-      'weather_conditions',
+      'field_conditions',
       'supervisorLicenseNumber',
       'rei_hours',
       'phi_days',
@@ -600,11 +530,11 @@ export default function ApplicationsPage() {
       const rateText = logMixItems
         .map((item) => `${item.rateApplied ?? 0} ${item.rateUnit ?? ''}`.trim())
         .join(' | ');
-      const weatherText = [
-        log.weatherConditionsSummary ?? '',
+      const conditionText = [
+        log.siteConditions ?? '',
         `Wind ${log.windSpeedAtApplication ?? 0} mph`,
         `Temp ${log.temperatureAtApplication ?? 0}F`,
-      ].filter(Boolean).join(' · ');
+      ].filter(Boolean).join(' Â· ');
 
       return [
         quoteCsv(log.applicationDate),
@@ -613,7 +543,7 @@ export default function ApplicationsPage() {
         quoteCsv(applicator ? `${applicator.firstName} ${applicator.lastName}` : 'Not recorded'),
         quoteCsv(`${log.areaTreated ?? 0} ${log.areaUnit ?? ''}`.trim()),
         quoteCsv(rateText || 'Not recorded'),
-        quoteCsv(weatherText || 'Not recorded'),
+        quoteCsv(conditionText || 'Not recorded'),
         quoteCsv(log.supervisorLicenseNumber ?? 'Not recorded'),
         quoteCsv(product?.reentryIntervalHours ?? 0),
         quoteCsv(product?.preHarvestIntervalHours ?? 0),
@@ -627,7 +557,6 @@ export default function ApplicationsPage() {
     employeesQuery.isLoading ||
     propertiesQuery.isLoading ||
     equipmentUnitsQuery.isLoading ||
-    weatherLogsQuery.isLoading ||
     logsQuery.isLoading ||
     productsQuery.isLoading ||
     mixItemsQuery.isLoading
@@ -639,7 +568,7 @@ export default function ApplicationsPage() {
     <div className="mx-auto max-w-7xl space-y-4 p-4">
       <PageHeader
         title="Applications"
-        subtitle="Licensed applicator-ready chemical logging with tank mix detail, timestamped weather snapshots, and exportable records."
+        subtitle="Licensed applicator-ready chemical logging with tank mix detail, site condition detail, and exportable records."
         badge={
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{totalApplications} logs</Badge>
@@ -744,10 +673,6 @@ export default function ApplicationsPage() {
             </select>
           </div>
         </Card>
-
-        {snapshotLocation && (
-          <WeatherSnapshotCard location={snapshotLocation} log={snapshotLog} compact />
-        )}
       </div>
 
           <div className="space-y-3">
@@ -758,7 +683,7 @@ export default function ApplicationsPage() {
             ?? log.areaId;
           const applicator = employees.find((employee) => employee.id === log.applicatorId);
           const equipment = equipmentUnits.find((unit) => unit.id === log.equipmentUsedId);
-          const weather = weatherLogs.find((entry) => entry.id === log.weatherLogId);
+
           const logMixItems = mixItems
             .filter((item) => item.applicationLogId === log.id)
             .sort((left, right) => (left.mixOrder ?? 0) - (right.mixOrder ?? 0));
@@ -788,7 +713,7 @@ export default function ApplicationsPage() {
                 </div>
                 <div className="space-y-2 text-xs text-muted-foreground xl:max-w-sm">
                   <Wind className="h-3.5 w-3.5" />
-                  {weather ? `${weather.currentConditions} · ${weather.wind} mph wind · ${weather.rainfallTotal.toFixed(2)} in rain` : 'No linked weather snapshot'}
+                  <span>Wind {log.windSpeedAtApplication ?? 0} mph ? Temp {log.temperatureAtApplication ?? 0}F</span>
                 </div>
               </div>
 
@@ -971,19 +896,9 @@ export default function ApplicationsPage() {
               <Card className="p-4">
                 <div className="mb-4 flex items-center gap-2">
                   <Wind className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-semibold">Weather At Application</p>
+                  <p className="text-sm font-semibold">Application Conditions</p>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Linked Weather Log</label>
-                    <select id="weather-log" name="weather_log_id" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.weatherLogId} onChange={(e) => setDraft((current) => ({ ...current, weatherLogId: e.target.value }))}>
-                      {locationWeatherLogs.map((log) => (
-                        <option key={log.id} value={log.id}>
-                          {log.date} · {log.currentConditions}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Wind Direction</label>
                     <Input id="wind-direction" name="wind_direction" className="mt-1" value={draft.windDirection} onChange={(e) => setDraft((current) => ({ ...current, windDirection: e.target.value }))} />
@@ -999,10 +914,6 @@ export default function ApplicationsPage() {
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Humidity (%)</label>
                     <Input id="humidity-at-application" name="humidity_at_application" className="mt-1" type="number" value={draft.humidityAtApplication} onChange={(e) => setDraft((current) => ({ ...current, humidityAtApplication: e.target.value }))} />
-                  </div>
-                  <div className="md:col-span-3">
-                    <label className="text-xs font-medium text-muted-foreground">Weather Conditions Summary</label>
-                    <Input id="weather-conditions-summary" name="weather_conditions_summary" className="mt-1" value={draft.weatherConditionsSummary} onChange={(e) => setDraft((current) => ({ ...current, weatherConditionsSummary: e.target.value }))} />
                   </div>
                 </div>
               </Card>
@@ -1027,13 +938,13 @@ export default function ApplicationsPage() {
             </div>
 
             <div className="space-y-4">
-              {snapshotLocation && <WeatherSnapshotCard location={snapshotLocation} log={snapshotLog} compact />}
+
               <Card className="p-4">
                 <p className="text-sm font-semibold">Compliance Checklist</p>
                 <div className="mt-3 space-y-3 text-sm text-muted-foreground">
                   <p className="rounded-lg bg-muted/40 px-3 py-3">1. Record every product in tank mix order with the actual use rate and total quantity used.</p>
                   <p className="rounded-lg bg-muted/40 px-3 py-3">2. Capture applicator and supervisor license details for the record.</p>
-                  <p className="rounded-lg bg-muted/40 px-3 py-3">3. Save a weather snapshot so rainfall, wind, and application timing can be analyzed together in reports.</p>
+                  <p className="rounded-lg bg-muted/40 px-3 py-3">3. Record site conditions and timing notes so the application record is ready for review.</p>
                 </div>
               </Card>
               <Card className="p-4">

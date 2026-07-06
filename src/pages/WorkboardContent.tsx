@@ -21,8 +21,6 @@ import {
   type ScheduleEntry,
   type Task,
   type TaskRequest,
-  type WeatherDailyLog,
-  type WeatherLocation,
   type WorkLocation,
 } from '@/data/seedData';
 import {
@@ -33,7 +31,6 @@ import {
   ChevronUp,
   CheckCircle2,
   Clock,
-  CloudSun,
   FileText,
   GanttChart,
   HelpCircle,
@@ -53,7 +50,6 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
-import { fetchNwsWeather } from '@/lib/weather/providers';
 import {
   getOperationalTimezone,
   getNowHHMMInTimezone,
@@ -302,7 +298,6 @@ function normalizeApplicationArea(row: Record<string, unknown>): ApplicationArea
     id: String(row.id ?? ''),
     name: String(row.name ?? ''),
     property: String(row.property ?? row.propertyName ?? ''),
-    weatherLocationId: String(row.weatherLocationId ?? row.weather_location_id ?? ''),
   };
 }
 
@@ -368,39 +363,6 @@ function normalizeEscalationThresholds(value: unknown): EscalationThresholds {
   };
 }
 
-function normalizeWeatherLocation(row: Record<string, unknown>): WeatherLocation {
-  return {
-    id: String(row.id ?? ''),
-    name: String(row.name ?? ''),
-    property: String(row.property ?? row.propertyName ?? ''),
-    propertyId: row.propertyId ? String(row.propertyId) : row.property_id ? String(row.property_id) : undefined,
-    area: String(row.area ?? ''),
-    address: row.address ? String(row.address) : undefined,
-    latitude: typeof row.latitude === 'number' ? row.latitude : undefined,
-    longitude: typeof row.longitude === 'number' ? row.longitude : undefined,
-  };
-}
-
-function normalizeWeatherLog(row: Record<string, unknown>): WeatherDailyLog {
-  return {
-    id: String(row.id ?? ''),
-    locationId: String(row.locationId ?? row.location_id ?? ''),
-    stationId: row.stationId ? String(row.stationId) : row.station_id ? String(row.station_id) : undefined,
-    date: String(row.date ?? ''),
-    capturedAt: row.capturedAt ? String(row.capturedAt) : row.captured_at ? String(row.captured_at) : undefined,
-    currentConditions: String(row.currentConditions ?? row.current_conditions ?? 'Unknown'),
-    forecast: String(row.forecast ?? ''),
-    rainfallTotal: Number(row.rainfallTotal ?? row.rainfall_total ?? 0),
-    temperature: Number(row.temperature ?? 0),
-    humidity: Number(row.humidity ?? 0),
-    wind: Number(row.wind ?? 0),
-    windGust: row.windGust != null ? Number(row.windGust) : row.wind_gust != null ? Number(row.wind_gust) : undefined,
-    et: Number(row.et ?? 0),
-    source: (row.source ?? 'station') as WeatherDailyLog['source'],
-    alerts: Array.isArray(row.alerts) ? row.alerts.map(String) : [],
-    notes: row.notes ? String(row.notes) : undefined,
-  };
-}
 
 function normalizeWorkLocation(row: Record<string, unknown>): WorkLocation {
   return {
@@ -509,23 +471,6 @@ type RecurringTaskRuleRow = {
   active: boolean | null;
 };
 
-type TaskWeatherWarning = {
-  level: 'warning' | 'danger';
-  message: string;
-};
-
-type DispatchWeatherConflict = {
-  hasSprayConflict: boolean;
-  sprayMessage: string | null;
-  heatMessage: string | null;
-};
-
-type WorkboardWeatherSnapshot = {
-  temperature: number;
-  windSpeed: number;
-  precipitationProbability: number;
-  weatherCode: number;
-};
 
 type EscalationThresholds = {
   equipmentServiceOverdueDays: number;
@@ -592,14 +537,13 @@ const SOP_ITEMS: SopItem[] = [
   {
     id: 'spray-application',
     title: 'Spray Application',
-    icon: <CloudSun className="h-4 w-4 text-amber-600" />,
+    icon: <AlertCircle className="h-4 w-4 text-amber-600" />,
     checklist: [
       'Check wind speed (<10mph)',
       'Verify product label',
       'Calibrate sprayer',
       'Wear required PPE',
       'Log application in Chemical Logs',
-      'Record weather conditions',
     ],
   },
   {
@@ -657,7 +601,6 @@ export default function WorkboardContent() {
   const [lastRealtimeRefreshAt, setLastRealtimeRefreshAt] = useState<number | null>(null);
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const [needsFilter, setNeedsFilter] = useState<'all' | 'open' | 'done'>('all');
-  const [weatherSnapshot, setWeatherSnapshot] = useState<WorkboardWeatherSnapshot | null>(null);
   const [dismissedEscalationIds, setDismissedEscalationIds] = useState<string[]>([]);
   const [assignmentFlashMap, setAssignmentFlashMap] = useState<Record<string, 'complete' | 'started'>>({});
   const [actualHoursMenuAssignmentId, setActualHoursMenuAssignmentId] = useState<string | null>(null);
@@ -689,10 +632,8 @@ export default function WorkboardContent() {
   const [expandedSopIds, setExpandedSopIds] = useState<string[]>([]);
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<string[]>([]);
   const [taskRows, setTaskRows] = useState<TaskRowDraft[]>(() => [makeEmptyTaskRow()]);
-  const [weatherConflictOverride, setWeatherConflictOverride] = useState(false);
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
     scheduledCrew: false,
-    weather: true,
     notes: false,
     escalations: false,
   });
@@ -899,58 +840,6 @@ export default function WorkboardContent() {
     refetchInterval: 1000 * 30,
   });
 
-  const weatherLogsQuery = useQuery({
-    queryKey: ['weather-daily-logs', boardDate, orgId ?? 'all-orgs'],
-    enabled: Boolean(orgId),
-    queryFn: async () => {
-      try {
-        if (!supabase) return [] as WeatherDailyLog[];
-        let locationQuery = supabase
-          .from('weather_locations')
-          .select('id, name, property, area, latitude, longitude, org_id, is_active')
-          .eq('org_id', orgId ?? '');
-        locationQuery = locationQuery.eq('is_active', true);
-        if (effectivePropertyId && effectivePropertyId !== 'all') {
-          locationQuery = locationQuery.eq('property', effectivePropertyId);
-        }
-        const { data: locationRows, error: locationError } = await withWorkboardRequestTimeout(locationQuery);
-        if (locationError) return [] as WeatherDailyLog[];
-        const locationIds = (locationRows ?? [])
-          .map((row) => String((row as { id?: unknown }).id ?? ''))
-          .filter(Boolean);
-        if (locationIds.length === 0) return [] as WeatherDailyLog[];
-        const query = supabase
-          .from('weather_daily_logs')
-          .select('*')
-          .eq('date', boardDate)
-          .in('location_id', locationIds);
-        const { data, error } = await withWorkboardRequestTimeout(query);
-        if (error) return [] as WeatherDailyLog[];
-        return (data ?? []).map((row) => normalizeWeatherLog(row as Record<string, unknown>));
-      } catch {
-        return [] as WeatherDailyLog[];
-      }
-    },
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const weatherLocationsQuery = useQuery({
-    queryKey: ['weather-locations', effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
-    enabled: Boolean(orgId),
-    queryFn: async () => {
-      if (!supabase) return [] as WeatherLocation[];
-      let query = supabase
-        .from('weather_locations')
-        .select('id, name, property, area, latitude, longitude, org_id, is_active')
-        .eq('is_active', true);
-      if (orgId) query = query.eq('org_id', orgId);
-      if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property', effectivePropertyId);
-      const { data, error } = await withWorkboardRequestTimeout(query);
-      if (error) return [] as WeatherLocation[];
-      return (data ?? []).map((row) => normalizeWeatherLocation(row as Record<string, unknown>));
-    },
-    staleTime: 1000 * 60 * 5,
-  });
   const workOrdersQuery = useQuery({
     queryKey: ['work-orders', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
     enabled: Boolean(orgId && workOrdersExpanded),
@@ -1087,17 +976,11 @@ export default function WorkboardContent() {
   const noteList = notesQuery.data ?? [];
   const taskRequests = taskRequestsQuery.data ?? [];
   const pendingTaskRequests = pendingTaskRequestsQuery.data ?? [];
-  const weatherLogs = weatherLogsQuery.data ?? [];
-  const weatherLocations = weatherLocationsQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
   const workOrders = workOrdersQuery.data ?? [];
   const departmentOptions = useMemo(
     () => ['All Departments', ...(departmentsQuery.data?.map((entry) => entry.name) ?? [])],
     [departmentsQuery.data],
-  );
-  const weatherStripProperty = useMemo(
-    () => properties.find((property) => property.id === effectivePropertyId) ?? properties[0] ?? null,
-    [effectivePropertyId, properties],
   );
   const previousWeekDateKey = useMemo(() => {
     const selectedDate = new Date(`${boardDate}T00:00:00`);
@@ -1122,45 +1005,6 @@ export default function WorkboardContent() {
       .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title))
       .slice(0, 5);
   }, [previousWeekAssignmentsQuery.data]);
-  const hourlyWeatherStripQuery = useQuery({
-    queryKey: ['workboard-hourly-strip', boardDate, weatherStripProperty?.id ?? 'no-property'],
-    enabled: Boolean(orgId && weatherStripProperty?.latitude && weatherStripProperty?.longitude),
-    staleTime: 1000 * 60 * 10,
-    queryFn: async () => {
-      if (!weatherStripProperty?.latitude || !weatherStripProperty?.longitude) return [] as Array<{
-        hour: number;
-        temp: number;
-        wind: number;
-        precip: number;
-        weatherCode: number;
-      }>;
-      const payload = await fetchNwsWeather({
-        latitude: weatherStripProperty.latitude,
-        longitude: weatherStripProperty.longitude,
-        timezone: 'America/New_York',
-      });
-      const points = payload.hourly.filter((point) => point.time.slice(0, 10) === boardDate);
-      if (points.length === 0) return [] as Array<{
-        hour: number;
-        temp: number;
-        wind: number;
-        precip: number;
-        weatherCode: number;
-      }>;
-      const byHour = new Map(points.map((point) => [new Date(point.time).getHours(), point]));
-      return Array.from({ length: 13 }, (_, index) => {
-        const hour = index + 6;
-        const point = byHour.get(hour);
-        return {
-          hour,
-          temp: Number(point?.temperature ?? 0),
-          wind: Number(point?.windSpeed ?? 0),
-          precip: Number(point?.precipitationProbability ?? 0),
-          weatherCode: Number(point?.weatherCode ?? -1),
-        };
-      }).filter((entry) => entry.weatherCode >= 0);
-    },
-  });
 
   const recurringRulesQuery = useQuery({
     queryKey: ['recurring-task-rules', currentUser?.orgId ?? 'all-orgs', effectivePropertyId ?? 'all'],
@@ -1560,34 +1404,6 @@ export default function WorkboardContent() {
     return result;
   }, [breakClockEvents, operationalTimezone]);
 
-  const fetchWorkboardWeather = useCallback(async () => {
-    if (!activeProperty?.latitude || !activeProperty?.longitude) {
-      setWeatherSnapshot(null);
-      return;
-    }
-
-    try {
-      const payload = await fetchNwsWeather({
-        latitude: activeProperty.latitude,
-        longitude: activeProperty.longitude,
-        timezone: operationalTimezone,
-      });
-      const firstHourly = payload.hourly[0];
-      setWeatherSnapshot({
-        temperature: Number(payload.current.temperature ?? 0),
-        windSpeed: Number(payload.current.windSpeed ?? 0),
-        precipitationProbability: Number(firstHourly?.precipitationProbability ?? 0),
-        weatherCode: Number(payload.current.weatherCode ?? firstHourly?.weatherCode ?? -1),
-      });
-    } catch {
-      setWeatherSnapshot(null);
-    }
-  }, [activeProperty?.latitude, activeProperty?.longitude, operationalTimezone]);
-
-  useEffect(() => {
-    if (!orgId) return;
-    void fetchWorkboardWeather();
-  }, [fetchWorkboardWeather, boardDate, orgId]);
 
   const propertyRequests = useMemo(
     () =>
@@ -1606,50 +1422,6 @@ export default function WorkboardContent() {
 
   const escalationThresholds = escalationThresholdsQuery.data ?? DEFAULT_ESCALATION_THRESHOLDS;
 
-  const dispatchWeatherConflict = useMemo<DispatchWeatherConflict>(() => {
-    if (!weatherSnapshot) {
-      return { hasSprayConflict: false, sprayMessage: null, heatMessage: null };
-    }
-
-    const selectedTaskIds = editingAssignmentId
-      ? [assignmentDraft.taskId]
-      : taskRows.map((row) => row.taskId).filter(Boolean);
-    const selectedTasks = selectedTaskIds
-      .map((taskId) => taskLibrary.find((task) => task.id === taskId) ?? null)
-      .filter((task): task is TaskLibraryItem => Boolean(task));
-    const sprayCategory = selectedTasks.some((task) => {
-      const categoryText = String(task.category ?? '').toLowerCase();
-      return categoryText.includes('spray') || categoryText.includes('irrigation') || categoryText.includes('application');
-    });
-
-    const windOver = weatherSnapshot.windSpeed > escalationThresholds.windSpeedSprayCutoffMph;
-    const rainOver = weatherSnapshot.precipitationProbability > escalationThresholds.rainProbabilitySprayCutoffPct;
-    const hasSprayConflict = sprayCategory && (windOver || rainOver);
-
-    const sprayMessage = hasSprayConflict
-      ? `⚠️ Weather conflict: Wind is ${Math.round(weatherSnapshot.windSpeed)}mph (limit: ${Math.round(escalationThresholds.windSpeedSprayCutoffMph)}mph) — spraying may be unsafe. Dispatch anyway?`
-      : null;
-
-    const heatMessage =
-      weatherSnapshot.temperature > escalationThresholds.heatAdvisoryTempF
-        ? `🔴 Heat advisory: ${Math.round(weatherSnapshot.temperature)}°F — ensure crew has water breaks.`
-        : null;
-
-    return {
-      hasSprayConflict,
-      sprayMessage,
-      heatMessage,
-    };
-  }, [
-    assignmentDraft.taskId,
-    editingAssignmentId,
-    escalationThresholds.heatAdvisoryTempF,
-    escalationThresholds.rainProbabilitySprayCutoffPct,
-    escalationThresholds.windSpeedSprayCutoffMph,
-    taskRows,
-    taskLibrary,
-    weatherSnapshot,
-  ]);
 
   const selectedTaskForDraft = useMemo(
     () => {
@@ -1668,9 +1440,6 @@ export default function WorkboardContent() {
       const taskName = selectedTaskForDraft.name || 'Task';
       const category = selectedTaskForDraft.category || 'General';
       const estimated = Number(selectedTaskForDraft.estimated_hours ?? 0);
-      const weatherLine = weatherSnapshot
-        ? `Weather is ${Math.round(weatherSnapshot.temperature)}°F with winds near ${Math.round(weatherSnapshot.windSpeed)} mph.`
-        : '';
 
       // Keep the async flow so the button can show a spinner while generating.
       await new Promise((resolve) => window.setTimeout(resolve, 350));
@@ -1680,7 +1449,6 @@ export default function WorkboardContent() {
         estimated > 0
           ? `Target completion in about ${estimated} hour${estimated === 1 ? '' : 's'} and report any hazards or delays immediately.`
           : 'Report any hazards or delays immediately and confirm completion once finished.',
-        weatherLine,
       ]
         .filter(Boolean)
         .join(' ');
@@ -1692,11 +1460,8 @@ export default function WorkboardContent() {
     } finally {
       setIsGeneratingTaskNotes(false);
     }
-  }, [isGeneratingTaskNotes, selectedTaskForDraft, weatherSnapshot]);
+  }, [isGeneratingTaskNotes, selectedTaskForDraft]);
 
-  useEffect(() => {
-    setWeatherConflictOverride(false);
-  }, [assignmentDraft.taskId, assignmentDraft.employeeId, assignmentDraft.startTime, boardDate, taskRows]);
 
   const isRequestOpen = useCallback(
     (status: string) => !['assigned', 'dismissed', 'done', 'closed'].includes(status.toLowerCase()),
@@ -2445,63 +2210,6 @@ export default function WorkboardContent() {
     [boardDate, dayAssignments, scheduleList, scheduledEmployees],
   );
 
-  const assignmentWeatherWarnings = useMemo<Record<string, TaskWeatherWarning[]>>(() => {
-    if (!weatherSnapshot) return {};
-
-    return dayAssignments.reduce<Record<string, TaskWeatherWarning[]>>((acc, assignment) => {
-      const task = taskList.find((candidate) => candidate.id === assignment.taskId);
-      if (!task?.id) return acc;
-
-      const warnings: TaskWeatherWarning[] = [];
-      const category = (task.category ?? '').toLowerCase();
-      const isSprayingTask =
-        category.includes('spray') || category.includes('irrigation') || category.includes('application');
-      const isMowingTask = category === 'mowing';
-
-      const windHighForSpray = weatherSnapshot.windSpeed > escalationThresholds.windSpeedSprayCutoffMph;
-      const rainHighForSpray = weatherSnapshot.precipitationProbability > escalationThresholds.rainProbabilitySprayCutoffPct;
-      if (isSprayingTask && windHighForSpray && rainHighForSpray) {
-        warnings.push({ level: 'danger', message: '🛑 Unsafe spray conditions' });
-      } else if (isSprayingTask) {
-        if (windHighForSpray) {
-          warnings.push({
-            level: 'warning',
-            message: `⚠️ Wind too high for spraying (${Math.round(weatherSnapshot.windSpeed)}mph)`,
-          });
-        }
-        if (rainHighForSpray) {
-          warnings.push({
-            level: 'warning',
-            message: '⚠️ Rain expected — spraying not recommended',
-          });
-        }
-      }
-
-      if (isMowingTask && weatherSnapshot.precipitationProbability > 60) {
-        warnings.push({
-          level: 'warning',
-          message: '⚠️ Wet conditions — mowing quality affected',
-        });
-      }
-
-      if (weatherSnapshot.temperature > escalationThresholds.heatAdvisoryTempF + 10) {
-        warnings.push({
-          level: 'danger',
-          message: '🛑 Extreme heat — consider rescheduling',
-        });
-      } else if (weatherSnapshot.temperature > escalationThresholds.heatAdvisoryTempF) {
-        warnings.push({
-          level: 'warning',
-          message: '🔴 Heat advisory — schedule water breaks',
-        });
-      }
-
-      if (warnings.length > 0 && assignment.id) {
-        acc[assignment.id] = warnings;
-      }
-      return acc;
-    }, {});
-  }, [dayAssignments, escalationThresholds.heatAdvisoryTempF, escalationThresholds.rainProbabilitySprayCutoffPct, escalationThresholds.windSpeedSprayCutoffMph, taskList, weatherSnapshot]);
 
   const orderedDispatchBoard = useMemo(() => {
     const ranking = new Map(laneOrder.map((id, i) => [id, i]));
@@ -2589,18 +2297,6 @@ export default function WorkboardContent() {
       });
     }
 
-    if (
-      weatherSnapshot &&
-      (weatherSnapshot.windSpeed > escalationThresholds.windSpeedSprayCutoffMph ||
-        weatherSnapshot.precipitationProbability > escalationThresholds.rainProbabilitySprayCutoffPct)
-    ) {
-      alerts.push({
-        id: `weather-unsafe-${boardDate}`,
-        severity: 'critical',
-        message: `Weather alert: unsafe spray conditions (wind ${Math.round(weatherSnapshot.windSpeed)} mph, rain ${Math.round(weatherSnapshot.precipitationProbability)}%)`,
-        timestamp: nowIso,
-      });
-    }
 
     const openTaskRequestCount = propertyRequests.filter((request) => isRequestOpen(String(request.status ?? ''))).length;
     if (openTaskRequestCount > 0) {
@@ -2613,7 +2309,7 @@ export default function WorkboardContent() {
     }
 
     return alerts.filter((alert) => !dismissedEscalationIds.includes(alert.id));
-  }, [boardDate, dayAssignments, dismissedEscalationIds, equipmentList, escalationThresholds.equipmentServiceOverdueDays, escalationThresholds.rainProbabilitySprayCutoffPct, escalationThresholds.shiftCoverageWarningPct, escalationThresholds.windSpeedSprayCutoffMph, isRequestOpen, orderedDispatchBoard, propertyRequests, scheduleList, weatherSnapshot]);
+  }, [boardDate, dayAssignments, dismissedEscalationIds, equipmentList, escalationThresholds.equipmentServiceOverdueDays, escalationThresholds.shiftCoverageWarningPct, isRequestOpen, orderedDispatchBoard, propertyRequests, scheduleList]);
 
   const dismissEscalation = useCallback((alertId: string) => {
     setDismissedEscalationIds((current) => (current.includes(alertId) ? current : [...current, alertId]));
@@ -3009,28 +2705,6 @@ export default function WorkboardContent() {
     [availableEquipmentList],
   );
 
-  const latestWeatherLog = useMemo(
-    () => [...weatherLogs].sort((a, b) => b.date.localeCompare(a.date))[0],
-    [weatherLogs],
-  );
-
-  const planningWeatherLocation = latestWeatherLog
-    ? weatherLocations.find((l) => l.id === latestWeatherLog.locationId) ?? weatherLocations[0]
-    : weatherLocations[0];
-  const weatherCellIcon = useCallback((code: number) => {
-    if (code === 0) return '☀️';
-    if (code <= 2) return '🌤';
-    if (code === 3) return '☁️';
-    if (code <= 48) return '🌫️';
-    if (code <= 82) return '🌧️';
-    return '⛈️';
-  }, []);
-  const weatherCellTone = useCallback((precip: number, code: number) => {
-    if (code >= 95 || precip >= 60 || (code >= 61 && code <= 82)) return 'bg-red-100 text-red-800 border-red-200';
-    if (precip >= 25 || code === 3 || (code >= 45 && code <= 57)) return 'bg-amber-100 text-amber-800 border-amber-200';
-    return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-  }, []);
-
   const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
   const [todayDateKey] = useState(() => new Date().toLocaleDateString('en-CA'));
 
@@ -3042,9 +2716,6 @@ export default function WorkboardContent() {
 
   const newRequestsCount = propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length;
 
-  const weatherSummaryLabel = weatherSnapshot
-    ? `${Math.round(weatherSnapshot.temperature)}°F, wind ${Math.round(weatherSnapshot.windSpeed)} mph`
-    : latestWeatherLog?.currentConditions || 'Weather unavailable';
 
   const buildScheduleShareText = useCallback(() => {
     const propertyLabel = activeProperty?.name || 'All Properties';
@@ -3082,9 +2753,8 @@ export default function WorkboardContent() {
         lines.push('');
       });
     }
-    lines.push(`🌤️ Weather: ${weatherSummaryLabel}`);
     return lines.join('\n');
-  }, [activeProperty?.name, boardDate, dayAssignments, scheduleList, scheduledEmployees, selectedScheduleRecipientIds, weatherSummaryLabel]);
+  }, [activeProperty?.name, boardDate, dayAssignments, scheduleList, scheduledEmployees, selectedScheduleRecipientIds]);
 
   const shareScheduleByEmail = useCallback(() => {
     const propertyLabel = activeProperty?.name || 'All Properties';
@@ -3111,45 +2781,6 @@ export default function WorkboardContent() {
   const suggestedTasks = useMemo(() => {
     const items: SuggestedTaskItem[] = [];
     const dayLabel = new Date(`${boardDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' });
-
-    if (weatherSnapshot) {
-      if (weatherSnapshot.precipitationProbability < 20 && weatherSnapshot.windSpeed < 10) {
-        items.push({
-          id: 'weather-good-spraying',
-          tone: 'opportunity',
-          title: 'Good conditions for spraying',
-          detail: `Current wind is ${Math.round(weatherSnapshot.windSpeed)} mph with ${Math.round(weatherSnapshot.precipitationProbability)}% rain chance.`,
-        });
-      }
-
-      const hasRecentRain = weatherLogs.some((log) => Number(log.rainfallTotal ?? 0) > 0) || (hourlyWeatherStripQuery.data ?? []).some((entry) => entry.precip >= 50);
-      if (hasRecentRain) {
-        items.push({
-          id: 'weather-wet-course',
-          tone: 'warning',
-          title: 'Course may be wet',
-          detail: 'Recent rain signals softer turf. Consider delaying mowing for better quality.',
-        });
-      }
-
-      if (weatherSnapshot.temperature > 95) {
-        items.push({
-          id: 'weather-water-breaks',
-          tone: 'urgent',
-          title: 'Heat risk for crew',
-          detail: `Temperature is ${Math.round(weatherSnapshot.temperature)}°F. Schedule water breaks every 90 minutes.`,
-        });
-      }
-
-      if (weatherSnapshot.windSpeed > 15) {
-        items.push({
-          id: 'weather-postpone-spray',
-          tone: 'urgent',
-          title: 'Postpone spray applications',
-          detail: `Wind is ${Math.round(weatherSnapshot.windSpeed)} mph, which is above safe spray conditions.`,
-        });
-      }
-    }
 
     const historySummary = previousWeekSummary;
     if (historySummary.length > 0) {
@@ -3197,12 +2828,9 @@ export default function WorkboardContent() {
     dismissedSuggestionIds,
     equipmentList,
     escalationThresholds.equipmentServiceOverdueDays,
-    hourlyWeatherStripQuery.data,
     openQuickPlanDialog,
     orderedDispatchBoard,
     previousWeekSummary,
-    weatherLogs,
-    weatherSnapshot,
   ]);
 
   const activeWorkflowIssueCount = useMemo(() => {
@@ -3250,10 +2878,6 @@ export default function WorkboardContent() {
     const varianceHours = actualHours - scheduledHours;
     const variancePct = scheduledHours > 0 ? (varianceHours / scheduledHours) * 100 : 0;
 
-    const weatherPoints = hourlyWeatherStripQuery.data ?? [];
-    const highTemp = weatherPoints.length > 0 ? Math.max(...weatherPoints.map((point) => point.temp)) : Math.round(weatherSnapshot?.temperature ?? 0);
-    const maxWind = weatherPoints.length > 0 ? Math.max(...weatherPoints.map((point) => point.wind)) : Math.round(weatherSnapshot?.windSpeed ?? 0);
-    const rainTotal = Number(latestWeatherLog?.rainfallTotal ?? 0);
 
     const overdueThresholdDays = Math.max(1, escalationThresholds.equipmentServiceOverdueDays);
     const overdueThresholdDate = new Date();
@@ -3300,9 +2924,6 @@ export default function WorkboardContent() {
       `Actual hours: ${actualHours.toFixed(1)}`,
       `Variance: ${varianceHours >= 0 ? '+' : ''}${varianceHours.toFixed(1)}h (${variancePct >= 0 ? '+' : ''}${variancePct.toFixed(1)}%)`,
       '',
-      'WEATHER CONDITIONS:',
-      `High: ${Math.round(highTemp)}°F | Wind: ${Math.round(maxWind)}mph | Rain: ${rainTotal.toFixed(1)}mm`,
-      '',
       'EQUIPMENT NOTES:',
       ...(equipmentNotes.length > 0 ? equipmentNotes.map((note) => `- ${note}`) : ['- No equipment flags']),
       '',
@@ -3317,7 +2938,6 @@ export default function WorkboardContent() {
       `*${propertyLabel}*`,
       `${completedTasks}/${totalTasks} tasks done (${completionPct}%)`,
       `Crew: ${scheduledEmployees.length} | Hours: ${actualHours.toFixed(1)} actual / ${scheduledHours.toFixed(1)} scheduled`,
-      `Weather: ${Math.round(highTemp)}°F high, ${Math.round(maxWind)}mph wind, ${rainTotal.toFixed(1)}mm rain`,
       `Open items: ${openAssignmentItems.length} tasks, ${openRequests.length} needs`,
     ].join('\n');
 
@@ -3355,17 +2975,13 @@ export default function WorkboardContent() {
     effectivePropertyId,
     equipmentList,
     escalationThresholds.equipmentServiceOverdueDays,
-    hourlyWeatherStripQuery.data,
     isRequestOpen,
-    latestWeatherLog?.rainfallTotal,
     propertyRequests,
     queryClient,
     scheduleList,
     scheduledEmployees,
     supabase,
     todayDateKey,
-    weatherSnapshot?.temperature,
-    weatherSnapshot?.windSpeed,
   ]);
 
   const openEndOfDayReportDialog = useCallback(() => {
@@ -3415,9 +3031,6 @@ export default function WorkboardContent() {
 
     const propertyLabel = activeProperty?.name || 'All Properties';
     const preparedBy = currentUser?.fullName || currentUser?.email || 'Ground Crew HQ';
-    const weatherSummary = weatherSnapshot
-      ? `${Math.round(weatherSnapshot.temperature)}°F · Wind ${Math.round(weatherSnapshot.windSpeed)} mph`
-      : latestWeatherLog?.currentConditions || 'Weather unavailable';
 
     const rowsMarkup = orderedDispatchBoard
       .map((lane) => {
@@ -3506,7 +3119,6 @@ export default function WorkboardContent() {
           ${rowsMarkup || '<p>No scheduled crew for this date.</p>'}
           <footer class="footer">
             <div>Total Scheduled Hours: ${totalScheduledHours.toFixed(1)}h · Total Tasks: ${totalTasks}</div>
-            <div>Weather: ${escapeHtml(weatherSummary)}</div>
           </footer>
           <script>
             window.onload = () => {
@@ -3529,10 +3141,8 @@ export default function WorkboardContent() {
     currentUser?.fullName,
     dayAssignments.length,
     equipmentList,
-    latestWeatherLog?.currentConditions,
     orderedDispatchBoard,
     taskList,
-    weatherSnapshot,
   ]);
 
   function openAssignmentDialog(employeeId: string) {
@@ -3612,7 +3222,6 @@ export default function WorkboardContent() {
       setLinkedRequestId(null);
       setLinkedRequestTitle(null);
       setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
-      setWeatherConflictOverride(false);
       setIsAssignmentModalDirty(false);
       return true;
     },
@@ -3658,7 +3267,7 @@ export default function WorkboardContent() {
     };
   }, [assignmentDialogOpen, closeAssignmentDialog, fallbackEligibleEmployees, isReadOnly, openAssignmentDialog, selectedEmployeeId]);
 
-  async function saveAssignment(ignoreWeatherConflict = false) {
+  async function saveAssignment() {
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
       return;
@@ -3678,10 +3287,6 @@ export default function WorkboardContent() {
       : null;
     if (editingAssignmentId && !resolvedPropertyId) {
       toast.error('No property available for assignment.');
-      return;
-    }
-    if (dispatchWeatherConflict.hasSprayConflict && !weatherConflictOverride && !ignoreWeatherConflict) {
-      toast.warning('Weather conflict detected. Review warning before dispatching.');
       return;
     }
 
@@ -3978,7 +3583,6 @@ export default function WorkboardContent() {
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
     setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
-    setWeatherConflictOverride(false);
     setIsAssignmentModalDirty(false);
     closeAssignmentDialog(true);
   }
@@ -4380,8 +3984,6 @@ export default function WorkboardContent() {
               void notesQuery.refetch();
               void taskRequestsQuery.refetch();
               void pendingTaskRequestsQuery.refetch();
-              void weatherLogsQuery.refetch();
-              void weatherLocationsQuery.refetch();
               void workLocationsQuery.refetch();
             }}
           />
@@ -4979,7 +4581,6 @@ export default function WorkboardContent() {
                       onAddTask={openAssignmentDialog}
                       onEditAssignment={openEditAssignmentDialog}
                       onRemoveAssignment={removeAssignment}
-                      weatherWarningsByAssignment={assignmentWeatherWarnings}
                       assignmentTimelineById={assignmentTimelineRecord}
                       breakEvents={breakChipsByEmployee[lane.employee.id] ?? []}
                       operationalTimezone={operationalTimezone}
@@ -5840,41 +5441,6 @@ export default function WorkboardContent() {
               />
             </div>
 
-            {dispatchWeatherConflict.sprayMessage ? (
-              <div className="col-span-2 rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
-                <p className="font-medium">{dispatchWeatherConflict.sprayMessage}</p>
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setWeatherConflictOverride(false);
-                      closeAssignmentDialog();
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-status-pending text-text-primary hover:bg-status-pending/90"
-                    onClick={() => {
-                      setWeatherConflictOverride(true);
-                      void saveAssignment(true);
-                    }}
-                  >
-                    Dispatch Anyway
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            {dispatchWeatherConflict.heatMessage ? (
-              <div className="col-span-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
-                <p className="font-medium">{dispatchWeatherConflict.heatMessage}</p>
-              </div>
-            ) : null}
           </div>
 
           </div>
@@ -5887,7 +5453,6 @@ export default function WorkboardContent() {
               className="min-h-11"
               onClick={saveAssignment}
               data-testid="button-save-assignment"
-              disabled={dispatchWeatherConflict.hasSprayConflict && !weatherConflictOverride}
             >
               {editingAssignmentId ? 'Save Changes' : 'Dispatch'}
             </Button>

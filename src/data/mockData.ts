@@ -131,68 +131,6 @@ export interface Assignment {
   status?: 'planned' | 'in-progress' | 'completed';
 }
 
-export interface WeatherLocation {
-  id: string;
-  clubId?: string;
-  name: string;
-  property: string;
-  propertyId?: string;
-  area: string;
-  address?: string;
-  latitude?: number;
-  longitude?: number;
-}
-
-export interface WeatherStation {
-  id: string;
-  clubId?: string;
-  locationId: string;
-  name: string;
-  provider: string;
-  providerType?: 'manual' | 'noaa-nws' | 'davis' | 'noaa' | 'airport';
-  stationCode: string;
-  latitude?: number;
-  longitude?: number;
-  timeZone?: string;
-  stationCategory?: 'property' | 'airport' | 'regional-grid' | 'manual';
-  distanceMiles?: number;
-  isPrimary: boolean;
-  status: 'online' | 'offline';
-}
-
-export interface WeatherStationSuggestion {
-  id: string;
-  name: string;
-  provider: string;
-  providerType: 'noaa-nws' | 'noaa' | 'airport';
-  stationCode: string;
-  latitude: number;
-  longitude: number;
-  timeZone: string;
-  stationCategory: 'airport' | 'regional-grid';
-  distanceMiles?: number;
-  reason: string;
-}
-
-export interface WeatherDailyLog {
-  id: string;
-  clubId?: string;
-  locationId: string;
-  stationId?: string;
-  date: string;
-  capturedAt?: string;
-  currentConditions: string;
-  forecast: string;
-  rainfallTotal: number;
-  temperature: number;
-  humidity: number;
-  wind: number;
-  windGust?: number;
-  et: number;
-  source: 'station' | 'manual-override';
-  alerts?: string[];
-  notes?: string;
-}
 
 export interface ManualRainfallEntry {
   id: string;
@@ -225,7 +163,6 @@ export interface ApplicationArea {
   clubId?: string;
   name: string;
   property: string;
-  weatherLocationId: string;
 }
 
 export interface ChemicalApplicationLog {
@@ -248,8 +185,6 @@ export interface ChemicalApplicationLog {
   supervisorName?: string;
   supervisorLicenseNumber?: string;
   equipmentUsedId?: string;
-  weatherLogId?: string;
-  weatherConditionsSummary?: string;
   windDirection?: string;
   windSpeedAtApplication?: number;
   temperatureAtApplication?: number;
@@ -296,12 +231,6 @@ export interface ProgramSettings {
   /** Feature flags for sidebar modules (ids match Program Setup toggles). */
   enabledModules?: string[];
   pushNotifications?: boolean;
-  weatherDefaultLocationName?: string;
-  weatherDefaultAddress?: string;
-  weatherDefaultLatitude?: number;
-  weatherDefaultLongitude?: number;
-  weatherPreferredProvider?: string;
-  weatherEnabledPanels?: string[];
 }
 
 export interface DepartmentOption {
@@ -519,7 +448,6 @@ export const programSettings: ProgramSettings[] = [
       'scheduler',
       'mobile-field',
       'breakroom',
-      'weather',
       'applications',
       'equipment',
       'safety',
@@ -570,14 +498,14 @@ export const propertyClassOptions: PropertyClassOption[] = [
   {
     id: 'pc-golf-premium',
     name: 'Golf Course Premium',
-    description: 'Full agronomy, crew workflow, breakroom, applications, and weather tracking for private or destination golf properties.',
-    enabledModules: ['command-center', 'workflow', 'breakroom', 'weather', 'applications', 'reports', 'field', 'equipment'],
+    description: 'Full agronomy, crew workflow, breakroom, applications, and reporting for private or destination golf properties.',
+    enabledModules: ['command-center', 'workflow', 'breakroom', 'applications', 'reports', 'field', 'equipment'],
   },
   {
     id: 'pc-resort',
     name: 'Resort Grounds',
     description: 'Balanced crew workflow for mixed landscape, guest areas, and light agronomic operations.',
-    enabledModules: ['command-center', 'workflow', 'breakroom', 'weather', 'reports', 'equipment', 'field'],
+    enabledModules: ['command-center', 'workflow', 'breakroom', 'reports', 'equipment', 'field'],
   },
   {
     id: 'pc-municipal',
@@ -697,29 +625,9 @@ export const reportCategories = [
   { id: 'r2', name: 'Equipment Reports', reports: ['Equipment Usage Summary', 'Repair Cost Analysis', 'Downtime Report', 'Maintenance Schedule'] },
   { id: 'r3', name: 'Task Reports', reports: ['Task Completion Rate', 'Task Distribution', 'Area Coverage', 'Chemical Application Log'] },
   { id: 'r4', name: 'Safety Reports', reports: ['Incident Log', 'Safety Training Status', 'Equipment Inspection', 'Chemical Exposure'] },
-  { id: 'r5', name: 'Weather Reports', reports: ['Rainfall History', 'Weather By Location', 'ET Trend Summary'] },
   { id: 'r6', name: 'Applications', reports: ['Application Log Register', 'Product Usage Summary', 'Rainfall vs Application Window'] },
 ];
 
-export const weatherLocations: WeatherLocation[] = [
-  { id: 'wl1', name: 'North Course', property: 'Ground Crew HQ', propertyId: 'prop-1', area: 'Greens + Fairways', address: '1200 Championship Dr, Scottsdale, AZ', latitude: 35.7796, longitude: -78.6382 },
-  { id: 'wl2', name: 'South Course', property: 'Ground Crew HQ', propertyId: 'prop-1', area: 'Practice + Tees', address: '1200 Championship Dr, Scottsdale, AZ', latitude: 35.7688, longitude: -78.6484 },
-  { id: 'wl3', name: 'Clubhouse Grounds', property: 'Ground Crew HQ', propertyId: 'prop-1', area: 'Landscape + Entry', address: '1200 Championship Dr, Scottsdale, AZ', latitude: 35.7762, longitude: -78.6328 },
-];
-
-export const weatherStations: WeatherStation[] = [
-  { id: 'ws1', locationId: 'wl1', name: 'North Primary', provider: 'Open-Meteo', providerType: 'noaa-nws', stationCode: 'NC-01', latitude: 35.7796, longitude: -78.6382, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'online' },
-  { id: 'ws2', locationId: 'wl1', name: 'North Backup', provider: 'Manual Feed', providerType: 'manual', stationCode: 'NC-ALT', latitude: 35.7815, longitude: -78.6401, timeZone: 'America/New_York', stationCategory: 'manual', isPrimary: false, status: 'online' },
-  { id: 'ws3', locationId: 'wl2', name: 'South Primary', provider: 'Open-Meteo', providerType: 'noaa-nws', stationCode: 'SC-01', latitude: 35.7688, longitude: -78.6484, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'offline' },
-  { id: 'ws4', locationId: 'wl3', name: 'Clubhouse Primary', provider: 'Open-Meteo', providerType: 'noaa-nws', stationCode: 'CH-01', latitude: 35.7762, longitude: -78.6328, timeZone: 'America/New_York', stationCategory: 'regional-grid', isPrimary: true, status: 'online' },
-];
-
-export const weatherDailyLogs: WeatherDailyLog[] = [
-  { id: 'wd1', locationId: 'wl1', stationId: 'ws1', date: '2024-03-25', capturedAt: '2024-03-25T06:10:00', currentConditions: 'Partly Cloudy', forecast: 'Warm afternoon with light wind', rainfallTotal: 0.08, temperature: 71, humidity: 64, wind: 7, windGust: 11, et: 0.17, source: 'station', alerts: [] },
-  { id: 'wd2', locationId: 'wl1', stationId: 'ws1', date: '2024-03-26', capturedAt: '2024-03-26T06:00:00', currentConditions: 'Sunny', forecast: 'Dry and bright', rainfallTotal: 0.0, temperature: 76, humidity: 58, wind: 6, windGust: 9, et: 0.19, source: 'station', alerts: [] },
-  { id: 'wd3', locationId: 'wl2', stationId: 'ws3', date: '2024-03-25', capturedAt: '2024-03-25T05:40:00', currentConditions: 'Manual Override', forecast: 'Station offline, conditions entered manually', rainfallTotal: 0.12, temperature: 69, humidity: 70, wind: 8, windGust: 13, et: 0.14, source: 'manual-override', alerts: ['Station offline'], notes: 'South station offline at 5:40 AM' },
-  { id: 'wd4', locationId: 'wl3', stationId: 'ws4', date: '2024-03-25', capturedAt: '2024-03-25T06:05:00', currentConditions: 'Cloudy', forecast: 'Chance of passing shower after 4 PM', rainfallTotal: 0.04, temperature: 68, humidity: 73, wind: 9, windGust: 14, et: 0.12, source: 'station', alerts: ['Shower risk after 4 PM'] },
-];
 
 export const manualRainfallEntries: ManualRainfallEntry[] = [
   { id: 'mr1', locationId: 'wl2', date: '2024-03-25', rainfallAmount: 0.12, enteredBy: 'James Wilson', notes: 'Measured at practice tee gauge due to station outage' },
@@ -734,15 +642,15 @@ export const chemicalProducts: ChemicalProduct[] = [
 ];
 
 export const applicationAreas: ApplicationArea[] = [
-  { id: 'aa1', name: 'Greens 1-9', property: 'Ground Crew HQ', weatherLocationId: 'wl1' },
-  { id: 'aa2', name: 'Fairways 1-9', property: 'Ground Crew HQ', weatherLocationId: 'wl1' },
-  { id: 'aa3', name: 'Practice Facility', property: 'Ground Crew HQ', weatherLocationId: 'wl2' },
-  { id: 'aa4', name: 'Clubhouse Landscape', property: 'Ground Crew HQ', weatherLocationId: 'wl3' },
+  { id: 'aa1', name: 'Greens 1-9', property: 'Ground Crew HQ' },
+  { id: 'aa2', name: 'Fairways 1-9', property: 'Ground Crew HQ' },
+  { id: 'aa3', name: 'Practice Facility', property: 'Ground Crew HQ' },
+  { id: 'aa4', name: 'Clubhouse Landscape', property: 'Ground Crew HQ' },
 ];
 
 export const chemicalApplicationLogs: ChemicalApplicationLog[] = [
-  { id: 'cal1', applicationDate: '2024-03-25', startTime: '05:45', endTime: '07:10', applicationTimestamp: '2024-03-25T05:45:00', areaId: 'aa1', targetPest: 'Dollar spot', agronomicPurpose: 'Preventive fungicide and growth regulation', applicationMethod: 'Ground boom spray', carrierVolume: 180, totalMixVolume: 180, areaTreated: 4.5, areaUnit: 'acres', applicatorId: 'e1', applicatorLicenseNumber: 'NC-45612', supervisorName: 'Mike Johnson', supervisorLicenseNumber: 'NC-45612', equipmentUsedId: 'u7', weatherLogId: 'wd1', weatherConditionsSummary: 'Partly cloudy, calm start, drying conditions after sunrise', windDirection: 'NE', windSpeedAtApplication: 4, temperatureAtApplication: 66, humidityAtApplication: 72, restrictedEntryUntil: '2024-03-25T19:10:00', siteConditions: 'Leaf surface slightly damp at first pass, no visible drift, greens closed until dry-down.', notes: 'Completed before golfer play. Light wind, no drift concerns.' },
-  { id: 'cal2', applicationDate: '2024-03-25', startTime: '06:15', endTime: '07:05', applicationTimestamp: '2024-03-25T06:15:00', areaId: 'aa3', targetPest: 'Localized dry spot', agronomicPurpose: 'Moisture management', applicationMethod: 'Boom spray', carrierVolume: 90, totalMixVolume: 90, areaTreated: 2.1, areaUnit: 'acres', applicatorId: 'e4', applicatorLicenseNumber: 'NC-33820', supervisorName: 'James Wilson', supervisorLicenseNumber: 'NC-33820', equipmentUsedId: 'u6', weatherLogId: 'wd3', weatherConditionsSummary: 'Manual weather entry used due to station outage', windDirection: 'S', windSpeedAtApplication: 5, temperatureAtApplication: 65, humidityAtApplication: 76, restrictedEntryUntil: '2024-03-25T11:05:00', siteConditions: 'Practice facility closed during application. Moisture stress visible in center section.', notes: 'Manual weather entry used due to station outage.' },
+  { id: 'cal1', applicationDate: '2024-03-25', startTime: '05:45', endTime: '07:10', applicationTimestamp: '2024-03-25T05:45:00', areaId: 'aa1', targetPest: 'Dollar spot', agronomicPurpose: 'Preventive fungicide and growth regulation', applicationMethod: 'Ground boom spray', carrierVolume: 180, totalMixVolume: 180, areaTreated: 4.5, areaUnit: 'acres', applicatorId: 'e1', applicatorLicenseNumber: 'NC-45612', supervisorName: 'Mike Johnson', supervisorLicenseNumber: 'NC-45612', equipmentUsedId: 'u7', windDirection: 'NE', windSpeedAtApplication: 4, temperatureAtApplication: 66, humidityAtApplication: 72, restrictedEntryUntil: '2024-03-25T19:10:00', siteConditions: 'Leaf surface slightly damp at first pass, no visible drift, greens closed until dry-down.', notes: 'Completed before golfer play. Light wind, no drift concerns.' },
+  { id: 'cal2', applicationDate: '2024-03-25', startTime: '06:15', endTime: '07:05', applicationTimestamp: '2024-03-25T06:15:00', areaId: 'aa3', targetPest: 'Localized dry spot', agronomicPurpose: 'Moisture management', applicationMethod: 'Boom spray', carrierVolume: 90, totalMixVolume: 90, areaTreated: 2.1, areaUnit: 'acres', applicatorId: 'e4', applicatorLicenseNumber: 'NC-33820', supervisorName: 'James Wilson', supervisorLicenseNumber: 'NC-33820', equipmentUsedId: 'u6', windDirection: 'S', windSpeedAtApplication: 5, temperatureAtApplication: 65, humidityAtApplication: 76, restrictedEntryUntil: '2024-03-25T11:05:00', siteConditions: 'Practice facility closed during application. Moisture stress visible in center section.', notes: 'Manual site conditions entry used due to station outage.' },
 ];
 
 export const chemicalApplicationTankMixItems: ChemicalApplicationTankMixItem[] = [

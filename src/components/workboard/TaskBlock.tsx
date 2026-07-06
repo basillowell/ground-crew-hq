@@ -21,7 +21,6 @@ interface TaskBlockProps {
   onDragStart?: () => void;
   onDragEnter?: () => void;
   onDrop?: () => void;
-  weatherWarnings?: Array<{ level: 'warning' | 'danger'; message: string }>;
 }
 
 function normalizeStatus(status?: string) {

@@ -75,7 +75,7 @@ const TESTIMONIALS: TestimonialItem[] = [
     initials: 'HG',
   },
   {
-    quote: 'The weather alerts caught a storm we would have missed. Saved $3,000 in chemical waste.',
+    quote: 'The dispatch board caught coverage gaps we would have missed. Saved hours every week.',
     byline: 'Asst. Superintendent, Resort',
     initials: 'AR',
   },
@@ -422,7 +422,7 @@ export default function LaunchPortalPage() {
             </div>
             <div className="grid grid-cols-[80px_1fr]">
               <div className="space-y-2 bg-surface-base p-3">
-                {['Dashboard', 'Workboard', 'Scheduler', 'Weather'].map((item) => (
+                {['Dashboard', 'Workboard', 'Scheduler', 'Equipment'].map((item) => (
                   <div key={item} className="rounded-md bg-surface-elevated px-2 py-1 text-[10px] text-text-secondary">
                     {item}
                   </div>
@@ -439,8 +439,8 @@ export default function LaunchPortalPage() {
                     <div className="text-sm font-semibold text-text-primary">8 Assigned</div>
                   </div>
                   <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
-                    <div className="text-[10px] text-text-muted">Weather</div>
-                    <div className="text-sm font-semibold text-text-primary">84°F</div>
+                    <div className="text-[10px] text-text-muted">Equipment</div>
+                    <div className="text-sm font-semibold text-text-primary">12 Ready</div>
                   </div>
                 </div>
                 <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
@@ -452,7 +452,7 @@ export default function LaunchPortalPage() {
                   </div>
                 </div>
                 <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
-                  <div className="mb-2 text-[10px] text-text-muted">Spray Window Timeline</div>
+                  <div className="mb-2 text-[10px] text-text-muted">Task Timeline</div>
                   <div className="flex h-3 overflow-hidden rounded-full">
                     <div className="w-1/2 bg-lime-400/60" />
                     <div className="w-1/4 bg-amber-400/60" />
@@ -607,7 +607,7 @@ export default function LaunchPortalPage() {
             <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Built by People Who Know the Course</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
               Ground Crew HQ was designed by turf professionals who&apos;ve walked the course at 5 AM, managed crews in
-              95° heat, and dealt with weather cancellations. We built the tool we wished we had.
+              95° heat, and dealt with last-minute schedule changes. We built the tool we wished we had.
             </p>
           </div>
         </section>

@@ -43,14 +43,6 @@ function uid(prefix: string) {
     : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-async function geocodeZip(zip: string) {
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(zip)}&country=US&format=json`);
-  if (!response.ok) throw new Error('Zip lookup failed');
-  const data = (await response.json()) as Array<{ lat: string; lon: string }>;
-  const first = data[0];
-  if (!first) return null;
-  return { latitude: Number(first.lat), longitude: Number(first.lon) };
-}
 
 export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWizardProps) {
   const [step, setStep] = useState(1);
@@ -60,10 +52,6 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
   const [propertyName, setPropertyName] = useState('');
   const [propertyAddress, setPropertyAddress] = useState('');
 
-  const [weatherMode, setWeatherMode] = useState<'zip' | 'manual' | 'gps'>('zip');
-  const [zipCode, setZipCode] = useState('');
-  const [weatherLat, setWeatherLat] = useState('');
-  const [weatherLng, setWeatherLng] = useState('');
 
   const [crewDraft, setCrewDraft] = useState<CrewDraft>({ firstName: '', lastName: '', role: 'Field Staff' });
   const [crew, setCrew] = useState<CrewMember[]>([]);
@@ -106,58 +94,7 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
       return;
     }
     setPropertyId(String(data?.id ?? payload.id));
-    setStep(2);
-  };
-
-  const resolveWeatherCoordinates = async () => {
-    if (weatherMode === 'manual') {
-      const lat = Number(weatherLat);
-      const lng = Number(weatherLng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error('Enter valid coordinates');
-      return { latitude: lat, longitude: lng };
-    }
-    if (weatherMode === 'zip') {
-      if (!zipCode.trim()) throw new Error('Enter a zip code');
-      const coords = await geocodeZip(zipCode.trim());
-      if (!coords) throw new Error('Could not find coordinates for this zip');
-      return coords;
-    }
-    return new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocation not available'));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (position) => resolve({ latitude: Number(position.coords.latitude.toFixed(4)), longitude: Number(position.coords.longitude.toFixed(4)) }),
-        () => reject(new Error('Could not read current location')),
-      );
-    });
-  };
-
-  const saveWeather = async () => {
-    if (!supabase || !orgId || !propertyId) return;
-    setSaving(true);
-    try {
-      const coords = await resolveWeatherCoordinates();
-      const payload = {
-        id: crypto.randomUUID(),
-        org_id: orgId,
-        name: propertyName.trim() || 'Weather Station',
-        property: propertyId,
-        area: 'Main Course',
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        is_active: true,
-      };
-      const { error } = await supabase.from('weather_locations').insert(payload);
-      if (error) throw error;
-      setStep(3);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save weather location';
-      toast.error(message);
-    } finally {
-      setSaving(false);
-    }
+    setStep(3);
   };
 
   const addCrewMember = async () => {
@@ -245,7 +182,7 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
     }
     localStorage.setItem(`gcrew-onboarding-complete-${orgId}`, 'true');
     setSaving(false);
-    setStep(7);
+    setStep(6);
   };
 
   const completeWizard = () => {
@@ -289,30 +226,10 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
           </div>
         ) : null}
 
+
         {step === 3 ? (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Step 2 — Set Weather Location</h2>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <button type="button" className={`rounded-md border px-3 py-1 ${weatherMode === 'zip' ? 'bg-primary text-primary-foreground' : ''}`} onClick={() => setWeatherMode('zip')}>Zip code</button>
-              <button type="button" className={`rounded-md border px-3 py-1 ${weatherMode === 'gps' ? 'bg-primary text-primary-foreground' : ''}`} onClick={() => setWeatherMode('gps')}>Use my location</button>
-              <button type="button" className={`rounded-md border px-3 py-1 ${weatherMode === 'manual' ? 'bg-primary text-primary-foreground' : ''}`} onClick={() => setWeatherMode('manual')}>Coordinates</button>
-            </div>
-            {weatherMode === 'zip' ? <Input value={zipCode} onChange={(event) => setZipCode(event.target.value)} placeholder="Zip code" /> : null}
-            {weatherMode === 'manual' ? (
-              <div className="grid gap-2 md:grid-cols-2">
-                <Input value={weatherLat} onChange={(event) => setWeatherLat(event.target.value)} placeholder="Latitude" />
-                <Input value={weatherLng} onChange={(event) => setWeatherLng(event.target.value)} placeholder="Longitude" />
-              </div>
-            ) : null}
-            <Button onClick={() => void saveWeather()} disabled={saving}>
-              {saving ? 'Saving...' : 'Next'}
-            </Button>
-          </div>
-        ) : null}
-
-        {step === 4 ? (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Step 3 — Add Your Crew</h2>
+            <h2 className="text-xl font-semibold">Step 2 — Add Your Crew</h2>
             <div className="grid gap-2 md:grid-cols-3">
               <Input value={crewDraft.firstName} onChange={(event) => setCrewDraft((current) => ({ ...current, firstName: event.target.value }))} placeholder="First name" />
               <Input value={crewDraft.lastName} onChange={(event) => setCrewDraft((current) => ({ ...current, lastName: event.target.value }))} placeholder="Last name" />
@@ -322,7 +239,7 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
               <Button variant="outline" onClick={() => void addCrewMember()} disabled={saving || !crewDraft.firstName.trim() || !crewDraft.lastName.trim()}>
                 {saving ? 'Adding...' : 'Add'}
               </Button>
-              <Button onClick={() => setStep(5)} disabled={crew.length === 0}>Next</Button>
+              <Button onClick={() => setStep(4)} disabled={crew.length === 0}>Next</Button>
             </div>
             <ul className="rounded-lg border p-3 text-sm">
               {crew.length === 0 ? <li className="text-muted-foreground">No crew added yet.</li> : crew.map((member) => <li key={member.id}>{member.firstName} {member.lastName} — {member.role}</li>)}
@@ -330,9 +247,9 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
           </div>
         ) : null}
 
-        {step === 5 ? (
+        {step === 4 ? (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Step 4 — Seed Task Library</h2>
+            <h2 className="text-xl font-semibold">Step 3 — Seed Task Library</h2>
             <div className="space-y-2">
               {tasks.map((task) => (
                 <label key={task.key} className="flex items-center gap-2 text-sm">
@@ -347,9 +264,9 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
           </div>
         ) : null}
 
-        {step === 6 ? (
+        {step === 5 ? (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Step 5 — Create Your First Schedule</h2>
+            <h2 className="text-xl font-semibold">Step 4 — Create Your First Schedule</h2>
             <p className="text-sm text-muted-foreground">Default shift 7:00 AM – 3:30 PM. Uncheck any day off.</p>
             <div className="space-y-3">
               {crew.map((member) => (
@@ -374,7 +291,7 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
           </div>
         ) : null}
 
-        {step === 7 ? (
+        {step === 6 ? (
           <div className="space-y-4 text-center">
             <h2 className="text-2xl font-semibold">🎉 You&apos;re all set!</h2>
             <p className="text-sm text-muted-foreground">Your operation is configured and ready to go.</p>

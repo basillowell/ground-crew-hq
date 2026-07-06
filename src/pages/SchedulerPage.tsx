@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle, Cloud, CloudRain, Sun, HelpCircle } from 'lucide-react';
+import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
@@ -14,7 +14,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
-import { fetchNwsWeather } from '@/lib/weather/providers';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -41,10 +40,6 @@ type AssignmentSummary = {
   estimatedHours: number;
 };
 
-type DayWeather = {
-  temp: number;
-  weatherCode: number;
-};
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -85,11 +80,6 @@ function toCoveragePercent(assignedHours: number, scheduledHours: number): numbe
   return Math.max(0, Math.min(100, Math.round((assignedHours / scheduledHours) * 100)));
 }
 
-function weatherIconForCode(code: number) {
-  if (code >= 51) return CloudRain;
-  if (code >= 1) return Cloud;
-  return Sun;
-}
 
 const STATUS_STYLES: Record<string, { cell: string; label: string; badge: string }> = {
   scheduled: {
@@ -198,36 +188,7 @@ export default function SchedulerPage() {
     orgId,
   );
 
-  const selectedProperty = useMemo(() => {
-    const properties = storeProperties;
-    if (propertyScope && propertyScope !== 'all') {
-      return properties.find((property) => property.id === propertyScope) ?? null;
-    }
-    return properties.find((property) => typeof property.latitude === 'number' && typeof property.longitude === 'number') ?? null;
-  }, [propertyScope, storeProperties]);
 
-  const weekWeatherQuery = useQuery({
-    queryKey: ['scheduler-week-weather', weekStart, selectedProperty?.id ?? 'none', orgId ?? 'all-orgs'],
-    enabled: Boolean(orgId && selectedProperty?.latitude && selectedProperty?.longitude),
-    staleTime: 1000 * 60 * 10,
-    queryFn: async () => {
-      if (!selectedProperty?.latitude || !selectedProperty?.longitude) return {} as Record<string, DayWeather>;
-      const payload = await fetchNwsWeather({
-        latitude: selectedProperty.latitude,
-        longitude: selectedProperty.longitude,
-        timezone: 'America/New_York',
-      });
-      const byDate = new Map<string, DayWeather>();
-      payload.hourly.forEach((point) => {
-        const dateKey = point.time.slice(0, 10);
-        const hour = new Date(point.time).getHours();
-        if (hour === 12 || !byDate.has(dateKey)) {
-          byDate.set(dateKey, { temp: Number(point.temperature ?? 0), weatherCode: Number(point.weatherCode ?? 0) });
-        }
-      });
-      return Object.fromEntries(byDate.entries());
-    },
-  });
 
   const weekScheduleQueries = useQueries({
     queries: weekDays.map((day) => ({
@@ -1372,8 +1333,6 @@ export default function SchedulerPage() {
                   </th>
                   {weekDays.map((day) => {
                     const isToday = day.date === today;
-                    const dayWeather = (weekWeatherQuery.data ?? {})[day.date];
-                    const WeatherIcon = dayWeather ? weatherIconForCode(dayWeather.weatherCode) : null;
                     return (
                       <th
                         key={day.date}
@@ -1381,12 +1340,6 @@ export default function SchedulerPage() {
                       >
                         <div className={`text-[10px] uppercase tracking-wider ${isToday ? 'text-primary' : ''}`}>{day.short}</div>
                         <div className={`mt-0.5 text-lg font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{day.dayNum}</div>
-                        {dayWeather && WeatherIcon ? (
-                          <div className="mt-1 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
-                            <WeatherIcon className="h-3 w-3" />
-                            <span>{Math.round(dayWeather.temp)}°</span>
-                          </div>
-                        ) : null}
                         {isToday && <div className="h-1 w-1 rounded-full bg-primary mx-auto mt-1" />}
                       </th>
                     );

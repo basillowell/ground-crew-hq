@@ -19,9 +19,6 @@ import {
   scheduleEntries,
   shiftTemplates,
   tasks,
-  weatherDailyLogs,
-  weatherLocations,
-  weatherStations,
   type ApplicationArea,
   type AppUser,
   type Assignment,
@@ -43,9 +40,6 @@ import {
   type ShiftTemplate,
   type Task,
   type TaskRequest,
-  type WeatherDailyLog,
-  type WeatherLocation,
-  type WeatherStation,
   type WorkLocation,
   taskRequests,
   workLocations,
@@ -59,12 +53,9 @@ const SCHEDULE_ENTRIES_KEY = 'gchq-schedule-entries';
 const ASSIGNMENTS_KEY = 'gchq-assignments';
 const NOTES_KEY = 'gchq-notes';
 const EQUIPMENT_UNITS_KEY = 'gchq-equipment-units';
-const WEATHER_LOGS_KEY = 'gchq-weather-daily-logs';
 const MANUAL_RAIN_KEY = 'gchq-manual-rainfall';
 const APPLICATION_LOGS_KEY = 'gchq-application-logs';
 const TANK_MIX_ITEMS_KEY = 'gchq-application-tank-mix';
-const WEATHER_LOCATIONS_KEY = 'gchq-weather-locations';
-const WEATHER_STATIONS_KEY = 'gchq-weather-stations';
 const CHEMICAL_PRODUCTS_KEY = 'gchq-chemical-products';
 const APPLICATION_AREAS_KEY = 'gchq-application-areas';
 const PROGRAM_SETTINGS_KEY = 'gchq-program-settings';
@@ -150,13 +141,6 @@ export function saveEquipmentUnits(value: EquipmentUnit[]) {
   writeList(EQUIPMENT_UNITS_KEY, value);
 }
 
-export function loadWeatherDailyLogs() {
-  return readList<WeatherDailyLog>(WEATHER_LOGS_KEY, weatherDailyLogs);
-}
-
-export function saveWeatherDailyLogs(value: WeatherDailyLog[]) {
-  writeList(WEATHER_LOGS_KEY, value);
-}
 
 export function loadManualRainfallEntries() {
   return readList<ManualRainfallEntry>(MANUAL_RAIN_KEY, manualRainfallEntries);
@@ -182,21 +166,6 @@ export function saveChemicalApplicationTankMixItems(value: ChemicalApplicationTa
   writeList(TANK_MIX_ITEMS_KEY, value);
 }
 
-export function loadWeatherLocations() {
-  return readList<WeatherLocation>(WEATHER_LOCATIONS_KEY, weatherLocations);
-}
-
-export function saveWeatherLocations(value: WeatherLocation[]) {
-  writeList(WEATHER_LOCATIONS_KEY, value);
-}
-
-export function loadWeatherStations() {
-  return readList<WeatherStation>(WEATHER_STATIONS_KEY, weatherStations);
-}
-
-export function saveWeatherStations(value: WeatherStation[]) {
-  writeList(WEATHER_STATIONS_KEY, value);
-}
 
 export function loadChemicalProducts() {
   return readList<ChemicalProduct>(CHEMICAL_PRODUCTS_KEY, chemicalProducts);

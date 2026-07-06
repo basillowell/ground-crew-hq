@@ -7,7 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3,
-  Building2, CheckCircle, CloudRain, Clock, Loader2,
+  Building2, CheckCircle, Clock, Loader2,
   MapPin, Shield, TrendingUp, Users, Wrench, Zap,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,7 +41,6 @@ export default function CommandCenterOperationalPage() {
       const propAssignments = assignments.filter(a => a.employeeId && propEmpIds.has(a.employeeId));
       const equipAtProp = equipmentUnits.filter(u => propLocationNames.has(u.location ?? ''));
       const propAlerts = notes.filter(n => n.type === 'alert');
-      const weatherAlert = propAlerts.some(n => /weather|storm|rain/i.test(`${n.title} ${n.content}`));
       const equipDown = equipAtProp.filter(u => u.status === 'maintenance' || u.status === 'out-of-service').length;
       return {
         propertyId: property.id,
@@ -52,7 +51,6 @@ export default function CommandCenterOperationalPage() {
         equipmentActive: equipAtProp.filter(u => u.status === 'available' || u.status === 'in-use').length,
         equipmentDown: equipDown,
         openWorkOrders: propAlerts.length,
-        weatherAlert,
         complianceScore: Math.max(74, 100 - equipDown * 8 - propAlerts.length * 3),
       };
     });
@@ -66,7 +64,7 @@ export default function CommandCenterOperationalPage() {
       equipment: acc.equipment + s.equipmentActive,
       equipmentDown: acc.equipmentDown + s.equipmentDown,
       workOrders: acc.workOrders + s.openWorkOrders,
-      alerts: acc.alerts + (s.weatherAlert ? 1 : 0),
+      alerts: acc.alerts,
     }),
     { crew: 0, tasks: 0, tasksTotal: 0, equipment: 0, equipmentDown: 0, workOrders: 0, alerts: 0 }
   ), [propertyStats]);
@@ -222,7 +220,6 @@ export default function CommandCenterOperationalPage() {
                     <div className="flex items-center gap-6 text-xs text-muted-foreground">
                       <span><strong className="text-foreground">{stats.crewActive}</strong> crew</span>
                       <span><strong className="text-foreground">{stats.equipmentActive}</strong> equip</span>
-                      {stats.weatherAlert && <CloudRain className="h-4 w-4 text-destructive" />}
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   </div>

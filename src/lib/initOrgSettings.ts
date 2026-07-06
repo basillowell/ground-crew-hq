@@ -4,8 +4,6 @@ type InitOrgSettingsArgs = {
   orgId: string;
 };
 
-const DEFAULT_WEATHER_LATITUDE = 27.3364;
-const DEFAULT_WEATHER_LONGITUDE = -82.5307;
 
 export async function initOrgSettings({ orgId }: InitOrgSettingsArgs): Promise<void> {
   if (!supabase || !orgId) return;
@@ -29,9 +27,6 @@ export async function initOrgSettings({ orgId }: InitOrgSettingsArgs): Promise<v
       {
         org_id: orgId,
         app_name: 'Ground Crew HQ',
-        weather_default_latitude: DEFAULT_WEATHER_LATITUDE,
-        weather_default_longitude: DEFAULT_WEATHER_LONGITUDE,
-        weather_preferred_provider: 'noaa-nws',
       },
       { onConflict: 'org_id', ignoreDuplicates: true },
     );

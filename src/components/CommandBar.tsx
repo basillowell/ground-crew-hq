@@ -9,14 +9,12 @@ import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
-import { fetchNwsWeather } from '@/lib/weather/providers';
-import { getWeatherConditionMeta } from '@/lib/weather/wmoUtils';
 import { formatTime } from '@/utils/formatTime';
 
 const HISTORY_KEY = 'ground-crew-command-history';
 const QUICK_PROMPTS = [
   "What's my crew status today?",
-  'Any weather concerns?',
+  'Any open needs?',
   'Who has no tasks assigned?',
   'What was our labor cost this week?',
   'Any equipment overdue?',
@@ -37,7 +35,6 @@ type ContextPayload = {
   shifts: Array<{ employee: string; shiftStart: string; shiftEnd: string }>;
   taskCount: number;
   tasks: Array<{ title: string; employee: string; status: string; hours: number }>;
-  weather: { temp: number | null; wind: number | null; rainProbability: number | null; conditions: string };
   equipmentAlerts: string[];
   openNeeds: number;
   lastWeekHours: { scheduled: number; actual: number };
@@ -68,7 +65,6 @@ function inferNav(response: string): { label: string; route: string } | null {
   const lower = response.toLowerCase();
   if (lower.includes('scheduler')) return { label: 'Open Scheduler', route: '/app/scheduler' };
   if (lower.includes('workboard') || lower.includes('workflow')) return { label: 'Open Workboard', route: '/app/workboard' };
-  if (lower.includes('weather')) return { label: 'Open Weather', route: '/app/weather' };
   if (lower.includes('equipment')) return { label: 'Open Equipment', route: '/app/equipment' };
   if (lower.includes('reports')) return { label: 'Open Reports', route: '/app/reports' };
   return null;
@@ -76,14 +72,6 @@ function inferNav(response: string): { label: string; route: string } | null {
 
 function answerLocally(question: string, context: ContextPayload): string {
   const lower = question.toLowerCase();
-  if (lower.includes('spray')) {
-    const wind = context.weather.wind ?? 0;
-    const rain = context.weather.rainProbability ?? 0;
-    if (wind > 10 || rain > 40) {
-      return `Wind is ${wind}mph and rain chance is ${rain}%. I’d hold spraying for now and recheck on the Weather page hourly.`;
-    }
-    return `Current wind is ${wind}mph with ${rain}% rain probability, so spray conditions look acceptable right now. Keep monitoring on the Weather page.`;
-  }
   if (lower.includes('who') && (lower.includes('working') || lower.includes('crew'))) {
     if (!context.shifts.length) return 'No crew members are scheduled today. I can help you navigate there by opening the Scheduler.';
     const crewLine = context.shifts
@@ -91,9 +79,6 @@ function answerLocally(question: string, context: ContextPayload): string {
       .map((shift) => `${shift.employee} (${formatTime(shift.shiftStart)}-${formatTime(shift.shiftEnd)})`)
       .join(', ');
     return `${context.crewCount} crew members are scheduled today: ${crewLine}${context.shifts.length > 4 ? ', and more.' : '.'}`;
-  }
-  if (lower.includes('weather')) {
-    return `Current weather is ${context.weather.temp ?? 'N/A'}F, wind ${context.weather.wind ?? 'N/A'}mph, rain probability ${context.weather.rainProbability ?? 'N/A'}%. ${context.weather.conditions}.`;
   }
   if (lower.includes('no tasks') || lower.includes('unassigned')) {
     if (!context.unassignedCrew.length) return 'Everyone scheduled today has at least one task assignment.';
@@ -142,7 +127,6 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
         shifts: [],
         taskCount: 0,
         tasks: [],
-        weather: { temp: null, wind: null, rainProbability: null, conditions: 'Unknown' },
         equipmentAlerts: [],
         openNeeds: 0,
         lastWeekHours: { scheduled: 0, actual: 0 },
@@ -203,19 +187,12 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
     overdueCutoff.setDate(overdueCutoff.getDate() - 90);
     equipmentQuery = equipmentQuery.lt('last_serviced', overdueCutoff.toISOString().slice(0, 10));
 
-    const [schedulesResult, assignmentsResult, equipmentResult, needsResult, lastWeekResult, weatherResult] = await Promise.all([
+    const [schedulesResult, assignmentsResult, equipmentResult, needsResult, lastWeekResult] = await Promise.all([
       schedulesQuery,
       assignmentsQuery,
       equipmentQuery,
       needsQuery,
       lastWeekQuery,
-      selectedProperty?.latitude && selectedProperty?.longitude
-        ? fetchNwsWeather({
-            latitude: selectedProperty.latitude,
-            longitude: selectedProperty.longitude,
-            timezone: 'America/New_York',
-          })
-        : Promise.resolve(null),
     ]);
 
     if (schedulesResult.error) throw schedulesResult.error;
@@ -252,15 +229,6 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
       },
       { scheduled: 0, actual: 0 },
     );
-    const weatherNow = weatherResult?.hourly.find((row) => row.time.slice(0, 10) === today) ?? null;
-    const weather = weatherResult
-      ? {
-          temp: Math.round(weatherResult.current.temperature),
-          wind: Math.round(weatherResult.current.windSpeed),
-          rainProbability: weatherNow ? Math.round(weatherNow.precipitationProbability) : null,
-          conditions: getWeatherConditionMeta(weatherResult.current.weatherCode).label,
-        }
-      : { temp: null, wind: null, rainProbability: null, conditions: 'Unknown' };
 
     return {
       today,
@@ -270,7 +238,6 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
       shifts,
       taskCount: tasks.length,
       tasks,
-      weather,
       equipmentAlerts: (equipmentResult.data ?? []).map((row) => {
         const name = String(row.name ?? '').trim();
         const unit = String(row.unit_name ?? '').trim();

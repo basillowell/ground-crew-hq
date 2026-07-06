@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useAssignments, useEmployees, useNotes, useProperties, useTasks } from '@/lib/supabase-queries';
-import { fetchNwsWeather } from '@/lib/weather/providers';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
-import { ClipboardList, CloudSun, Hash, MessageSquare, Send, StickyNote } from 'lucide-react';
+import { ClipboardList, Hash, MessageSquare, Send, StickyNote } from 'lucide-react';
 import { PageHeader } from '@/components/shared';
 
 // columns from messages migration
@@ -19,10 +18,6 @@ interface Message {
   created_at: string;
 }
 
-type BreakroomWeather = {
-  temperature: number;
-  windSpeed: number;
-};
 
 const COMPANY_CHANNEL = 'general';
 const UNREAD_KEY = (orgId: string, channel: string) =>
@@ -73,7 +68,6 @@ export default function BreakroomPage() {
     orgId ?? undefined,
   );
   const { data: tasks = [] } = useTasks(undefined, orgId ?? undefined);
-  const [weather, setWeather] = useState<BreakroomWeather | null>(null);
   const channels = [
     { id: COMPANY_CHANNEL, label: 'Company-wide' },
     ...properties.map((p) => ({ id: `property-${p.id}`, label: p.name })),
@@ -87,7 +81,6 @@ export default function BreakroomPage() {
   const [sending, setSending] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
-  const activeProperty = properties.find((property) => property.id === selectedPropertyId) ?? null;
   const dailyNote = notes.find((note) => note.type === 'daily' && note.date === todayKey);
   const assignmentSummary = useMemo(() => {
     const employeeNames = new Map(
@@ -143,31 +136,6 @@ export default function BreakroomPage() {
     markRead(activeChannel);
   }, [fetchMessages, activeChannel, orgId, markRead]);
 
-  useEffect(() => {
-    if (!orgId || activeProperty?.latitude == null || activeProperty.longitude == null) {
-      setWeather(null);
-      return;
-    }
-    let cancelled = false;
-    void fetchNwsWeather({
-      latitude: activeProperty.latitude,
-      longitude: activeProperty.longitude,
-    })
-      .then((payload) => {
-        if (!cancelled) {
-          setWeather({
-            temperature: Number(payload.current.temperature ?? 0),
-            windSpeed: Number(payload.current.windSpeed ?? 0),
-          });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setWeather(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeProperty?.latitude, activeProperty?.longitude, orgId]);
 
   // Scroll to bottom when messages load or change
   useEffect(() => {
@@ -304,7 +272,7 @@ export default function BreakroomPage() {
         <div className="border-b border-surface-border px-4 pt-3">
           <PageHeader title="Breakroom" subtitle="Share updates with your team channels." />
         </div>
-        <div className="grid gap-3 border-b border-surface-border bg-surface-base p-4 lg:grid-cols-3">
+        <div className="grid gap-3 border-b border-surface-border bg-surface-base p-4 lg:grid-cols-2">
           <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-2">
             <div className="mb-2 flex items-center gap-2 text-brand">
               <StickyNote className="h-4 w-4" />
@@ -321,21 +289,7 @@ export default function BreakroomPage() {
               <p className="text-sm text-text-muted">No daily note has been posted for today.</p>
             )}
           </section>
-          <section className="rounded-xl border border-surface-border bg-surface-elevated p-4">
-            <div className="mb-2 flex items-center gap-2 text-brand">
-              <CloudSun className="h-4 w-4" />
-              <h2 className="text-xs font-semibold uppercase tracking-wide">Current Weather</h2>
-            </div>
-            {weather ? (
-              <div>
-                <p className="text-2xl font-bold text-text-primary">{Math.round(weather.temperature)}°F</p>
-                <p className="text-sm text-text-secondary">Wind {Math.round(weather.windSpeed)} mph</p>
-              </div>
-            ) : (
-              <p className="text-sm text-text-muted">Weather unavailable for this property.</p>
-            )}
-          </section>
-          <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-3">
+          <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-2">
             <div className="mb-3 flex items-center gap-2 text-brand">
               <ClipboardList className="h-4 w-4" />
               <h2 className="text-xs font-semibold uppercase tracking-wide">Today's Assignments</h2>

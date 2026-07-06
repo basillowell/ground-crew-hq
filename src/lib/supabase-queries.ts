@@ -19,9 +19,6 @@ import type {
   ScheduleEntry,
   ShiftTemplate,
   Task,
-  WeatherDailyLog,
-  WeatherLocation,
-  WeatherStation,
   WorkLocation,
 } from '@/data/seedData';
 import { supabase } from '@/lib/supabase';
@@ -180,12 +177,6 @@ type DbProgramSettings = {
   font_theme_preset: string;
   logo_url: string | null;
   default_department: string;
-  weather_default_location_name?: string | null;
-  weather_default_address?: string | null;
-  weather_default_latitude?: number | null;
-  weather_default_longitude?: number | null;
-  weather_preferred_provider?: string | null;
-  weather_enabled_panels?: string[] | null;
   created_at: string;
 };
 
@@ -200,14 +191,6 @@ type DbClockEvent = {
   location_lng: number | null;
 };
 
-type DbWeatherStation = {
-  id: string;
-  location_id?: string | null;
-  name: string;
-  provider: string;
-  status: string;
-  is_primary?: boolean | null;
-};
 
 type DbPropertyClassOption = {
   id: string;
@@ -225,48 +208,7 @@ type DbWorkLocation = {
   property_name?: string | null;
 };
 
-type DbWeatherLocation = {
-  id: string;
-  name: string;
-  property: string;
-  propertyId?: string | null;
-  property_id?: string | null;
-  area: string;
-  org_id?: string | null;
-  is_active?: boolean | null;
-  address?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  timezone?: string | null;
-  is_default?: boolean | null;
-  forecast_provider?: 'auto' | 'noaa-nws' | null;
-  radar_provider?: 'auto' | null;
-};
 
-type DbWeatherDailyLog = {
-  id: string;
-  locationId?: string | null;
-  location_id?: string | null;
-  stationId?: string | null;
-  station_id?: string | null;
-  date: string;
-  capturedAt?: string | null;
-  captured_at?: string | null;
-  currentConditions?: string | null;
-  current_conditions?: string | null;
-  forecast?: string | null;
-  rainfallTotal?: number | null;
-  rainfall_total?: number | null;
-  temperature?: number | null;
-  humidity?: number | null;
-  wind?: number | null;
-  windGust?: number | null;
-  wind_gust?: number | null;
-  et?: number | null;
-  source?: 'station' | 'manual-override' | null;
-  alerts?: string[] | null;
-  notes?: string | null;
-};
 
 type DbDepartmentOption = { id: string; org_id?: string | null; name: string; active?: boolean | null };
 type DbGroupOption = { id: string; org_id?: string | null; name: string; color?: string | null; active?: boolean | null };
@@ -298,8 +240,6 @@ type DbApplicationArea = {
   property: string;
   propertyId?: string | null;
   property_id?: string | null;
-  weatherLocationId?: string | null;
-  weather_location_id?: string | null;
 };
 type DbChemicalProduct = {
   id: string;
@@ -356,8 +296,6 @@ type DbChemicalApplicationLog = {
   supervisorName?: string | null;
   supervisorLicenseNumber?: string | null;
   equipmentUsedId?: string | null;
-  weatherLogId?: string | null;
-  weatherConditionsSummary?: string | null;
   windDirection?: string | null;
   windSpeedAtApplication?: number | null;
   temperatureAtApplication?: number | null;
@@ -382,13 +320,6 @@ type DbChemicalApplicationTankMixItem = {
   mix_order?: number | null;
 };
 
-type WeatherStationSummary = {
-  id: string;
-  name: string;
-  provider: string;
-  status: string;
-  isPrimary: boolean;
-};
 
 export type ClockEvent = {
   id: string;
@@ -602,12 +533,6 @@ function toProgramSettings(row: DbProgramSettings): ProgramSettings {
     sidebarColor: row.sidebar_color,
     fontThemePreset: row.font_theme_preset,
     defaultDepartment: row.default_department,
-    weatherDefaultLocationName: row.weather_default_location_name ?? undefined,
-    weatherDefaultAddress: row.weather_default_address ?? undefined,
-    weatherDefaultLatitude: row.weather_default_latitude ?? undefined,
-    weatherDefaultLongitude: row.weather_default_longitude ?? undefined,
-    weatherPreferredProvider: row.weather_preferred_provider ?? undefined,
-    weatherEnabledPanels: row.weather_enabled_panels ?? undefined,
     timeZone: 'America/New_York',
     fiscalYearStart: '01-01',
     enableMobileApp: true,
@@ -644,59 +569,12 @@ function toWorkLocation(row: DbWorkLocation): WorkLocation {
   };
 }
 
-function toWeatherLocation(row: DbWeatherLocation): WeatherLocation {
-  const latitude =
-    typeof row.latitude === 'number'
-      ? row.latitude
-      : row.latitude == null
-        ? undefined
-        : Number(row.latitude);
-  const longitude =
-    typeof row.longitude === 'number'
-      ? row.longitude
-      : row.longitude == null
-        ? undefined
-        : Number(row.longitude);
-  const propertyValue = String(row.property ?? '').trim();
-  return {
-    id: row.id,
-    name: row.name,
-    property: row.property,
-    propertyId: row.property_id ?? row.propertyId ?? (propertyValue || undefined),
-    area: row.area,
-    address: row.address ?? undefined,
-    latitude: Number.isFinite(latitude) ? latitude : undefined,
-    longitude: Number.isFinite(longitude) ? longitude : undefined,
-  };
-}
-
-function toWeatherDailyLog(row: DbWeatherDailyLog): WeatherDailyLog {
-  return {
-    id: row.id,
-    locationId: row.location_id ?? row.locationId ?? '',
-    stationId: row.station_id ?? row.stationId ?? undefined,
-    date: row.date,
-    capturedAt: row.captured_at ?? row.capturedAt ?? undefined,
-    currentConditions: row.current_conditions ?? row.currentConditions ?? 'Unknown',
-    forecast: row.forecast ?? '',
-    rainfallTotal: Number(row.rainfall_total ?? row.rainfallTotal ?? 0),
-    temperature: Number(row.temperature ?? 0),
-    humidity: Number(row.humidity ?? 0),
-    wind: Number(row.wind ?? 0),
-    windGust: Number(row.wind_gust ?? row.windGust ?? 0),
-    et: Number(row.et ?? 0),
-    source: row.source ?? 'station',
-    alerts: row.alerts ?? [],
-    notes: row.notes ?? '',
-  };
-}
 
 function toApplicationArea(row: DbApplicationArea): ApplicationArea {
   return {
     id: row.id,
     name: row.name,
     property: row.property,
-    weatherLocationId: row.weather_location_id ?? row.weatherLocationId ?? '',
   };
 }
 
@@ -737,8 +615,6 @@ function toChemicalApplicationLog(row: DbChemicalApplicationLog): ChemicalApplic
     supervisorName: row.supervisor_name ?? row.supervisorName ?? undefined,
     supervisorLicenseNumber: row.supervisor_license_number ?? row.supervisorLicenseNumber ?? undefined,
     equipmentUsedId: row.equipment_used_id ?? row.equipmentUsedId ?? undefined,
-    weatherLogId: row.weather_log_id ?? row.weatherLogId ?? undefined,
-    weatherConditionsSummary: row.weather_conditions_summary ?? row.weatherConditionsSummary ?? undefined,
     windDirection: row.wind_direction ?? row.windDirection ?? undefined,
     windSpeedAtApplication: row.wind_speed_at_application ?? row.windSpeedAtApplication ?? undefined,
     temperatureAtApplication: row.temperature_at_application ?? row.temperatureAtApplication ?? undefined,
@@ -860,18 +736,6 @@ async function fetchNotes(propertyId?: string, orgId?: string): Promise<Note[]> 
   return (data as DbNote[]).map(toNote);
 }
 
-async function fetchWeatherStations(): Promise<WeatherStationSummary[]> {
-  const client = ensureSupabase();
-  const { data, error } = await client.from('weather_stations').select('*').order('name');
-  if (error) return [];
-  return ((data as DbWeatherStation[]) ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    provider: row.provider,
-    status: row.status,
-    isPrimary: Boolean(row.is_primary),
-  }));
-}
 
 async function fetchPropertyClassOptions(): Promise<PropertyClassOption[]> {
   const rows = await fetchOptionalRows<DbPropertyClassOption>('property_class_options', 'name');
@@ -883,76 +747,6 @@ async function fetchWorkLocations(): Promise<WorkLocation[]> {
   return rows.map(toWorkLocation);
 }
 
-export async function fetchWeatherLocations(propertyId?: string, orgId?: string, activeOnly = false): Promise<WeatherLocation[]> {
-  try {
-    const client = ensureSupabase();
-    const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-    let query = client
-      .from('weather_locations')
-      .select('id, name, property, area, latitude, longitude, org_id, is_active, timezone, is_default, forecast_provider, radar_provider')
-      .order('name');
-    if (orgId) query = query.eq('org_id', orgId);
-    if (activeOnly) query = query.eq('is_active', true);
-    const { data, error } = await query;
-    if (error) return [];
-    const rows = (data as DbWeatherLocation[]) ?? [];
-    if (!scopedPropertyId) return rows.map(toWeatherLocation);
-    const filtered = rows.filter((row) => row.property === scopedPropertyId);
-    return filtered.map(toWeatherLocation);
-  } catch {
-    return [];
-  }
-}
-
-/** Full table fetch for hooks that need unbounded history (e.g. Breakroom, Scheduler). */
-async function fetchAllWeatherDailyLogs(): Promise<WeatherDailyLog[]> {
-  try {
-    const rows = await fetchOptionalRows<DbWeatherDailyLog>('weather_daily_logs', 'date');
-    return rows.map(toWeatherDailyLog);
-  } catch {
-    return [];
-  }
-}
-
-export async function fetchWeatherDailyLogs(startDate: string, endDate: string, propertyId?: string): Promise<WeatherDailyLog[]> {
-  try {
-    const client = ensureSupabase();
-    const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-    let locationIds: string[] | undefined;
-    if (scopedPropertyId) {
-      const locations = await fetchWeatherLocations(scopedPropertyId);
-      locationIds = locations.map((l) => l.id);
-      if (locationIds.length === 0) return [];
-    }
-    let query = client
-      .from('weather_daily_logs')
-      .select('*')
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date');
-    if (locationIds && locationIds.length > 0) {
-      query = query.in('location_id', locationIds);
-    }
-    const { data, error } = await query;
-    if (error) return [];
-    return ((data as DbWeatherDailyLog[]) ?? []).map(toWeatherDailyLog);
-  } catch {
-    return [];
-  }
-}
-
-async function fetchWeatherDailyLogsByIds(ids: string[]): Promise<WeatherDailyLog[]> {
-  try {
-    const unique = [...new Set(ids.filter(Boolean))];
-    if (unique.length === 0) return [];
-    const client = ensureSupabase();
-    const { data, error } = await client.from('weather_daily_logs').select('*').in('id', unique);
-    if (error) return [];
-    return ((data as DbWeatherDailyLog[]) ?? []).map(toWeatherDailyLog);
-  } catch {
-    return [];
-  }
-}
 
 async function fetchDepartmentOptions(orgId?: string): Promise<DepartmentOption[]> {
   const client = ensureSupabase();
@@ -1069,18 +863,17 @@ async function fetchFrameworkOptions(table: 'job_descriptions' | 'employment_sta
 async function fetchChemicalApplicationLogFieldsForDate(
   date: string,
   orgId?: string,
-): Promise<Array<{ weatherLogId?: string | null; applicatorLicenseNumber?: string | null; supervisorLicenseNumber?: string | null }>> {
+): Promise<Array<{ applicatorLicenseNumber?: string | null; supervisorLicenseNumber?: string | null }>> {
   try {
     const client = ensureSupabase();
     let query = client
       .from('chemical_application_logs')
-      .select('weather_log_id, applicator_license_number, supervisor_license_number, application_date')
+      .select('applicator_license_number, supervisor_license_number, application_date')
       .eq('application_date', date);
     if (orgId) query = query.eq('org_id', orgId);
     const { data, error } = await query;
     if (error) return [];
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-      weatherLogId: row.weather_log_id ? String(row.weather_log_id) : null,
       applicatorLicenseNumber: row.applicator_license_number ? String(row.applicator_license_number) : null,
       supervisorLicenseNumber: row.supervisor_license_number ? String(row.supervisor_license_number) : null,
     }));
@@ -1357,13 +1150,6 @@ export function useNotes(propertyId?: string, orgId?: string) {
   });
 }
 
-export function useWeatherStations() {
-  return useQuery({
-    queryKey: ['weather-stations'],
-    queryFn: fetchWeatherStations,
-    staleTime: 1000 * 60 * 5,
-  });
-}
 
 export function usePropertyClassOptions() {
   return useQuery({
@@ -1390,45 +1176,6 @@ export function useWorkLocations(propertyId?: string, orgId?: string) {
   });
 }
 
-export function useWeatherLocations(propertyId?: string, orgId?: string, activeOnly = false) {
-  return useQuery({
-    queryKey: ['weather-locations', propertyId ?? 'all', orgId ?? 'all-orgs', activeOnly ? 'active' : 'all-statuses'],
-    queryFn: () => fetchWeatherLocations(propertyId, orgId, activeOnly),
-    enabled: Boolean(orgId),
-    staleTime: 1000 * 60 * 10,
-    retry: 3,
-    retryDelay: 1000,
-  });
-}
-
-export function useWeatherDailyLogs() {
-  return useQuery({
-    queryKey: ['weather-daily-logs-all'],
-    queryFn: fetchAllWeatherDailyLogs,
-    staleTime: 1000 * 60 * 10,
-  });
-}
-
-export function useWeatherDailyLogsRange(startDate: string, endDate: string, propertyId?: string, orgId?: string) {
-  return useQuery({
-    queryKey: ['weather-daily-logs-range', startDate, endDate, propertyId ?? 'all', orgId ?? 'all-orgs'],
-    queryFn: () => fetchWeatherDailyLogs(startDate, endDate, propertyId),
-    enabled: Boolean(orgId && startDate && endDate),
-    staleTime: 1000 * 60 * 5,
-    retry: 3,
-    retryDelay: 1000,
-  });
-}
-
-export function useWeatherDailyLogsByIds(ids: string[]) {
-  const sortedKey = [...ids].filter(Boolean).sort().join(',');
-  return useQuery({
-    queryKey: ['weather-daily-logs-by-ids', sortedKey],
-    queryFn: () => fetchWeatherDailyLogsByIds(ids),
-    enabled: ids.some(Boolean),
-    staleTime: 1000 * 60 * 5,
-  });
-}
 
 export function useDepartmentOptions(orgId?: string) {
   return useQuery({
@@ -1623,20 +1370,3 @@ export function useClockEventsRange(startDate: string, endDate: string, property
   });
 }
 
-export async function updatePropertyLocation(
-  propertyId: string,
-  latitude: number,
-  longitude: number,
-  label: string,
-) {
-  const { error } = await ensureSupabase()
-    .from('properties')
-    .update({
-      latitude,
-      longitude,
-      weather_location_label: label,
-    })
-    .eq('id', propertyId);
-
-  if (error) throw error;
-}

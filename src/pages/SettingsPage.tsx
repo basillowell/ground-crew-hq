@@ -4196,7 +4196,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
                 <HelpCircle className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Set thresholds for weather and equipment alerts on the workboard.</TooltipContent>
+            <TooltipContent>Set thresholds for equipment and coverage alerts on the workboard.</TooltipContent>
           </Tooltip>
         </div>
         <p className="mb-4 mt-1 text-sm text-text-muted">Configure escalation thresholds used by the Workboard escalation center.</p>

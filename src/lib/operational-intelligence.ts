@@ -1,4 +1,4 @@
-import type { Assignment, Employee, Property, ScheduleEntry, WeatherDailyLog } from '@/data/seedData';
+import type { Assignment, Employee, Property, ScheduleEntry } from '@/data/seedData';
 
 type CompletionStatus = {
   key: string;
@@ -38,14 +38,6 @@ export type PropertyStaffingSummary = {
   assignedCrew: number;
 };
 
-export type WeatherOperationalFlags = {
-  hasData: boolean;
-  windRisk: boolean;
-  rainRisk: boolean;
-  heatRisk: boolean;
-  alertCount: number;
-  summary: string;
-};
 
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -186,32 +178,3 @@ export function computePropertyStaffingSummary(params: {
   });
 }
 
-export function computeWeatherOperationalFlags(weatherLog?: WeatherDailyLog | null): WeatherOperationalFlags {
-  if (!weatherLog) {
-    return {
-      hasData: false,
-      windRisk: false,
-      rainRisk: false,
-      heatRisk: false,
-      alertCount: 0,
-      summary: 'No weather data available.',
-    };
-  }
-  const windRisk = (weatherLog.windGust ?? weatherLog.wind ?? 0) >= 20;
-  const rainRisk = (weatherLog.rainfallTotal ?? 0) >= 0.15;
-  const heatRisk = (weatherLog.temperature ?? 0) >= 95;
-  const alertCount = weatherLog.alerts?.length ?? 0;
-  const riskLabels = [
-    windRisk ? 'wind risk' : null,
-    rainRisk ? 'rain risk' : null,
-    heatRisk ? 'heat risk' : null,
-  ].filter(Boolean);
-  return {
-    hasData: true,
-    windRisk,
-    rainRisk,
-    heatRisk,
-    alertCount,
-    summary: riskLabels.length > 0 ? `Watch ${riskLabels.join(', ')}.` : 'Weather conditions are within normal operating thresholds.',
-  };
-}

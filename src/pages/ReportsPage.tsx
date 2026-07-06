@@ -95,12 +95,6 @@ type TaskRow = {
   category: string | null;
 };
 
-type WeatherDailyLogRow = {
-  date: string;
-  rainfallTotal: number | null;
-  temperature: number | null;
-  wind: number | null;
-};
 
 type ClockEventRow = {
   id: string;
@@ -248,7 +242,6 @@ export default function ReportsPage() {
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
   const [openNeedsCount, setOpenNeedsCount] = useState(0);
   const organizationName = 'Ground Crew HQ';
-  const [weatherLogs, setWeatherLogs] = useState<WeatherDailyLogRow[]>([]);
   const [timesheetWeekStart, setTimesheetWeekStart] = useState<string>(() => toIsoDate(startOfWeek(new Date())));
   const [timesheetSchedules, setTimesheetSchedules] = useState<TimesheetScheduleRow[]>([]);
   const [timesheetAssignments, setTimesheetAssignments] = useState<AssignmentRow[]>([]);
@@ -378,12 +371,7 @@ export default function ReportsPage() {
       equipmentQuery,
       openNeedsQuery,
     ]);
-    const weatherLogsResult = await supabase
-      .from('weather_daily_logs')
-      .select('date, rainfall_total, temperature, wind')
-      .eq('org_id', orgId)
-      .gte('date', startDate)
-      .lte('date', endDate);
+
 
     if (
       assignmentsResult.error ||
@@ -392,8 +380,7 @@ export default function ReportsPage() {
       trendAssignmentsResult.error ||
       trendScheduleEntriesResult.error ||
       equipmentResult.error ||
-      openNeedsResult.error ||
-      weatherLogsResult.error
+      openNeedsResult.error
     ) {
       setError(
         assignmentsResult.error?.message ??
@@ -403,7 +390,6 @@ export default function ReportsPage() {
           trendScheduleEntriesResult.error?.message ??
           equipmentResult.error?.message ??
           openNeedsResult.error?.message ??
-          weatherLogsResult.error?.message ??
           'Unable to load report data',
       );
       setLoading(false);
@@ -417,14 +403,7 @@ export default function ReportsPage() {
     setTrendScheduleEntries((trendScheduleEntriesResult.data ?? []) as ScheduleEntryTrendRow[]);
     setEquipmentRows((equipmentResult.data ?? []) as EquipmentRow[]);
     setOpenNeedsCount(openNeedsResult.count ?? 0);
-    setWeatherLogs(
-      ((weatherLogsResult.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-        date: String(row.date ?? ''),
-        rainfallTotal: row.rainfall_total == null ? null : Number(row.rainfall_total),
-        temperature: row.temperature == null ? null : Number(row.temperature),
-        wind: row.wind == null ? null : Number(row.wind),
-      })),
-    );
+
     setLoading(false);
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
@@ -940,9 +919,6 @@ export default function ReportsPage() {
       .map(([name, hours]) => ({ name, hours }))
       .sort((a, b) => b.hours - a.hours)
       .slice(0, 5);
-    const sprayRestrictionDays = weatherLogs.filter((row) => Number(row.wind ?? 0) > 10).length;
-    const heatAdvisoryDays = weatherLogs.filter((row) => Number(row.temperature ?? 0) > 95).length;
-    const rainfallTotal = weatherLogs.reduce((sum, row) => sum + Number(row.rainfallTotal ?? 0), 0);
     const laborVariancePct =
       totals.scheduledHours > 0 ? Math.round((Math.abs(totals.actualHours - totals.scheduledHours) / totals.scheduledHours) * 100) : 0;
     const recommendations: string[] = [];
@@ -957,12 +933,9 @@ export default function ReportsPage() {
       avgCrewCoverage,
       equipmentUptime,
       topFive,
-      sprayRestrictionDays,
-      heatAdvisoryDays,
-      rainfallTotal,
       recommendations,
     };
-  }, [assignments, completionRate, equipmentRows, tasks, totals, weatherLogs]);
+  }, [assignments, completionRate, equipmentRows, tasks, totals]);
 
   const exportTrendsCsv = useCallback(() => {
     const headers = ['Month', 'Scheduled Hours', 'Actual Hours', 'Completion Rate (%)', 'Labor Cost'];
@@ -1471,12 +1444,6 @@ export default function ReportsPage() {
                 </li>
               ))}
             </ol>
-          </div>
-          <div>
-            <h4 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600 }}>Weather Impact</h4>
-            <p style={{ margin: 0, fontSize: '13px' }}>{gmSummary.sprayRestrictionDays} days with spray restrictions</p>
-            <p style={{ margin: 0, fontSize: '13px' }}>{gmSummary.heatAdvisoryDays} days with heat advisories</p>
-            <p style={{ margin: 0, fontSize: '13px' }}>Total rainfall: {gmSummary.rainfallTotal.toFixed(1)} inches</p>
           </div>
           <div>
             <h4 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600 }}>Recommendations</h4>

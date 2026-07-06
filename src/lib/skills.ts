@@ -28,18 +28,6 @@ type AssignmentRow = {
   location: string | null;
 };
 
-type WeatherRow = {
-  id: string;
-  location_id: string;
-  date: string;
-  forecast: string | null;
-  temperature: number | null;
-  humidity: number | null;
-  wind: number | null;
-  rainfall_total: number | null;
-  source: string | null;
-  created_at: string | null;
-};
 
 export type OpsContext = {
   orgId: string;
@@ -48,7 +36,6 @@ export type OpsContext = {
   crew: CrewRow[];
   shifts: ShiftRow[];
   assignments: AssignmentRow[];
-  weather: WeatherRow[];
 };
 
 export async function buildOpsContext(
@@ -57,7 +44,7 @@ export async function buildOpsContext(
 ): Promise<OpsContext> {
   const today = new Date().toISOString().slice(0, 10);
 
-  const [crewResult, shiftsResult, assignmentsResult, weatherResult] = await Promise.all([
+  const [crewResult, shiftsResult, assignmentsResult] = await Promise.all([
     client
       .from('employees')
       .select('id,first_name,last_name,role')
@@ -74,19 +61,11 @@ export async function buildOpsContext(
       .eq('org_id', orgId)
       .eq('date', today)
       .order('created_at', { ascending: true }),
-    client
-      .from('weather_daily_logs')
-      .select('id,location_id,date,forecast,temperature,humidity,wind,rainfall_total,source,created_at')
-      .eq('org_id', orgId)
-      .eq('date', today)
-      .order('created_at', { ascending: false })
-      .limit(1),
   ]);
 
   if (crewResult.error) throw crewResult.error;
   if (shiftsResult.error) throw shiftsResult.error;
   if (assignmentsResult.error) throw assignmentsResult.error;
-  if (weatherResult.error) throw weatherResult.error;
 
   return {
     orgId,
@@ -95,6 +74,5 @@ export async function buildOpsContext(
     crew: (crewResult.data ?? []) as CrewRow[],
     shifts: (shiftsResult.data ?? []) as ShiftRow[],
     assignments: (assignmentsResult.data ?? []) as AssignmentRow[],
-    weather: (weatherResult.data ?? []) as WeatherRow[],
   };
 }

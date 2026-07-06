@@ -6,7 +6,6 @@ import {
   Calendar,
   ClipboardList,
   Clock,
-  CloudSun,
   Home,
   LayoutDashboard,
   Mail,
@@ -485,7 +484,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     { label: 'Field View', route: '/app/field', icon: MapPin },
     { label: 'Workflow', route: '/app/workboard', icon: ClipboardList },
     { label: 'Team', route: '/app/employees', icon: Users },
-    { label: 'Weather', route: '/app/weather', icon: CloudSun },
   ];
   const employeeTabs = [
     { label: 'Today', icon: Home, href: '/app/field' },

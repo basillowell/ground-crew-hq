@@ -29,11 +29,5 @@ export function toProgramSettingsView(
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,
-    weatherDefaultLocationName: settings.weather_default_location_name ?? undefined,
-    weatherDefaultAddress: settings.weather_default_address ?? undefined,
-    weatherDefaultLatitude: settings.weather_default_latitude ?? undefined,
-    weatherDefaultLongitude: settings.weather_default_longitude ?? undefined,
-    weatherPreferredProvider: settings.weather_preferred_provider ?? undefined,
-    weatherEnabledPanels: settings.weather_enabled_panels ?? undefined,
   };
 }

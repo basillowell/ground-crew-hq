@@ -42,7 +42,6 @@ interface EmployeeRowProps {
   onTaskDragStart?: (employeeId: string, assignmentId: string) => void;
   onTaskDropOnTask?: (employeeId: string, targetAssignmentId: string) => void;
   coveragePercent?: number;
-  weatherWarningsByAssignment?: Record<string, Array<{ level: 'warning' | 'danger'; message: string }>>;
   assignmentTimelineById?: Record<string, { actualStartAt: string | null; actualCompletedAt: string | null }>;
   breakEvents?: EmployeeBreakChip[];
   operationalTimezone?: string;
@@ -98,7 +97,6 @@ export function EmployeeRow({
   onTaskDragStart,
   onTaskDropOnTask,
   coveragePercent,
-  weatherWarningsByAssignment,
   assignmentTimelineById,
   breakEvents = [],
   operationalTimezone = 'America/New_York',
@@ -324,7 +322,6 @@ export function EmployeeRow({
                           estimatedHours: Math.max(0, Number(assignment.estimatedHours ?? 0)),
                           status: 'active',
                           priority: 3,
-                          weatherDependency: false,
                           safetySensitive: false,
                           icon: 'clipboard',
                           color: '#6b7280',
@@ -335,7 +332,6 @@ export function EmployeeRow({
                       shiftEndTime={shiftEndTime}
                       operationalTimezone={operationalTimezone}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
-                      weatherWarnings={weatherWarningsByAssignment?.[assignment.id ?? ''] ?? []}
                       draggable
                       onDragStart={onTaskDragStart ? () => onTaskDragStart(employee.id, assignment.id ?? '') : undefined}
                       onDrop={onTaskDropOnTask ? () => onTaskDropOnTask(employee.id, assignment.id ?? '') : undefined}

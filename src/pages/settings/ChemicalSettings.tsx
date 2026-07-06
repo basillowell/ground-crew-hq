@@ -51,7 +51,6 @@ export default function ChemicalSettings() {
       default_property_id: settings.default_property_id,
       default_applicator_id: settings.default_applicator_id,
       rei_notification_hours: settings.rei_notification_hours,
-      require_weather_log: settings.require_weather_log,
       require_supervisor: settings.require_supervisor,
       default_area_unit: settings.default_area_unit,
     });
@@ -127,14 +126,7 @@ export default function ChemicalSettings() {
 
       <Card className="space-y-3 p-4">
         <h3 className="text-sm font-semibold">Compliance Toggles</h3>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={settings.require_weather_log}
-            onChange={(event) => update('require_weather_log', event.target.checked)}
-          />
-          Require linked weather log
-        </label>
+
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"

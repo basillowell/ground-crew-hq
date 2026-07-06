@@ -49,7 +49,6 @@ export type Property = {
   status: string;
   created_at: string;
   org_id: string | null;
-  weather_location_label: string | null;
 };
 
 export type Department = {
@@ -96,12 +95,6 @@ export type ProgramSettings = {
   default_department: string;
   created_at: string;
   org_id: string | null;
-  weather_default_location_name: string | null;
-  weather_default_address: string | null;
-  weather_default_latitude: number | null;
-  weather_default_longitude: number | null;
-  weather_preferred_provider: string | null;
-  weather_enabled_panels: string[] | null;
   theme_preference?: string | null;
 };
 

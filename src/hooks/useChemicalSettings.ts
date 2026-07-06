@@ -7,7 +7,6 @@ export type ChemicalSettings = {
   default_property_id: string | null;
   default_applicator_id: string | null;
   rei_notification_hours: number;
-  require_weather_log: boolean;
   require_supervisor: boolean;
   default_area_unit: string;
 };
@@ -17,7 +16,6 @@ const defaultSettings = (orgId: string): ChemicalSettings => ({
   default_property_id: null,
   default_applicator_id: null,
   rei_notification_hours: 24,
-  require_weather_log: true,
   require_supervisor: false,
   default_area_unit: 'acres',
 });
@@ -59,7 +57,6 @@ export function useChemicalSettings() {
       default_property_id: next.default_property_id ?? null,
       default_applicator_id: next.default_applicator_id ?? null,
       rei_notification_hours: Number(next.rei_notification_hours ?? 24),
-      require_weather_log: Boolean(next.require_weather_log ?? true),
       require_supervisor: Boolean(next.require_supervisor ?? false),
       default_area_unit: next.default_area_unit ?? 'acres',
     });
@@ -84,7 +81,6 @@ export function useChemicalSettings() {
         default_property_id: nextSettings.default_property_id || null,
         default_applicator_id: nextSettings.default_applicator_id || null,
         rei_notification_hours: Number(nextSettings.rei_notification_hours ?? 24),
-        require_weather_log: Boolean(nextSettings.require_weather_log),
         require_supervisor: Boolean(nextSettings.require_supervisor),
         default_area_unit: nextSettings.default_area_unit || 'acres',
       };
