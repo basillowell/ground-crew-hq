@@ -28,16 +28,25 @@ const noOpLock = async <T>(
 // Same reliability model as server-side session apps (e.g. ASB Task Tracker)
 // without requiring a backend rewrite. Authorized exception per CODERULES
 // Rule 4/21 - see ARCHITECTURE_ROADMAP.md.
+const COOKIE_KEY = 'gchq-session';
 const cookieStorage = {
-  getItem: (key: string) => {
-    const match = document.cookie.match(new RegExp('(^| )' + key + '=([^;]+)'));
-    return match ? decodeURIComponent(match[2]) : null;
+  getItem: (_key: string) => {
+    const match = document.cookie
+      .split('; ')
+      .find((row) => row.startsWith(`${COOKIE_KEY}=`));
+    if (!match) return null;
+    try {
+      return decodeURIComponent(match.split('=').slice(1).join('='));
+    } catch {
+      return null;
+    }
   },
-  setItem: (key: string, value: string) => {
-    document.cookie = `${key}=${encodeURIComponent(value)}; path=/; max-age=86400; SameSite=Lax; Secure`;
+  setItem: (_key: string, value: string) => {
+    const maxAge = 60 * 60 * 24; // 24 hours, matches JWT expiry
+    document.cookie = `${COOKIE_KEY}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax; Secure`;
   },
-  removeItem: (key: string) => {
-    document.cookie = `${key}=; path=/; max-age=0`;
+  removeItem: (_key: string) => {
+    document.cookie = `${COOKIE_KEY}=; path=/; max-age=0; SameSite=Lax; Secure`;
   },
 };
 
