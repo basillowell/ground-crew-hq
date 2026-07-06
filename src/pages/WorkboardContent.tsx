@@ -450,9 +450,11 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
   'in-progress': <Radio className="h-3.5 w-3.5 text-blue-500 animate-pulse" />,
 };
 
+type NullableOrgId = string | null;
+
 type PendingTaskRequest = {
   id: string;
-  org_id?: string | null;
+  org_id?: NullableOrgId;
   employee_id?: string | null;
   property_id?: string | null;
   date: string;
@@ -495,7 +497,7 @@ type AvailableEquipmentItem = {
   type: string | null;
   status: string | null;
   active: boolean | null;
-  org_id: string | null;
+  org_id: NullableOrgId;
 };
 
 type RecurringTaskRuleRow = {
@@ -1002,7 +1004,7 @@ export default function WorkboardContent() {
     if (!import.meta.env.DEV) return;
     console.info('[workboard:data]', {
       boardDate,
-      orgId: currentUser?.orgId ?? null,
+      orgId,
       propertyId: effectivePropertyId,
       scheduleEntries: scheduleQuery.data?.length ?? 0,
       assignments: assignmentList.length,
@@ -1013,8 +1015,8 @@ export default function WorkboardContent() {
     assignmentList.length,
     assignmentsQuery.status,
     boardDate,
-    currentUser?.orgId,
     effectivePropertyId,
+    orgId,
     scheduleQuery.data?.length,
     scheduleQuery.status,
   ]);
@@ -1238,7 +1240,12 @@ export default function WorkboardContent() {
   }, [assignmentsQuery.dataUpdatedAt, taskRequestsQuery.dataUpdatedAt]);
 
   const applyRecurringTasks = useCallback(async () => {
-    if (!supabase || !currentUser?.orgId) return;
+    if (!supabase) return;
+    const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+    if (!resolvedOrgId) {
+      toast.error('Session is reconnecting — please try again in a moment.');
+      return;
+    }
     if (scheduleQuery.isLoading || assignmentsQuery.isLoading) {
       toast.info('Crew assignments are still loading. Try again in a moment.');
       return;
@@ -1264,7 +1271,7 @@ export default function WorkboardContent() {
       return;
     }
 
-    const sessionKey = `recurring-applied-${currentUser.orgId}-${effectivePropertyId ?? 'all'}-${boardDate}`;
+    const sessionKey = `recurring-applied-${resolvedOrgId}-${effectivePropertyId ?? 'all'}-${boardDate}`;
     if (sessionStorage.getItem(sessionKey) === 'true') {
       toast.info('Recurring tasks have already been applied for this date.');
       return;
@@ -1282,7 +1289,7 @@ export default function WorkboardContent() {
         const shift = scheduledByEmployee.get(rule.employee_id);
         if (!shift) continue;
         inserts.push({
-          org_id: currentUser.orgId,
+          org_id: resolvedOrgId,
           property_id: shift.propertyId,
           employee_id: rule.employee_id,
           task_id: task.id,
@@ -1295,7 +1302,7 @@ export default function WorkboardContent() {
       } else {
         for (const shift of scheduledToday) {
           inserts.push({
-            org_id: currentUser.orgId,
+            org_id: resolvedOrgId,
             property_id: shift.propertyId,
             employee_id: shift.employeeId,
             task_id: task.id,
@@ -1325,6 +1332,7 @@ export default function WorkboardContent() {
     await queryClient.invalidateQueries({ queryKey: ['assignments'] });
   }, [
     assignmentsQuery.isLoading,
+    authOrgId,
     boardDate,
     currentUser?.orgId,
     dayAssignments.length,
@@ -2740,7 +2748,12 @@ export default function WorkboardContent() {
       toast.info('Demo mode is read-only.');
       return;
     }
-    if (!supabase || !currentUser?.orgId) return;
+    if (!supabase) return;
+    const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+    if (!resolvedOrgId) {
+      toast.error('Session is reconnecting — please try again in a moment.');
+      return;
+    }
 
     const selected = quickPlanSuggestions.filter((item) => selectedQuickPlanIds.includes(item.sourceId));
     if (selected.length === 0) {
@@ -2772,7 +2785,7 @@ export default function WorkboardContent() {
       assignmentCountByEmployee[item.employeeId] = nextOrder;
       const row = {
         id: makeId(),
-        org_id: currentUser.orgId,
+        org_id: resolvedOrgId,
         employee_id: item.employeeId,
         property_id:
           (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : shift.propertyId) ??
@@ -2844,6 +2857,7 @@ export default function WorkboardContent() {
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
   }, [
     activeProperty?.id,
+    authOrgId,
     boardDate,
     currentUser?.orgId,
     dayAssignments,
@@ -2863,7 +2877,12 @@ export default function WorkboardContent() {
       toast.info('Demo mode is read-only.');
       return;
     }
-    if (!supabase || !currentUser?.orgId) return;
+    if (!supabase) return;
+    const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+    if (!resolvedOrgId) {
+      toast.error('Session is reconnecting — please try again in a moment.');
+      return;
+    }
 
     if (selectedTemplateTaskIds.length === 0) {
       toast.error('Select at least one task to apply.');
@@ -2909,7 +2928,7 @@ export default function WorkboardContent() {
         const nextOrder = (assignmentCountByEmployee[employeeId] ?? 0) + index + 1;
         return {
           id: makeId(),
-          org_id: currentUser.orgId,
+          org_id: resolvedOrgId,
           employee_id: employeeId,
           property_id: propertyIdForEmployee,
           task_id: task.id,
@@ -2964,6 +2983,7 @@ export default function WorkboardContent() {
   }, [
     activeProperty?.id,
     applyTemplateToAllCrew,
+    authOrgId,
     boardDate,
     currentUser?.orgId,
     dayAssignments,
@@ -3644,8 +3664,9 @@ export default function WorkboardContent() {
       return;
     }
     if (!supabase) return;
-    if (!currentUser?.orgId) {
-      toast.error('Missing organization context.');
+    const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+    if (!resolvedOrgId) {
+      toast.error('Session is reconnecting — please try again in a moment.');
       return;
     }
     if (!isValidAssignmentDate(boardDate)) {
@@ -3728,7 +3749,7 @@ export default function WorkboardContent() {
         const writeStatus = toAssignmentWriteStatus(taskRow.status);
         const row: Record<string, unknown> = {
           id: assignmentId,
-          org_id: currentUser.orgId,
+          org_id: resolvedOrgId,
           employee_id: employee.id,
           property_id: propertyIdForRow,
           task_id: selectedTaskId,
@@ -3881,7 +3902,7 @@ export default function WorkboardContent() {
       const writeStatus = toAssignmentWriteStatus(assignmentDraft.status);
       const basePayload: Record<string, unknown> = {
         id: assignmentId,
-        org_id: currentUser.orgId,
+        org_id: resolvedOrgId,
         employee_id: assignmentDraft.employeeId,
         property_id: resolvedPropertyId,
         task_id: selectedTaskId,
@@ -3942,7 +3963,7 @@ export default function WorkboardContent() {
         .update({
           status: 'assigned',
           task_id: linkedRequestTaskId,
-          org_id: currentUser?.orgId ?? null,
+          org_id: resolvedOrgId,
         })
         .eq('id', linkedRequestId));
       if (linkedRequestError) {
@@ -4142,7 +4163,12 @@ export default function WorkboardContent() {
       toast.info('Demo mode is read-only.');
       return;
     }
-    if (!supabase || !currentUser?.orgId || !request.employee_id) return;
+    if (!supabase || !request.employee_id) return;
+    const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+    if (!resolvedOrgId) {
+      toast.error('Session is reconnecting — please try again in a moment.');
+      return;
+    }
     const resolvedPropertyId =
       (request.property_id && request.property_id !== 'all' ? request.property_id : null) ??
       (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null);
@@ -4160,7 +4186,7 @@ export default function WorkboardContent() {
     }
     const payload = {
       id: makeId(),
-      org_id: currentUser.orgId,
+      org_id: resolvedOrgId,
       employee_id: request.employee_id,
       property_id: resolvedPropertyId,
       task_id: fallbackTaskId,
@@ -4207,7 +4233,7 @@ export default function WorkboardContent() {
       .from('task_requests')
       .update({ status: 'approved' })
       .eq('id', request.id)
-      .eq('org_id', currentUser.orgId));
+      .eq('org_id', resolvedOrgId));
     if (requestError) {
       toast.error(`Assignment created but request update failed: ${requestError.message}`);
       return;
