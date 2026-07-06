@@ -274,6 +274,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await delay(200);
         await loadAppUser(session.user.id, session.user);
       }
+
+      if (event === 'TOKEN_REFRESHED' && session?.user) {
+        if (!currentUser || !orgId) {
+          await loadAppUser(session.user.id, session.user);
+        }
+      }
     });
 
     let mounted = true;
