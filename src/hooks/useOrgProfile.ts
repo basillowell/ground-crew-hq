@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/utils/supabase/browser'
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { useUser } from './useUser'
 
@@ -101,6 +101,7 @@ function useOrgProfileState() {
   const [loading, setLoading] = useState(true)
   const [profileAttempted, setProfileAttempted] = useState(false)
   const [profileError, setProfileError] = useState(false)
+  const attemptedForUserIdRef = useRef<string | null>(null)
   const currentPropertyId = useSyncExternalStore(
     subscribeToCurrentPropertyId,
     getCurrentPropertyIdSnapshot,
@@ -113,6 +114,7 @@ function useOrgProfileState() {
     if (userLoading) return
 
     if (!user) {
+      attemptedForUserIdRef.current = null
       setOrgId(null)
       setUserRole(null)
       setCurrentUser(null)
@@ -151,6 +153,7 @@ function useOrgProfileState() {
         }
 
         if (!appUser) {
+          attemptedForUserIdRef.current = user.id
           setOrgId(null)
           setUserRole(null)
           setCurrentUser(null)
@@ -185,6 +188,7 @@ function useOrgProfileState() {
           (organizationResult.data as OrganizationRow | null) ?? null,
         )
 
+        attemptedForUserIdRef.current = user.id
         setOrgId(profile.orgId)
         setUserRole(profile.role)
         setCurrentUser(profile)
@@ -193,6 +197,7 @@ function useOrgProfileState() {
         setLoading(false)
       } catch {
         if (!mounted) return
+        attemptedForUserIdRef.current = user.id
         setOrgId(null)
         setUserRole(null)
         setCurrentUser(null)
@@ -224,19 +229,20 @@ function useOrgProfileState() {
   const isPlanActive = useCallback(() => ['active', 'trialing'].includes(currentUser?.subscriptionStatus ?? 'trialing'), [currentUser?.subscriptionStatus])
 
   return useMemo(() => {
+    const attemptedForCurrentUser = attemptedForUserIdRef.current === (user?.id ?? null)
     const authState: AuthState = userLoading
       ? 'checking-session'
       : loading
         ? 'loading-profile'
         : !user
           ? 'no-session'
-          : currentUser
+          : currentUser && attemptedForCurrentUser
             ? 'authenticated'
-            : profileError
+            : profileError && attemptedForCurrentUser
               ? 'profile-error'
-              : profileAttempted
+              : profileAttempted && attemptedForCurrentUser
                 ? 'profile-missing'
-                : 'checking-session'
+                : 'loading-profile'
     const currentRole = currentUser?.role ?? userRole ?? 'employee'
     const isLoading = userLoading || loading
 
