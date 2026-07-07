@@ -149,7 +149,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
   const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive, isOrgReady } = useOrgProfile();
-  const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
+  const [showDemoBanner, setShowDemoBanner] = useState(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true' : true));
   const [orgReadyTimeout, setOrgReadyTimeout] = useState(false);
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
