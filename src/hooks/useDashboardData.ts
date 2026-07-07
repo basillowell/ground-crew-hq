@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import type {
   Assignment,
   ClockEvent,
@@ -16,6 +16,8 @@ import type {
   ProgramSettings as StoreProgramSettings,
   Property as StoreProperty,
 } from '@/store/appStore';
+
+const supabase = createClient();
 
 type UseDashboardDataParams = {
   orgId?: string;
@@ -255,4 +257,5 @@ export function useDashboardData(params: UseDashboardDataParams) {
     },
   });
 }
+
 

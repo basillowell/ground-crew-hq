@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp } from 'lucide-react';
 import { PageHeader } from '@/components/shared';
+
+const supabase = createClient();
 
 // columns from docs/dev/live-db-state.md — assignments
 interface CompletedAssignment {
@@ -29,7 +31,7 @@ interface TaskRow {
 type SortKey = 'property' | 'task' | 'employee' | 'estimated_hours' | 'actual_hours' | 'margin';
 
 export default function JobCostingPage() {
-  const { orgId } = useAuth();
+  const { orgId } = useOrgProfile();
   const { data: employees = [], isLoading: employeesLoading } = useEmployees(undefined, orgId ?? undefined, 'all');
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
 
@@ -310,3 +312,5 @@ export default function JobCostingPage() {
     </div>
   );
 }
+
+

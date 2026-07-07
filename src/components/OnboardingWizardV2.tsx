@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
+
+const supabase = createClient();
 
 type OnboardingWizardProps = {
   orgId: string;
@@ -306,3 +308,4 @@ export function OnboardingWizardV2({ orgId, userId, onComplete }: OnboardingWiza
     </div>
   );
 }
+

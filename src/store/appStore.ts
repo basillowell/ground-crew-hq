@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
+
+const supabase = createClient();
 
 export type Employee = {
   id: string;
@@ -256,3 +258,4 @@ export const useAppStore = create<AppStoreState>((set) => ({
   },
   reset: () => set(initialState),
 }));
+

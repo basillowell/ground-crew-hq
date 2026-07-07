@@ -94,7 +94,10 @@ import {
   saveCurrentAppUserId as saveCurrentAppUserIdLocal,
   saveCurrentPropertyId as saveCurrentPropertyIdLocal,
 } from './operationsStorage';
-import { hasSupabaseConfig, supabase } from './supabase';
+import { createClient } from './supabase';
+
+const supabase = createClient();
+const hasSupabaseConfig = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 type PersistedRow = {
   id?: string;
@@ -654,3 +657,4 @@ export function loadCurrentPropertyId() {
 export function saveCurrentPropertyId(value: string) {
   saveCurrentPropertyIdLocal(value);
 }
+

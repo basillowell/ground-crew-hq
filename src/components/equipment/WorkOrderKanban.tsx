@@ -10,7 +10,7 @@ import { Plus, Clock, Wrench, CheckCircle2, AlertTriangle, DollarSign, ChevronRi
 import type { WorkOrder, EquipmentUnit } from '@/data/seedData';
 import { workOrders as seedWorkOrders, equipmentTypes } from '@/data/seedData';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 
 const columns: { key: WorkOrder['status']; label: string; icon: any; color: string }[] = [
   { key: 'open', label: 'Reported', icon: AlertTriangle, color: 'hsl(var(--warning))' },
@@ -59,7 +59,7 @@ function WorkOrderCard({ wo, units, onMoveForward }: { wo: WorkOrder; units: Equ
 }
 
 export function WorkOrderKanban() {
-  const { currentPropertyId, currentUser } = useAuth();
+  const { currentPropertyId, currentUser } = useOrgProfile();
   const [orders, setOrders] = useState<WorkOrder[]>(seedWorkOrders);
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const units = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
@@ -170,3 +170,4 @@ export function WorkOrderKanban() {
     </div>
   );
 }
+

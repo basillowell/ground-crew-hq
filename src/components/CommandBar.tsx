@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
+
+const supabase = createClient();
 
 const HISTORY_KEY = 'ground-crew-command-history';
 const QUICK_PROMPTS = [
@@ -96,7 +98,7 @@ function answerLocally(question: string, context: ContextPayload): string {
 
 export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId }: CommandBarProps) {
   const navigate = useNavigate();
-  const { orgId } = useAuth();
+  const { orgId } = useOrgProfile();
   const { data: properties = [] } = useProperties(orgId ?? undefined);
   const { data: employees = [] } = useEmployees(undefined, orgId ?? undefined, 'all');
   const [input, setInput] = useState('');
@@ -381,3 +383,5 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
     document.body,
   );
 }
+
+

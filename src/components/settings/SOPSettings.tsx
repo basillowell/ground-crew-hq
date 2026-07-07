@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { createClient } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -8,6 +8,8 @@ import { Pencil, RotateCcw, Trash2, Plus, X, GripVertical } from 'lucide-react';
 import { DndContext, PointerSensor, closestCenter, type DragEndEvent, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+const supabase = createClient();
 
 const SOP_CATEGORIES = [
   'Aeration',
@@ -78,7 +80,7 @@ function SortableChecklistRow({ id, children }: { id: string; children: ReactNod
 }
 
 export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: string | null }) {
-  const { currentUser } = useAuth();
+  const { currentUser } = useOrgProfile();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -613,3 +615,5 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
     </div>
   );
 }
+
+

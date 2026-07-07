@@ -24,7 +24,7 @@ export const AGENT_SKILLS: AgentSkill[] = [
     docPath: 'docs/skills/auth-skill.md',
     relatedPages: ['/', '/app/*'],
     recommendedCodexPromptTemplate:
-      'Use AGENTS.md and docs/skills/auth-skill.md. TASK: fix auth flow without bypassing Supabase security. Inspect AuthContext, LaunchPortalPage, App.tsx, supabase.ts first.',
+      'Use AGENTS.md and docs/skills/auth-skill.md. TASK: fix auth flow without bypassing Supabase security. Inspect LaunchPortalPage, App.tsx, and Supabase client utilities first.',
   },
   {
     id: 'scheduler',
@@ -90,3 +90,4 @@ export const AGENT_SKILLS: AgentSkill[] = [
       'Use AGENTS.md, docs/skills/design-skill.md, and docs/design.md. Apply a small, page-specific design polish to [PAGE]. Preserve working functionality. Return files changed and testing steps.',
   },
 ];
+

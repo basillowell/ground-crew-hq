@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from '@/components/ui/sonner';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -10,6 +10,8 @@ import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
 import { PageHeader } from '@/components/shared';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
+
+const supabase = createClient();
 
 const RechartsResponsiveContainer = lazy(() =>
   import('recharts').then((m) => ({ default: m.ResponsiveContainer })),
@@ -203,7 +205,7 @@ export default function ReportsPage() {
   const queryStartDate = searchParams.get('start');
   const queryEndDate = searchParams.get('end');
   const queryPropertyId = searchParams.get('property');
-  const { orgId, currentPropertyId, currentUser } = useAuth();
+  const { orgId, currentPropertyId, currentUser } = useOrgProfile();
   const [startDate, setStartDate] = useState<string>(() => queryStartDate || toIsoDate(startOfWeek(new Date())));
   const [endDate, setEndDate] = useState<string>(() => queryEndDate || toIsoDate(endOfWeek(new Date())));
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
@@ -1698,3 +1700,5 @@ export default function ReportsPage() {
     </div>
   );
 }
+
+

@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import { useProperties } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { Receipt, Send, DollarSign, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/shared';
+
+const supabase = createClient();
 
 // columns from invoices migration
 interface Invoice {
@@ -76,7 +78,7 @@ async function withInvoicesMutationTimeout<T extends { error: unknown }>(request
   }
 }
 export default function InvoicingPage() {
-  const { orgId } = useAuth();
+  const { orgId } = useOrgProfile();
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
 
   const queryClient = useQueryClient();
@@ -339,3 +341,5 @@ export default function InvoicingPage() {
     </div>
   );
 }
+
+

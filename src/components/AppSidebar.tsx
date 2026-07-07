@@ -10,7 +10,7 @@ import {
   SidebarFooter, useSidebar,
 } from '@/components/ui/sidebar';
 import { APP_VERSION } from '@/constants/version';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useProgramSettings } from '@/lib/supabase-queries';
 
 const navItems = [
@@ -30,7 +30,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { orgId } = useAuth();
+  const { orgId } = useOrgProfile();
   const { data: programSetting } = useProgramSettings(orgId ?? undefined);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
@@ -101,3 +101,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+

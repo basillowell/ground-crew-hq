@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,6 +14,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/shared';
+
+const supabase = createClient();
 
 type EquipmentUnitRow = {
   id: string;
@@ -153,7 +155,7 @@ async function withEquipmentMutationTimeout<T extends { error: unknown }>(reques
   }
 }
 export default function EquipmentPage() {
-  const { currentUser, currentPropertyId, userRole } = useAuth();
+  const { currentUser, currentPropertyId, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const orgId = currentUser?.orgId ?? '';
   const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null;
@@ -823,3 +825,5 @@ export default function EquipmentPage() {
     </div>
   );
 }
+
+

@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import type { ChemicalApplicationLog } from '@/data/seedData';
+
+const supabase = createClient();
 
 type ChemicalLogRow = ChemicalApplicationLog & {
   org_id?: string | null;
@@ -40,3 +42,4 @@ export function useChemicalLogs(orgId?: string, propertyId?: string) {
     },
   });
 }
+

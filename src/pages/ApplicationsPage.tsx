@@ -34,12 +34,14 @@ import {
   useProperties,
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import ChemicalSettings from '@/pages/settings/ChemicalSettings';
 import { useChemicalLogs } from '@/hooks/useChemicalLogs';
 import { PageSkeleton } from '@/components/PageSkeleton';
+
+const supabase = createClient();
 
 type DraftMixItem = {
   productId: string;
@@ -178,7 +180,7 @@ function buildRestrictedEntry(
 }
 
 export default function ApplicationsPage() {
-  const { currentUser, currentPropertyId } = useAuth();
+  const { currentUser, currentPropertyId } = useOrgProfile();
   const queryClient = useQueryClient();
   const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
   const orgScope = currentUser?.orgId;
@@ -390,7 +392,7 @@ export default function ApplicationsPage() {
     }));
 
     try {
-      if (import.meta.env.DEV) {
+      if (process.env.NODE_ENV === 'development') {
         console.debug('[chemical-save] started', { logId, payload: nextLogPayload, mixCount: nextMix.length });
       }
 
@@ -398,19 +400,19 @@ export default function ApplicationsPage() {
         supabase.from('chemical_application_logs').upsert(nextLogPayload),
       );
       if (logError) {
-        if (import.meta.env.DEV) console.error('[chemical-save] main log error', logError);
+        if (process.env.NODE_ENV === 'development') console.error('[chemical-save] main log error', logError);
         toast.error(`Failed to save application log: ${logError.message}`);
         return;
       }
 
-      if (import.meta.env.DEV) console.debug('[chemical-save] main log saved');
+      if (process.env.NODE_ENV === 'development') console.debug('[chemical-save] main log saved');
 
       for (const mix of nextMix) {
         const { error } = await withChemicalMutationTimeout(
           supabase.from('chemical_application_tank_mix_items').upsert(mix),
         );
         if (error) {
-          if (import.meta.env.DEV) console.error('[chemical-save] tank mix error', { mix, error });
+          if (process.env.NODE_ENV === 'development') console.error('[chemical-save] tank mix error', { mix, error });
           toast.error(`Failed to save tank mix item: ${error.message}`);
           return;
         }
@@ -437,10 +439,10 @@ export default function ApplicationsPage() {
         },
       ]);
     } catch (error) {
-      if (import.meta.env.DEV) console.error('[chemical-save] unexpected error', error);
+      if (process.env.NODE_ENV === 'development') console.error('[chemical-save] unexpected error', error);
       toast.error(error instanceof Error ? error.message : 'Failed to save application log.');
     } finally {
-      if (import.meta.env.DEV) console.debug('[chemical-save] finished');
+      if (process.env.NODE_ENV === 'development') console.debug('[chemical-save] finished');
       setSaving(false);
     }
   }
@@ -984,6 +986,9 @@ export default function ApplicationsPage() {
     </div>
   );
 }
+
+
+
 
 
 

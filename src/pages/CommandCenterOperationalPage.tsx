@@ -10,7 +10,7 @@ import {
   Building2, CheckCircle, Clock, Loader2,
   MapPin, Shield, TrendingUp, Users, Wrench, Zap,
 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import {
   useAssignments, useEmployees, useEquipmentUnits,
   useNotes, useProperties, useScheduleEntries,
@@ -20,7 +20,7 @@ import {
 export default function CommandCenterOperationalPage() {
   const navigate = useNavigate();
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const { currentPropertyId, orgId } = useAuth();
+  const { currentPropertyId, orgId } = useOrgProfile();
   const todayKey = new Date().toISOString().slice(0, 10);
 
   const { data: properties = [], isLoading: propsLoading } = useProperties(orgId ?? undefined);
@@ -278,3 +278,4 @@ export default function CommandCenterOperationalPage() {
     </div>
   );
 }
+

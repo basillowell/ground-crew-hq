@@ -47,8 +47,8 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { createClient } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import {
   getOperationalTimezone,
@@ -62,6 +62,8 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
+
+const supabase = createClient();
 
 const GanttTimeline = lazy(() =>
   import('@/components/workboard/GanttTimeline').then((module) => ({ default: module.GanttTimeline })),
@@ -576,7 +578,7 @@ export default function WorkboardContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentPropertyId, setCurrentPropertyId, currentUser, orgId: authOrgId, userRole } = useAuth();
+  const { currentPropertyId, setCurrentPropertyId, currentUser, orgId: authOrgId, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const getLocalDateKey = useCallback(() => new Date().toLocaleDateString('en-CA'), []);
   const [boardDate, setBoardDate] = useState(() => new Date().toLocaleDateString('en-CA'));
@@ -923,7 +925,7 @@ export default function WorkboardContent() {
 
   const assignmentList = assignmentsQuery.data ?? [];
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!process.env.NODE_ENV === 'development') return;
     console.info('[workboard:data]', {
       boardDate,
       orgId,
@@ -1993,7 +1995,7 @@ export default function WorkboardContent() {
   const saveAssignmentTimelineTimes = useCallback(
     async (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return false;
-      if (import.meta.env.DEV) {
+      if (process.env.NODE_ENV === 'development') {
         const now = Date.now();
         const lastRun = timelineSaveGuardRef.current[assignment.id] ?? 0;
         if (now - lastRun < 100 && !timelineSaveWarnedRef.current[assignment.id]) {
@@ -2065,7 +2067,7 @@ export default function WorkboardContent() {
         setSavingTimelineAssignmentId(null);
         return false;
       }
-      if (import.meta.env.DEV) {
+      if (process.env.NODE_ENV === 'development') {
         console.debug('[workboard:actual-times-save]', {
           assignmentId: assignment.id,
           inputStart: startInput,
@@ -5929,3 +5931,6 @@ export default function WorkboardContent() {
     </>
   );
 }
+
+
+

@@ -6,12 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { Bell, ChevronLeft, ChevronRight, Copy, RefreshCw, Save, StickyNote, Trash2 } from 'lucide-react';
 import { formatTime } from '@/utils/formatTime';
 import { PageHeader } from '@/components/shared';
 import { useAssignments, useEmployees } from '@/lib/supabase-queries';
+
+const supabase = createClient();
 
 type AssignmentStatus = 'planned' | 'pending' | 'in_progress' | 'done';
 
@@ -115,7 +117,7 @@ function statusPill(status: AssignmentStatus) {
 }
 
 export default function WorkflowPage() {
-  const { currentUser, currentPropertyId } = useAuth();
+  const { currentUser, currentPropertyId } = useOrgProfile();
   const orgId = currentUser?.orgId ?? '';
   const { data: liveEmployees = [], isLoading: employeesLoading } = useEmployees(undefined, orgId || undefined, 'all');
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
@@ -851,3 +853,5 @@ export default function WorkflowPage() {
     </div>
   );
 }
+
+

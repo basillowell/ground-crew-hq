@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Send, Mail, Phone, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { useEmployees } from '@/lib/supabase-queries';
 import { PageHeader } from '@/components/shared';
@@ -17,7 +17,7 @@ export default function MessagingPage() {
   const [body, setBody] = useState('');
   const [search, setSearch] = useState('');
   const { toast } = useToast();
-  const { currentPropertyId, currentUser } = useAuth();
+  const { currentPropertyId, currentUser } = useOrgProfile();
   const { data: liveEmployees = [], isLoading: employeesLoading } = useEmployees(undefined, currentUser?.orgId ?? undefined, 'all');
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
 
@@ -157,3 +157,4 @@ export default function MessagingPage() {
     </div>
   );
 }
+

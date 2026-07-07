@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CalendarDays, Plus, Trash2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { toast } from '@/components/ui/sonner';
 import { Switch } from '@/components/ui/switch';
+
+const supabase = createClient();
 
 // columns from docs/dev/live-db-state.md — recurring_task_rules
 interface RecurringRule {
@@ -394,3 +396,4 @@ export function RecurringTasksSection({ orgId }: Props) {
     </div>
   );
 }
+

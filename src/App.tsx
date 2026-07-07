@@ -6,9 +6,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { useOrgProfile } from "@/hooks/useOrgProfile";
+import { createClient } from "@/lib/supabase";
 import { sendNotification } from "@/lib/notifications";
+
+const supabase = createClient();
 
 const LandingPage = lazy(() => import("./pages/LaunchPortalPage"));
 const CommandCenterPage = lazy(() => import("./pages/CommandCenterOperationalPage"));
@@ -113,7 +115,7 @@ class RouteErrorBoundary extends Component<
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { currentUser, isLoading, authState, hasSession } = useAuth();
+  const { currentUser, isLoading, authState, hasSession } = useOrgProfile();
   const hasEverAuthed = useRef(false);
 
   if (currentUser) {
@@ -153,7 +155,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 function AppNotificationChannel() {
-  const { currentUser } = useAuth();
+  const { currentUser } = useOrgProfile();
   const [realtimeReady, setRealtimeReady] = useState(false);
 
   useEffect(() => {
@@ -241,7 +243,6 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
         <AppNotificationChannel />
         <TooltipProvider>
           <Toaster />
@@ -266,7 +267,9 @@ export default function App() {
             </Suspense>
           </BrowserRouter>
         </TooltipProvider>
-      </AuthProvider>
     </QueryClientProvider>
   );
 }
+
+
+

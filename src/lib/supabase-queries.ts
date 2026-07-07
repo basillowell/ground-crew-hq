@@ -21,7 +21,9 @@ import type {
   Task,
   WorkLocation,
 } from '@/data/seedData';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
+
+const supabase = createClient();
 
 type DbProperty = {
   id: string;
@@ -1369,4 +1371,5 @@ export function useClockEventsRange(startDate: string, endDate: string, property
     retryDelay: 1000,
   });
 }
+
 

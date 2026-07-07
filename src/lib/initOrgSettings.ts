@@ -1,4 +1,6 @@
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
+
+const supabase = createClient();
 
 type InitOrgSettingsArgs = {
   orgId: string;
@@ -35,3 +37,4 @@ export async function initOrgSettings({ orgId }: InitOrgSettingsArgs): Promise<v
     throw insertResult.error;
   }
 }
+

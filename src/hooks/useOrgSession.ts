@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { useAuth } from '@/lib/auth/authContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 
 export function useOrgSession() {
-  const { currentUser, hasSession, isLoading, isOrgReady, orgId, authState } = useAuth();
+  const { currentUser, hasSession, isLoading, isOrgReady, orgId, authState } = useOrgProfile();
 
   return useMemo(
     () => ({
@@ -16,4 +16,5 @@ export function useOrgSession() {
     [authState, currentUser?.authUser.id, currentUser?.orgId, hasSession, isLoading, isOrgReady, orgId],
   );
 }
+
 

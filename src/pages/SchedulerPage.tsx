@@ -10,8 +10,8 @@ import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
 import { EmptyState } from '@/components/EmptyState';
@@ -19,6 +19,8 @@ import { TableSkeleton } from '@/components/TableSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
 import { useAssignmentsRange, useEmployees, useProperties } from '@/lib/supabase-queries';
+
+const supabase = createClient();
 
 type WeekTemplateItem = {
   id: string;
@@ -139,7 +141,7 @@ async function withSchedulerMutationTimeout<T extends { error: unknown }>(reques
 }
 export default function SchedulerPage() {
   const queryClient = useQueryClient();
-  const { currentPropertyId, currentUser, userRole } = useAuth();
+  const { currentPropertyId, currentUser, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1865,3 +1867,5 @@ export default function SchedulerPage() {
     </div>
   );
 }
+
+

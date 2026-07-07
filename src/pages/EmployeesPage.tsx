@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Loader2, MoreHorizontal, Plus, UserCog, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -29,6 +29,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+
+const supabase = createClient();
 
 const EMPLOYEES_PER_PAGE = 20;
 const FALLBACK_SHIFT_START = '07:30';
@@ -230,7 +232,7 @@ function EmployeePagination({
 }
 
 export default function EmployeesPage() {
-  const { orgId, userRole, currentPropertyId } = useAuth();
+  const { orgId, userRole, currentPropertyId } = useOrgProfile();
   const queryClient = useQueryClient();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const isAdmin = userRole === 'admin';
@@ -1801,3 +1803,5 @@ export default function EmployeesPage() {
     </div>
   );
 }
+
+

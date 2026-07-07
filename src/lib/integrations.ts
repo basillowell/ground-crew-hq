@@ -1,7 +1,9 @@
 import { createEvents, type EventAttributes } from 'ics';
 import type { Employee, ScheduleEntry } from '@/data/seedData';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import { handleSupabaseError } from '@/utils/handleSupabaseError';
+
+const supabase = createClient();
 
 export type IntegrationResult<T> = {
   ok: boolean;
@@ -159,3 +161,4 @@ export async function sendSmsNotification(payload: { to: string; message: string
     };
   }
 }
+

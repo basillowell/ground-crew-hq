@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import type { Task, Assignment, Property } from '@/data/seedData';
 import { Pencil, X } from 'lucide-react';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { formatTime } from '@/utils/formatTime';
 import { wallClockToStoredIso } from '@/lib/timeWorkflow';
 
@@ -65,7 +65,7 @@ export function TaskBlock({
   onDragEnter,
   onDrop,
 }: TaskBlockProps) {
-  const { currentPropertyId, currentUser } = useAuth();
+  const { currentPropertyId, currentUser } = useOrgProfile();
   const [nowMs, setNowMs] = useState(() => Date.now());
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const equipmentUnits = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
@@ -208,3 +208,4 @@ export function TaskBlock({
     </div>
   );
 }
+

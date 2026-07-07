@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { useAssignments, useEmployees, useNotes, useProperties, useTasks } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { ClipboardList, Hash, MessageSquare, Send, StickyNote } from 'lucide-react';
 import { PageHeader } from '@/components/shared';
+
+const supabase = createClient();
 
 // columns from messages migration
 interface Message {
@@ -46,7 +48,7 @@ function fmtDate(iso: string) {
 }
 
 export default function BreakroomPage() {
-  const { orgId, currentPropertyId, currentUser } = useAuth();
+  const { orgId, currentPropertyId, currentUser } = useOrgProfile();
   const authUserId = currentUser?.authUser?.id;
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
   const todayKey = new Date().toLocaleDateString('en-CA');
@@ -412,3 +414,5 @@ export default function BreakroomPage() {
     </div>
   );
 }
+
+

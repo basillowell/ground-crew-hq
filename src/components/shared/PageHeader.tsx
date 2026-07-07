@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useProgramSettings, useProperties } from '@/lib/supabase-queries';
 
 interface PageHeaderProps {
@@ -18,7 +18,7 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, badge, action, children }: PageHeaderProps) {
-  const { currentPropertyId, orgId } = useAuth();
+  const { currentPropertyId, orgId } = useOrgProfile();
   const { data: programSettings } = useProgramSettings(orgId ?? undefined);
   const { data: properties = [] } = useProperties(orgId ?? undefined);
   const programSetting = programSettings ?? undefined;
@@ -77,3 +77,4 @@ export function PageHeader({ title, subtitle, badge, action, children }: PageHea
     </div>
   );
 }
+

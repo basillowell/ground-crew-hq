@@ -3,9 +3,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import { toast } from '@/components/ui/sonner';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+
+const supabase = createClient();
 
 type ProductFormState = {
   name: string;
@@ -52,7 +54,7 @@ const defaultForm: ProductFormState = {
 };
 
 export default function ProductManager() {
-  const { orgId } = useAuth();
+  const { orgId } = useOrgProfile();
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductFormState>(defaultForm);
@@ -274,3 +276,5 @@ export default function ProductManager() {
     </Card>
   );
 }
+
+

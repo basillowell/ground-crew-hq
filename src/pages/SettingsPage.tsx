@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import {
   useDepartmentOptions,
   useEmployees,
@@ -84,6 +84,8 @@ import {
 } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/shared';
+
+const supabase = createClient();
 
 const TABS = ['Operations', 'Tasks', 'Equipment', 'Workforce', 'SOPs', 'Account', 'Help'] as const;
 type Tab = (typeof TABS)[number];
@@ -728,7 +730,7 @@ function SortableTaskCategoryCard({
 }
 
 export default function SettingsPage() {
-  const { orgId, user, userRole, currentUser, currentPropertyId, signOut } = useAuth();
+  const { orgId, user, userRole, currentUser, currentPropertyId, signOut } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const location = useLocation();
   const [tab, setTab] = useState<Tab>('Operations');
@@ -3002,7 +3004,7 @@ function HelpTab() {
 }
 
 function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; propertyId: string | null }) {
-  const { orgId } = useAuth();
+  const { orgId } = useOrgProfile();
   const queryClient = useQueryClient();
   const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
   const propertiesQuery = useProperties(orgId ?? undefined);
@@ -4231,3 +4233,5 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
     </div>
   );
 }
+
+

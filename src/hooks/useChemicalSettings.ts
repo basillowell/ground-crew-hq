@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { createClient } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+
+const supabase = createClient();
 
 export type ChemicalSettings = {
   org_id: string;
@@ -21,7 +23,7 @@ const defaultSettings = (orgId: string): ChemicalSettings => ({
 });
 
 export function useChemicalSettings() {
-  const { currentUser } = useAuth();
+  const { currentUser } = useOrgProfile();
   const orgId = currentUser?.orgId ?? '';
   const [settings, setSettings] = useState<ChemicalSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -112,3 +114,5 @@ export function useChemicalSettings() {
     reload: loadSettings,
   };
 }
+
+

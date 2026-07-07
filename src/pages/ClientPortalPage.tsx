@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import { CheckCircle2, Clock, MapPin, FileText, Loader2 } from 'lucide-react';
+
+const supabase = createClient();
 
 // columns from clients migration
 interface Client {
@@ -261,3 +263,4 @@ export default function ClientPortalPage() {
     </div>
   );
 }
+

@@ -26,7 +26,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useProgramSettings, useProperties, usePropertyClassOptions } from '@/lib/supabase-queries';
 import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/constants/version';
@@ -149,7 +149,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { currentRole, currentPropertyId, orgId } = useAuth();
+  const { currentRole, currentPropertyId, orgId } = useOrgProfile();
   const { data: programSetting } = useProgramSettings(orgId);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
@@ -264,3 +264,4 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
     </Sidebar>
   );
 });
+

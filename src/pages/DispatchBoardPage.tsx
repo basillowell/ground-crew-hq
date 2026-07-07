@@ -16,9 +16,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/sonner';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useAssignments, useEmployees, useProperties, useTasks } from '@/lib/supabase-queries';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
+
+const supabase = createClient();
 
 type AbortableSupabaseRequest<T> = {
   abortSignal: (signal: AbortSignal) => PromiseLike<T>;
@@ -44,7 +46,7 @@ async function withDispatchAbortControllerTimeout<T extends { error: unknown }>(
 export default function DispatchBoardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentPropertyId, orgId } = useAuth();
+  const { currentPropertyId, orgId } = useOrgProfile();
   const todayKey = new Date().toISOString().slice(0, 10);
 
   const { data: assignments = [], isLoading: assignmentsLoading } =
@@ -338,3 +340,5 @@ export default function DispatchBoardPage() {
     </div>
   );
 }
+
+

@@ -36,10 +36,12 @@ import {
   useProgramSettings,
   useScheduleEntries,
 } from '@/lib/supabase-queries';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { OperationsProvider } from '@/contexts/OperationsContext';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+
+const supabase = createClient();
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -145,7 +147,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
-  const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive, isOrgReady } = useAuth();
+  const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive, isOrgReady } = useOrgProfile();
   const [showDemoBanner, setShowDemoBanner] = useState(() => sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true');
   const [orgReadyTimeout, setOrgReadyTimeout] = useState(false);
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
@@ -795,3 +797,5 @@ export function AppLayout({ children }: AppLayoutProps) {
     </SidebarProvider>
   );
 }
+
+

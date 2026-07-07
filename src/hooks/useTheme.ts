@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
+
+const supabase = createClient();
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -22,7 +24,7 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export function useTheme() {
-  const { orgId } = useAuth();
+  const { orgId } = useOrgProfile();
   const [theme, setThemeState] = useState<ThemeMode>(readStoredTheme);
 
   // Apply theme to DOM whenever state changes
@@ -57,3 +59,5 @@ export function useTheme() {
 export function initThemeFromStorage() {
   applyTheme(readStoredTheme());
 }
+
+

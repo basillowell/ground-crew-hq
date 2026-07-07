@@ -4,7 +4,13 @@ import { CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { hasSupabaseConfig, supabase, supabaseConfigError } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase';
+
+const supabase = createClient();
+const hasSupabaseConfig = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const supabaseConfigError = hasSupabaseConfig
+  ? ''
+  : 'Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and/or NEXT_PUBLIC_SUPABASE_ANON_KEY.';
 
 type ResetState = 'waiting' | 'ready' | 'success' | 'error';
 
@@ -173,3 +179,4 @@ export default function ResetPasswordPage() {
     </div>
   );
 }
+

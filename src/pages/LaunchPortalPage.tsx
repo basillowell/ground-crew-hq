@@ -5,8 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { hasSupabaseConfig, supabase, supabaseConfigError } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { createClient } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+
+const supabase = createClient();
+const hasSupabaseConfig = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const supabaseConfigError = hasSupabaseConfig
+  ? ''
+  : 'Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and/or NEXT_PUBLIC_SUPABASE_ANON_KEY.';
 
 type AuthPanel = 'sign-in' | 'sign-up' | 'forgot-password';
 
@@ -162,7 +168,7 @@ function PanelLink({ onClick, children }: { onClick: () => void; children: React
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
-  const { currentUser, authDebugMessage, isLoading, authState, hasSession, retryAuthHydration } = useAuth();
+  const { currentUser, authDebugMessage, isLoading, authState, hasSession, retryAuthHydration } = useOrgProfile();
 
   // ── Sign-in state (unchanged) ──
   const [email, setEmail] = useState('');
@@ -865,3 +871,5 @@ export default function LaunchPortalPage() {
     </div>
   );
 }
+
+

@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { PageHeader } from '@/components/shared';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useTasks } from '@/lib/supabase-queries';
 
 type TaskListItem = {
@@ -30,7 +30,7 @@ function groupedByCategory(tasks: TaskListItem[]) {
 
 export default function TasksCatalogPage() {
   const navigate = useNavigate();
-  const { currentUser, currentPropertyId } = useAuth();
+  const { currentUser, currentPropertyId } = useOrgProfile();
   const {
     data: taskRows = [],
     isLoading: loading,
@@ -125,3 +125,4 @@ export default function TasksCatalogPage() {
     </div>
   );
 }
+

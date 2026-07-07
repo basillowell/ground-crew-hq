@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
+
+const supabase = createClient();
 
 type FeedbackType = 'bug' | 'feature' | 'general';
 
@@ -11,7 +13,7 @@ interface FeedbackWidgetProps {
 }
 
 export function FeedbackWidget({ pagePath }: FeedbackWidgetProps) {
-  const { orgId, user } = useAuth();
+  const { orgId, user } = useOrgProfile();
   const [open, setOpen] = useState(false);
   const [feedbackType, setFeedbackType] = useState<FeedbackType>('bug');
   const [message, setMessage] = useState('');
@@ -127,3 +129,5 @@ export function FeedbackWidget({ pagePath }: FeedbackWidgetProps) {
     </div>
   );
 }
+
+

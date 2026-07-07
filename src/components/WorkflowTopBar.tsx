@@ -15,7 +15,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { AppNotification } from './AppLayout';
 import type { ProgramSettings, Property } from '@/data/seedData';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 
 interface WorkflowTopBarProps {
   department: string;
@@ -70,7 +70,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   planTier = 'FREE',
   onOpenCommandBar,
 }: WorkflowTopBarProps) {
-  const { currentUser } = useAuth();
+  const { currentUser } = useOrgProfile();
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
   const formatTimestamp = (isoTimestamp: string) =>
@@ -245,3 +245,4 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
     </header>
   );
 });
+

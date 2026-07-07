@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { createClient } from '@/lib/supabase';
 import { formatTime } from '@/utils/formatTime';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -16,6 +16,8 @@ import { createEvents, type EventAttributes } from 'ics';
 import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin, MoreHorizontal, Users, WifiOff } from 'lucide-react';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { PageHeader } from '@/components/shared';
+
+const supabase = createClient();
 
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 type FieldTab = 'today' | 'team' | 'more';
@@ -309,7 +311,7 @@ function ClockInCard({
 export default function MobileFieldWorkspacePage() {
   const queryClient = useQueryClient();
   const LANG_STORAGE_KEY = 'ground-crew-field-lang';
-  const { currentUser } = useAuth();
+  const { currentUser } = useOrgProfile();
   const employeeId = currentUser?.employeeId ?? null;
   const orgId = currentUser?.orgId ?? null;
   const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
@@ -1623,3 +1625,5 @@ export default function MobileFieldWorkspacePage() {
 
   return displayOnlyLayout;
 }
+
+

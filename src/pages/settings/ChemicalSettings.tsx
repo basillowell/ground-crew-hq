@@ -3,13 +3,13 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useChemicalSettings } from '@/hooks/useChemicalSettings';
-import { useAuth } from '@/contexts/AuthContext';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { toast } from '@/components/ui/sonner';
 import ProductManager from '@/components/chemicals/ProductManager';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 
 export default function ChemicalSettings() {
-  const { currentUser } = useAuth();
+  const { currentUser } = useOrgProfile();
   const orgId = currentUser?.orgId;
   const { data: liveProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
   const { data: liveEmployees = [], isLoading: employeesLoading } = useEmployees(undefined, orgId, 'all');
@@ -150,3 +150,4 @@ export default function ChemicalSettings() {
     </div>
   );
 }
+
