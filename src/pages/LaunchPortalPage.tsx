@@ -168,7 +168,7 @@ function PanelLink({ onClick, children }: { onClick: () => void; children: React
 
 export default function LaunchPortalPage() {
   const navigate = useNavigate();
-  const { currentUser, authDebugMessage, isLoading, authState, hasSession, retryAuthHydration } = useOrgProfile();
+  const { currentUser, authDebugMessage, authState, hasSession, retryAuthHydration } = useOrgProfile();
 
   // ── Sign-in state (unchanged) ──
   const [email, setEmail] = useState('');
@@ -223,19 +223,23 @@ export default function LaunchPortalPage() {
   // After form sign-in: navigate to app only when the user triggered it (isAwaitingProfile).
   // Visiting the landing page while already authenticated shows "Go to App →" instead.
   useEffect(() => {
-    if (currentUser && isAwaitingProfile) {
+    if (!isAwaitingProfile) return;
+    if (currentUser) {
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
       setErrorMessage('');
       navigate('/app/scheduler', { replace: true });
       return;
     }
-    if (isAwaitingProfile && !isLoading) {
+    // Only show error when truly done loading - authState reaches
+    // a terminal state (not checking-session or loading-profile).
+    const isDoneLoading = authState !== 'checking-session' && authState !== 'loading-profile';
+    if (isDoneLoading && !currentUser) {
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
       setErrorMessage(authDebugMessage || 'Sign-in completed, but your app profile could not be loaded.');
     }
-  }, [authDebugMessage, currentUser, isAwaitingProfile, isLoading, navigate]);
+  }, [authDebugMessage, authState, currentUser, isAwaitingProfile, navigate]);
 
   useEffect(() => {
     if (!hasSupabaseConfig) {
@@ -871,5 +875,4 @@ export default function LaunchPortalPage() {
     </div>
   );
 }
-
 
