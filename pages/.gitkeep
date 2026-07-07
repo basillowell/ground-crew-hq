@@ -1,0 +1,2 @@
+# Keeps Next's Pages Router directory at the project root so the new root app/
+# directory can coexist with the existing Vite-only src/pages tree.

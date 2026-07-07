@@ -1,0 +1,358 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+/* ── Design token CSS variables (dark defaults; overridden by html.light) ── */
+:root {
+  --surface-base: 17 20 18;       /* #111413 - lifted near-black, no green tint */
+  --surface-card: 24 30 26;       /* #181e1a */
+  --surface-elevated: 32 40 35;   /* #202823 */
+  --surface-border: 44 54 47;     /* #2c362f */
+  --surface-hover: 30 38 33;      /* #1e2621 */
+  --brand-default: 74 184 110;    /* #4ab86e - emerald/moss, calmer than chartreuse */
+  --brand-bright: 110 211 145;    /* #6ed391 - bright variant for CTAs */
+  --brand-dim: 45 122 76;         /* #2d7a4c */
+  --brand-ghost: 18 44 30;        /* #122c1e */
+  --text-primary: 241 245 241;    /* #f1f5f1 - near-white, slight warm */
+  --text-secondary: 148 163 184;  /* #94a3b8 - pure slate-400, no green tint */
+  --text-muted: 71 85 105;        /* #475569 - slate-600 */
+  --text-inverse: 17 20 18;       /* #111413 */
+}
+
+html.light {
+  --surface-base: 248 250 248;    /* #f8faf8 */
+  --surface-card: 255 255 255;    /* #ffffff */
+  --surface-elevated: 240 244 240; /* #f0f4f0 */
+  --surface-border: 212 224 212;  /* #d4e0d4 */
+  --surface-hover: 232 240 232;   /* #e8f0e8 */
+  --text-primary: 10 15 12;       /* #0a0f0c */
+  --text-secondary: 61 92 61;     /* #3d5c3d */
+  --text-muted: 107 140 107;      /* #6b8c6b */
+  --text-inverse: 240 244 240;    /* #f0f4f0 */
+  --brand-ghost: 220 245 232;     /* #dcf5e8 - light emerald tint */
+  /* shadcn/ui overrides for light mode */
+  --background: 120 15% 97%;
+  --foreground: 147 27% 8%;
+  --card: 0 0% 100%;
+  --card-foreground: 147 27% 8%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 147 27% 8%;
+  --muted: 120 10% 94%;
+  --muted-foreground: 147 20% 35%;
+  --border: 120 20% 83%;
+  --input: 120 20% 83%;
+  --sidebar-background: 120 15% 97%;
+  --sidebar-foreground: 147 20% 35%;
+  --sidebar-border: 120 20% 83%;
+}
+
+@layer base {
+  :root {
+    --hq-green-900: #0d2a1a;
+    --hq-green-800: #183d28;
+    --hq-green-700: #225838;
+    --hq-green-600: #2d7a4c;
+    --hq-green-500: #4ab86e;
+    --hq-green-100: #d1f5e2;
+    --hq-ink: #111827;
+    --hq-slate: #334155;
+    --hq-muted: #64748B;
+    --hq-border: #E2E8F0;
+    --hq-bg: #F6F8F6;
+    --hq-card: #FFFFFF;
+    --status-safe: #22c55e;
+    --status-warning: #F59E0B;
+    --status-danger: #ef4444;
+    --status-info: #3b82f6;
+    --status-muted: #94a3b8;
+
+    --background: 150 8% 7.3%;
+    --foreground: 120 15.385% 94.902%;
+
+    --card: 150 11% 10.6%;
+    --card-foreground: 120 15.385% 94.902%;
+
+    --popover: 150 12% 12.5%;
+    --popover-foreground: 120 15.385% 94.902%;
+
+    --primary: 145 48% 56%;
+    --primary-foreground: 144 20% 4.902%;
+
+    --secondary: 150 12% 12.5%;
+    --secondary-foreground: 120 15.385% 94.902%;
+
+    --muted: 150 12% 12.5%;
+    --muted-foreground: 120 13.131% 61.176%;
+
+    --accent: 150 13% 14%;
+    --accent-foreground: 120 15.385% 94.902%;
+
+    --destructive: 0 84.236% 60.196%;
+    --destructive-foreground: 120 15.385% 94.902%;
+
+    --border: 150 10% 19%;
+    --input: 150 10% 19%;
+    --ring: 145 48% 56%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 150 12% 7%;
+    --sidebar-foreground: 215 20% 65%;
+    --sidebar-primary: 145 50% 63%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 150 13% 16%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 0 0% 100% / 0.06;
+    --sidebar-ring: 145 50% 63%;
+    --sidebar-muted: 215 20% 65%;
+
+    --success: 152 55% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 80% 52%;
+    --info-foreground: 0 0% 100%;
+
+    --chart-green: 152 55% 38%;
+    --chart-blue: 210 80% 52%;
+    --chart-orange: 25 90% 55%;
+    --chart-red: 0 72% 55%;
+    --chart-purple: 270 60% 55%;
+
+    --brand-body-font: "Inter", "Segoe UI", sans-serif;
+    --brand-heading-font: "Inter", "Segoe UI", sans-serif;
+  }
+}
+
+@media print {
+  .sidebar,
+  .app-header,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .print-header {
+    display: block !important;
+  }
+
+  .print-footer {
+    display: block !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 12px;
+    color: #4b5563;
+    padding: 8px 0;
+    background: #ffffff;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--brand-body-font);
+    background-image: none;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply text-foreground;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-muted-foreground;
+  }
+
+  [data-radix-select-content],
+  [data-radix-popover-content],
+  [data-radix-dropdown-menu-content],
+  [data-radix-dialog-content] {
+    @apply bg-surface-elevated border-surface-border text-text-primary;
+  }
+
+  [data-radix-select-item][data-highlighted],
+  [data-radix-dropdown-menu-item][data-highlighted] {
+    @apply bg-surface-hover text-text-primary;
+  }
+
+  h1, h2, h3, h4, .brand-heading {
+    font-family: var(--brand-heading-font);
+  }
+}
+
+@layer utilities {
+  .heading-xl {
+    @apply text-3xl font-bold tracking-tight text-text-primary;
+  }
+
+  .heading-lg {
+    @apply text-xl font-semibold tracking-tight text-text-primary;
+  }
+
+  .heading-md {
+    @apply text-base font-semibold text-text-primary;
+  }
+
+  .body-base {
+    @apply text-sm font-normal text-text-secondary;
+  }
+
+  .body-muted {
+    @apply text-xs font-normal text-text-muted;
+  }
+
+  .label-field {
+    @apply text-xs font-medium uppercase tracking-widest text-text-muted;
+  }
+
+  .glass-modal {
+    background: rgba(20, 31, 24, 0.85);
+    backdrop-filter: blur(16px) saturate(1.4);
+    border: 1px solid rgba(132, 204, 22, 0.12);
+  }
+
+  .settings-theme input,
+  .settings-theme select,
+  .settings-theme textarea {
+    @apply border-surface-border bg-surface-elevated text-text-primary placeholder:text-text-muted;
+  }
+
+  .settings-theme table {
+    @apply text-text-secondary;
+  }
+
+  .settings-theme table thead tr {
+    @apply border-surface-border bg-surface-elevated text-text-muted;
+  }
+
+  .settings-theme table tbody tr {
+    @apply border-surface-border transition-colors hover:bg-surface-hover;
+  }
+
+  .settings-theme button {
+    @apply transition-colors;
+  }
+
+  .settings-theme [style*="border: 1px solid rgb(229, 231, 235)"],
+  .settings-theme [style*="border: 1px solid rgb(209, 213, 219)"],
+  .settings-theme [style*="border-bottom: 1px solid rgb(229, 231, 235)"],
+  .settings-theme [style*="border-bottom: 1px solid rgb(241, 245, 249)"] {
+    border-color: rgb(var(--surface-border)) !important;
+  }
+
+  .settings-theme [style*="background: rgb(255, 255, 255)"] {
+    background: rgb(var(--surface-card)) !important;
+  }
+
+  .settings-theme [style*="color: rgb(17, 24, 39)"] {
+    color: rgb(var(--text-primary)) !important;
+  }
+
+  .settings-theme [style*="color: rgb(55, 65, 81)"],
+  .settings-theme [style*="color: rgb(107, 114, 128)"] {
+    color: rgb(var(--text-muted)) !important;
+  }
+}
+
+@layer base {
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+  }
+}
+
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+  color: rgb(var(--text-primary));
+  background-color: rgb(var(--surface-base));
+  border-color: rgb(var(--surface-border));
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  cursor: pointer;
+}
+
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+select {
+  color-scheme: dark;
+}
+
+select:not([class*="sr-only"]) {
+  color: rgb(var(--text-primary));
+  background-color: rgb(var(--surface-base));
+}
+
+select option {
+  color: rgb(var(--text-primary));
+  background-color: rgb(var(--surface-base));
+}
+
+input[type="color"] {
+  color-scheme: dark;
+  border-color: rgb(var(--surface-border));
+  border-radius: 0.375rem;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .animate-fade-up {
+    animation: fade-up 0.2s ease-out;
+  }
+
+  .page-enter {
+    animation: page-enter 0.18s ease-out both;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: rgb(var(--text-primary));
+  }
+}
