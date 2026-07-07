@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { BarChart3, CalendarDays, CheckCircle2, Clock, ClipboardList, Loader2, Repeat2, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -167,7 +167,6 @@ function PanelLink({ onClick, children }: { onClick: () => void; children: React
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function LaunchPortalPage() {
-  const navigate = useNavigate();
   const { currentUser, authDebugMessage, authState, hasSession, retryAuthHydration } = useOrgProfile();
 
   // ── Sign-in state (unchanged) ──
@@ -228,7 +227,7 @@ export default function LaunchPortalPage() {
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
       setErrorMessage('');
-      navigate('/app/scheduler', { replace: true });
+      window.location.href = '/app/scheduler';
       return;
     }
     // Only show error when truly done loading - authState reaches
@@ -239,7 +238,7 @@ export default function LaunchPortalPage() {
       setIsSubmitting(false);
       setErrorMessage(authDebugMessage || 'Sign-in completed, but your app profile could not be loaded.');
     }
-  }, [authDebugMessage, authState, currentUser, isAwaitingProfile, navigate]);
+  }, [authDebugMessage, authState, currentUser, isAwaitingProfile]);
 
   useEffect(() => {
     if (!hasSupabaseConfig) {
