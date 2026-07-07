@@ -232,7 +232,7 @@ export default function LaunchPortalPage() {
     }
     // Only show error when truly done loading - authState reaches
     // a terminal state (not checking-session or loading-profile).
-    const isDoneLoading = authState !== 'checking-session' && authState !== 'loading-profile';
+    const isDoneLoading = authState === 'profile-missing' || authState === 'profile-error';
     if (isDoneLoading && !currentUser) {
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
