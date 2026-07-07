@@ -194,7 +194,7 @@ export function useOrgProfile() {
     return () => {
       mounted = false
     }
-  }, [user, userLoading])
+  }, [user?.id, userLoading])
 
   const signOut = useCallback(async () => {
     setSharedCurrentPropertyId(null)
