@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { CheckCircle2, Clock, MapPin, FileText, Loader2 } from 'lucide-react';
 

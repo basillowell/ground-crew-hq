@@ -12,7 +12,7 @@ import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/ui/sonner';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { PageHeader } from '@/components/shared';
 
 const supabase = createClient();
@@ -744,7 +744,7 @@ export default function EquipmentPage() {
             {activeEquipmentTypes.length === 0 ? (
               <div className="rounded-md border border-status-pending/20 bg-status-pending/10 p-3 text-sm text-status-pending">
                 No equipment types defined. Add types in Settings → Equipment first.{" "}
-                <Link to="/app/settings?tab=Workspace" className="font-medium underline">
+                <Link href="/app/settings?tab=Workspace" className="font-medium underline">
                   Open Settings
                 </Link>
               </div>

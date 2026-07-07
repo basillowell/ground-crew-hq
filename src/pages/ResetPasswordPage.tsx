@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ const supabaseConfigError = hasSupabaseConfig
 type ResetState = 'waiting' | 'ready' | 'success' | 'error';
 
 export default function ResetPasswordPage() {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const [resetState, setResetState] = useState<ResetState>('waiting');
   const [newPassword, setNewPassword] = useState('');
@@ -96,7 +96,7 @@ export default function ResetPasswordPage() {
               <button
                 type="button"
                 className="w-full rounded-full border border-surface-border py-2.5 text-sm text-text-secondary transition-all duration-200 hover:bg-surface-hover hover:text-text-primary"
-                onClick={() => navigate('/')}
+                onClick={() => router.push('/')}
               >
                 Back to sign in
               </button>
@@ -164,7 +164,7 @@ export default function ResetPasswordPage() {
               <button
                 type="button"
                 className="w-full rounded-full bg-brand-bright py-2.5 text-sm font-semibold text-text-inverse transition-all duration-200 hover:brightness-110"
-                onClick={() => navigate('/')}
+                onClick={() => router.push('/')}
               >
                 Go to sign in
               </button>

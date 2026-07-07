@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -44,7 +44,7 @@ async function withDispatchAbortControllerTimeout<T extends { error: unknown }>(
 }
 
 export default function DispatchBoardPage() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { currentPropertyId, orgId } = useOrgProfile();
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -171,7 +171,7 @@ export default function DispatchBoardPage() {
             <Plus className="mr-2 h-4 w-4" />
             New Assignment
           </Button>
-          <Button onClick={() => navigate('/app/workboard')}>
+          <Button onClick={() => router.push('/app/workboard')}>
             Open Workboard
           </Button>
         </div>
@@ -186,7 +186,7 @@ export default function DispatchBoardPage() {
           <Button
             variant="outline"
             className="mt-4"
-            onClick={() => navigate('/app/scheduler')}
+            onClick={() => router.push('/app/scheduler')}
           >
             Open Scheduler
           </Button>

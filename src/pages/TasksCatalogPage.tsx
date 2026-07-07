@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ListChecks } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/EmptyState';
@@ -29,7 +29,7 @@ function groupedByCategory(tasks: TaskListItem[]) {
 }
 
 export default function TasksCatalogPage() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { currentUser, currentPropertyId } = useOrgProfile();
   const {
     data: taskRows = [],
@@ -88,7 +88,7 @@ export default function TasksCatalogPage() {
           title="No tasks in your library"
           description="Create tasks your crew can be assigned to on the workboard. Manage your task library in Settings."
           actionLabel="Go to Settings"
-          onAction={() => navigate('/app/settings')}
+          onAction={() => router.push('/app/settings')}
         />
       ) : (
         orderedCategories.map((category) => (

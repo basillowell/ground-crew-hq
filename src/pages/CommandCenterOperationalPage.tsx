@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,7 @@ import {
 } from '@/lib/supabase-queries';
 
 export default function CommandCenterOperationalPage() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const { currentPropertyId, orgId } = useOrgProfile();
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -116,7 +116,7 @@ export default function CommandCenterOperationalPage() {
             <MapPin className="mr-1.5 h-3 w-3" />
             {properties.filter(p => p.status === 'active').length} Active Properties
           </Badge>
-          <Button size="sm" variant="outline" onClick={() => navigate('/app/workboard')}>
+          <Button size="sm" variant="outline" onClick={() => router.push('/app/workboard')}>
             <ArrowRight className="mr-1.5 h-3.5 w-3.5" /> Go to Workflow
           </Button>
         </div>
@@ -152,7 +152,7 @@ export default function CommandCenterOperationalPage() {
             <Card className="p-12 text-center">
               <p className="text-sm font-medium">No properties configured</p>
               <p className="text-xs text-muted-foreground mt-1">Add your first property in Settings.</p>
-              <Button variant="outline" className="mt-4" onClick={() => navigate('/app/settings')}>
+              <Button variant="outline" className="mt-4" onClick={() => router.push('/app/settings')}>
                 Open Settings
               </Button>
             </Card>
@@ -164,7 +164,7 @@ export default function CommandCenterOperationalPage() {
                 const taskPct = stats.tasksTotal > 0 ? Math.round((stats.tasksCompleted / stats.tasksTotal) * 100) : 0;
                 return (
                   <Card key={property.id} className="group cursor-pointer overflow-hidden border transition-all hover:border-primary/30 hover:shadow-lg"
-                    onClick={() => navigate(`/app/workboard?property=${encodeURIComponent(property.id)}`)}>
+                    onClick={() => router.push(`/app/workboard?property=${encodeURIComponent(property.id)}`)}>
                     <div className="h-1.5" style={{ background: property.color ?? '#16a34a' }} />
                     <div className="space-y-4 p-5">
                       <div className="flex items-start justify-between">
@@ -208,7 +208,7 @@ export default function CommandCenterOperationalPage() {
                 if (!stats) return null;
                 return (
                   <div key={property.id} className="flex cursor-pointer items-center gap-4 p-4 hover:bg-muted/30 transition-colors"
-                    onClick={() => navigate(`/app/workboard?property=${encodeURIComponent(property.id)}`)}>
+                    onClick={() => router.push(`/app/workboard?property=${encodeURIComponent(property.id)}`)}>
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg text-xs font-bold text-white"
                       style={{ background: property.color ?? '#16a34a' }}>
                       {property.logoInitials ?? property.name?.slice(0, 2).toUpperCase()}
@@ -267,7 +267,7 @@ export default function CommandCenterOperationalPage() {
               ].map(action => (
                 <Button key={action.label} variant="outline" size="sm"
                   className="h-9 justify-start text-xs"
-                  onClick={() => navigate(action.route)}>
+                  onClick={() => router.push(action.route)}>
                   <action.icon className="mr-1.5 h-3.5 w-3.5" /> {action.label}
                 </Button>
               ))}

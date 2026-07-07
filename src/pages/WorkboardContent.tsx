@@ -1,6 +1,6 @@
 import { type ReactNode, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -575,8 +575,8 @@ const SOP_ITEMS: SopItem[] = [
 ];
 
 export default function WorkboardContent() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { currentPropertyId, setCurrentPropertyId, currentUser, orgId: authOrgId, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
@@ -738,7 +738,7 @@ export default function WorkboardContent() {
     location: '',
   });
   const [savingNote, setSavingNote] = useState(false);
-  const workflowParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const workflowParams = useMemo(() => new URLSearchParams(searchParams?.toString() ?? ''), [searchParams]);
   const focusedPropertyId = workflowParams.get('property') || '';
   const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
 
@@ -4450,7 +4450,7 @@ export default function WorkboardContent() {
               title="No crew scheduled today"
               description="Add shifts in the Scheduler to see your crew here."
               actionLabel="Open Scheduler"
-              onAction={() => navigate('/app/scheduler')}
+              onAction={() => router.push('/app/scheduler')}
             />
           ) : isMobile ? (
             <div className="space-y-3 px-4 pb-24">
@@ -5215,7 +5215,7 @@ export default function WorkboardContent() {
                 onChange={(e) => {
                   if (e.target.value === '__manage_task_library__') {
                     if (!closeAssignmentDialog()) return;
-                    navigate('/app/settings?tab=Tasks');
+                    router.push('/app/settings?tab=Tasks');
                     return;
                   }
                   setIsAssignmentModalDirty(true);
@@ -5256,7 +5256,7 @@ export default function WorkboardContent() {
                 className="mt-2 block text-xs font-medium text-primary hover:underline"
                 onClick={() => {
                   if (!closeAssignmentDialog()) return;
-                  navigate('/app/settings?tab=Tasks');
+                  router.push('/app/settings?tab=Tasks');
                 }}
               >
                 + Manage task library
@@ -5381,7 +5381,7 @@ export default function WorkboardContent() {
                           onChange={(e) => {
                             if (e.target.value === '__manage_task_library__') {
                               if (!closeAssignmentDialog()) return;
-                              navigate('/app/settings?tab=Tasks');
+                              router.push('/app/settings?tab=Tasks');
                               return;
                             }
                             setIsAssignmentModalDirty(true);

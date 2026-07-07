@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { createClient } from '@/lib/supabase';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'next/navigation';
 import { toast } from '@/components/ui/sonner';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -200,7 +200,7 @@ function calculateShiftHours(shiftStart?: string | null, shiftEnd?: string | nul
 }
 
 export default function ReportsPage() {
-  const [searchParams] = useSearchParams();
+  const searchParams = useSearchParams();
   const isFullReportView = searchParams.get('fullReport') === '1';
   const queryStartDate = searchParams.get('start');
   const queryEndDate = searchParams.get('end');

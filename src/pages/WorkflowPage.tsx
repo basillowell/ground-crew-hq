@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -568,7 +568,7 @@ export default function WorkflowPage() {
           ) : crewRows.length === 0 ? (
             <Card className="p-6 text-center space-y-2">
               <div className="text-sm font-medium">No crew scheduled for this day</div>
-              <Link to="/app/scheduler" className="text-sm text-primary underline">
+              <Link href="/app/scheduler" className="text-sm text-primary underline">
                 Go to Scheduler →
               </Link>
             </Card>

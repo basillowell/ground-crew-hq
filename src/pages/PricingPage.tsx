@@ -1,6 +1,6 @@
 import { Check, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 
 type Tier = {
   name: string;

@@ -13,7 +13,7 @@ import {
 import type { Property as LiveProperty } from '@/data/seedData';
 import { formatTime } from '@/utils/formatTime';
 import { APP_VERSION } from '@/constants/version';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -732,7 +732,7 @@ function SortableTaskCategoryCard({
 export default function SettingsPage() {
   const { orgId, user, userRole, currentUser, currentPropertyId, signOut } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
-  const location = useLocation();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>('Operations');
   const taskPropertyId =
     (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null) ??
@@ -744,12 +744,11 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const requestedTab = params.get('tab');
+    const requestedTab = searchParams?.get('tab');
     if (requestedTab && TABS.includes(requestedTab as Tab)) {
       setTab(requestedTab as Tab);
     }
-  }, [location.search]);
+  }, [searchParams]);
 
   return (
     <div className="settings-theme mx-auto max-w-6xl space-y-4 bg-surface-base p-4 text-text-primary md:p-6">
@@ -977,7 +976,7 @@ function WorkspaceTab({
   const { theme, setTheme } = useTheme();
   const sopCategoryOptions = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
 
-  const navigate = useNavigate();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const propertiesQuery = useProperties(orgId ?? undefined);
   const employeesQuery = useEmployees(undefined, orgId ?? undefined, 'all');
@@ -1927,7 +1926,7 @@ function WorkspaceTab({
               <button
                 key={item.label}
                 type="button"
-                onClick={() => navigate(item.href)}
+                onClick={() => router.push(item.href)}
                 className={`flex items-center gap-3 rounded-lg border border-surface-border bg-surface-elevated px-4 py-3 text-left text-sm transition-colors hover:bg-surface-hover ${
                   item.done ? 'text-brand' : 'text-text-primary'
                 }`}
@@ -2004,7 +2003,7 @@ function WorkspaceTab({
           {usageAtLimit && !isProPlan ? (
             <button
               type="button"
-              onClick={() => navigate('/app/settings?tab=Account')}
+              onClick={() => router.push('/app/settings?tab=Account')}
               className="w-fit text-sm text-brand underline hover:text-brand-bright"
             >
               Approaching plan limits. Contact support to upgrade.
