@@ -1086,7 +1086,6 @@ export function useEmployees(
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 30,
     placeholderData: (prev) => prev,
-    structuralSharing: false,
     retry: 3,
     retryDelay: 1000,
   });
@@ -1099,7 +1098,6 @@ export function useProperties(orgId?: string) {
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 60,
     placeholderData: (prev) => prev,
-    structuralSharing: false,
     retry: 3,
     retryDelay: 1000,
   });

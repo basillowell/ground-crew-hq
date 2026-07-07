@@ -192,8 +192,7 @@ export default function SchedulerPage() {
 
 
 
-  const weekScheduleQueries = useQueries({
-    queries: weekDays.map((day) => ({
+  const weekScheduleQueryConfigs = useMemo(() => weekDays.map((day) => ({
       queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', orgId ?? 'all-orgs'],
       enabled: Boolean(orgId),
       queryFn: async () => {
@@ -218,7 +217,10 @@ export default function SchedulerPage() {
         })) as (ScheduleEntry & { notes?: string | null })[];
       },
       staleTime: 1000 * 60 * 5,
-    })),
+    })), [weekDays, propertyScope, orgId]);
+
+  const weekScheduleQueries = useQueries({
+    queries: weekScheduleQueryConfigs,
   });
 
   const employeeList = useMemo(
