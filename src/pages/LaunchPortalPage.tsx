@@ -390,7 +390,7 @@ export default function LaunchPortalPage() {
             <div className="mt-6 flex flex-wrap gap-3">
               {currentUser ? (
                 <Link
-                  to="/app/scheduler"
+                  href="/app/scheduler"
                   className="rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
                 >
                   Go to App →
