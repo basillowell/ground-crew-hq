@@ -129,13 +129,26 @@ export function useOrgProfile() {
       const supabase = createClient()
 
       try {
-        const { data: appUser } = await supabase
-          .from('app_users')
-          .select('org_id, role, employee_id')
-          .eq('id', user.id)
-          .single()
+        const fetchAppUser = async () => {
+          const { data } = await supabase
+            .from('app_users')
+            .select('org_id, role, employee_id')
+            .eq('id', user.id)
+            .single()
+
+          return data
+        }
+
+        let appUser = await fetchAppUser()
 
         if (!mounted) return
+
+        if (!appUser) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          if (!mounted) return
+          appUser = await fetchAppUser()
+          if (!mounted) return
+        }
 
         if (!appUser) {
           setOrgId(null)
