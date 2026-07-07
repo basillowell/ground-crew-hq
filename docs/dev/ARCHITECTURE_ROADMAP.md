@@ -146,3 +146,27 @@ This file tracks architecture-level follow-up work distinct from
 day-to-day feature/bug sessions. Update the status markers as each
 item is actually completed and verified — do not mark an item [x]
 without confirming the change is live in production.
+
+## Next.js Migration Status (July 7, 2026)
+
+### Completed
+- [x] Sessions 1-8: Full Next.js App Router migration executed.
+- [x] Vite removed, AuthContext removed, legacy browser-side session management removed.
+- [x] `utils/supabase/browser.ts`, `server.ts`, and `middleware.ts` created.
+- [x] All 17 app routes wired to existing page components.
+- [x] `useUser.ts` and `useOrgProfile.ts` hooks replace AuthContext.
+- [x] `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` added to Vercel.
+- [x] `getSession` fix for `useUser.ts` initial load race condition.
+- [x] `authState` terminal-state guard in `LaunchPortalPage.tsx`.
+- [x] Login handoff fix in `LaunchPortalPage.tsx`: replaced React Router `navigate('/app/scheduler', { replace: true })` with `window.location.href = '/app/scheduler'` so the post-login request goes through Next.js middleware and can establish the server-side Supabase session cookie. See commit `ef86e1d`.
+
+### Final Blocking Issue Status
+- [x] RESOLVED: the previously identified final blocker was the post-login client-side navigation path. HAR evidence showed login succeeded, profile calls returned 200, then the server app shell redirected because middleware saw no server-side cookie. The fix was the one-line full-page handoff in `src/pages/LaunchPortalPage.tsx`, now present as `window.location.href = '/app/scheduler';`.
+
+### Architecture now in place
+- Next.js middleware runs on every request.
+- Server-side Supabase cookie management is handled via `@supabase/ssr`.
+- Legacy browser-side AuthContext session ownership has been removed.
+- Legacy Vite app entry/config files have been removed.
+- The remaining auth flow uses the Next.js App Router shell plus Supabase SSR client utilities.
+
