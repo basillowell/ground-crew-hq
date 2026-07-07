@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart3,
@@ -141,8 +141,9 @@ type IncomingNotification = Omit<AppNotification, 'read'>;
 
 export function AppLayout({ children }: AppLayoutProps) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname() ?? '/';
+  const searchParams = useSearchParams();
   const [department, setDepartment] = useState('All Departments');
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -188,7 +189,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: ['assignments'] });
-  }, [location.pathname, queryClient]);
+  }, [pathname, queryClient]);
 
   useEffect(() => {
     const handleVisible = () => {
@@ -446,7 +447,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     let redirectedByFallback = false;
     const fallbackTimeoutId = window.setTimeout(() => {
       redirectedByFallback = true;
-      navigate('/', { replace: true });
+      router.replace('/');
     }, 5_000);
 
     try {
@@ -461,7 +462,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     } finally {
       window.clearTimeout(fallbackTimeoutId);
       if (!redirectedByFallback) {
-        navigate('/', { replace: true });
+        router.replace('/');
       }
     }
   };
@@ -474,13 +475,13 @@ export function AppLayout({ children }: AppLayoutProps) {
     setInAppNotifications((previous) =>
       previous.map((entry) => (entry.id === id ? { ...entry, read: true } : entry)),
     );
-    navigate(route);
+    router.push(route);
   };
 
   const closeMobileSidebar = () => setMobileSidebarOpen(false);
   const shouldShowFeedbackWidget = !(
-    location.pathname === '/' ||
-    location.pathname.startsWith('/app/field')
+    pathname === '/' ||
+    pathname.startsWith('/app/field')
   );
   const mobilePrimaryTabs = [
     { label: 'Field View', route: '/app/field', icon: MapPin },
@@ -539,12 +540,12 @@ export function AppLayout({ children }: AppLayoutProps) {
         return;
       }
 
-      if (event.shiftKey && key === 'n' && location.pathname === '/app/scheduler') {
+      if (event.shiftKey && key === 'n' && pathname === '/app/scheduler') {
         event.preventDefault();
         window.dispatchEvent(new CustomEvent('ground-crew-open-add-shift'));
         return;
       }
-      if (event.shiftKey && key === 't' && location.pathname === '/app/workboard') {
+      if (event.shiftKey && key === 't' && pathname === '/app/workboard') {
         event.preventDefault();
         window.dispatchEvent(new CustomEvent('ground-crew-open-add-task'));
         return;
@@ -553,19 +554,19 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       if (key === '1') {
         event.preventDefault();
-        navigate('/app/dashboard');
+        router.push('/app/dashboard');
       } else if (key === '2') {
         event.preventDefault();
-        navigate('/app/workboard');
+        router.push('/app/workboard');
       } else if (key === '3') {
         event.preventDefault();
-        navigate('/app/scheduler');
+        router.push('/app/scheduler');
       }
     };
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [location.pathname, navigate, shortcutsOverlayOpen]);
+  }, [pathname, router, shortcutsOverlayOpen]);
 
   if (!isOrgReady && !orgReadyTimeout) {
     return <PageLoader />;
@@ -579,7 +580,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-3 text-xs md:px-4">
               <div>
                 Demo Mode — Viewing sample data (read-only).{' '}
-                <button type="button" className="underline underline-offset-2" onClick={() => navigate('/')}>
+                <button type="button" className="underline underline-offset-2" onClick={() => router.push('/')}>
                   Sign Up
                 </button>
               </div>
@@ -682,7 +683,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
               {children}
             </main>
-            {shouldShowFeedbackWidget ? <FeedbackWidget pagePath={location.pathname} /> : null}
+            {shouldShowFeedbackWidget ? <FeedbackWidget pagePath={pathname} /> : null}
             <CommandBar
               open={commandBarOpen}
               onOpenChange={setCommandBarOpen}
@@ -698,11 +699,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                   {employeeTabs.map((tab) => {
                     const [tabPath, tabSearch = ''] = tab.href.split('?');
                     const requiredSearch = new URLSearchParams(tabSearch);
-                    const currentSearch = new URLSearchParams(location.search);
+                    const currentSearch = new URLSearchParams(searchParams?.toString() ?? '');
                     const hasRequiredSearch = [...requiredSearch.entries()].every(
                       ([key, value]) => currentSearch.get(key) === value,
                     );
-                    const isActive = location.pathname === tabPath
+                    const isActive = pathname === tabPath
                       && (tabSearch ? hasRequiredSearch : !currentSearch.has('tab'));
                     const isClockTab = tab.label === 'Clock';
 
@@ -710,7 +711,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                       <button
                         key={tab.href}
                         type="button"
-                        onClick={() => navigate(tab.href)}
+                        onClick={() => router.push(tab.href)}
                         className={cn(
                           'relative flex min-h-11 flex-col items-center justify-center gap-0.5 text-xs transition-colors',
                           isActive ? 'text-brand' : 'text-text-muted hover:text-text-primary',
@@ -731,12 +732,12 @@ export function AppLayout({ children }: AppLayoutProps) {
               ) : (
                 <div className="grid h-16 grid-cols-5">
                   {mobilePrimaryTabs.map((tab) => {
-                    const isActive = location.pathname === tab.route;
+                    const isActive = pathname === tab.route;
                     return (
                       <button
                         key={tab.route}
                         type="button"
-                        onClick={() => navigate(tab.route)}
+                        onClick={() => router.push(tab.route)}
                         className={cn(
                           'relative flex min-h-11 flex-col items-center justify-center gap-0.5 text-xs transition-colors',
                           isActive ? 'text-brand' : 'text-text-muted hover:text-text-primary',
@@ -770,11 +771,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                       key={item.route}
                       type="button"
                       onClick={() => {
-                        navigate(item.route);
+                        router.push(item.route);
                         setMobileMoreOpen(false);
                       }}
                       className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
-                        location.pathname === item.route
+                        pathname === item.route
                           ? 'border-brand-dim bg-brand-ghost text-brand'
                           : 'border-surface-border text-text-secondary hover:bg-surface-hover hover:text-text-primary'
                       }`}

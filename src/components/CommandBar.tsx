@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -97,7 +97,7 @@ function answerLocally(question: string, context: ContextPayload): string {
 }
 
 export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId }: CommandBarProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { orgId } = useOrgProfile();
   const { data: properties = [] } = useProperties(orgId ?? undefined);
   const { data: employees = [] } = useEmployees(undefined, orgId ?? undefined, 'all');
@@ -353,7 +353,7 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
                 size="sm"
                 onClick={() => {
                   onOpenChange(false);
-                  navigate(navigationAction.route);
+                  router.push(navigationAction.route);
                 }}
               >
                 {navigationAction.label}

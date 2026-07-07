@@ -3,7 +3,7 @@ import {
   BarChart3, Settings, MessageSquare, Leaf, FlaskConical, MonitorSmartphone
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
-import { useLocation } from 'react-router-dom';
+import { usePathname } from 'next/navigation';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader,
@@ -29,7 +29,7 @@ const navItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const location = useLocation();
+  const pathname = usePathname() ?? '/';
   const { orgId } = useOrgProfile();
   const { data: programSetting } = useProgramSettings(orgId ?? undefined);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
@@ -71,7 +71,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location.pathname === item.url}
+                    isActive={pathname === item.url}
                     tooltip={item.title}
                   >
                     <NavLink

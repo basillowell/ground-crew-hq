@@ -1,22 +1,46 @@
-import { NavLink as RouterNavLink, NavLinkProps } from "react-router-dom";
-import { forwardRef } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { forwardRef, type AnchorHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-interface NavLinkCompatProps extends Omit<NavLinkProps, "className"> {
-  className?: string;
+type NavLinkClassName =
+  | string
+  | ((state: { isActive: boolean; isPending: boolean }) => string | undefined);
+
+interface NavLinkCompatProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "href"> {
+  to: string;
+  className?: NavLinkClassName;
   activeClassName?: string;
   pendingClassName?: string;
+  end?: boolean;
+}
+
+function normalizePath(path: string) {
+  const [withoutHash] = path.split("#");
+  const [withoutQuery] = withoutHash.split("?");
+  return withoutQuery.replace(/\/+$/, "") || "/";
+}
+
+function getIsActive(pathname: string, to: string, end?: boolean) {
+  const currentPath = normalizePath(pathname);
+  const targetPath = normalizePath(to);
+
+  if (end) return currentPath === targetPath;
+  return currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
 }
 
 const NavLink = forwardRef<HTMLAnchorElement, NavLinkCompatProps>(
-  ({ className, activeClassName, pendingClassName, to, ...props }, ref) => {
+  ({ className, activeClassName, pendingClassName, to, end, ...props }, ref) => {
+    const pathname = usePathname() ?? "/";
+    const isActive = getIsActive(pathname, to, end);
+    const isPending = false;
+    const resolvedClassName = typeof className === "function" ? className({ isActive, isPending }) : className;
+
     return (
-      <RouterNavLink
+      <Link
         ref={ref}
-        to={to}
-        className={({ isActive, isPending }) =>
-          cn(className, isActive && activeClassName, isPending && pendingClassName)
-        }
+        href={to}
+        className={cn(resolvedClassName, isActive && activeClassName, isPending && pendingClassName)}
         {...props}
       />
     );

@@ -15,7 +15,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { AppNotification } from './AppLayout';
 import type { AppUser, ProgramSettings } from '@/data/seedData';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 
 interface TopBarProps {
   department: string;
@@ -46,7 +46,7 @@ export function TopBar({
   onSignOut,
   programSetting,
 }: TopBarProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
 
@@ -119,7 +119,7 @@ export function TopBar({
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {notifications.map((notification) => (
-            <DropdownMenuItem key={notification.id} className="items-start gap-3 py-3" onClick={() => navigate(notification.route)}>
+            <DropdownMenuItem key={notification.id} className="items-start gap-3 py-3" onClick={() => router.push(notification.route)}>
               <div
                 className={`mt-1 h-2.5 w-2.5 rounded-full ${
                   notification.severity === 'critical'

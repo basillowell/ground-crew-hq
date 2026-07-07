@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { memo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { usePathname } from 'next/navigation';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
@@ -148,7 +148,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
 }: AppSidebarRefinedProps) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const location = useLocation();
+  const pathname = usePathname() ?? '/';
   const { currentRole, currentPropertyId, orgId } = useOrgProfile();
   const { data: programSetting } = useProgramSettings(orgId);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
@@ -192,7 +192,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
           <NavItem
             {...item}
             collapsed={collapsed}
-            isActive={Boolean(item.href && location.pathname.startsWith(item.href))}
+            isActive={Boolean(item.href && pathname.startsWith(item.href))}
             onNavigate={onNavigate}
           />
         </SidebarMenuItem>
