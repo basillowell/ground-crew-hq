@@ -16,7 +16,6 @@ import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared';
 import { useAssignmentsRange, useEmployees, useProperties } from '@/lib/supabase-queries';
 
@@ -1168,28 +1167,28 @@ export default function SchedulerPage() {
             <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openSaveTemplateDialog}>
               Save as Template
             </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" aria-label="Save template help" className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground">
-                  <HelpCircle className="mx-auto h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Save as Template stores this week as a reusable schedule pattern.</TooltipContent>
-            </Tooltip>
+            <button
+              type="button"
+              aria-label="Save template help"
+              title="Save as Template stores this week as a reusable schedule pattern."
+              className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground"
+            >
+              <HelpCircle className="mx-auto h-3.5 w-3.5" />
+            </button>
             <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openApplyTemplateDialog}>
               Apply Template
             </Button>
             <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openCopyWeekDialog} data-testid="button-copy-week">
               <Copy className="h-3.5 w-3.5" /> Copy Week
             </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" aria-label="Copy week help" className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground">
-                  <HelpCircle className="mx-auto h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Copy Week duplicates this week&apos;s shifts to next week.</TooltipContent>
-            </Tooltip>
+            <button
+              type="button"
+              aria-label="Copy week help"
+              title="Copy Week duplicates this week's shifts to next week."
+              className="h-9 w-9 rounded-md border border-input text-muted-foreground hover:text-foreground"
+            >
+              <HelpCircle className="mx-auto h-3.5 w-3.5" />
+            </button>
           </>
         ) : null}
         <DropdownMenu>
