@@ -12,9 +12,9 @@ export function useUser() {
     let mounted = true
     const supabase = createClient()
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return
-      setUser(user)
+      setUser(session?.user ?? null)
       setLoading(false)
     }).catch(() => {
       if (!mounted) return
@@ -25,7 +25,10 @@ export function useUser() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
+      if (mounted) {
+        setUser(session?.user ?? null)
+        setLoading(false)
+      }
     })
 
     return () => {
