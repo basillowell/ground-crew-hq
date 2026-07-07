@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/utils/supabase/browser'
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { useUser } from './useUser'
 
@@ -93,7 +93,7 @@ function buildProfile(authUser: User, appUser: AppUserRow, employee: EmployeeRow
   }
 }
 
-export function useOrgProfile() {
+function useOrgProfileState() {
   const { user, loading: userLoading } = useUser()
   const [orgId, setOrgId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<AuthRole | null>(null)
@@ -281,4 +281,22 @@ export function useOrgProfile() {
     userLoading,
     userRole,
   ])
+}
+type OrgProfileContextValue = ReturnType<typeof useOrgProfileState>
+
+const OrgProfileContext = createContext<OrgProfileContextValue | null>(null)
+
+export function OrgProfileProvider({ children }: { children: ReactNode }) {
+  const value = useOrgProfileState()
+
+  return createElement(OrgProfileContext.Provider, { value }, children)
+}
+
+export function useOrgProfile() {
+  const context = useContext(OrgProfileContext)
+  if (!context) {
+    throw new Error('useOrgProfile must be used within OrgProfileProvider')
+  }
+
+  return context
 }
