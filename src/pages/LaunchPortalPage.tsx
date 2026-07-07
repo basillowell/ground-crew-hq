@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { BarChart3, CalendarDays, CheckCircle2, Clock, ClipboardList, Loader2, Repeat2, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -351,7 +351,7 @@ export default function LaunchPortalPage() {
           <div className="flex items-center gap-2">
             {currentUser ? (
               <Link
-                to="/app/scheduler"
+                href="/app/scheduler"
                 className="rounded-full bg-brand-bright px-5 py-2 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
               >
                 Go to App →
@@ -627,7 +627,7 @@ export default function LaunchPortalPage() {
             <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Ready to run your crew smarter?</h2>
             {currentUser ? (
               <Link
-                to="/app/scheduler"
+                href="/app/scheduler"
                 className="mt-5 inline-block rounded-full bg-brand-bright px-8 py-3 text-sm font-semibold text-text-inverse transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110"
               >
                 Go to App →
@@ -654,7 +654,7 @@ export default function LaunchPortalPage() {
           </div>
           <div className="flex items-center gap-4">
             <a href="#" className="transition-colors hover:text-text-secondary">Features</a>
-            <Link to="/pricing" className="transition-colors hover:text-text-secondary">Pricing</Link>
+            <Link href="/pricing" className="transition-colors hover:text-text-secondary">Pricing</Link>
             <button type="button" className="transition-colors hover:text-text-secondary" onClick={() => openDialog('sign-in')}>Login</button>
             <a href="mailto:support@groundcrewhq.com" className="transition-colors hover:text-text-secondary">Contact</a>
           </div>
