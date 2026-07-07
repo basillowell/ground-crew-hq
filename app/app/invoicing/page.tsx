@@ -1,3 +1,3 @@
-export default function Page() {
-  return <div>Placeholder</div>
-}
+'use client'
+
+export { default } from '@/src/pages/InvoicingPage'
