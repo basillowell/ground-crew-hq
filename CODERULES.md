@@ -204,6 +204,19 @@ last good render persist while a refetch is in flight.
 
 ---
 
+## Lessons from the Vite → Next.js Migration Debugging Session (July 2026)
+
+- SSR-guard browser APIs: any `window`, `document`, `localStorage`, or `sessionStorage` access must be inside a client-only guard (`typeof window !== 'undefined'`) or an effect/event handler. Lazy `useState` initializers still execute during server render in Next.
+- Shared session/profile state belongs in Context, not per-component hooks. Auth/profile hydration must run once in a provider and be consumed via Context; do not let every component that calls a hook start its own `app_users`/profile fetch chain.
+- Scope derived "attempted" flags to identity. State like `profileAttempted`, `profileError`, or "loaded once" must be tied to the user/org id it was computed for, so stale logged-out or previous-user state cannot become a terminal error for the next identity.
+- After framework migrations, grep repo-wide for old framework dependencies and props: remove `react-router-dom`, `BrowserRouter`, `useNavigate`, `useLocation`, `Link to=`, Vite globals, and any framework-specific globals after migrating to Next.
+- Test render-loop bugs against production before dev-mode debugging. Dev-mode React/Next behavior can add StrictMode noise and extra ref/effect churn; confirm whether a maximum-update-depth issue reproduces in a production build before chasing dev-only traces.
+- Chrome's default HAR export can strip `Cookie` and `Authorization` headers. A HAR showing "no auth headers" is not proof headers were absent on the wire unless the export preserved sensitive headers.
+- Confirm fixes are actually deployed before re-testing. Verify the deployed commit/build hash or app version before concluding a production test disproves a local or newly merged fix.
+- Next.js can vendor its own internal React/React DOM under `next/dist/compiled/*`; `package.json`'s `react`/`react-dom` version is not the only React implementation involved in runtime stack traces.
+
+---
+
 ## Start-of-Session Checklist
 
 Before writing any code in a new session:
@@ -229,7 +242,7 @@ Before every commit:
 - Supabase project: **fjqeekwisnbpxgebrnpl.supabase.co**
 - Branch: **main only**
 - Commit format: `feat|fix|refactor|chore: description (ver2.X.Y)`
-- Version source of truth: `package.json` → flows to sidebar via `__APP_VERSION__`
+- Version source of truth: `package.json` version is injected by `next.config.ts` as `NEXT_PUBLIC_APP_VERSION`; `src/constants/version.ts` reads `process.env.NEXT_PUBLIC_APP_VERSION ?? 'unknown'` and exports `APP_VERSION` for UI consumers.
 
 ---
 
