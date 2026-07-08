@@ -258,15 +258,17 @@ function SettingsCard({
   subtitle,
   action,
   children,
+  stickyHeader = false,
 }: {
   title: string;
   subtitle?: string;
   action?: ReactNode;
   children: ReactNode;
+  stickyHeader?: boolean;
 }) {
   return (
     <section className="rounded-xl border border-surface-border bg-surface-card p-5">
-      <div className="mb-4 flex items-start justify-between gap-4">
+      <div className={`mb-4 flex items-start justify-between gap-4 ${stickyHeader ? 'sticky top-0 z-10 bg-surface-card' : ''}`}>
         <div>
           <h2 className="text-base font-semibold text-text-primary">{title}</h2>
           {subtitle ? <p className="mt-1 text-sm text-text-muted">{subtitle}</p> : null}
@@ -774,7 +776,7 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      <div className="sticky top-0 z-10 mb-4 hidden flex-wrap items-center gap-2 border-b border-surface-border bg-surface-base/95 pb-1 backdrop-blur md:flex">
+      <div className="sticky top-0 z-20 mb-4 hidden flex-wrap items-center gap-2 border-b border-surface-border bg-surface-base/95 pb-1 backdrop-blur md:flex">
         {TABS.map((t) => (
           <button
             key={t}
@@ -3547,12 +3549,45 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
         title="Task Library"
         subtitle="Reusable tasks grouped by category. Drag categories to reorder groups; drag tasks within a group to set priority."
         action={
-          <Button type="button" size="sm" onClick={() => setAddTaskDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add task
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => { setShowAddCategory((current) => !current); setNewCategoryInput(''); }}
+            >
+              <Plus className="h-4 w-4" />
+              Add category
+            </Button>
+            <Button type="button" size="sm" onClick={() => setAddTaskDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add task
+            </Button>
+          </div>
         }
+        stickyHeader
       >
+        {showAddCategory ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand/40 bg-surface-elevated px-4 py-3">
+            <input
+              autoFocus
+              className={`${settingsInputClass} max-w-xs`}
+              placeholder="Category name"
+              value={newCategoryInput}
+              onChange={(event) => setNewCategoryInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void commitAddCategory();
+                if (event.key === 'Escape') setShowAddCategory(false);
+              }}
+            />
+            <Button type="button" onClick={() => void commitAddCategory()} disabled={!newCategoryInput.trim()}>
+              Add
+            </Button>
+            <Button type="button" variant="outline" onClick={() => { setShowAddCategory(false); setNewCategoryInput(''); }}>
+              Cancel
+            </Button>
+          </div>
+        ) : null}
         {tasksLoading && tasks.length === 0 ? (
           showTimeout && !hasTaskLibraryResult ? <LoadingTimeoutFallback /> : <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />
         ) : (
@@ -3632,39 +3667,6 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
               </div>
             )}
 
-            {!categoriesLoading && !categoriesError ? (
-              <div className="mt-4 border-t border-surface-border pt-4">
-                {showAddCategory ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-brand/40 bg-surface-elevated px-4 py-3">
-                    <input
-                      autoFocus
-                      className={`${settingsInputClass} max-w-xs`}
-                      placeholder="Category name"
-                      value={newCategoryInput}
-                      onChange={(event) => setNewCategoryInput(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') void commitAddCategory();
-                        if (event.key === 'Escape') setShowAddCategory(false);
-                      }}
-                    />
-                    <Button type="button" onClick={() => void commitAddCategory()} disabled={!newCategoryInput.trim()}>
-                      Add
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => { setShowAddCategory(false); setNewCategoryInput(''); }}>
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={() => { setShowAddCategory(true); setNewCategoryInput(''); }}
-                    variant="outline"
-                  >
-                    <Plus className="h-4 w-4" /> Add category
-                  </Button>
-                )}
-              </div>
-            ) : null}
           </>
         )}
       </SettingsCard>

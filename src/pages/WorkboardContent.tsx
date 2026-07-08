@@ -4773,8 +4773,11 @@ export default function WorkboardContent() {
                                       setTimelineEditAssignmentId(assignment.id ?? null);
                                       const startInputValue =
                                         toTimeInputValue(canonicalStartAt, operationalTimezone) ||
-                                        toTimeInputValue(String(assignment.startTime ?? ''), operationalTimezone);
-                                      const endInputValue = toTimeInputValue(canonicalCompletedAt, operationalTimezone);
+                                        toTimeInputValue(String(assignment.startTime ?? ''), operationalTimezone) ||
+                                        getDefaultStartTimeForEmployee(scheduleList, assignment.employeeId, boardDate);
+                                      const endInputValue =
+                                        toTimeInputValue(canonicalCompletedAt, operationalTimezone) ||
+                                        getNowHHMMInTimezone(operationalTimezone);
                                       setTimelineEditStart(startInputValue);
                                       setTimelineEditEnd(endInputValue);
                                     }}
