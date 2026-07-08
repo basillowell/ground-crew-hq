@@ -13,7 +13,6 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { useDepartmentOptions, useEmployees, useProperties, type EmployeeStatusFilter } from '@/lib/supabase-queries';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '@/components/shared';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1015,12 +1014,15 @@ export default function EmployeesPage() {
 
   return (
     <div className="animate-fade-up mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <PageHeader
-        compact
-        title="Team"
-        subtitle="Manage your crew roster."
-        action={!isReadOnly ? { label: 'Add Employee', onClick: openAddModal } : undefined}
-      />
+
+      <div className="flex justify-end">
+        {!isReadOnly ? (
+          <Button size="sm" className="h-9 gap-1.5" onClick={openAddModal}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Employee
+          </Button>
+        ) : null}
+      </div>
 
       <div className="flex items-center gap-2">
         <Button variant={viewMode === 'roster' ? 'default' : 'outline'} size="sm" className="h-9 rounded-lg" onClick={() => setViewMode('roster')}>

@@ -7,7 +7,6 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { Receipt, Send, DollarSign, FileText } from 'lucide-react';
-import { PageHeader } from '@/components/shared';
 
 const supabase = createClient();
 
@@ -189,7 +188,6 @@ export default function InvoicingPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <PageHeader compact title="Invoicing" subtitle="Manage and track invoices." />
 
       {/* Summary banner */}
       <div className="grid gap-4 sm:grid-cols-3">

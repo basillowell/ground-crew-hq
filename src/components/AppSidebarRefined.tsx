@@ -5,6 +5,7 @@ import {
   ClipboardList,
   HelpCircle,
   LayoutDashboard,
+  LogOut,
   Receipt,
   Settings2,
   Shield,
@@ -15,7 +16,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { memo } from 'react';
-import { usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
@@ -149,7 +151,9 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const pathname = usePathname() ?? '/';
-  const { currentRole, currentPropertyId, orgId } = useOrgProfile();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { currentRole, currentPropertyId, orgId, signOut, currentUser } = useOrgProfile();
   const { data: programSetting } = useProgramSettings(orgId);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
@@ -184,6 +188,24 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const managementItems = withVisibility(management);
   const footerItems = withVisibility(complianceAndSettings);
   const roleBadgeLabel = currentRole === 'admin' ? 'Admin' : currentRole === 'manager' ? 'Supervisor' : 'Field Crew';
+  const userDisplayName = currentUser?.fullName || currentUser?.email || '';
+
+  const handleSignOut = async () => {
+    queryClient.clear();
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('ground-crew-query-cache-v3');
+        window.localStorage.removeItem('ground-crew-query-cache-v2');
+        window.localStorage.removeItem('ground-crew-query-cache');
+      }
+      await signOut();
+    } catch (error) {
+      console.error('Sign out failed:', error);
+    } finally {
+      onNavigate?.();
+      router.replace('/');
+    }
+  };
 
   const renderItems = (items: NavItemConfig[]) => (
     <SidebarMenu>
@@ -247,18 +269,41 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
         {renderItems(footerItems)}
         <div className="mt-2 border-t border-surface-border px-3 pt-3">
           {!collapsed ? (
-            <span className="rounded-full bg-brand-ghost px-2.5 py-1 text-xs font-semibold uppercase text-brand-bright">
-              {roleBadgeLabel}
-            </span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="rounded-full bg-brand-ghost px-2.5 py-1 text-xs font-semibold uppercase text-brand-bright">
+                  {roleBadgeLabel}
+                </span>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+                  onClick={() => void handleSignOut()}
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+              {userDisplayName ? <div className="truncate text-xs font-medium text-text-secondary">{userDisplayName}</div> : null}
+            </div>
           ) : (
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-3">
               <span className={cn('h-2 w-2 rounded-full', currentRole === 'employee' ? 'bg-text-muted' : 'bg-brand')} />
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+                onClick={() => void handleSignOut()}
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           )}
           <div className="mt-3 text-xs text-text-muted">
-            {collapsed ? `v${APP_VERSION}` : `Ground Crew HQ · v${APP_VERSION}`}
+            {collapsed ? `v${APP_VERSION}` : `Ground Crew HQ - v${APP_VERSION}`}
           </div>
-          {!collapsed ? <div className="mt-1 text-xs text-text-muted">© 2026 Ground Crew HQ</div> : null}
+          {!collapsed ? <div className="mt-1 text-xs text-text-muted">(c) 2026 Ground Crew HQ</div> : null}
         </div>
       </SidebarFooter>
     </Sidebar>

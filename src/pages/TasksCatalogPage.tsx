@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
-import { PageHeader } from '@/components/shared';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useTasks } from '@/lib/supabase-queries';
 
@@ -65,12 +64,10 @@ export default function TasksCatalogPage() {
 
   return (
     <div className="animate-fade-up mx-auto max-w-6xl space-y-4 p-4">
-      <PageHeader
-        compact
-        title="Task Management"
-        subtitle="Task library for Workflow assignment and operations planning."
-        badge={<Badge variant="secondary">{tasks.length} tasks</Badge>}
-      />
+
+      <div className="flex justify-end">
+        <Badge variant="secondary">{tasks.length} tasks</Badge>
+      </div>
 
       {error ? (
         <Card className="p-4 space-y-3">

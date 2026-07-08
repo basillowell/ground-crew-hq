@@ -17,7 +17,6 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
-import { PageHeader } from '@/components/shared';
 import {
   type ApplicationArea,
   type ChemicalApplicationLog,
@@ -568,30 +567,23 @@ export default function ApplicationsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4">
-      <PageHeader
-        compact
-        title="Applications"
-        subtitle="Chemical logging with tank mix and site condition detail."
-        badge={
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{totalApplications} logs</Badge>
-            <Badge className="bg-status-active/10 text-status-active border-status-active/20">EPA-Compliant Record Keeping</Badge>
-          </div>
-        }
-        action={
-          activeTab === 'logs'
-            ? {
-                label: 'New Application',
-                onClick: () => {
-                  setDialogOpen(true);
-                },
-                icon: <FlaskConical className="h-3.5 w-3.5" />,
-              }
-            : undefined
-        }
-      >
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{totalApplications} logs</Badge>
+          <Badge className="bg-status-active/10 text-status-active border-status-active/20">EPA-Compliant Record Keeping</Badge>
+        </div>
         {activeTab === 'logs' ? (
-          <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setDialogOpen(true);
+              }}
+            >
+              <FlaskConical className="h-3.5 w-3.5" />
+              New Application
+            </Button>
             <Button variant="outline" size="sm" className="gap-1" onClick={exportForAudit}>
               <Download className="h-3.5 w-3.5" /> Export for Audit
             </Button>
@@ -601,9 +593,9 @@ export default function ApplicationsPage() {
             <Button variant="outline" size="sm" className="gap-1" onClick={() => window.print()}>
               <Printer className="h-3.5 w-3.5" /> Print
             </Button>
-          </>
+          </div>
         ) : null}
-      </PageHeader>
+      </div>
 
       <div className="flex items-center gap-2 rounded-xl border bg-card p-1">
         <button

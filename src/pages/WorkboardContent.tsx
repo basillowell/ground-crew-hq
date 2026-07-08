@@ -8,7 +8,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { PageHeader } from '@/components/shared';
 import { TimeSelect } from '@/components/TimeSelect';
 import { toast } from '@/components/ui/sonner';
 import {
@@ -4046,9 +4045,6 @@ export default function WorkboardContent() {
     <div className="relative flex h-[calc(100vh-3.5rem)] overflow-hidden">
       {/* ─── MAIN DISPATCH BOARD ─── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-3 pt-3 md:px-5">
-          <PageHeader compact title="Workflow" subtitle="Assign tasks and manage daily operations." />
-        </div>
 
         {/* Header bar */}
         <div className="border-b border-surface-border bg-surface-card px-3 py-3 md:px-5">

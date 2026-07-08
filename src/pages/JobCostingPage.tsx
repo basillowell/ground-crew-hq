@@ -6,7 +6,6 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp } from 'lucide-react';
-import { PageHeader } from '@/components/shared';
 
 const supabase = createClient();
 
@@ -198,7 +197,6 @@ export default function JobCostingPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-      <PageHeader compact title="Job Costing" subtitle="Labor cost and margin analysis." />
 
       {summary && (
         <div className="grid gap-4 sm:grid-cols-3">

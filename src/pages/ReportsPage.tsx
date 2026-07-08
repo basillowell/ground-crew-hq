@@ -8,7 +8,6 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
-import { PageHeader } from '@/components/shared';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 
 const supabase = createClient();
@@ -1086,10 +1085,6 @@ export default function ReportsPage() {
         <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#6b7280' }}>
           Generated: {generatedAt} - Prepared by: {currentUser?.fullName ?? currentUser?.email ?? 'Ground Crew User'}
         </p>
-      </div>
-
-      <div className="no-print">
-        <PageHeader compact title="Reports" subtitle="Labor summaries and cost analysis." />
       </div>
 
       <div className="no-print space-y-3 rounded-xl border border-surface-border bg-surface-card p-4">

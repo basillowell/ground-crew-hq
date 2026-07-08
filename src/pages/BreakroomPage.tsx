@@ -6,7 +6,6 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { ClipboardList, Hash, MessageSquare, Send, StickyNote } from 'lucide-react';
-import { PageHeader } from '@/components/shared';
 
 const supabase = createClient();
 
@@ -272,7 +271,6 @@ export default function BreakroomPage() {
       {/* Message area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="border-b border-surface-border px-4 pt-3">
-          <PageHeader compact title="Breakroom" subtitle="Share updates with your team." />
         </div>
         <div className="grid gap-3 border-b border-surface-border bg-surface-base p-4 lg:grid-cols-2">
           <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-2">

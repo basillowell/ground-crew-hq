@@ -13,7 +13,6 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/ui/sonner';
 import Link from 'next/link';
-import { PageHeader } from '@/components/shared';
 
 const supabase = createClient();
 
@@ -425,7 +424,7 @@ export default function EquipmentPage() {
 
   return (
     <div className="animate-fade-up space-y-6 p-4 md:p-6">
-      <PageHeader compact title="Equipment" subtitle="Track maintenance and availability.">
+      <div className="flex justify-end">
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-surface-border bg-surface-card p-0.5">
             <Button
@@ -454,7 +453,7 @@ export default function EquipmentPage() {
             </Button>
           ) : null}
         </div>
-      </PageHeader>
+      </div>
 
       {displayError ? <ErrorRetry message={displayError} onRetry={() => { setError(null); void equipmentQuery.refetch(); }} /> : null}
 

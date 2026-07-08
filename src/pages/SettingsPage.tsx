@@ -83,7 +83,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
-import { PageHeader } from '@/components/shared';
 
 const supabase = createClient();
 
@@ -268,7 +267,7 @@ function SettingsCard({
 }) {
   return (
     <section className="rounded-xl border border-surface-border bg-surface-card p-5">
-      <div className={`mb-4 flex items-start justify-between gap-4 ${stickyHeader ? 'md:sticky md:top-[170px] md:z-20 bg-surface-card' : ''}`}>
+      <div className={`mb-4 flex items-start justify-between gap-4 ${stickyHeader ? 'md:sticky md:top-[134px] md:z-20 bg-surface-card' : ''}`}>
         <div>
           <h2 className="text-base font-semibold text-text-primary">{title}</h2>
           {subtitle ? <p className="mt-1 text-sm text-text-muted">{subtitle}</p> : null}
@@ -760,7 +759,6 @@ export default function SettingsPage() {
   return (
     <div className="settings-theme mx-auto max-w-6xl space-y-4 bg-surface-base p-4 text-text-primary md:p-6">
       <div className="sticky top-[85px] z-30 mb-4 bg-surface-base/95 pb-2 backdrop-blur">
-        <PageHeader compact title="Settings" subtitle={user?.email ?? 'Workspace settings'} />
 
         <div className="mb-4 md:hidden">
           <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">Section</label>

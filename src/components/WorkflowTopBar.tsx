@@ -1,8 +1,7 @@
 import { memo } from 'react';
-import { Bell, CalendarDays, ClipboardList, LogOut, Wrench, CalendarClock, Menu, Search } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, ClipboardList, Menu, Search, Wrench } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +14,6 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { AppNotification } from './AppLayout';
 import type { ProgramSettings, Property } from '@/data/seedData';
-import { useOrgProfile } from '@/hooks/useOrgProfile';
 
 interface WorkflowTopBarProps {
   department: string;
@@ -40,6 +38,40 @@ interface WorkflowTopBarProps {
   onOpenCommandBar?: () => void;
 }
 
+type RouteTitle = {
+  title: string;
+  subtitle: string;
+};
+
+const routeTitles: Record<string, RouteTitle> = {
+  '/app': { title: 'Command Center', subtitle: 'Cross-property operations at a glance' },
+  '/app/dashboard': { title: 'Command Center', subtitle: 'Cross-property operations at a glance' },
+  '/app/dispatch': { title: 'Dispatch', subtitle: "Today's crew assignments" },
+  '/app/workboard': { title: 'Workflow', subtitle: 'Assign tasks and manage daily operations.' },
+  '/app/scheduler': { title: 'Scheduler', subtitle: 'Manage employee shifts.' },
+  '/app/employees': { title: 'Team', subtitle: 'Manage your crew roster.' },
+  '/app/equipment': { title: 'Equipment', subtitle: 'Track maintenance and availability.' },
+  '/app/invoicing': { title: 'Invoicing', subtitle: 'Manage and track invoices.' },
+  '/app/reports': { title: 'Reports', subtitle: 'Labor summaries and cost analysis.' },
+  '/app/job-costing': { title: 'Job Costing', subtitle: 'Labor cost and margin analysis.' },
+  '/app/applications': { title: 'Applications', subtitle: 'Chemical logging with tank mix and site condition detail.' },
+  '/app/breakroom': { title: 'Breakroom', subtitle: 'Share updates with your team.' },
+  '/app/messaging': { title: 'Messaging', subtitle: 'Compose and send a message to your crew.' },
+  '/app/tasks': { title: 'Task Management', subtitle: 'Task library for Workflow assignment and operations planning.' },
+  '/app/safety': { title: 'Safety', subtitle: 'Toolbox talks and compliance records.' },
+  '/app/settings': { title: 'Settings', subtitle: 'Workspace settings' },
+  '/app/field': { title: 'Field', subtitle: "Mobile workspace for today's work" },
+};
+
+function getRouteTitle(pathname: string): RouteTitle {
+  const normalizedPath = pathname.split('?')[0] || '/app';
+  const matchingRoute = Object.keys(routeTitles)
+    .sort((first, second) => second.length - first.length)
+    .find((route) => normalizedPath === route || normalizedPath.startsWith(`${route}/`));
+
+  return matchingRoute ? routeTitles[matchingRoute] : { title: 'Ground Crew HQ', subtitle: 'Operations workspace' };
+}
+
 const formatDate = (d: Date) =>
   d.toLocaleDateString('en-US', {
     weekday: 'long',
@@ -49,15 +81,8 @@ const formatDate = (d: Date) =>
   });
 
 export const WorkflowTopBar = memo(function WorkflowTopBar({
-  department,
-  setDepartment,
-  departments,
   currentDate,
   setCurrentDate,
-  properties,
-  currentPropertyId,
-  onSelectProperty,
-  allowAllProperties = false,
   notifications,
   unreadNotificationCount,
   pendingSyncCount = 0,
@@ -65,12 +90,11 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   onMarkAllNotificationsRead,
   onOpenNotification,
   onOpenMobileSidebar,
-  onSignOut,
   programSetting,
-  planTier = 'FREE',
   onOpenCommandBar,
 }: WorkflowTopBarProps) {
-  const { currentUser } = useOrgProfile();
+  const pathname = usePathname() ?? '/app';
+  const pageTitle = getRouteTitle(pathname);
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
   const formatTimestamp = (isoTimestamp: string) =>
@@ -81,85 +105,50 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
     if (icon === 'equipment') return <Wrench className="h-3.5 w-3.5 text-amber-600" />;
     return <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />;
   };
-  const showAllPropertiesOption = allowAllProperties && properties.length > 1;
-  const allPropertiesLabel = `All Properties (${properties.length})`;
   const bellBadgeLabel = pendingSyncCount > 0 ? `${pendingSyncCount} pending syncs` : String(unreadNotificationCount);
 
   return (
-    <header className="sticky top-0 z-20 shrink-0 border-b border-surface-border bg-surface-base/80 px-3 py-2 backdrop-blur-md">
-      <div className="flex items-center gap-2 md:gap-3">
-        <Button variant="ghost" size="icon" className="h-9 w-9 text-text-muted hover:bg-surface-hover hover:text-text-primary md:hidden" onClick={onOpenMobileSidebar} aria-label="Open menu">
+    <header className="sticky top-0 z-20 shrink-0 border-b border-surface-border bg-surface-base/80 px-3 py-3 backdrop-blur-md md:h-[85px]">
+      <div className="flex h-full items-center gap-3">
+        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-text-muted hover:bg-surface-hover hover:text-text-primary md:hidden" onClick={onOpenMobileSidebar} aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </Button>
 
-        <div className="hidden md:block">
-          <Select value={department} onValueChange={setDepartment}>
-            <SelectTrigger className="h-9 w-[170px] rounded-lg border-surface-border bg-surface-card/80 text-sm text-text-primary">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All Departments">All Departments</SelectItem>
-              {departments.map((entry) => (
-                <SelectItem key={entry} value={entry}>
-                  {entry}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-2xl font-bold tracking-tight text-text-primary">{pageTitle.title}</h1>
+          <p className="mt-0.5 truncate text-sm text-muted-foreground">{pageTitle.subtitle}</p>
         </div>
 
-        <div className="min-w-0 flex-1 md:flex-none">
-          <Select value={currentPropertyId} onValueChange={onSelectProperty}>
-            <SelectTrigger className="h-9 w-full rounded-lg border-surface-border bg-surface-card/80 text-sm text-text-primary md:w-[190px]">
-              <SelectValue placeholder="Select property" />
-            </SelectTrigger>
-            <SelectContent>
-              {showAllPropertiesOption ? (
-                <SelectItem value="all">{allPropertiesLabel}</SelectItem>
-              ) : null}
-              {properties.map((entry) => (
-                <SelectItem key={entry.id} value={entry.id}>
-                  {entry.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="ml-auto hidden items-center gap-2 md:flex">
+          <div className="hidden min-w-[250px] lg:block">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-surface-border bg-surface-card/80 px-3 text-left font-medium text-text-primary hover:bg-surface-elevated/80 hover:text-text-primary">
+                  <span>{formatDate(currentDate)}</span>
+                  <CalendarDays className="h-4 w-4 text-text-muted" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={currentDate}
+                  onSelect={(date) => date && setCurrentDate(date)}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-surface-border bg-surface-card/80 text-xs text-text-secondary hover:bg-surface-elevated/80 hover:text-text-primary md:inline-flex" onClick={today}>
+            {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
+          </Button>
         </div>
 
-        <div className="hidden min-w-[250px] md:block">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-surface-border bg-surface-card/80 px-3 text-left font-medium text-text-primary hover:bg-surface-elevated/80 hover:text-text-primary">
-                <span>{formatDate(currentDate)}</span>
-                <CalendarDays className="h-4 w-4 text-text-muted" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={currentDate}
-                onSelect={(date) => date && setCurrentDate(date)}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-surface-border bg-surface-card/80 text-xs text-text-secondary hover:bg-surface-elevated/80 hover:text-text-primary md:inline-flex" onClick={today}>
-          {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
-        </Button>
-
-        {programSetting?.clientLabel ? (
-          <span className="hidden rounded-full border border-surface-border bg-surface-card/60 px-3 py-1 text-[11px] text-text-muted lg:inline-flex">
-            {programSetting.clientLabel}
-          </span>
-        ) : null}
-
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <DropdownMenu onOpenChange={(open) => open && onMarkAllNotificationsRead()}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent text-text-muted hover:border-surface-border hover:bg-surface-hover hover:text-text-primary">
+              <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent text-text-muted hover:border-surface-border hover:bg-surface-hover hover:text-text-primary" aria-label="Open notifications">
                 <Bell className="h-4 w-4" />
                 <span
                   className={`absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
@@ -211,38 +200,8 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             <Search className="mr-1.5 h-3.5 w-3.5" />
             Ask anything
           </Button>
-
-          <div className="hidden md:block">
-            <p className="text-sm font-medium">
-              {currentUser?.firstName} {currentUser?.lastName}
-            </p>
-            <p className="text-xs text-muted-foreground capitalize">
-              {currentUser?.role}
-            </p>
-          </div>
-
-          {/* Mobile avatar */}
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-elevated text-xs font-semibold text-brand ring-1 ring-brand/20 transition-colors duration-200 hover:ring-brand/40 md:hidden"
-            onClick={onSignOut}
-            aria-label="Account"
-          >
-            {(currentUser?.firstName ?? '').slice(0, 1).toUpperCase()}
-          </button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 rounded-full text-text-muted hover:bg-surface-hover hover:text-text-primary md:inline-flex"
-            onClick={onSignOut}
-            aria-label="Sign out"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
         </div>
       </div>
     </header>
   );
 });
-

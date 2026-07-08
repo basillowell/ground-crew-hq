@@ -9,7 +9,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { useEmployees } from '@/lib/supabase-queries';
-import { PageHeader } from '@/components/shared';
 
 export default function MessagingPage() {
   const [selected, setSelected] = useState<string[]>([]);
@@ -96,7 +95,6 @@ export default function MessagingPage() {
 
       {/* Compose */}
       <div className="flex-1 p-6 flex flex-col max-w-3xl">
-        <PageHeader compact title="Messaging" subtitle="Compose and send a message to your crew." />
 
         <div className="mb-4 rounded-xl border bg-muted/20 p-4">
           <div className="flex items-center justify-between gap-2">

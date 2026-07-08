@@ -17,7 +17,6 @@ import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
-import { PageHeader } from '@/components/shared';
 import { useAssignmentsRange, useEmployees, useProperties } from '@/lib/supabase-queries';
 
 const supabase = createClient();
@@ -1096,10 +1095,6 @@ export default function SchedulerPage() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
-      {/* ── Top bar ── */}
-      <div className="px-3 pt-3 md:px-5">
-        <PageHeader compact title="Scheduler" subtitle="Manage employee shifts." />
-      </div>
       <div className="border-b bg-card px-3 py-3 md:px-5 flex items-center gap-2 md:gap-3 flex-wrap shrink-0">
 
         {/* Week nav */}
