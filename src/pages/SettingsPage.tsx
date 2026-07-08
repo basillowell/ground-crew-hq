@@ -267,9 +267,9 @@ function SettingsCard({
 }) {
   return (
     <section className="rounded-xl border border-surface-border bg-surface-card p-5">
-      <div className={`mb-4 flex items-start justify-between gap-4 ${stickyHeader ? 'md:sticky md:top-[104px] md:z-20 md:-mx-5 md:px-5 md:py-3 bg-surface-card' : ''}`}>
+      <div className={`mb-4 flex items-start justify-between gap-4 ${stickyHeader ? 'md:sticky md:top-[104px] md:z-20 md:-mx-5 md:border-b md:border-surface-border md:px-5 md:py-3 md:shadow-md bg-surface-card' : ''}`}>
         <div>
-          <h2 className="text-base font-semibold text-text-primary">{title}</h2>
+          <h2 className={stickyHeader ? 'text-xl font-bold tracking-tight text-text-primary' : 'text-base font-semibold text-text-primary'}>{title}</h2>
           {subtitle ? <p className="mt-1 text-sm text-text-muted">{subtitle}</p> : null}
         </div>
         {action}
