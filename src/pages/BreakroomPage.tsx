@@ -233,7 +233,7 @@ export default function BreakroomPage() {
   if (!orgId || propertiesLoading || employeesLoading) return <PageSkeleton />;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex h-full min-h-0 overflow-hidden">
       {/* Channel sidebar */}
       <aside className="flex w-52 shrink-0 flex-col border-r border-surface-border bg-surface-base">
         <div className="border-b border-surface-border px-4 py-3">

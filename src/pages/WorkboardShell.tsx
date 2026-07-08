@@ -21,7 +21,7 @@ export default function WorkboardShell() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
+        <div className="flex h-full min-h-0 items-center justify-center">
           <div className="text-sm text-muted-foreground">Loading workflow...</div>
         </div>
       }

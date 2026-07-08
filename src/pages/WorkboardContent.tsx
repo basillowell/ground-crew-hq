@@ -4042,7 +4042,7 @@ export default function WorkboardContent() {
           />
         </div>
       ) : (
-    <div className="relative flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="relative flex h-full min-h-0 overflow-hidden">
       {/* ─── MAIN DISPATCH BOARD ─── */}
       <div className="flex-1 flex flex-col overflow-hidden">
 

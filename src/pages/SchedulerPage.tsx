@@ -1094,7 +1094,7 @@ export default function SchedulerPage() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="border-b bg-card px-3 py-3 md:px-5 flex items-center gap-2 md:gap-3 flex-wrap shrink-0">
 
         {/* Week nav */}

@@ -87,7 +87,7 @@ export function CardGridSkeleton({ count = 3 }: { count?: number }) {
 
 export function PageSkeleton() {
   return (
-    <div className="min-h-[calc(100vh-120px)] p-6">
+    <div className="h-full min-h-0 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <PageHeaderSkeleton />
         <CardGridSkeleton />
