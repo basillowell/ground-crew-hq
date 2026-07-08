@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Bell, CalendarClock, CalendarDays, ClipboardList, Menu, Search, Wrench } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, ClipboardList, Menu, Wrench } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -98,7 +98,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   onOpenNotification,
   onOpenMobileSidebar,
   programSetting,
-  onOpenCommandBar,
 }: WorkflowTopBarProps) {
   const pathname = usePathname() ?? '/app';
   const router = useRouter();
@@ -106,8 +105,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const pageTitle = getRouteTitle(pathname);
   const isSettingsRoute = pathname === '/app/settings' || pathname.startsWith('/app/settings/');
   const activeSettingsTab = getSettingsTab(searchParams.get('tab'));
-  const today = () => setCurrentDate(new Date());
-  const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
   const formatTimestamp = (isoTimestamp: string) =>
     new Date(isoTimestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
 
@@ -158,10 +155,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         </div>
 
         <div className="ml-auto hidden items-center gap-2 md:flex">
-          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-surface-border bg-surface-card/80 text-xs text-text-secondary hover:bg-surface-elevated/80 hover:text-text-primary md:inline-flex" onClick={today}>
-            {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
-          </Button>
-
           <div className="hidden min-w-[250px] lg:block">
             <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
             <Popover>
@@ -229,15 +222,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="hidden h-9 rounded-xl border-surface-border bg-surface-card/80 text-xs text-text-secondary hover:bg-surface-elevated/80 hover:text-text-primary md:inline-flex"
-            onClick={onOpenCommandBar}
-          >
-            <Search className="mr-1.5 h-3.5 w-3.5" />
-            Ask anything
-          </Button>
         </div>
       </div>
     </header>
