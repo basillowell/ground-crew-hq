@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Bell, CalendarClock, CalendarDays, ClipboardList, Menu, Search, Wrench } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -63,6 +63,9 @@ const routeTitles: Record<string, RouteTitle> = {
   '/app/field': { title: 'Field', subtitle: "Mobile workspace for today's work" },
 };
 
+const settingsTabs = ['Operations', 'Tasks', 'Equipment', 'Workforce', 'SOPs', 'Account', 'Help'] as const;
+type SettingsTab = (typeof settingsTabs)[number];
+
 function getRouteTitle(pathname: string): RouteTitle {
   const normalizedPath = pathname.split('?')[0] || '/app';
   const matchingRoute = Object.keys(routeTitles)
@@ -70,6 +73,10 @@ function getRouteTitle(pathname: string): RouteTitle {
     .find((route) => normalizedPath === route || normalizedPath.startsWith(`${route}/`));
 
   return matchingRoute ? routeTitles[matchingRoute] : { title: 'Ground Crew HQ', subtitle: 'Operations workspace' };
+}
+
+function getSettingsTab(value: string | null): SettingsTab {
+  return settingsTabs.includes(value as SettingsTab) ? (value as SettingsTab) : 'Operations';
 }
 
 const formatDate = (d: Date) =>
@@ -94,11 +101,21 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   onOpenCommandBar,
 }: WorkflowTopBarProps) {
   const pathname = usePathname() ?? '/app';
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const pageTitle = getRouteTitle(pathname);
+  const isSettingsRoute = pathname === '/app/settings' || pathname.startsWith('/app/settings/');
+  const activeSettingsTab = getSettingsTab(searchParams.get('tab'));
   const today = () => setCurrentDate(new Date());
   const sameDayAsToday = currentDate.toDateString() === new Date().toDateString();
   const formatTimestamp = (isoTimestamp: string) =>
     new Date(isoTimestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
+
+  const updateSettingsTab = (nextTab: SettingsTab) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set('tab', nextTab);
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+  };
 
   const getNotificationIcon = (icon: AppNotification['icon']) => {
     if (icon === 'task') return <ClipboardList className="h-3.5 w-3.5 text-blue-600" />;
@@ -108,18 +125,43 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const bellBadgeLabel = pendingSyncCount > 0 ? `${pendingSyncCount} pending syncs` : String(unreadNotificationCount);
 
   return (
-    <header className="sticky top-0 z-20 shrink-0 border-b border-surface-border bg-surface-base/80 px-3 py-3 backdrop-blur-md md:h-[85px]">
+    <header className={`sticky top-0 z-20 shrink-0 border-b border-surface-border bg-surface-base/80 px-3 py-3 backdrop-blur-md ${isSettingsRoute ? 'md:h-[104px]' : 'md:h-[85px]'}`}>
       <div className="flex h-full items-center gap-3">
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-text-muted hover:bg-surface-hover hover:text-text-primary md:hidden" onClick={onOpenMobileSidebar} aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </Button>
 
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-bold tracking-tight text-text-primary">{pageTitle.title}</h1>
-          <p className="mt-0.5 truncate text-sm text-muted-foreground">{pageTitle.subtitle}</p>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-4">
+          <div className="min-w-0 shrink-0">
+            <h1 className="truncate text-2xl font-bold tracking-tight text-text-primary">{pageTitle.title}</h1>
+            <p className="mt-0.5 truncate text-sm text-muted-foreground">{pageTitle.subtitle}</p>
+          </div>
+
+          {isSettingsRoute ? (
+            <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-1" aria-label="Settings sections">
+              {settingsTabs.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => updateSettingsTab(tab)}
+                  className={`h-8 shrink-0 rounded-lg px-3 text-xs font-medium transition-colors ${
+                    activeSettingsTab === tab
+                      ? 'bg-surface-hover text-brand ring-1 ring-brand/30'
+                      : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </nav>
+          ) : null}
         </div>
 
         <div className="ml-auto hidden items-center gap-2 md:flex">
+          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-surface-border bg-surface-card/80 text-xs text-text-secondary hover:bg-surface-elevated/80 hover:text-text-primary md:inline-flex" onClick={today}>
+            {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
+          </Button>
+
           <div className="hidden min-w-[250px] lg:block">
             <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
             <Popover>
@@ -139,10 +181,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
               </PopoverContent>
             </Popover>
           </div>
-
-          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-surface-border bg-surface-card/80 text-xs text-text-secondary hover:bg-surface-elevated/80 hover:text-text-primary md:inline-flex" onClick={today}>
-            {sameDayAsToday ? 'Today Selected' : 'Jump to Today'}
-          </Button>
         </div>
 
         <div className="flex items-center gap-2">

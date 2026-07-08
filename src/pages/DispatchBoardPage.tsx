@@ -159,13 +159,7 @@ export default function DispatchBoardPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dispatch</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Today's crew assignments - {todayKey}
-          </p>
-        </div>
+      <div className="flex justify-end">
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setIsCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />

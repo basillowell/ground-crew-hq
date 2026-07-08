@@ -106,11 +106,7 @@ export default function CommandCenterOperationalPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Command Center</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">Cross-property operations at a glance</p>
-        </div>
+      <div className="flex justify-end">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="px-3 py-1.5 text-xs">
             <MapPin className="mr-1.5 h-3 w-3" />
