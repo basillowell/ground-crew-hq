@@ -1089,7 +1089,7 @@ export default function ReportsPage() {
       </div>
 
       <div className="no-print">
-        <PageHeader title="Reports" subtitle="Labor summaries and cost analysis." />
+        <PageHeader compact title="Reports" subtitle="Labor summaries and cost analysis." />
       </div>
 
       <div className="no-print space-y-3 rounded-xl border border-surface-border bg-surface-card p-4">

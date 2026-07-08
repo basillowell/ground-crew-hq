@@ -66,8 +66,9 @@ export default function TasksCatalogPage() {
   return (
     <div className="animate-fade-up mx-auto max-w-6xl space-y-4 p-4">
       <PageHeader
+        compact
         title="Task Management"
-        subtitle="Task library used by Workflow assignment and operations planning."
+        subtitle="Task library for Workflow assignment and operations planning."
         badge={<Badge variant="secondary">{tasks.length} tasks</Badge>}
       />
 

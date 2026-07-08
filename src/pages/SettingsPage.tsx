@@ -752,7 +752,7 @@ export default function SettingsPage() {
 
   return (
     <div className="settings-theme mx-auto max-w-6xl space-y-4 bg-surface-base p-4 text-text-primary md:p-6">
-      <PageHeader title="Settings" subtitle={`Operations Control Center · ${user?.email ?? 'Workspace settings'}`} />
+      <PageHeader compact title="Settings" subtitle={user?.email ?? 'Workspace settings'} />
 
       <div className="mb-4 md:hidden">
         <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">Section</label>

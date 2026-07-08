@@ -81,6 +81,7 @@ export default function SafetyPage() {
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <PageHeader
+        compact
         title="Safety"
         subtitle="Toolbox talks and compliance records."
         action={{ label: 'Log Safety Talk', onClick: () => setShowLogTalkModal(true) }}

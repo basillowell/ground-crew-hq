@@ -198,7 +198,7 @@ export default function JobCostingPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-      <PageHeader title="Job Costing" subtitle="Labor cost and margin analysis for completed assignments." />
+      <PageHeader compact title="Job Costing" subtitle="Labor cost and margin analysis." />
 
       {summary && (
         <div className="grid gap-4 sm:grid-cols-3">

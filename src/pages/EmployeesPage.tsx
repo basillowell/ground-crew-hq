@@ -1016,6 +1016,7 @@ export default function EmployeesPage() {
   return (
     <div className="animate-fade-up mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <PageHeader
+        compact
         title="Team"
         subtitle="Manage your crew roster."
         action={!isReadOnly ? { label: 'Add Employee', onClick: openAddModal } : undefined}
@@ -1098,11 +1099,6 @@ export default function EmployeesPage() {
               message={`Failed to load availability: ${monthEntriesQuery.error.message}`}
               onRetry={() => void monthEntriesQuery.refetch()}
             />
-          ) : monthEntries.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center">
-              <p className="text-sm font-medium">No availability set for {availabilityMonthLabel}</p>
-              <p className="mt-1 text-xs text-muted-foreground">No shifts have been scheduled yet for this month.</p>
-            </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-surface-border bg-surface-card">
               <table className="min-w-full text-xs" style={isDragging ? { userSelect: 'none' } : undefined}>

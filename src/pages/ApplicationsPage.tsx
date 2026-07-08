@@ -569,8 +569,9 @@ export default function ApplicationsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4">
       <PageHeader
+        compact
         title="Applications"
-        subtitle="Licensed applicator-ready chemical logging with tank mix detail, site condition detail, and exportable records."
+        subtitle="Chemical logging with tank mix and site condition detail."
         badge={
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{totalApplications} logs</Badge>

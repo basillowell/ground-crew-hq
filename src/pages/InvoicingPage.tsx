@@ -189,7 +189,7 @@ export default function InvoicingPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <PageHeader title="Invoicing" subtitle="Manage and track invoices for your properties." />
+      <PageHeader compact title="Invoicing" subtitle="Manage and track invoices." />
 
       {/* Summary banner */}
       <div className="grid gap-4 sm:grid-cols-3">

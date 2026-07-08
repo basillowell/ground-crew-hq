@@ -96,7 +96,7 @@ export default function MessagingPage() {
 
       {/* Compose */}
       <div className="flex-1 p-6 flex flex-col max-w-3xl">
-        <PageHeader title="Messaging" subtitle="Compose and send a message to your crew." />
+        <PageHeader compact title="Messaging" subtitle="Compose and send a message to your crew." />
 
         <div className="mb-4 rounded-xl border bg-muted/20 p-4">
           <div className="flex items-center justify-between gap-2">

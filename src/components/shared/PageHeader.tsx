@@ -55,7 +55,7 @@ export function PageHeader({ title, subtitle, badge, action, children, compact =
           {compact ? (
             <div className="flex items-center gap-2">
               <p className="text-sm text-muted-foreground">
-                {subtitle ? `${title} - ${subtitle}` : title}
+                {subtitle ? `${title} — ${subtitle}` : title}
               </p>
               {badge}
             </div>

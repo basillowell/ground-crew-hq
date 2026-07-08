@@ -600,7 +600,6 @@ export default function WorkboardContent() {
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
   const [dropTargetEmployeeId, setDropTargetEmployeeId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
-  const [lastRealtimeRefreshAt, setLastRealtimeRefreshAt] = useState<number | null>(null);
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const [needsFilter, setNeedsFilter] = useState<'all' | 'open' | 'done'>('all');
   const [dismissedEscalationIds, setDismissedEscalationIds] = useState<string[]>([]);
@@ -662,7 +661,6 @@ export default function WorkboardContent() {
   const [endOfDayReportSubject, setEndOfDayReportSubject] = useState('');
   const [endOfDayReportGenerating, setEndOfDayReportGenerating] = useState(false);
   const [isGeneratingTaskNotes, setIsGeneratingTaskNotes] = useState(false);
-  const [showFirstVisitHint, setShowFirstVisitHint] = useState(false);
   const boardDateInputRef = useRef<HTMLInputElement>(null);
   const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
@@ -1112,12 +1110,6 @@ export default function WorkboardContent() {
     );
   }, []);
 
-  useEffect(() => {
-    if (assignmentsQuery.dataUpdatedAt || taskRequestsQuery.dataUpdatedAt) {
-      setLastRealtimeRefreshAt(Math.max(assignmentsQuery.dataUpdatedAt ?? 0, taskRequestsQuery.dataUpdatedAt ?? 0));
-    }
-  }, [assignmentsQuery.dataUpdatedAt, taskRequestsQuery.dataUpdatedAt]);
-
   const applyRecurringTasks = useCallback(async () => {
     if (!supabase) return;
     const resolvedOrgId = authOrgId ?? currentUser?.orgId;
@@ -1279,7 +1271,6 @@ export default function WorkboardContent() {
             filter: `org_id=eq.${orgId}`,
           },
           (payload) => {
-            setLastRealtimeRefreshAt(Date.now());
             const next = payload.new as { id?: string; status?: string; title?: string; employee_id?: string } | null;
             const previous = payload.old as { status?: string } | null;
             const nextStatus = (next?.status ?? '').toLowerCase();
@@ -1301,7 +1292,6 @@ export default function WorkboardContent() {
           },
         )
         .on('postgres_changes', { event: '*', schema: 'public', table: 'task_requests', filter: `org_id=eq.${orgId}` }, () => {
-          setLastRealtimeRefreshAt(Date.now());
           queueRealtimeInvalidation('task-requests');
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `org_id=eq.${orgId}` }, () => {
@@ -2756,13 +2746,8 @@ export default function WorkboardContent() {
     [availableEquipmentList],
   );
 
-  const showFreshUpdateBadge = lastRealtimeRefreshAt != null && Date.now() - lastRealtimeRefreshAt < 90_000;
   const [todayDateKey] = useState(() => new Date().toLocaleDateString('en-CA'));
 
-  useEffect(() => {
-    const dismissed = window.localStorage.getItem('ground-crew-first-visit-workboard-dismissed') === 'true';
-    setShowFirstVisitHint(!dismissed);
-  }, []);
   const showEndOfDayReportButton = useMemo(() => new Date().getHours() >= 14, []);
 
   const newRequestsCount = propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length;
@@ -4059,37 +4044,10 @@ export default function WorkboardContent() {
         </div>
       ) : (
     <div className="relative flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      {showFirstVisitHint ? (
-        <div className="absolute left-3 right-3 top-3 z-20 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 md:left-5 md:right-5">
-          <div className="flex items-start justify-between gap-2">
-            <p>This is your daily operations board. Assign tasks to scheduled crew and track progress in real-time.</p>
-            <button
-              type="button"
-              aria-label="Dismiss workflow help"
-              className="rounded-full p-2 text-xs font-medium text-blue-700 hover:text-blue-900"
-              onClick={() => {
-                window.localStorage.setItem('ground-crew-first-visit-workboard-dismissed', 'true');
-                setShowFirstVisitHint(false);
-              }}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       {/* ─── MAIN DISPATCH BOARD ─── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="px-3 pt-3 md:px-5">
-          <PageHeader
-            title="Workflow"
-            subtitle="Assign tasks and manage daily operations."
-            badge={showFreshUpdateBadge ? (
-              <Badge variant="secondary" className="gap-1">
-                <Radio className="h-3 w-3 animate-pulse" /> Live
-              </Badge>
-            ) : undefined}
-          />
+          <PageHeader compact title="Workflow" subtitle="Assign tasks and manage daily operations." />
         </div>
 
         {/* Header bar */}
