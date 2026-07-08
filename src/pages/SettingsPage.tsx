@@ -268,7 +268,7 @@ function SettingsCard({
 }) {
   return (
     <section className="rounded-xl border border-surface-border bg-surface-card p-5">
-      <div className={`mb-4 flex items-start justify-between gap-4 ${stickyHeader ? 'sticky top-0 z-10 bg-surface-card' : ''}`}>
+      <div className={`mb-4 flex items-start justify-between gap-4 ${stickyHeader ? 'md:sticky md:top-[85px] md:z-20 bg-surface-card' : ''}`}>
         <div>
           <h2 className="text-base font-semibold text-text-primary">{title}</h2>
           {subtitle ? <p className="mt-1 text-sm text-text-muted">{subtitle}</p> : null}
@@ -759,37 +759,39 @@ export default function SettingsPage() {
 
   return (
     <div className="settings-theme mx-auto max-w-6xl space-y-4 bg-surface-base p-4 text-text-primary md:p-6">
-      <PageHeader compact title="Settings" subtitle={user?.email ?? 'Workspace settings'} />
+      <div className="sticky top-0 z-30 mb-4 bg-surface-base/95 pb-2 backdrop-blur">
+        <PageHeader compact title="Settings" subtitle={user?.email ?? 'Workspace settings'} />
 
-      <div className="mb-4 md:hidden">
-        <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">Section</label>
-        <select
-          value={tab}
-          onChange={(event) => setTab(event.target.value as Tab)}
-          className="h-10 w-full rounded-lg border border-surface-border bg-surface-card px-3 text-sm text-text-primary"
-        >
-          {TABS.map((t) => (
-            <option key={`mobile-tab-${t}`} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="sticky top-0 z-20 mb-4 hidden flex-wrap items-center gap-2 border-b border-surface-border bg-surface-base/95 pb-1 backdrop-blur md:flex">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`h-9 rounded-lg px-3 text-sm transition-colors ${
-              tab === t
-                ? 'border-b-2 border-brand bg-surface-hover font-medium text-brand'
-                : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-            }`}
+        <div className="mb-4 md:hidden">
+          <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">Section</label>
+          <select
+            value={tab}
+            onChange={(event) => setTab(event.target.value as Tab)}
+            className="h-10 w-full rounded-lg border border-surface-border bg-surface-card px-3 text-sm text-text-primary"
           >
-            {t}
-          </button>
-        ))}
+            {TABS.map((t) => (
+              <option key={`mobile-tab-${t}`} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="hidden flex-wrap items-center gap-2 border-b border-surface-border pb-1 md:flex">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`h-9 rounded-lg px-3 text-sm transition-colors ${
+                tab === t
+                  ? 'border-b-2 border-brand bg-surface-hover font-medium text-brand'
+                  : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
       {isReadOnly ? (
