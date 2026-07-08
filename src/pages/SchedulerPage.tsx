@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import type { Employee, Property, ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -139,6 +140,7 @@ async function withSchedulerMutationTimeout<T extends { error: unknown }>(reques
   }
 }
 export default function SchedulerPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { currentPropertyId, currentUser, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
@@ -1120,7 +1122,7 @@ export default function SchedulerPage() {
 
       {/* ── Top bar ── */}
       <div className="px-3 pt-3 md:px-5">
-        <PageHeader title="Schedule" subtitle="Build and manage crew shifts." />
+        <PageHeader compact title="Scheduler" subtitle="Manage employee shifts." />
       </div>
       <div className="border-b bg-card px-3 py-3 md:px-5 flex items-center gap-2 md:gap-3 flex-wrap shrink-0">
 
@@ -1163,6 +1165,14 @@ export default function SchedulerPage() {
           <>
             <Button size="sm" className="h-11 w-full md:h-9 md:w-auto gap-1.5" onClick={() => openAddShift()} data-testid="button-add-shift">
               <Plus className="h-3.5 w-3.5" /> Add Shift
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 w-full md:h-9 md:w-auto gap-1.5"
+              onClick={() => router.push('/app/employees?view=availability')}
+            >
+              <CalendarDays className="h-3.5 w-3.5" /> Availability
             </Button>
             <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" onClick={openSaveTemplateDialog}>
               Save as Template

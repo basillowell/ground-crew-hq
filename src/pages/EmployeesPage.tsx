@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Loader2, MoreHorizontal, Plus, UserCog, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
@@ -232,6 +233,7 @@ function EmployeePagination({
 }
 
 export default function EmployeesPage() {
+  const searchParams = useSearchParams();
   const { orgId, userRole, currentPropertyId } = useOrgProfile();
   const queryClient = useQueryClient();
   const isReadOnly = String(userRole ?? '') === 'viewer';
@@ -282,7 +284,9 @@ export default function EmployeesPage() {
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<EmployeeRow | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'roster' | 'availability'>('roster');
+  const [viewMode, setViewMode] = useState<'roster' | 'availability'>(() =>
+    searchParams.get('view') === 'availability' ? 'availability' : 'roster',
+  );
   const [employeePage, setEmployeePage] = useState(1);
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date();

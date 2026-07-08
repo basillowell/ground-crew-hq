@@ -15,9 +15,10 @@ interface PageHeaderProps {
     icon?: ReactNode;
   };
   children?: ReactNode;
+  compact?: boolean;
 }
 
-export function PageHeader({ title, subtitle, badge, action, children }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, badge, action, children, compact = false }: PageHeaderProps) {
   const { currentPropertyId, orgId } = useOrgProfile();
   const { data: programSettings } = useProgramSettings(orgId ?? undefined);
   const { data: properties = [] } = useProperties(orgId ?? undefined);
@@ -30,7 +31,7 @@ export function PageHeader({ title, subtitle, badge, action, children }: PageHea
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-3">
         <div>
-          {(programSetting?.clientLabel || programSetting?.appName || programSetting?.logoUrl) ? (
+          {!compact && (programSetting?.clientLabel || programSetting?.appName || programSetting?.logoUrl) ? (
             <div className="mb-2 flex flex-wrap items-center gap-2">
               {programSetting?.logoUrl ? (
                 <img
@@ -51,10 +52,19 @@ export function PageHeader({ title, subtitle, badge, action, children }: PageHea
               </span>
             </div>
           ) : null}
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">{title}</h2>
-            {badge}
-          </div>
+          {compact ? (
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">
+                {subtitle ? `${title} - ${subtitle}` : title}
+              </p>
+              {badge}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">{title}</h2>
+              {badge}
+            </div>
+          )}
           {selectedPropertyName ? (
             <div className="mt-1">
               <Badge variant="outline" className="rounded-full text-[11px]">
@@ -62,7 +72,7 @@ export function PageHeader({ title, subtitle, badge, action, children }: PageHea
               </Badge>
             </div>
           ) : null}
-          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+          {!compact && subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
       </div>
       <div className="flex items-center gap-2">
