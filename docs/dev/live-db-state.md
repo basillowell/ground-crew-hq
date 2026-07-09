@@ -285,6 +285,48 @@
 
 ---
 
+## fertilizer_application_logs
+| column                | type        | nullable | default   |
+|-----------------------|-------------|----------|-----------|
+| id                    | uuid        | NO       | gen_random_uuid() |
+| application_date      | date        | NO       |           |
+| start_time            | text        | NO       |           |
+| end_time              | text        | NO       |           |
+| property_id           | uuid        | NO       |           |
+| applicator_id         | uuid        | NO       |           |
+| fertilizer_product_id | uuid        | NO       |           |
+| rate                  | numeric     | NO       | 0         |
+| rate_unit             | text        | NO       | 'lbs/acre'|
+| application_speed     | numeric     | NO       | 0         |
+| speed_unit            | text        | NO       | 'mph'     |
+| area_treated          | numeric     | NO       | 0         |
+| area_unit             | text        | NO       | 'acres'   |
+| total_amount          | numeric     | NO       | 0         |
+| equipment_used_id     | uuid        | YES      |           |
+| notes                 | text        | NO       | ''        |
+| org_id                | uuid        | YES      |           |
+| created_at            | timestamptz | NO       | now()     |
+| updated_at            | timestamptz | NO       | now()     |
+
+> ⚠️ `id` is `uuid` (not `text` like the chemical_* logging tables) — safe to use `gen_random_uuid()` in inserts/tests.
+
+---
+
+## fertilizer_products
+| column          | type        | nullable | default   |
+|-----------------|-------------|----------|-----------|
+| id              | uuid        | NO       | gen_random_uuid() |
+| name            | text        | NO       |           |
+| fertilizer_type | text        | NO       |           |
+| rate_unit       | text        | NO       | 'lbs/acre'|
+| org_id          | uuid        | YES      |           |
+| created_at      | timestamptz | NO       | now()     |
+| updated_at      | timestamptz | NO       | now()     |
+
+> ⚠️ `id` is `uuid` (not `text` like `chemical_products`) — safe to use `gen_random_uuid()` in inserts/tests.
+
+---
+
 ## group_options
 | column | type | nullable |
 |--------|------|----------|
