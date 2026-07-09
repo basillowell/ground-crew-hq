@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { DateInput } from '@/components/ui/date-input';
+import { DateInput, TimeInput } from '@/components/ui/date-input';
 import { toast } from '@/components/ui/sonner';
 import {
   type ApplicationArea,
@@ -765,11 +765,11 @@ export default function ApplicationsPage() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Start Time *</label>
-                  <Input id="application-start-time" name="start_time" className="mt-1" type="time" value={draft.startTime} onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))} />
+                  <TimeInput id="application-start-time" name="start_time" className="mt-1" value={draft.startTime} onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">End Time *</label>
-                  <Input id="application-end-time" name="end_time" className="mt-1" type="time" value={draft.endTime} onChange={(e) => setDraft((current) => ({ ...current, endTime: e.target.value }))} />
+                  <TimeInput id="application-end-time" name="end_time" className="mt-1" value={draft.endTime} onChange={(e) => setDraft((current) => ({ ...current, endTime: e.target.value }))} />
                 </div>
               </div>
 

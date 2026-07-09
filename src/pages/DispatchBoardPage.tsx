@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { TimeInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
@@ -300,9 +301,8 @@ export default function DispatchBoardPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="assignment-start-time">Start time</Label>
-                <Input
+                <TimeInput
                   id="assignment-start-time"
-                  type="time"
                   value={startTime}
                   onChange={(event) => setStartTime(event.target.value)}
                 />

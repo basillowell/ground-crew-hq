@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Plus, Copy, Download, Search, CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2, Coffee, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { TimeInput } from '@/components/ui/date-input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
@@ -1659,8 +1660,7 @@ export default function SchedulerPage() {
                 </div>
                 <div>
                   <label className="text-xs text-text-secondary">Shift start</label>
-                  <Input
-                    type="time"
+                  <TimeInput
                     value={draft.shiftStart}
                     onChange={(e) => {
                       setIsShiftModalDirty(true);
@@ -1673,8 +1673,7 @@ export default function SchedulerPage() {
                 </div>
                 <div>
                   <label className="text-xs text-text-secondary">Shift end</label>
-                  <Input
-                    type="time"
+                  <TimeInput
                     value={draft.shiftEnd}
                     onChange={(e) => {
                       setIsShiftModalDirty(true);

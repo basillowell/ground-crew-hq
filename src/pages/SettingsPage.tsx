@@ -19,6 +19,7 @@ import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { TimeInput } from '@/components/ui/date-input';
 import {
   CalendarDays,
   ChevronRight,
@@ -4075,24 +4076,24 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
         ) : settings ? (
           <div className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
-                Operations Start
-                <input
-                  type="time"
+              <div className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                <label htmlFor="settings-operational-day-start">Operations Start</label>
+                <TimeInput
+                  id="settings-operational-day-start"
                   value={settings.operational_day_start.slice(0, 5)}
                   onChange={(event) => setSettings((cur) => (cur ? { ...cur, operational_day_start: `${event.target.value}:00` } : cur))}
                   className={`${settingsInputClass} mt-1.5`}
                 />
-              </label>
-              <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
-                Operations End
-                <input
-                  type="time"
+              </div>
+              <div className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                <label htmlFor="settings-operational-day-end">Operations End</label>
+                <TimeInput
+                  id="settings-operational-day-end"
                   value={settings.operational_day_end.slice(0, 5)}
                   onChange={(event) => setSettings((cur) => (cur ? { ...cur, operational_day_end: `${event.target.value}:00` } : cur))}
                   className={`${settingsInputClass} mt-1.5`}
                 />
-              </label>
+              </div>
             </div>
             <div className="text-xs text-text-muted">
               Display window: {formatTime(settings.operational_day_start)}–{formatTime(settings.operational_day_end)}
@@ -4177,8 +4178,8 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
           <p className="text-sm font-medium text-text-primary">Add template</p>
           <input className={settingsInputClass} placeholder="Template name" value={newName} onChange={(event) => setNewName(event.target.value)} />
           <div className="grid grid-cols-2 gap-3">
-            <input className={settingsInputClass} type="time" value={newStart} onChange={(event) => setNewStart(event.target.value)} />
-            <input className={settingsInputClass} type="time" value={newEnd} onChange={(event) => setNewEnd(event.target.value)} />
+            <TimeInput className={settingsInputClass} value={newStart} onChange={(event) => setNewStart(event.target.value)} />
+            <TimeInput className={settingsInputClass} value={newEnd} onChange={(event) => setNewEnd(event.target.value)} />
           </div>
           <div className="flex flex-wrap gap-2">
             {dayOptions.map((day) => (

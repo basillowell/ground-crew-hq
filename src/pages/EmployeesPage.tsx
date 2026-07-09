@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { DateInput } from '@/components/ui/date-input';
+import { DateInput, TimeInput } from '@/components/ui/date-input';
 import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
@@ -1675,11 +1675,11 @@ export default function EmployeesPage() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs text-muted-foreground">Shift Start</label>
-                <Input type="time" className="mt-1" value={shiftDraft.shift_start} onChange={(event) => setShiftDraft((current) => ({ ...current, shift_start: event.target.value }))} />
+                <TimeInput className="mt-1" value={shiftDraft.shift_start} onChange={(event) => setShiftDraft((current) => ({ ...current, shift_start: event.target.value }))} />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground">Shift End</label>
-                <Input type="time" className="mt-1" value={shiftDraft.shift_end} onChange={(event) => setShiftDraft((current) => ({ ...current, shift_end: event.target.value }))} />
+                <TimeInput className="mt-1" value={shiftDraft.shift_end} onChange={(event) => setShiftDraft((current) => ({ ...current, shift_end: event.target.value }))} />
               </div>
             </div>
             <div>
@@ -1766,8 +1766,7 @@ export default function EmployeesPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-xs text-muted-foreground">Shift Start</label>
-                    <Input
-                      type="time"
+                    <TimeInput
                       className="mt-1"
                       value={bulkShiftDraft.shift_start}
                       onChange={(event) => setBulkShiftDraft((current) => ({ ...current, shift_start: event.target.value }))}
@@ -1775,8 +1774,7 @@ export default function EmployeesPage() {
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Shift End</label>
-                    <Input
-                      type="time"
+                    <TimeInput
                       className="mt-1"
                       value={bulkShiftDraft.shift_end}
                       onChange={(event) => setBulkShiftDraft((current) => ({ ...current, shift_end: event.target.value }))}
