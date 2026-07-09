@@ -6,6 +6,7 @@ import { toast } from '@/components/ui/sonner';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
+import { DateInput } from '@/components/ui/date-input';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
@@ -215,6 +216,7 @@ export default function ReportsPage() {
     selectedPropertyId === 'all' ? undefined : selectedPropertyId,
     orgId ?? undefined,
   );
+  const allEmployeesQuery = useEmployees(undefined, orgId ?? undefined);
   const properties = useMemo(
     () => (propertiesQuery.data ?? []).map((property) => ({ id: property.id, name: property.name })),
     [propertiesQuery.data],
@@ -230,6 +232,16 @@ export default function ReportsPage() {
           hourly_rate: employee.wage,
         })),
     [employeesQuery.data, selectedPropertyId],
+  );
+  const allEmployees = useMemo(
+    () =>
+      (allEmployeesQuery.data ?? []).map((employee) => ({
+        id: employee.id,
+        first_name: employee.firstName,
+        last_name: employee.lastName,
+        hourly_rate: employee.wage,
+      })),
+    [allEmployeesQuery.data],
   );
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
@@ -460,7 +472,7 @@ export default function ReportsPage() {
 
   const laborRows = useMemo<LaborSummaryRow[]>(() => {
     const byEmployee = new Map<string, LaborSummaryRow>();
-    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
     const clockHoursByEmployee = new Map<string, { hours: number; days: Set<string> }>();
     const openClockInByEmployee = new Map<string, Date>();
 
@@ -551,7 +563,7 @@ export default function ReportsPage() {
     });
 
     return Array.from(byEmployee.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [assignments, clockEvents, employees]);
+  }, [assignments, clockEvents, allEmployees]);
 
   const hasLaborResult = !loading || Boolean(error) || laborRows.length > 0;
 
@@ -593,7 +605,7 @@ export default function ReportsPage() {
   }, [laborRows]);
 
   const costByTaskRows = useMemo<CostByTaskRow[]>(() => {
-    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
     const taskCategoryById = new Map(tasks.map((task) => [task.id, task.category?.trim() || 'General']));
     const byCategory = new Map<string, CostByTaskRow>();
 
@@ -624,7 +636,7 @@ export default function ReportsPage() {
     }));
 
     return rows.sort((a, b) => a.category.localeCompare(b.category));
-  }, [assignments, employees, tasks]);
+  }, [assignments, allEmployees, tasks]);
 
   const costByTaskTotals = useMemo(() => {
     return costByTaskRows.reduce(
@@ -663,7 +675,7 @@ export default function ReportsPage() {
         },
       ]),
     );
-    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
     trendAssignments.forEach((assignment) => {
       const month = String(assignment.date).slice(0, 7);
       const bucket = byMonth.get(month);
@@ -684,7 +696,7 @@ export default function ReportsPage() {
       actualHours: Number(row.actualHours.toFixed(1)),
       laborCost: Number(row.laborCost.toFixed(2)),
     }));
-  }, [employees, trendAssignments]);
+  }, [allEmployees, trendAssignments]);
 
   const ytdCost = useMemo(
     () => trendChartData.reduce((sum, row) => sum + Number(row.laborCost ?? 0), 0),
@@ -710,7 +722,7 @@ export default function ReportsPage() {
     const last4Start = startOfWeek(new Date());
     last4Start.setDate(last4Start.getDate() - 7 * 3);
     const last4StartKey = toIsoDate(last4Start);
-    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
     const byEmployee = new Map<string, { name: string; actualHours: number; shiftHours: number }>();
 
     const shiftHoursForEntry = (entry: ScheduleEntryTrendRow) => {
@@ -764,7 +776,7 @@ export default function ReportsPage() {
       })
       .sort((a, b) => b.averageHours - a.averageHours)
       .slice(0, 12);
-  }, [employees, trendAssignments, trendScheduleEntries]);
+  }, [allEmployees, trendAssignments, trendScheduleEntries]);
 
   const exportCsv = useCallback(() => {
     const headers = ['Employee', 'Days Worked', 'Scheduled Hours', 'Actual Hours', 'Tasks Completed', 'Variance', 'Scheduled Cost', 'Actual Cost', 'Variance ($)'];
@@ -977,7 +989,7 @@ export default function ReportsPage() {
   }, [timesheetWeekStart]);
 
   const timesheetRows = useMemo(() => {
-    const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
+    const employeeMap = new Map(allEmployees.map((employee) => [employee.id, employee]));
     const scheduledByEmployeeDay = new Map<string, number>();
     const actualByEmployeeDay = new Map<string, number>();
 
@@ -1020,7 +1032,7 @@ export default function ReportsPage() {
         return { employeeId, employeeName, hourlyRate, days, totalScheduled, totalActual, cost };
       })
       .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [employees, timesheetAssignments, timesheetSchedules, timesheetWeekDays]);
+  }, [allEmployees, timesheetAssignments, timesheetSchedules, timesheetWeekDays]);
 
   const timesheetTotals = useMemo(() => {
     return timesheetRows.reduce(
@@ -1071,7 +1083,7 @@ export default function ReportsPage() {
     toast.success('Timesheet approval coming soon');
   }, []);
 
-  if (!orgId || propertiesQuery.isLoading || employeesQuery.isLoading) {
+  if (!orgId || propertiesQuery.isLoading || employeesQuery.isLoading || allEmployeesQuery.isLoading) {
     return <PageSkeleton />;
   }
 
@@ -1097,11 +1109,11 @@ export default function ReportsPage() {
         <div className="grid gap-[10px] md:grid-cols-3">
           <div style={{ display: 'grid', gap: '4px' }}>
             <label className="text-xs text-text-muted">Start Date</label>
-            <input className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            <DateInput className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           </div>
           <div style={{ display: 'grid', gap: '4px' }}>
             <label className="text-xs text-text-muted">End Date</label>
-            <input className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            <DateInput className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </div>
           <div style={{ display: 'grid', gap: '4px' }}>
             <label className="text-xs text-text-muted">Property</label>

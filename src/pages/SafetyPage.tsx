@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 
@@ -187,8 +188,7 @@ export default function SafetyPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Date</label>
-              <Input
-                type="date"
+              <DateInput
                 value={talkDraft.date}
                 onChange={(event) => {
                   setIsDirty(true);

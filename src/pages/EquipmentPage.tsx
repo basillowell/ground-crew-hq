@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Textarea } from '@/components/ui/textarea';
 import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -550,8 +551,7 @@ export default function EquipmentPage() {
                     <td className="px-3 py-2">
                       {isEditing ? (
                         <div className="space-y-2">
-                          <Input
-                            type="date"
+                          <DateInput
                             value={editDraft.lastServiced}
                             onChange={(event) => setEditDraft({ ...editDraft, lastServiced: event.target.value })}
                           />
@@ -644,7 +644,7 @@ export default function EquipmentPage() {
                       ))}
                     </select>
                     <Input value={editDraft.location} onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value })} placeholder="Location" />
-                    <Input type="date" value={editDraft.lastServiced} onChange={(event) => setEditDraft({ ...editDraft, lastServiced: event.target.value })} />
+                    <DateInput value={editDraft.lastServiced} onChange={(event) => setEditDraft({ ...editDraft, lastServiced: event.target.value })} />
                     <Textarea value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })} className="min-h-16" />
                   </div>
                 ) : (

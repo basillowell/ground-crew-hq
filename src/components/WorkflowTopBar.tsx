@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Bell, CalendarClock, CalendarDays, ClipboardList, Menu, Wrench } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -105,6 +105,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const pageTitle = getRouteTitle(pathname);
   const isSettingsRoute = pathname === '/app/settings' || pathname.startsWith('/app/settings/');
   const activeSettingsTab = getSettingsTab(searchParams.get('tab'));
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const formatTimestamp = (isoTimestamp: string) =>
     new Date(isoTimestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
 
@@ -157,7 +158,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         <div className="ml-auto hidden items-center gap-2 md:flex">
           <div className="hidden min-w-[250px] lg:block">
             <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
-            <Popover>
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-surface-border bg-surface-card/80 px-3 text-left font-medium text-text-primary hover:bg-surface-elevated/80 hover:text-text-primary">
                   <span>{formatDate(currentDate)}</span>
@@ -168,7 +169,11 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                 <Calendar
                   mode="single"
                   selected={currentDate}
-                  onSelect={(date) => date && setCurrentDate(date)}
+                  onSelect={(date) => {
+                    if (!date) return;
+                    setCurrentDate(date);
+                    setDatePickerOpen(false);
+                  }}
                   initialFocus
                 />
               </PopoverContent>

@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { toast } from '@/components/ui/sonner';
 import {
   type ApplicationArea,
@@ -653,7 +654,7 @@ export default function ApplicationsPage() {
             <p className="text-sm font-semibold">Filter Application Logs</p>
           </div>
           <div className="grid gap-3 md:grid-cols-4">
-            <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+            <DateInput value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
             <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={filterProperty} onChange={(e) => setFilterProperty(e.target.value)}>
               <option value="all">All Properties</option>
               {properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
@@ -760,7 +761,7 @@ export default function ApplicationsPage() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Application Date *</label>
-                  <Input id="application-date" name="application_date" className="mt-1" type="date" value={draft.applicationDate} onChange={(e) => setDraft((current) => ({ ...current, applicationDate: e.target.value }))} />
+                  <DateInput id="application-date" name="application_date" className="mt-1" value={draft.applicationDate} onChange={(e) => setDraft((current) => ({ ...current, applicationDate: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Start Time *</label>

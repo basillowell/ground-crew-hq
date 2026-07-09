@@ -88,7 +88,7 @@ const STATUS_STYLES: Record<string, { cell: string; label: string; badge: string
     label: 'Scheduled',
     badge: 'border-emerald-200 text-emerald-700',
   },
-  'day-off': {
+  off: {
     cell: 'bg-card border border-l-4 border-l-amber-400 text-foreground hover:bg-muted/30',
     label: 'Day Off',
     badge: 'border-amber-200 text-amber-700',
@@ -1444,7 +1444,7 @@ export default function SchedulerPage() {
                                     </Badge>
                                     {entryNotes ? <div className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{entryNotes}</div> : null}
                                   </>
-                                ) : entry.status === 'day-off' ? (
+                                ) : String(entry.status) === 'off' ? (
                                   <>
                                     <div className="text-[11px] font-semibold">DAY OFF</div>
                                     <Badge
@@ -1621,7 +1621,7 @@ export default function SchedulerPage() {
                 data-testid="select-shift-status"
               >
                 <option value="scheduled">Scheduled</option>
-                <option value="day-off">Day Off</option>
+                <option value="off">Day Off</option>
                 <option value="vacation">Vacation</option>
                 <option value="sick">Sick</option>
               </select>
