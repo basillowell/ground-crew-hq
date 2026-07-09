@@ -109,6 +109,95 @@ const emptyMixItem: DraftMixItem = {
   totalQuantityUsed: '0',
 };
 
+type ApplicationMode = 'chemical' | 'fertilizer';
+
+type FertilizerProductRow = {
+  id: string;
+  name: string;
+  fertilizer_type: string;
+  rate_unit: string;
+  org_id: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type FertilizerApplicationLogRow = {
+  id: string;
+  application_date: string;
+  start_time: string;
+  end_time: string;
+  property_id: string;
+  applicator_id: string;
+  fertilizer_product_id: string;
+  rate: number;
+  rate_unit: string;
+  application_speed: number;
+  speed_unit: string;
+  area_treated: number;
+  area_unit: string;
+  total_amount: number;
+  equipment_used_id: string | null;
+  notes: string;
+  org_id: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type FertilizerDraft = {
+  applicationDate: string;
+  startTime: string;
+  endTime: string;
+  propertyId: string;
+  applicatorId: string;
+  fertilizerProductId: string;
+  rate: string;
+  rateUnit: string;
+  applicationSpeed: string;
+  speedUnit: string;
+  areaTreated: string;
+  areaUnit: string;
+  totalAmount: string;
+  equipmentUsedId: string;
+  notes: string;
+};
+
+type FertilizerProductDraft = {
+  name: string;
+  fertilizerType: string;
+  rateUnit: string;
+};
+
+const emptyFertilizerProductDraft: FertilizerProductDraft = {
+  name: '',
+  fertilizerType: '',
+  rateUnit: 'lbs/acre',
+};
+
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function createEmptyFertilizerDraft(): FertilizerDraft {
+  return {
+    applicationDate: todayInputValue(),
+    startTime: '05:30',
+    endTime: '07:00',
+    propertyId: '',
+    applicatorId: '',
+    fertilizerProductId: '',
+    rate: '0',
+    rateUnit: 'lbs/acre',
+    applicationSpeed: '0',
+    speedUnit: 'mph',
+    areaTreated: '0',
+    areaUnit: 'acres',
+    totalAmount: '0',
+    equipmentUsedId: '',
+    notes: '',
+  };
+}
+
+
 function downloadCsv(filename: string, lines: string[]) {
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
@@ -133,18 +222,29 @@ function numberValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message ?? fallback);
+  }
+  return fallback;
+}
+
+
 type AbortableSupabaseRequest<T> = {
   abortSignal: (signal: AbortSignal) => PromiseLike<T>;
 };
 
-async function withChemicalLookupRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+async function withChemicalLookupRequestTimeout<T>(
+  request: AbortableSupabaseRequest<T>,
+  timeoutMessage = 'Chemical lookup request timed out after 15 seconds.',
+): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
     return await request.abortSignal(controller.signal);
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error('Chemical lookup request timed out after 15 seconds.');
+      throw new Error(timeoutMessage);
     }
     throw error;
   } finally {
@@ -209,6 +309,47 @@ export default function ApplicationsPage() {
     staleTime: 1000 * 60 * 5,
   });
 
+  const fertilizerProductsQuery = useQuery<FertilizerProductRow[]>({
+    queryKey: ['fertilizer-products', orgScope ?? 'no-org'],
+    enabled: Boolean(orgScope),
+    queryFn: async () => {
+      if (!supabase || !orgScope) return [];
+      const { data, error } = await withChemicalLookupRequestTimeout(
+        supabase
+          .from('fertilizer_products')
+          .select('id, name, fertilizer_type, rate_unit, org_id, created_at, updated_at')
+          .eq('org_id', orgScope)
+          .order('name'),
+        'Fertilizer product lookup request timed out after 15 seconds.',
+      );
+      if (error) throw error;
+      return (data ?? []) as FertilizerProductRow[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const fertilizerLogsQuery = useQuery<FertilizerApplicationLogRow[]>({
+    queryKey: ['fertilizer-application-logs', orgScope ?? 'no-org', propertyScope ?? 'all'],
+    enabled: Boolean(orgScope),
+    queryFn: async () => {
+      if (!supabase || !orgScope) return [];
+      let query = supabase
+        .from('fertilizer_application_logs')
+        .select('id, application_date, start_time, end_time, property_id, applicator_id, fertilizer_product_id, rate, rate_unit, application_speed, speed_unit, area_treated, area_unit, total_amount, equipment_used_id, notes, org_id, created_at, updated_at')
+        .eq('org_id', orgScope)
+        .order('application_date', { ascending: false })
+        .order('start_time', { ascending: false });
+      if (propertyScope) query = query.eq('property_id', propertyScope);
+      const { data, error } = await withChemicalLookupRequestTimeout(
+        query,
+        'Fertilizer application lookup request timed out after 15 seconds.',
+      );
+      if (error) throw error;
+      return (data ?? []) as FertilizerApplicationLogRow[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
   const applicationAreas = applicationAreasQuery.data ?? [];
 
   const employees = employeesQuery.data ?? [];
@@ -217,20 +358,34 @@ export default function ApplicationsPage() {
   const logs = logsQuery.data ?? [];
   const chemicalProducts = productsQuery.data ?? [];
   const mixItems = mixItemsQuery.data ?? [];
+  const fertilizerProducts = fertilizerProductsQuery.data ?? [];
+  const fertilizerLogs = fertilizerLogsQuery.data ?? [];
   const [filterDate, setFilterDate] = useState('');
   const [filterProperty, setFilterProperty] = useState('all');
   const [filterProduct, setFilterProduct] = useState('all');
   const [filterApplicator, setFilterApplicator] = useState('all');
+  const [applicationMode, setApplicationMode] = useState<ApplicationMode>('chemical');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'logs' | 'settings'>('logs');
   const [draft, setDraft] = useState<ApplicationDraft>(emptyDraft);
   const [draftMixItems, setDraftMixItems] = useState<DraftMixItem[]>([{ ...emptyMixItem }]);
   const [saving, setSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [fertilizerFilterProduct, setFertilizerFilterProduct] = useState('all');
+  const [fertilizerDialogOpen, setFertilizerDialogOpen] = useState(false);
+  const [fertilizerDraft, setFertilizerDraft] = useState<FertilizerDraft>(() => createEmptyFertilizerDraft());
+  const [fertilizerSaving, setFertilizerSaving] = useState(false);
+  const [fertilizerValidationErrors, setFertilizerValidationErrors] = useState<string[]>([]);
+  const [showInlineFertilizerProductForm, setShowInlineFertilizerProductForm] = useState(false);
+  const [inlineFertilizerProductDraft, setInlineFertilizerProductDraft] = useState<FertilizerProductDraft>(emptyFertilizerProductDraft);
+  const [fertilizerProductDraft, setFertilizerProductDraft] = useState<FertilizerProductDraft>(emptyFertilizerProductDraft);
+  const [fertilizerProductSaving, setFertilizerProductSaving] = useState(false);
+  const [editingFertilizerProductId, setEditingFertilizerProductId] = useState<string | null>(null);
+  const [editingFertilizerProductDraft, setEditingFertilizerProductDraft] = useState<FertilizerProductDraft>(emptyFertilizerProductDraft);
 
   useEffect(() => {
-    document.title = 'Chemical Logs — Ground Crew HQ';
-  }, []);
+    document.title = applicationMode === 'chemical' ? 'Chemical Logs - Ground Crew HQ' : 'Fertilizer Logs - Ground Crew HQ';
+  }, [applicationMode]);
 
   useEffect(() => {
     if (!applicationAreas.length && !employees.length && !equipmentUnits.length && !chemicalProducts.length) {
@@ -264,6 +419,24 @@ export default function ApplicationsPage() {
     setDraft((current) => ({ ...current, applicatorLicenseNumber: knownLicense }));
   }, [draft.applicatorId, draft.applicatorLicenseNumber, employees]);
 
+
+  useEffect(() => {
+    if (!properties.length && !employees.length && !equipmentUnits.length && !fertilizerProducts.length) {
+      return;
+    }
+    setFertilizerDraft((current) => {
+      const selectedProduct = fertilizerProducts.find((product) => product.id === current.fertilizerProductId) ?? fertilizerProducts[0];
+      return {
+        ...current,
+        propertyId: current.propertyId || propertyScope || properties[0]?.id || '',
+        applicatorId: current.applicatorId || employees[0]?.id || '',
+        equipmentUsedId: current.equipmentUsedId || equipmentUnits[0]?.id || '',
+        fertilizerProductId: current.fertilizerProductId || selectedProduct?.id || '',
+        rateUnit: current.rateUnit || selectedProduct?.rate_unit || 'lbs/acre',
+      };
+    });
+  }, [employees, equipmentUnits, fertilizerProducts, properties, propertyScope]);
+
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       const logMixItems = mixItems.filter((item) => item.applicationLogId === log.id);
@@ -290,6 +463,24 @@ export default function ApplicationsPage() {
       .filter((item) => item.applicationLogId === log.id)
       .some((item) => chemicalProducts.find((product) => product.id === item.productId)?.restrictedUse)
   ).length;
+
+  const selectedAreaIdForProperty =
+    applicationAreas.find((area) => area.property === draft.propertyId)?.id ?? applicationAreas[0]?.id ?? '';
+
+  const filteredFertilizerLogs = useMemo(() => {
+    return fertilizerLogs.filter((log) => {
+      const matchesDate = !filterDate || log.application_date === filterDate;
+      const matchesProperty = filterProperty === 'all' || log.property_id === filterProperty;
+      const matchesApplicator = filterApplicator === 'all' || log.applicator_id === filterApplicator;
+      const matchesProduct = fertilizerFilterProduct === 'all' || log.fertilizer_product_id === fertilizerFilterProduct;
+      return matchesDate && matchesProperty && matchesApplicator && matchesProduct;
+    });
+  }, [fertilizerFilterProduct, fertilizerLogs, filterApplicator, filterDate, filterProperty]);
+
+  const totalFertilizerApplications = filteredFertilizerLogs.length;
+  const totalFertilizerArea = filteredFertilizerLogs.reduce((sum, log) => sum + Number(log.area_treated ?? 0), 0);
+  const totalFertilizerAmount = filteredFertilizerLogs.reduce((sum, log) => sum + Number(log.total_amount ?? 0), 0);
+  const uniqueFertilizerProducts = new Set(filteredFertilizerLogs.map((log) => log.fertilizer_product_id)).size;
 
   function addMixItem() {
     setDraftMixItems((current) => [
@@ -320,6 +511,255 @@ export default function ApplicationsPage() {
         };
       })
     );
+  }
+
+
+  function buildFertilizerDraftDefaults(): FertilizerDraft {
+    const product = fertilizerProducts[0];
+    return {
+      ...createEmptyFertilizerDraft(),
+      propertyId: propertyScope || properties[0]?.id || '',
+      applicatorId: employees[0]?.id || '',
+      equipmentUsedId: equipmentUnits[0]?.id || '',
+      fertilizerProductId: product?.id || '',
+      rateUnit: product?.rate_unit || 'lbs/acre',
+    };
+  }
+
+  function openFertilizerDialog() {
+    setFertilizerValidationErrors([]);
+    setShowInlineFertilizerProductForm(false);
+    setInlineFertilizerProductDraft(emptyFertilizerProductDraft);
+    setFertilizerDraft((current) => ({
+      ...buildFertilizerDraftDefaults(),
+      applicationDate: current.applicationDate || todayInputValue(),
+      startTime: current.startTime || '05:30',
+      endTime: current.endTime || '07:00',
+    }));
+    setFertilizerDialogOpen(true);
+  }
+
+  function updateFertilizerProductSelection(productId: string) {
+    const selectedProduct = fertilizerProducts.find((product) => product.id === productId);
+    setFertilizerDraft((current) => ({
+      ...current,
+      fertilizerProductId: productId,
+      rateUnit: selectedProduct?.rate_unit ?? current.rateUnit,
+    }));
+  }
+
+  async function insertFertilizerProduct(productDraft: FertilizerProductDraft) {
+    if (!orgScope) {
+      toast.error('Workspace is still loading. Please try again in a moment.');
+      return null;
+    }
+
+    const payload = {
+      name: productDraft.name.trim(),
+      fertilizer_type: productDraft.fertilizerType.trim(),
+      rate_unit: productDraft.rateUnit.trim() || 'lbs/acre',
+      org_id: orgScope,
+    };
+
+    if (!payload.name || !payload.fertilizer_type) {
+      toast.error('Product name and fertilizer type are required.');
+      return null;
+    }
+
+    const { data, error } = await withChemicalMutationTimeout(
+      supabase
+        .from('fertilizer_products')
+        .insert(payload)
+        .select('id, name, fertilizer_type, rate_unit, org_id, created_at, updated_at')
+        .single(),
+    );
+
+    if (error) {
+      toast.error(`Failed to save fertilizer product: ${getErrorMessage(error, 'Unknown error')}`);
+      return null;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['fertilizer-products'] });
+    return data as FertilizerProductRow;
+  }
+
+  async function saveInlineFertilizerProduct() {
+    setFertilizerProductSaving(true);
+    try {
+      const savedProduct = await insertFertilizerProduct(inlineFertilizerProductDraft);
+      if (!savedProduct) return;
+      setInlineFertilizerProductDraft(emptyFertilizerProductDraft);
+      setShowInlineFertilizerProductForm(false);
+      setFertilizerDraft((current) => ({
+        ...current,
+        fertilizerProductId: savedProduct.id,
+        rateUnit: savedProduct.rate_unit || current.rateUnit,
+      }));
+      toast.success('Fertilizer product added');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to save fertilizer product.'));
+    } finally {
+      setFertilizerProductSaving(false);
+    }
+  }
+
+  async function saveSettingsFertilizerProduct() {
+    setFertilizerProductSaving(true);
+    try {
+      const savedProduct = await insertFertilizerProduct(fertilizerProductDraft);
+      if (!savedProduct) return;
+      setFertilizerProductDraft(emptyFertilizerProductDraft);
+      toast.success('Fertilizer product added');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to save fertilizer product.'));
+    } finally {
+      setFertilizerProductSaving(false);
+    }
+  }
+
+  function startEditFertilizerProduct(product: FertilizerProductRow) {
+    setEditingFertilizerProductId(product.id);
+    setEditingFertilizerProductDraft({
+      name: product.name,
+      fertilizerType: product.fertilizer_type,
+      rateUnit: product.rate_unit,
+    });
+  }
+
+  async function saveEditedFertilizerProduct() {
+    if (!editingFertilizerProductId) return;
+    if (!orgScope) {
+      toast.error('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
+
+    const payload = {
+      name: editingFertilizerProductDraft.name.trim(),
+      fertilizer_type: editingFertilizerProductDraft.fertilizerType.trim(),
+      rate_unit: editingFertilizerProductDraft.rateUnit.trim() || 'lbs/acre',
+      org_id: orgScope,
+    };
+
+    if (!payload.name || !payload.fertilizer_type) {
+      toast.error('Product name and fertilizer type are required.');
+      return;
+    }
+
+    setFertilizerProductSaving(true);
+    try {
+      const { error } = await withChemicalMutationTimeout(
+        supabase
+          .from('fertilizer_products')
+          .update(payload)
+          .eq('id', editingFertilizerProductId)
+          .eq('org_id', orgScope),
+      );
+      if (error) {
+        toast.error(`Failed to update fertilizer product: ${getErrorMessage(error, 'Unknown error')}`);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['fertilizer-products'] });
+      setEditingFertilizerProductId(null);
+      setEditingFertilizerProductDraft(emptyFertilizerProductDraft);
+      toast.success('Fertilizer product updated');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to update fertilizer product.'));
+    } finally {
+      setFertilizerProductSaving(false);
+    }
+  }
+
+  async function deleteFertilizerProduct(product: FertilizerProductRow) {
+    if (!orgScope) {
+      toast.error('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
+    setFertilizerProductSaving(true);
+    try {
+      const { error } = await withChemicalMutationTimeout(
+        supabase
+          .from('fertilizer_products')
+          .delete()
+          .eq('id', product.id)
+          .eq('org_id', orgScope),
+      );
+      if (error) {
+        toast.error(`Failed to delete fertilizer product: ${getErrorMessage(error, 'Unknown error')}`);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['fertilizer-products'] });
+      toast.success('Fertilizer product deleted');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to delete fertilizer product.'));
+    } finally {
+      setFertilizerProductSaving(false);
+    }
+  }
+
+  async function saveFertilizerApplication() {
+    const missingFields: string[] = [];
+    if (!fertilizerDraft.applicationDate) missingFields.push('Application Date');
+    if (!fertilizerDraft.startTime) missingFields.push('Start Time');
+    if (!fertilizerDraft.endTime) missingFields.push('End Time');
+    if (!fertilizerDraft.propertyId) missingFields.push('Property');
+    if (!fertilizerDraft.applicatorId) missingFields.push('Applicator');
+    if (!fertilizerDraft.fertilizerProductId) missingFields.push('Fertilizer Product');
+    if (!fertilizerDraft.rate || numberValue(fertilizerDraft.rate) <= 0) missingFields.push('Rate');
+    if (!fertilizerDraft.areaTreated || numberValue(fertilizerDraft.areaTreated) <= 0) missingFields.push('Area Treated');
+    if (!fertilizerDraft.totalAmount || numberValue(fertilizerDraft.totalAmount) <= 0) missingFields.push('Total Amount');
+
+    if (missingFields.length > 0) {
+      setFertilizerValidationErrors([`Missing required fields: ${missingFields.join(', ')}`]);
+      return;
+    }
+    if (fertilizerDraft.endTime <= fertilizerDraft.startTime) {
+      setFertilizerValidationErrors(['End Time must be after Start Time.']);
+      return;
+    }
+    if (!orgScope) {
+      setFertilizerValidationErrors(['Workspace is still loading. Please try again in a moment.']);
+      return;
+    }
+
+    setFertilizerValidationErrors([]);
+    setFertilizerSaving(true);
+
+    const payload = {
+      application_date: fertilizerDraft.applicationDate,
+      start_time: fertilizerDraft.startTime,
+      end_time: fertilizerDraft.endTime,
+      property_id: fertilizerDraft.propertyId,
+      applicator_id: fertilizerDraft.applicatorId,
+      fertilizer_product_id: fertilizerDraft.fertilizerProductId,
+      rate: numberValue(fertilizerDraft.rate),
+      rate_unit: fertilizerDraft.rateUnit.trim() || 'lbs/acre',
+      application_speed: numberValue(fertilizerDraft.applicationSpeed),
+      speed_unit: fertilizerDraft.speedUnit.trim() || 'mph',
+      area_treated: numberValue(fertilizerDraft.areaTreated),
+      area_unit: fertilizerDraft.areaUnit.trim() || 'acres',
+      total_amount: numberValue(fertilizerDraft.totalAmount),
+      equipment_used_id: fertilizerDraft.equipmentUsedId || null,
+      notes: fertilizerDraft.notes.trim(),
+      org_id: orgScope,
+    };
+
+    try {
+      const { error } = await withChemicalMutationTimeout(
+        supabase.from('fertilizer_application_logs').insert(payload),
+      );
+      if (error) {
+        toast.error(`Failed to save fertilizer application: ${getErrorMessage(error, 'Unknown error')}`);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['fertilizer-application-logs'] });
+      toast.success('Fertilizer application logged');
+      setFertilizerDialogOpen(false);
+      setFertilizerDraft(buildFertilizerDraftDefaults());
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to save fertilizer application.'));
+    } finally {
+      setFertilizerSaving(false);
+    }
   }
 
   async function saveApplication() {
@@ -561,71 +1001,421 @@ export default function ApplicationsPage() {
     equipmentUnitsQuery.isLoading ||
     logsQuery.isLoading ||
     productsQuery.isLoading ||
-    mixItemsQuery.isLoading
+    mixItemsQuery.isLoading ||
+    fertilizerProductsQuery.isLoading ||
+    fertilizerLogsQuery.isLoading
   ) {
     return <PageSkeleton />;
   }
+
+
+  const fertilizerSettingsContent = (
+    <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+      <Card className="p-5">
+        <div className="mb-4">
+          <p className="text-sm font-semibold">Add Fertilizer Product</p>
+          <p className="text-xs text-muted-foreground">Products appear in the fertilizer application form.</p>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Product Name *</label>
+            <Input className="mt-1" value={fertilizerProductDraft.name} onChange={(e) => setFertilizerProductDraft((current) => ({ ...current, name: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Fertilizer Type *</label>
+            <Input className="mt-1" placeholder="Granular 10-10-10" value={fertilizerProductDraft.fertilizerType} onChange={(e) => setFertilizerProductDraft((current) => ({ ...current, fertilizerType: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Default Rate Unit</label>
+            <Input className="mt-1" value={fertilizerProductDraft.rateUnit} onChange={(e) => setFertilizerProductDraft((current) => ({ ...current, rateUnit: e.target.value }))} />
+          </div>
+          <Button onClick={saveSettingsFertilizerProduct} disabled={fertilizerProductSaving} className="w-full">
+            {fertilizerProductSaving ? 'Saving...' : 'Add Product'}
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">Fertilizer Products</p>
+            <p className="text-xs text-muted-foreground">Manage fertilizer products used by your crews.</p>
+          </div>
+          <Badge variant="secondary">{fertilizerProducts.length} products</Badge>
+        </div>
+        <div className="space-y-3">
+          {fertilizerProducts.map((product) => {
+            const isEditing = editingFertilizerProductId === product.id;
+            return (
+              <div key={product.id} className="rounded-xl border bg-muted/20 p-4">
+                {isEditing ? (
+                  <div className="grid gap-3 md:grid-cols-[1fr_1fr_0.7fr_auto]">
+                    <Input value={editingFertilizerProductDraft.name} onChange={(e) => setEditingFertilizerProductDraft((current) => ({ ...current, name: e.target.value }))} />
+                    <Input value={editingFertilizerProductDraft.fertilizerType} onChange={(e) => setEditingFertilizerProductDraft((current) => ({ ...current, fertilizerType: e.target.value }))} />
+                    <Input value={editingFertilizerProductDraft.rateUnit} onChange={(e) => setEditingFertilizerProductDraft((current) => ({ ...current, rateUnit: e.target.value }))} />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={saveEditedFertilizerProduct} disabled={fertilizerProductSaving}>Save</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingFertilizerProductId(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-semibold">{product.name}</p>
+                      <p className="text-sm text-muted-foreground">{product.fertilizer_type}</p>
+                      <p className="text-xs text-muted-foreground">Default unit: {product.rate_unit}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEditFertilizerProduct(product)}>Edit</Button>
+                      <Button size="sm" variant="ghost" onClick={() => void deleteFertilizerProduct(product)} disabled={fertilizerProductSaving}>Delete</Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {fertilizerProducts.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+              No fertilizer products have been configured yet.
+            </div>
+          ) : null}
+        </div>
+      </Card>
+    </div>
+  );
+
+  const fertilizerLogsContent = (
+    <>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Fertilizer Logs</p>
+          <p className="mt-2 text-3xl font-semibold">{totalFertilizerApplications}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Area Treated</p>
+          <p className="mt-2 text-3xl font-semibold">{totalFertilizerArea.toFixed(1)}</p>
+          <p className="text-xs text-muted-foreground">acres in current filter</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Products Used</p>
+          <p className="mt-2 text-3xl font-semibold">{uniqueFertilizerProducts}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Total Amount</p>
+          <p className="mt-2 text-3xl font-semibold">{totalFertilizerAmount.toFixed(1)}</p>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card className="p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold">Filter Fertilizer Logs</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            <DateInput value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+            <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={filterProperty} onChange={(e) => setFilterProperty(e.target.value)}>
+              <option value="all">All Properties</option>
+              {properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
+            </select>
+            <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={fertilizerFilterProduct} onChange={(e) => setFertilizerFilterProduct(e.target.value)}>
+              <option value="all">All Products</option>
+              {fertilizerProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+            </select>
+            <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={filterApplicator} onChange={(e) => setFilterApplicator(e.target.value)}>
+              <option value="all">All Applicators</option>
+              {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
+            </select>
+          </div>
+        </Card>
+      </div>
+
+      <div className="space-y-3">
+        {filteredFertilizerLogs.map((log) => {
+          const property = properties.find((entry) => entry.id === log.property_id);
+          const applicator = employees.find((employee) => employee.id === log.applicator_id);
+          const product = fertilizerProducts.find((entry) => entry.id === log.fertilizer_product_id);
+          const equipment = equipmentUnits.find((unit) => unit.id === log.equipment_used_id);
+          return (
+            <Card key={log.id} className="p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold">{property?.name ?? log.property_id}</h3>
+                    <Badge variant="outline">{log.application_date}</Badge>
+                    <Badge variant="secondary">{formatTime(log.start_time)} - {formatTime(log.end_time)}</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{product?.name ?? log.fertilizer_product_id} - {product?.fertilizer_type ?? 'Fertilizer product'}</p>
+                  <div className="flex flex-wrap gap-5 text-sm">
+                    <div><span className="text-muted-foreground">Applicator:</span> {applicator ? applicator.firstName + ' ' + applicator.lastName : log.applicator_id}</div>
+                    <div><span className="text-muted-foreground">Rate:</span> {log.rate} {log.rate_unit}</div>
+                    <div><span className="text-muted-foreground">Speed:</span> {log.application_speed} {log.speed_unit}</div>
+                    <div><span className="text-muted-foreground">Area:</span> {log.area_treated} {log.area_unit}</div>
+                    <div><span className="text-muted-foreground">Total:</span> {log.total_amount}</div>
+                    <div><span className="text-muted-foreground">Equipment:</span> {equipment?.unitNumber ?? equipment?.name ?? 'Not recorded'}</div>
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm xl:min-w-56">
+                  <div className="flex items-center gap-2">
+                    <Sprout className="h-4 w-4 text-primary" />
+                    <span className="font-semibold">Fertilizer Application</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{product?.rate_unit ?? log.rate_unit} default product unit</p>
+                </div>
+              </div>
+              {log.notes ? (
+                <div className="mt-4 rounded-xl bg-accent/30 px-4 py-3 text-sm text-muted-foreground">
+                  <FileText className="mr-2 inline h-4 w-4" />
+                  {log.notes}
+                </div>
+              ) : null}
+            </Card>
+          );
+        })}
+
+        {filteredFertilizerLogs.length === 0 ? (
+          <Card className="p-10 text-center text-sm text-muted-foreground">
+            No fertilizer application logs match the current filters.
+          </Card>
+        ) : null}
+      </div>
+
+      <Dialog open={fertilizerDialogOpen} onOpenChange={setFertilizerDialogOpen}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-auto">
+          <DialogHeader>
+            <DialogTitle>New Fertilizer Application</DialogTitle>
+            <DialogDescription className="sr-only">
+              Enter fertilizer application details including product, rate, area treated, timing, and equipment.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Application Date *</label>
+                  <DateInput className="mt-1" value={fertilizerDraft.applicationDate} onChange={(e) => setFertilizerDraft((current) => ({ ...current, applicationDate: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Start Time *</label>
+                  <TimeInput className="mt-1" value={fertilizerDraft.startTime} onChange={(e) => setFertilizerDraft((current) => ({ ...current, startTime: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">End Time *</label>
+                  <TimeInput className="mt-1" value={fertilizerDraft.endTime} onChange={(e) => setFertilizerDraft((current) => ({ ...current, endTime: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Property *</label>
+                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fertilizerDraft.propertyId} onChange={(e) => setFertilizerDraft((current) => ({ ...current, propertyId: e.target.value }))}>
+                    {properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Applicator *</label>
+                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fertilizerDraft.applicatorId} onChange={(e) => setFertilizerDraft((current) => ({ ...current, applicatorId: e.target.value }))}>
+                    {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <Card className="p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">Fertilizer Product</p>
+                    <p className="text-xs text-muted-foreground">Choose a saved product or add one without leaving the form.</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setShowInlineFertilizerProductForm((current) => !current)}>
+                    {showInlineFertilizerProductForm ? 'Hide Add Product' : 'Add Product'}
+                  </Button>
+                </div>
+                <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fertilizerDraft.fertilizerProductId} onChange={(e) => updateFertilizerProductSelection(e.target.value)}>
+                  <option value="">Select fertilizer product</option>
+                  {fertilizerProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+                </select>
+                {showInlineFertilizerProductForm ? (
+                  <div className="mt-3 grid gap-3 rounded-xl border bg-muted/20 p-3 md:grid-cols-[1fr_1fr_0.8fr_auto]">
+                    <Input placeholder="Product name" value={inlineFertilizerProductDraft.name} onChange={(e) => setInlineFertilizerProductDraft((current) => ({ ...current, name: e.target.value }))} />
+                    <Input placeholder="Fertilizer type" value={inlineFertilizerProductDraft.fertilizerType} onChange={(e) => setInlineFertilizerProductDraft((current) => ({ ...current, fertilizerType: e.target.value }))} />
+                    <Input placeholder="Rate unit" value={inlineFertilizerProductDraft.rateUnit} onChange={(e) => setInlineFertilizerProductDraft((current) => ({ ...current, rateUnit: e.target.value }))} />
+                    <Button onClick={saveInlineFertilizerProduct} disabled={fertilizerProductSaving}>{fertilizerProductSaving ? 'Saving...' : 'Save'}</Button>
+                  </div>
+                ) : null}
+              </Card>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Rate *</label>
+                  <Input className="mt-1" type="number" value={fertilizerDraft.rate} onChange={(e) => setFertilizerDraft((current) => ({ ...current, rate: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Rate Unit</label>
+                  <Input className="mt-1" value={fertilizerDraft.rateUnit} onChange={(e) => setFertilizerDraft((current) => ({ ...current, rateUnit: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Application Speed</label>
+                  <Input className="mt-1" type="number" value={fertilizerDraft.applicationSpeed} onChange={(e) => setFertilizerDraft((current) => ({ ...current, applicationSpeed: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Speed Unit</label>
+                  <Input className="mt-1" value={fertilizerDraft.speedUnit} onChange={(e) => setFertilizerDraft((current) => ({ ...current, speedUnit: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Area Treated *</label>
+                  <Input className="mt-1" type="number" value={fertilizerDraft.areaTreated} onChange={(e) => setFertilizerDraft((current) => ({ ...current, areaTreated: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Area Unit</label>
+                  <Input className="mt-1" value={fertilizerDraft.areaUnit} onChange={(e) => setFertilizerDraft((current) => ({ ...current, areaUnit: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Total Amount *</label>
+                  <Input className="mt-1" type="number" value={fertilizerDraft.totalAmount} onChange={(e) => setFertilizerDraft((current) => ({ ...current, totalAmount: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Equipment Used</label>
+                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={fertilizerDraft.equipmentUsedId} onChange={(e) => setFertilizerDraft((current) => ({ ...current, equipmentUsedId: e.target.value }))}>
+                    <option value="">No equipment selected</option>
+                    {equipmentUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unitNumber || unit.name || unit.id}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Notes</label>
+                <textarea className="mt-1 min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={fertilizerDraft.notes} onChange={(e) => setFertilizerDraft((current) => ({ ...current, notes: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <Card className="p-4">
+                <p className="text-sm font-semibold">Application Summary</p>
+                <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+                  <p className="rounded-lg bg-muted/40 px-3 py-3">Product: {fertilizerProducts.find((product) => product.id === fertilizerDraft.fertilizerProductId)?.name ?? 'Not selected'}</p>
+                  <p className="rounded-lg bg-muted/40 px-3 py-3">Rate: {fertilizerDraft.rate || 0} {fertilizerDraft.rateUnit}</p>
+                  <p className="rounded-lg bg-muted/40 px-3 py-3">Area: {fertilizerDraft.areaTreated || 0} {fertilizerDraft.areaUnit}</p>
+                  <p className="rounded-lg bg-muted/40 px-3 py-3">Total: {fertilizerDraft.totalAmount || 0}</p>
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          {fertilizerValidationErrors.length > 0 ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {fertilizerValidationErrors.map((error) => (
+                <p key={error}>{error}</p>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t bg-background/95 pt-3 backdrop-blur">
+            <Button variant="outline" onClick={() => setFertilizerDialogOpen(false)}>Cancel</Button>
+            <Button onClick={saveFertilizerApplication} disabled={fertilizerSaving}>{fertilizerSaving ? 'Saving...' : 'Save Fertilizer Log'}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4">
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Badge variant="secondary">{totalApplications} logs</Badge>
-          <Badge className="bg-status-active/10 text-status-active border-status-active/20">EPA-Compliant Record Keeping</Badge>
+          <Badge variant="secondary">{applicationMode === 'chemical' ? totalApplications : totalFertilizerApplications} logs</Badge>
+          <Badge className="bg-status-active/10 text-status-active border-status-active/20">
+            {applicationMode === 'chemical' ? 'EPA-Compliant Record Keeping' : 'Fertilizer Application Records'}
+          </Badge>
         </div>
         {activeTab === 'logs' ? (
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               onClick={() => {
-                setDialogOpen(true);
+                if (applicationMode === 'chemical') {
+                  setDialogOpen(true);
+                } else {
+                  openFertilizerDialog();
+                }
               }}
             >
-              <FlaskConical className="h-3.5 w-3.5" />
-              New Application
+              {applicationMode === 'chemical' ? <FlaskConical className="h-3.5 w-3.5" /> : <Sprout className="h-3.5 w-3.5" />}
+              {applicationMode === 'chemical' ? 'New Application' : 'New Fertilizer Application'}
             </Button>
-            <Button variant="outline" size="sm" className="gap-1" onClick={exportForAudit}>
-              <Download className="h-3.5 w-3.5" /> Export for Audit
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1" onClick={exportLogs}>
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1" onClick={() => window.print()}>
-              <Printer className="h-3.5 w-3.5" /> Print
-            </Button>
+            {applicationMode === 'chemical' ? (
+              <>
+                <Button variant="outline" size="sm" className="gap-1" onClick={exportForAudit}>
+                  <Download className="h-3.5 w-3.5" /> Export for Audit
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1" onClick={exportLogs}>
+                  <Download className="h-3.5 w-3.5" /> Export CSV
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1" onClick={() => window.print()}>
+                  <Printer className="h-3.5 w-3.5" /> Print
+                </Button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl border bg-card p-1">
-        <button
-          type="button"
-          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'logs'
-              ? 'bg-primary/10 text-primary'
-              : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
-          }`}
-          onClick={() => setActiveTab('logs')}
-        >
-          Logs
-        </button>
-        <button
-          type="button"
-          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'settings'
-              ? 'bg-primary/10 text-primary'
-              : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
-          }`}
-          onClick={() => setActiveTab('settings')}
-        >
-          Settings
-        </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 rounded-xl border bg-card p-1">
+          <button
+            type="button"
+            className={'rounded-lg px-3 py-2 text-sm font-medium transition-colors ' + (
+              applicationMode === 'chemical'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+            )}
+            onClick={() => setApplicationMode('chemical')}
+          >
+            Chemical
+          </button>
+          <button
+            type="button"
+            className={'rounded-lg px-3 py-2 text-sm font-medium transition-colors ' + (
+              applicationMode === 'fertilizer'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+            )}
+            onClick={() => setApplicationMode('fertilizer')}
+          >
+            Fertilizer
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 rounded-xl border bg-card p-1">
+          <button
+            type="button"
+            className={'rounded-lg px-3 py-2 text-sm font-medium transition-colors ' + (
+              activeTab === 'logs'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+            )}
+            onClick={() => setActiveTab('logs')}
+          >
+            Logs
+          </button>
+          <button
+            type="button"
+            className={'rounded-lg px-3 py-2 text-sm font-medium transition-colors ' + (
+              activeTab === 'settings'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+            )}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
+          </button>
+        </div>
       </div>
 
       {activeTab === 'settings' ? (
-        <ChemicalSettings />
-      ) : (
+        applicationMode === 'chemical' ? <ChemicalSettings /> : fertilizerSettingsContent
+      ) : applicationMode === 'chemical' ? (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="p-4">
@@ -976,6 +1766,8 @@ export default function ApplicationsPage() {
         </DialogContent>
           </Dialog>
         </>
+      ) : (
+        fertilizerLogsContent
       )}
     </div>
   );
