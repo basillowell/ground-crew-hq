@@ -499,7 +499,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { label: 'Dashboard', route: '/app/dashboard', icon: LayoutDashboard },
     { label: 'Scheduler', route: '/app/scheduler', icon: Calendar },
     { label: 'Equipment', route: '/app/equipment', icon: Wrench },
-    { label: 'Chemical Logs', route: '/app/applications', icon: ShieldCheck },
+    { label: 'Applications', route: '/app/applications', icon: ShieldCheck },
     { label: 'Safety', route: '/app/safety', icon: Shield },
     { label: 'Reports', route: '/app/reports', icon: BarChart3 },
     { label: 'Breakroom', route: '/app/breakroom', icon: LayoutDashboard },

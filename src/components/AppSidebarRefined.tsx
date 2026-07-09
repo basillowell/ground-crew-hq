@@ -72,7 +72,7 @@ const management: NavItemConfig[] = [
 ];
 
 const complianceAndSettings: NavItemConfig[] = [
-  { label: 'Chemical Logs', href: '/app/applications', icon: Shield, moduleId: 'applications' },
+  { label: 'Applications', href: '/app/applications', icon: Shield, moduleId: 'applications' },
   { label: 'Safety', href: '/app/safety', icon: ShieldAlert, moduleId: 'workflow' },
   { label: 'Settings', href: '/app/settings', icon: Settings2, moduleId: 'command-center' },
   { label: 'Help', href: 'mailto:support@groundcrewhq.com', icon: HelpCircle },
@@ -179,7 +179,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
         badge:
           item.label === 'Workflow'
             ? taskBoardBadgeCount
-            : item.label === 'Chemical Logs'
+            : item.label === 'Applications'
               ? chemicalLogsBadgeCount
               : undefined,
       }));

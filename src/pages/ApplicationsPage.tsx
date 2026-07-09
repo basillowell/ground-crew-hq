@@ -6,9 +6,11 @@ import {
   FileText,
   Filter,
   FlaskConical,
+  Pencil,
   Printer,
   ShieldCheck,
   Sprout,
+  Trash2,
   Wind,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -366,6 +368,7 @@ export default function ApplicationsPage() {
   const [filterApplicator, setFilterApplicator] = useState('all');
   const [applicationMode, setApplicationMode] = useState<ApplicationMode>('chemical');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingChemicalLogId, setEditingChemicalLogId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'logs' | 'settings'>('logs');
   const [draft, setDraft] = useState<ApplicationDraft>(emptyDraft);
   const [draftMixItems, setDraftMixItems] = useState<DraftMixItem[]>([{ ...emptyMixItem }]);
@@ -373,6 +376,7 @@ export default function ApplicationsPage() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [fertilizerFilterProduct, setFertilizerFilterProduct] = useState('all');
   const [fertilizerDialogOpen, setFertilizerDialogOpen] = useState(false);
+  const [editingFertilizerLogId, setEditingFertilizerLogId] = useState<string | null>(null);
   const [fertilizerDraft, setFertilizerDraft] = useState<FertilizerDraft>(() => createEmptyFertilizerDraft());
   const [fertilizerSaving, setFertilizerSaving] = useState(false);
   const [fertilizerValidationErrors, setFertilizerValidationErrors] = useState<string[]>([]);
@@ -384,7 +388,7 @@ export default function ApplicationsPage() {
   const [editingFertilizerProductDraft, setEditingFertilizerProductDraft] = useState<FertilizerProductDraft>(emptyFertilizerProductDraft);
 
   useEffect(() => {
-    document.title = applicationMode === 'chemical' ? 'Chemical Logs - Ground Crew HQ' : 'Fertilizer Logs - Ground Crew HQ';
+    document.title = applicationMode === 'chemical' ? 'Applications - Ground Crew HQ' : 'Fertilizer Applications - Ground Crew HQ';
   }, [applicationMode]);
 
   useEffect(() => {
@@ -527,6 +531,7 @@ export default function ApplicationsPage() {
   }
 
   function openFertilizerDialog() {
+    setEditingFertilizerLogId(null);
     setFertilizerValidationErrors([]);
     setShowInlineFertilizerProductForm(false);
     setInlineFertilizerProductDraft(emptyFertilizerProductDraft);
@@ -536,6 +541,35 @@ export default function ApplicationsPage() {
       startTime: current.startTime || '05:30',
       endTime: current.endTime || '07:00',
     }));
+    setFertilizerDialogOpen(true);
+  }
+
+  function handleFertilizerDialogOpenChange(open: boolean) {
+    setFertilizerDialogOpen(open);
+    if (!open) setEditingFertilizerLogId(null);
+  }
+
+  function openEditFertilizerLog(log: FertilizerApplicationLogRow) {
+    setEditingFertilizerLogId(log.id);
+    setFertilizerValidationErrors([]);
+    setShowInlineFertilizerProductForm(false);
+    setFertilizerDraft({
+      applicationDate: log.application_date,
+      startTime: log.start_time,
+      endTime: log.end_time,
+      propertyId: log.property_id,
+      applicatorId: log.applicator_id,
+      fertilizerProductId: log.fertilizer_product_id,
+      rate: String(log.rate ?? 0),
+      rateUnit: log.rate_unit || 'lbs/acre',
+      applicationSpeed: String(log.application_speed ?? 0),
+      speedUnit: log.speed_unit || 'mph',
+      areaTreated: String(log.area_treated ?? 0),
+      areaUnit: log.area_unit || 'acres',
+      totalAmount: String(log.total_amount ?? 0),
+      equipmentUsedId: log.equipment_used_id ?? '',
+      notes: log.notes ?? '',
+    });
     setFertilizerDialogOpen(true);
   }
 
@@ -744,15 +778,21 @@ export default function ApplicationsPage() {
     };
 
     try {
-      const { error } = await withChemicalMutationTimeout(
-        supabase.from('fertilizer_application_logs').insert(payload),
-      );
+      const saveQuery = editingFertilizerLogId
+        ? supabase
+            .from('fertilizer_application_logs')
+            .update(payload)
+            .eq('id', editingFertilizerLogId)
+            .eq('org_id', orgScope)
+        : supabase.from('fertilizer_application_logs').insert(payload);
+      const { error } = await withChemicalMutationTimeout(saveQuery);
       if (error) {
         toast.error(`Failed to save fertilizer application: ${getErrorMessage(error, 'Unknown error')}`);
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ['fertilizer-application-logs'] });
-      toast.success('Fertilizer application logged');
+      toast.success(editingFertilizerLogId ? 'Fertilizer application updated' : 'Fertilizer application logged');
+      setEditingFertilizerLogId(null);
       setFertilizerDialogOpen(false);
       setFertilizerDraft(buildFertilizerDraftDefaults());
     } catch (error) {
@@ -760,6 +800,113 @@ export default function ApplicationsPage() {
     } finally {
       setFertilizerSaving(false);
     }
+  }
+
+  async function deleteFertilizerLog(log: FertilizerApplicationLogRow) {
+    if (!orgScope) {
+      toast.error('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
+    if (!window.confirm('Delete this fertilizer application log?')) return;
+
+    setFertilizerSaving(true);
+    try {
+      const { error } = await withChemicalMutationTimeout(
+        supabase
+          .from('fertilizer_application_logs')
+          .delete()
+          .eq('id', log.id)
+          .eq('org_id', orgScope),
+      );
+      if (error) {
+        toast.error(`Failed to delete fertilizer application: ${getErrorMessage(error, 'Unknown error')}`);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['fertilizer-application-logs'] });
+      toast.success('Fertilizer application deleted');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to delete fertilizer application.'));
+    } finally {
+      setFertilizerSaving(false);
+    }
+  }
+
+
+  function buildChemicalDraftDefaults(): ApplicationDraft {
+    return {
+      ...emptyDraft,
+      propertyId: propertyScope || properties[0]?.id || '',
+      applicatorId: employees[0]?.id || '',
+      equipmentUsedId: equipmentUnits[0]?.id || '',
+    };
+  }
+
+  function buildChemicalMixDefaults(): DraftMixItem[] {
+    return [{
+      ...emptyMixItem,
+      productId: chemicalProducts[0]?.id ?? '',
+      rateUnit: chemicalProducts[0]?.rateUnit ?? emptyMixItem.rateUnit,
+    }];
+  }
+
+  function openNewChemicalApplicationDialog() {
+    setEditingChemicalLogId(null);
+    setValidationErrors([]);
+    setDraft(buildChemicalDraftDefaults());
+    setDraftMixItems(buildChemicalMixDefaults());
+    setDialogOpen(true);
+  }
+
+  function handleChemicalDialogOpenChange(open: boolean) {
+    setDialogOpen(open);
+    if (!open) setEditingChemicalLogId(null);
+  }
+
+  function openEditChemicalLog(log: ChemicalApplicationLog) {
+    const dbLog = log as ChemicalApplicationLog & { property_id?: string | null };
+    const areaPropertyId = applicationAreas.find((area) => area.id === log.areaId)?.property;
+    const logMixItems = mixItems
+      .filter((item) => item.applicationLogId === log.id)
+      .sort((left, right) => (left.mixOrder ?? 0) - (right.mixOrder ?? 0));
+
+    setEditingChemicalLogId(log.id);
+    setValidationErrors([]);
+    setDraft({
+      applicationDate: log.applicationDate,
+      startTime: log.startTime,
+      endTime: log.endTime,
+      propertyId: dbLog.property_id ?? areaPropertyId ?? propertyScope ?? properties[0]?.id ?? '',
+      targetPest: log.targetPest ?? '',
+      agronomicPurpose: log.agronomicPurpose ?? '',
+      applicationMethod: log.applicationMethod ?? 'Ground spray',
+      carrierVolume: String(log.carrierVolume ?? 0),
+      totalMixVolume: String(log.totalMixVolume ?? 0),
+      areaTreated: String(log.areaTreated ?? 0),
+      areaUnit: log.areaUnit ?? 'acres',
+      applicatorId: log.applicatorId ?? '',
+      applicatorLicenseNumber: log.applicatorLicenseNumber ?? '',
+      supervisorName: log.supervisorName ?? '',
+      supervisorLicenseNumber: log.supervisorLicenseNumber ?? '',
+      equipmentUsedId: log.equipmentUsedId ?? '',
+      windDirection: log.windDirection ?? '',
+      windSpeedAtApplication: String(log.windSpeedAtApplication ?? ''),
+      temperatureAtApplication: String(log.temperatureAtApplication ?? ''),
+      humidityAtApplication: String(log.humidityAtApplication ?? ''),
+      restrictedEntryUntil: log.restrictedEntryUntil ?? '',
+      siteConditions: log.siteConditions ?? '',
+      notes: log.notes ?? '',
+    });
+    setDraftMixItems(
+      logMixItems.length > 0
+        ? logMixItems.map((item) => ({
+            productId: item.productId,
+            rateApplied: String(item.rateApplied ?? 0),
+            rateUnit: item.rateUnit || chemicalProducts.find((product) => product.id === item.productId)?.rateUnit || emptyMixItem.rateUnit,
+            totalQuantityUsed: String(item.totalQuantityUsed ?? 0),
+          }))
+        : buildChemicalMixDefaults(),
+    );
+    setDialogOpen(true);
   }
 
   async function saveApplication() {
@@ -775,21 +922,24 @@ export default function ApplicationsPage() {
     if (!selectedAreaIdForProperty) missingFields.push('Area / Location mapping');
 
     if (missingFields.length > 0) {
-      setValidationErrors([`Missing required fields: ${missingFields.join(', ')}`]);
+      setValidationErrors(['Missing required fields: ' + missingFields.join(', ')]);
       return;
     }
     if (draft.endTime <= draft.startTime) {
       setValidationErrors(['End Time must be after Start Time.']);
       return;
     }
+    if (!orgScope) {
+      setValidationErrors(['Workspace is still loading. Please try again in a moment.']);
+      return;
+    }
 
     setValidationErrors([]);
     setSaving(true);
 
-    const logId = crypto.randomUUID();
-
+    const logId = editingChemicalLogId ?? crypto.randomUUID();
     const restrictedEntryUntil = buildRestrictedEntry(draft, chemicalProducts, draftMixItems);
-    const applicationTimestamp = `${draft.applicationDate}T${draft.startTime}:00-04:00`;
+    const applicationTimestamp = draft.applicationDate + 'T' + draft.startTime + ':00-04:00';
     const nextLogPayload: Record<string, string | number | boolean | null> = {
       id: logId,
       application_date: draft.applicationDate,
@@ -797,6 +947,7 @@ export default function ApplicationsPage() {
       end_time: draft.endTime,
       application_timestamp: applicationTimestamp,
       area_id: selectedAreaIdForProperty,
+      property_id: draft.propertyId,
       target_pest: draft.targetPest.trim(),
       agronomic_purpose: draft.agronomicPurpose.trim(),
       application_method: draft.applicationMethod,
@@ -816,73 +967,114 @@ export default function ApplicationsPage() {
       restricted_entry_until: restrictedEntryUntil,
       site_conditions: draft.siteConditions,
       notes: draft.notes,
-      org_id: currentUser?.orgId ?? null,
+      org_id: orgScope,
     };
     const nextMix = draftMixItems
       .filter((item) => item.productId)
       .map((item, index) => ({
-      id: crypto.randomUUID(),
-      application_log_id: logId,
-      product_id: item.productId,
-      rate_applied: numberValue(item.rateApplied),
-      rate_unit: item.rateUnit,
-      total_quantity_used: numberValue(item.totalQuantityUsed),
-      mix_order: index + 1,
-      org_id: currentUser?.orgId,
-    }));
+        id: crypto.randomUUID(),
+        applicationLogId: logId,
+        productId: item.productId,
+        rateApplied: numberValue(item.rateApplied),
+        rateUnit: item.rateUnit,
+        totalQuantityUsed: numberValue(item.totalQuantityUsed),
+        mixOrder: index + 1,
+        org_id: orgScope,
+      }));
 
     try {
-      if (process.env.NODE_ENV === 'development') {
-        console.debug('[chemical-save] started', { logId, payload: nextLogPayload, mixCount: nextMix.length });
-      }
-
       const { error: logError } = await withChemicalMutationTimeout(
         supabase.from('chemical_application_logs').upsert(nextLogPayload),
       );
       if (logError) {
-        if (process.env.NODE_ENV === 'development') console.error('[chemical-save] main log error', logError);
-        toast.error(`Failed to save application log: ${logError.message}`);
+        toast.error('Failed to save application log: ' + getErrorMessage(logError, 'Unknown error'));
         return;
       }
 
-      if (process.env.NODE_ENV === 'development') console.debug('[chemical-save] main log saved');
-
-      for (const mix of nextMix) {
-        const { error } = await withChemicalMutationTimeout(
-          supabase.from('chemical_application_tank_mix_items').upsert(mix),
+      if (editingChemicalLogId) {
+        const { error: deleteMixError } = await withChemicalMutationTimeout(
+          supabase
+            .from('chemical_application_tank_mix_items')
+            .delete()
+            .eq('applicationLogId', logId)
+            .eq('org_id', orgScope),
         );
-        if (error) {
-          if (process.env.NODE_ENV === 'development') console.error('[chemical-save] tank mix error', { mix, error });
-          toast.error(`Failed to save tank mix item: ${error.message}`);
+        if (deleteMixError) {
+          toast.error('Failed to replace tank mix items: ' + getErrorMessage(deleteMixError, 'Unknown error'));
           return;
         }
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['chemical-logs'] });
-      await queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] });
-      await queryClient.invalidateQueries({ queryKey: ['chemical-application-tank-mix-items'] });
+      for (const mix of nextMix) {
+        const { error } = await withChemicalMutationTimeout(
+          supabase.from('chemical_application_tank_mix_items').insert(mix),
+        );
+        if (error) {
+          toast.error('Failed to save tank mix item: ' + getErrorMessage(error, 'Unknown error'));
+          return;
+        }
+      }
 
-      toast.success('Chemical application logged');
-      setDialogOpen(false);
-      setDraft({
-        ...emptyDraft,
-        propertyId: propertyScope || properties[0]?.id || '',
-        applicatorId: employees[0]?.id ?? '',
-        equipmentUsedId: equipmentUnits[0]?.id ?? '',
-
-      });
-      setDraftMixItems([
-        {
-          ...emptyMixItem,
-          productId: chemicalProducts[0]?.id ?? '',
-          rateUnit: chemicalProducts[0]?.rateUnit ?? emptyMixItem.rateUnit,
-        },
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['chemical-logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] }),
+        queryClient.invalidateQueries({ queryKey: ['chemical-application-tank-mix-items'] }),
       ]);
+
+      toast.success(editingChemicalLogId ? 'Chemical application updated' : 'Chemical application logged');
+      setEditingChemicalLogId(null);
+      setDialogOpen(false);
+      setDraft(buildChemicalDraftDefaults());
+      setDraftMixItems(buildChemicalMixDefaults());
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('[chemical-save] unexpected error', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to save application log.');
+      toast.error(getErrorMessage(error, 'Failed to save application log.'));
     } finally {
-      if (process.env.NODE_ENV === 'development') console.debug('[chemical-save] finished');
+      setSaving(false);
+    }
+  }
+
+  async function deleteChemicalLog(log: ChemicalApplicationLog) {
+    if (!orgScope) {
+      toast.error('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
+    if (!window.confirm('Delete this chemical application log?')) return;
+
+    setSaving(true);
+    try {
+      const { error: mixError } = await withChemicalMutationTimeout(
+        supabase
+          .from('chemical_application_tank_mix_items')
+          .delete()
+          .eq('applicationLogId', log.id)
+          .eq('org_id', orgScope),
+      );
+      if (mixError) {
+        toast.error('Failed to delete tank mix items: ' + getErrorMessage(mixError, 'Unknown error'));
+        return;
+      }
+
+      const { error: logError } = await withChemicalMutationTimeout(
+        supabase
+          .from('chemical_application_logs')
+          .delete()
+          .eq('id', log.id)
+          .eq('org_id', orgScope),
+      );
+      if (logError) {
+        toast.error('Failed to delete application log: ' + getErrorMessage(logError, 'Unknown error'));
+        return;
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['chemical-logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] }),
+        queryClient.invalidateQueries({ queryKey: ['chemical-application-tank-mix-items'] }),
+      ]);
+      toast.success('Chemical application deleted');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to delete application log.'));
+    } finally {
       setSaving(false);
     }
   }
@@ -1155,12 +1347,22 @@ export default function ApplicationsPage() {
                     <div><span className="text-muted-foreground">Equipment:</span> {equipment?.unitNumber ?? equipment?.name ?? 'Not recorded'}</div>
                   </div>
                 </div>
-                <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm xl:min-w-56">
-                  <div className="flex items-center gap-2">
-                    <Sprout className="h-4 w-4 text-primary" />
-                    <span className="font-semibold">Fertilizer Application</span>
+                <div className="space-y-3 xl:min-w-56">
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" aria-label="Edit fertilizer application log" onClick={() => openEditFertilizerLog(log)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" aria-label="Delete fertilizer application log" onClick={() => void deleteFertilizerLog(log)} disabled={fertilizerSaving}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{product?.rate_unit ?? log.rate_unit} default product unit</p>
+                  <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Sprout className="h-4 w-4 text-primary" />
+                      <span className="font-semibold">Fertilizer Application</span>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">{product?.rate_unit ?? log.rate_unit} default product unit</p>
+                  </div>
                 </div>
               </div>
               {log.notes ? (
@@ -1180,10 +1382,10 @@ export default function ApplicationsPage() {
         ) : null}
       </div>
 
-      <Dialog open={fertilizerDialogOpen} onOpenChange={setFertilizerDialogOpen}>
+      <Dialog open={fertilizerDialogOpen} onOpenChange={handleFertilizerDialogOpenChange}>
         <DialogContent className="max-h-[90vh] max-w-4xl overflow-auto">
           <DialogHeader>
-            <DialogTitle>New Fertilizer Application</DialogTitle>
+            <DialogTitle>{editingFertilizerLogId ? 'Edit Fertilizer Application' : 'New Fertilizer Application'}</DialogTitle>
             <DialogDescription className="sr-only">
               Enter fertilizer application details including product, rate, area treated, timing, and equipment.
             </DialogDescription>
@@ -1311,8 +1513,8 @@ export default function ApplicationsPage() {
           ) : null}
 
           <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t bg-background/95 pt-3 backdrop-blur">
-            <Button variant="outline" onClick={() => setFertilizerDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveFertilizerApplication} disabled={fertilizerSaving}>{fertilizerSaving ? 'Saving...' : 'Save Fertilizer Log'}</Button>
+            <Button variant="outline" onClick={() => handleFertilizerDialogOpenChange(false)}>Cancel</Button>
+            <Button onClick={saveFertilizerApplication} disabled={fertilizerSaving}>{fertilizerSaving ? 'Saving...' : editingFertilizerLogId ? 'Update Fertilizer Log' : 'Save Fertilizer Log'}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1335,7 +1537,7 @@ export default function ApplicationsPage() {
               size="sm"
               onClick={() => {
                 if (applicationMode === 'chemical') {
-                  setDialogOpen(true);
+                  openNewChemicalApplicationDialog();
                 } else {
                   openFertilizerDialog();
                 }
@@ -1497,9 +1699,19 @@ export default function ApplicationsPage() {
                     <div><span className="text-muted-foreground">Carrier:</span> {log.carrierVolume} gal</div>
                   </div>
                 </div>
-                <div className="space-y-2 text-xs text-muted-foreground xl:max-w-sm">
-                  <Wind className="h-3.5 w-3.5" />
-                  <span>Wind {log.windSpeedAtApplication ?? 0} mph ? Temp {log.temperatureAtApplication ?? 0}F</span>
+                <div className="space-y-3 xl:max-w-sm">
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" aria-label="Edit chemical application log" onClick={() => openEditChemicalLog(log)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" aria-label="Delete chemical application log" onClick={() => void deleteChemicalLog(log)} disabled={saving}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    <Wind className="h-3.5 w-3.5" />
+                    <span>Wind {log.windSpeedAtApplication ?? 0} mph ? Temp {log.temperatureAtApplication ?? 0}F</span>
+                  </div>
                 </div>
               </div>
 
@@ -1537,10 +1749,10 @@ export default function ApplicationsPage() {
         )}
           </div>
 
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={handleChemicalDialogOpenChange}>
         <DialogContent aria-describedby="dialog-desc" className="max-h-[90vh] max-w-4xl overflow-auto">
           <DialogHeader>
-            <DialogTitle>New Chemical Application</DialogTitle>
+            <DialogTitle>{editingChemicalLogId ? 'Edit Chemical Application' : 'New Chemical Application'}</DialogTitle>
             <DialogDescription id="dialog-desc" className="sr-only">
               Enter spray record details, compliance information, and tank mix products.
             </DialogDescription>
@@ -1760,8 +1972,8 @@ export default function ApplicationsPage() {
           ) : null}
 
           <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t bg-background/95 pt-3 backdrop-blur">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveApplication} disabled={saving}>{saving ? 'Saving...' : 'Save Application Log'}</Button>
+            <Button variant="outline" onClick={() => handleChemicalDialogOpenChange(false)}>Cancel</Button>
+            <Button onClick={saveApplication} disabled={saving}>{saving ? 'Saving...' : editingChemicalLogId ? 'Update Application Log' : 'Save Application Log'}</Button>
           </div>
         </DialogContent>
           </Dialog>
