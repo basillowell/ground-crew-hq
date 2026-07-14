@@ -115,8 +115,13 @@ function getShiftForEmployee(scheduleList: ScheduleEntry[], employeeId: string, 
   return scheduleList.find((entry) => entry.employeeId === employeeId && entry.date === date);
 }
 
-function getDefaultStartTimeForEmployee(scheduleList: ScheduleEntry[], employeeId: string, date: string) {
-  return getShiftForEmployee(scheduleList, employeeId, date)?.shiftStart ?? '05:30';
+function getDefaultStartTimeForEmployee(
+  scheduleList: ScheduleEntry[],
+  employeeId: string,
+  date: string,
+  operationalTimezone: string,
+) {
+  return getShiftForEmployee(scheduleList, employeeId, date)?.shiftStart ?? getNowHHMMInTimezone(operationalTimezone);
 }
 
 function timeToMinutes(value?: string) {
@@ -3324,7 +3329,7 @@ export default function WorkboardContent() {
   function openAssignmentDialog(employeeId: string) {
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const targetEmployeeId = employeeId || fallbackEligibleEmployees[0]?.id || '';
-    const defaultStartTime = getDefaultStartTimeForEmployee(scheduleList, targetEmployeeId, boardDate);
+    const defaultStartTime = getDefaultStartTimeForEmployee(scheduleList, targetEmployeeId, boardDate, operationalTimezone);
     const targetPropertyId =
       effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id ?? '';
     setEditingAssignmentId(null);
@@ -3374,7 +3379,7 @@ export default function WorkboardContent() {
     setLinkedRequestTitle(request.title);
     const targetTaskId = request.taskId || taskList[0]?.id || '';
     const targetEmployeeId = fallbackEligibleEmployees[0]?.id || '';
-    const defaultStartTime = getDefaultStartTimeForEmployee(scheduleList, targetEmployeeId, boardDate);
+    const defaultStartTime = getDefaultStartTimeForEmployee(scheduleList, targetEmployeeId, boardDate, operationalTimezone);
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
     setTaskRows([{ ...makeEmptyTaskRow(defaultStartTime, (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : request.propertyId) ?? ''), taskId: targetTaskId }]);
@@ -3401,11 +3406,11 @@ export default function WorkboardContent() {
       setAssignmentDialogOpen(false);
       setLinkedRequestId(null);
       setLinkedRequestTitle(null);
-      setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
+      setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate, operationalTimezone), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
       setIsAssignmentModalDirty(false);
       return true;
     },
-    [assignmentDraft.employeeId, boardDate, effectivePropertyId, isAssignmentModalDirty, scheduleList],
+    [assignmentDraft.employeeId, boardDate, effectivePropertyId, isAssignmentModalDirty, operationalTimezone, scheduleList],
   );
 
   useEffect(() => {
@@ -3764,7 +3769,7 @@ export default function WorkboardContent() {
     setLinkedRequestId(null);
     setLinkedRequestTitle(null);
     setEditingAssignmentId(null);
-    setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
+    setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate, operationalTimezone), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
     setIsAssignmentModalDirty(false);
     closeAssignmentDialog(true);
     window.setTimeout(() => {
@@ -4958,7 +4963,7 @@ export default function WorkboardContent() {
                                       const startInputValue =
                                         toTimeInputValue(canonicalStartAt, operationalTimezone) ||
                                         toTimeInputValue(String(assignment.startTime ?? ''), operationalTimezone) ||
-                                        getDefaultStartTimeForEmployee(scheduleList, assignment.employeeId, boardDate);
+                                        getDefaultStartTimeForEmployee(scheduleList, assignment.employeeId, boardDate, operationalTimezone);
                                       const endInputValue =
                                         toTimeInputValue(canonicalCompletedAt, operationalTimezone) ||
                                         getNowHHMMInTimezone(operationalTimezone);
@@ -5332,7 +5337,7 @@ export default function WorkboardContent() {
                   setAssignmentDraft({ ...assignmentDraft, employeeId: e.target.value });
                   setTaskRows((current) => current.map((row) => ({
                     ...row,
-                    startTime: getDefaultStartTimeForEmployee(scheduleList, e.target.value, boardDate),
+                    startTime: getDefaultStartTimeForEmployee(scheduleList, e.target.value, boardDate, operationalTimezone),
                   })));
                 }}
                 className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -5486,7 +5491,7 @@ export default function WorkboardContent() {
                       setTaskRows((current) => [
                         ...current,
                         makeEmptyTaskRow(
-                          getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate),
+                          getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate, operationalTimezone),
                           effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '',
                         ),
                       ]);

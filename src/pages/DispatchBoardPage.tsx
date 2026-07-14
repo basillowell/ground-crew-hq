@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -57,6 +57,10 @@ export default function DispatchBoardPage() {
   const { data: tasks = [] } =
     useTasks(currentPropertyId ?? undefined, orgId ?? undefined);
   const { data: properties = [] } = useProperties(orgId ?? undefined);
+  const propertiesById = useMemo(
+    () => new Map(properties.map((property) => [property.id, property])),
+    [properties],
+  );
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
@@ -218,6 +222,10 @@ export default function DispatchBoardPage() {
                 <div className="space-y-1.5">
                   {employeeAssignments.map((assignment) => {
                     const task = tasks.find((item) => item.id === assignment.taskId);
+                    const propertyName = assignment.propertyId ? propertiesById.get(assignment.propertyId)?.name : undefined;
+                    const areaLabel = assignment.area?.trim();
+                    const isMeaningfulArea = Boolean(areaLabel && areaLabel.toLowerCase() !== 'unassigned area');
+                    const locationLabel = propertyName ?? (isMeaningfulArea && areaLabel ? areaLabel : 'No location set');
                     return (
                       <div
                         key={assignment.id}
@@ -225,7 +233,7 @@ export default function DispatchBoardPage() {
                       >
                         <p className="font-medium">{task?.name ?? 'Task'}</p>
                         <p className="mt-0.5 text-muted-foreground">
-                          {assignment.area ?? 'No location set'}
+                          {locationLabel}
                         </p>
                       </div>
                     );
