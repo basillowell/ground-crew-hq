@@ -10,6 +10,7 @@ import { DateInput } from '@/components/ui/date-input';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { BarChart3 } from 'lucide-react';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
+import { CalendarReport } from '@/components/reports/CalendarReport';
 
 const supabase = createClient();
 
@@ -249,7 +250,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [showTimeout, setShowTimeout] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'summary' | 'trends' | 'gm' | 'timesheets'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'trends' | 'gm' | 'timesheets' | 'calendar'>('summary');
   const [trendAssignments, setTrendAssignments] = useState<AssignmentRow[]>([]);
   const [trendScheduleEntries, setTrendScheduleEntries] = useState<ScheduleEntryTrendRow[]>([]);
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
@@ -1142,6 +1143,9 @@ export default function ReportsPage() {
         <button className={`h-9 rounded-lg px-3 text-sm transition-colors ${activeTab === 'timesheets' ? 'bg-brand-muted font-medium text-brand-primary' : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'}`} onClick={() => setActiveTab('timesheets')} aria-pressed={activeTab === 'timesheets'}>
           Timesheets
         </button>
+        <button className={`h-9 rounded-lg px-3 text-sm transition-colors ${activeTab === 'calendar' ? 'bg-brand-muted font-medium text-brand-primary' : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'}`} onClick={() => setActiveTab('calendar')} aria-pressed={activeTab === 'calendar'}>
+          Calendar
+        </button>
         <button
           className="ml-auto h-9 rounded-lg bg-brand-primary px-3 text-sm font-medium text-text-inverse transition-colors hover:bg-brand-hover"
           onClick={() => {
@@ -1155,7 +1159,17 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      {activeTab === 'timesheets' ? (
+      {activeTab === 'calendar' ? (
+        <CalendarReport
+          assignments={assignments}
+          tasks={tasks}
+          startDate={startDate}
+          endDate={endDate}
+          loading={loading}
+          error={error}
+          onRetry={() => void fetchReportData()}
+        />
+      ) : activeTab === 'timesheets' ? (
         <div style={{ display: 'grid', gap: '16px' }}>
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
