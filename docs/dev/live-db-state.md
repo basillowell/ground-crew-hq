@@ -270,21 +270,28 @@
 ---
 
 ## equipment_units
-| column            | type        | nullable | default     |
-|-------------------|-------------|----------|-------------|
-| id                | uuid        | NO       | gen_random_uuid() |
-| property_id       | uuid        | NO       |             |
-| name              | text        | NO       |             |
-| type              | text        | NO       |             |
-| status            | text        | NO       | 'available' |
-| location          | text        | YES      |             |
-| last_serviced     | date        | YES      |             |
-| created_at        | timestamptz | NO       | now()       |
-| org_id            | uuid        | YES      |             |
-| equipment_type_id | uuid        | YES      |             |
-| unit_name         | text        | YES      |             |
-| notes             | text        | YES      |             |
-| active            | boolean     | NO       | true        |
+| column              | type             | nullable | default            |
+|---------------------|------------------|----------|--------------------|
+| id                  | uuid             | NO       | gen_random_uuid()  |
+| property_id         | uuid             | NO       |                    |
+| name                | text             | NO       |                    |
+| type                | text             | NO       |                    |
+| status              | text             | NO       | 'available'        |
+| location            | text             | YES      |                    |
+| last_serviced       | date             | YES      |                    |
+| created_at          | timestamptz      | NO       | now()              |
+| org_id              | uuid             | YES      |                    |
+| equipment_type_id   | uuid             | YES      |                    |
+| unit_name           | text             | YES      |                    |
+| notes               | text             | YES      |                    |
+| active              | boolean          | NO       | true               |
+| estimated_hours     | numeric          | YES      | 0                  |
+| latitude            | double precision | YES      |                    |
+| longitude           | double precision | YES      |                    |
+| location_updated_at | timestamptz      | YES      |                    |
+| qr_token            | uuid             | YES      | gen_random_uuid()  |
+
+> qr_token has a unique index (equipment_units_qr_token_key) — used for mobile scan-to-login.
 
 ---
 
@@ -734,19 +741,73 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 ---
 
 ## work_orders
-| column           | type        | nullable | default  |
-|------------------|-------------|----------|----------|
+| column           | type        | nullable | default        |
+|------------------|-------------|----------|----------------|
 | id               | uuid        | NO       | gen_random_uuid() |
-| org_id           | uuid        | NO       |          |
-| property_id      | uuid        | NO       |          |
-| equipment_unit_id| uuid        | NO       |          |
-| title            | text        | NO       |          |
-| description      | text        | YES      |          |
-| status           | text        | NO       | 'open'   |
-| priority         | text        | NO       | 'medium' |
-| cost             | numeric     | YES      | 0        |
-| created_at       | timestamptz | NO       | now()    |
-| completed_at     | timestamptz | YES      |          |
+| org_id           | uuid        | NO       |                |
+| property_id      | uuid        | NO       |                |
+| equipment_unit_id| uuid        | NO       |                |
+| title            | text        | NO       |                |
+| description      | text        | YES      |                |
+| status           | text        | NO       | 'open'         |
+| priority         | text        | NO       | 'medium'       |
+| cost             | numeric     | YES      | 0              |
+| created_at       | timestamptz | NO       | now()          |
+| completed_at     | timestamptz | YES      |                |
+| wo_number        | serial      | NO       |                |
+| category         | text        | NO       | 'preventative' |
+| interval_hours   | numeric     | YES      |                |
+| interval_days    | numeric     | YES      |                |
+| due_at_hours     | numeric     | YES      |                |
+| due_at_date      | date        | YES      |                |
+| planned_status   | text        | NO       | 'not_started'  |
+
+> category CHECK: ('preventative','repair')
+> planned_status CHECK: ('not_started','in_progress','completed','skipped')
+
+---
+
+## equipment_specs
+| column     | type        | nullable | default           |
+|------------|-------------|----------|-------------------|
+| id         | uuid        | NO       | gen_random_uuid() |
+| org_id     | uuid        | YES      |                   |
+| unit_id    | uuid        | NO       |                   |
+| label      | text        | NO       |                   |
+| value      | text        | NO       | ''                |
+| sort_order | integer     | NO       | 0                 |
+| created_at | timestamptz | NO       | now()             |
+
+> FK: unit_id -> equipment_units.id (cascade delete)
+
+---
+
+## work_order_jobs
+| column        | type        | nullable | default           |
+|---------------|-------------|----------|-------------------|
+| id            | uuid        | NO       | gen_random_uuid() |
+| org_id        | uuid        | YES      |                   |
+| work_order_id | uuid        | NO       |                   |
+| label         | text        | NO       |                   |
+| is_complete   | boolean     | NO       | false             |
+| sort_order    | integer     | NO       | 0                 |
+| created_at    | timestamptz | NO       | now()             |
+
+> FK: work_order_id -> work_orders.id (cascade delete)
+
+---
+
+## equipment_favorites
+| column            | type        | nullable | default           |
+|-------------------|-------------|----------|-------------------|
+| id                | uuid        | NO       | gen_random_uuid() |
+| org_id            | uuid        | YES      |                   |
+| employee_id       | uuid        | NO       |                   |
+| equipment_type_id | uuid        | NO       |                   |
+| sort_order        | integer     | NO       | 0                 |
+| created_at        | timestamptz | NO       | now()             |
+
+> UNIQUE(employee_id, equipment_type_id). FKs cascade delete on both.
 
 ---
 
@@ -839,5 +900,5 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 
 ---
 
-## Table count: 42
-## Last synced from: Supabase project fjqeekwisnbpxgebrnpl
+## Table count: 45
+## Last synced from: Supabase project fjqeekwisnbpxgebrnpl (equipment_module_v2 migration applied — added equipment_specs, work_order_jobs, equipment_favorites; extended equipment_units and work_orders)
