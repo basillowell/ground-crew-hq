@@ -639,6 +639,7 @@ export default function WorkboardContent() {
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteScope, setNoteScope] = useState<NoteScope>('org');
+  const [noteTypeFilter, setNoteTypeFilter] = useState<'all' | 'daily' | 'general' | 'geo' | 'alert'>('all');
   const [selectedNotePropertyId, setSelectedNotePropertyId] = useState('');
   const [selectedNoteEmployeeId, setSelectedNoteEmployeeId] = useState('');
   const [selectedNoteAssignmentId, setSelectedNoteAssignmentId] = useState('');
@@ -1702,6 +1703,14 @@ export default function WorkboardContent() {
     { id: 'employee', label: 'Employee', count: employeeScopedNotes.length },
     { id: 'task', label: 'Task', count: taskScopedNotes.length },
   ];
+  const noteTypeFilterTabs: Array<{ id: 'all' | Note['type']; label: string; emptyLabel: string }> = [
+    { id: 'all', label: 'All', emptyLabel: 'notes' },
+    { id: 'daily', label: 'Daily', emptyLabel: 'daily notes' },
+    { id: 'general', label: 'General', emptyLabel: 'general notes' },
+    { id: 'geo', label: 'Geo', emptyLabel: 'geo notes' },
+    { id: 'alert', label: 'Alerts', emptyLabel: 'alert notes' },
+  ];
+  const noteTypeEmptyLabel = noteTypeFilterTabs.find((tab) => tab.id === noteTypeFilter)?.emptyLabel ?? 'notes';
 
   const upsertAssignmentInCache = useCallback(
     (nextAssignment: Assignment) => {
@@ -5941,6 +5950,23 @@ export default function WorkboardContent() {
                 </button>
               ))}
             </div>
+            <div className="flex flex-wrap gap-1">
+              {noteTypeFilterTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setNoteTypeFilter(tab.id)}
+                  className={`rounded-full border px-2 py-1 text-[10px] font-medium transition-colors ${
+                    noteTypeFilter === tab.id
+                      ? 'border-primary/40 bg-primary/10 text-primary'
+                      : 'border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                  }`}
+                  aria-pressed={noteTypeFilter === tab.id}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
             {noteScope === 'property' ? (
               <div>
@@ -6014,12 +6040,14 @@ export default function WorkboardContent() {
             <div className="space-y-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Visible notes</p>
               <div className="max-h-56 space-y-2 overflow-auto rounded-md border p-2">
-                {visibleScopedNotes.length === 0 ? (
+                {visibleScopedNotes.filter((note) => noteTypeFilter === 'all' || note.type === noteTypeFilter).length === 0 ? (
                   <div className="rounded-md border border-dashed bg-muted/20 p-4 text-center text-xs text-muted-foreground">
-                    No notes in this scope yet.
+                    No {noteTypeEmptyLabel} in this scope yet.
                   </div>
                 ) : (
-                  visibleScopedNotes.map((note) => (
+                  visibleScopedNotes
+                    .filter((note) => noteTypeFilter === 'all' || note.type === noteTypeFilter)
+                    .map((note) => (
                     <div key={note.id} className="rounded-md border bg-card p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
