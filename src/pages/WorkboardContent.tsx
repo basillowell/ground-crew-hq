@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TimeSelect } from '@/components/TimeSelect';
+import { TaskGroupedBoard } from '@/components/workboard/TaskGroupedBoard';
 import { toast } from '@/components/ui/sonner';
 import {
   type ApplicationArea,
@@ -652,6 +653,7 @@ export default function WorkboardContent() {
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
   const [dropTargetEmployeeId, setDropTargetEmployeeId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+  const [groupMode, setGroupMode] = useState<'employee' | 'task'>('employee');
   const [laneOrder, setLaneOrder] = useState<string[]>([]);
   const [needsFilter, setNeedsFilter] = useState<'all' | 'open' | 'done'>('all');
   const [dismissedEscalationIds, setDismissedEscalationIds] = useState<string[]>([]);
@@ -4361,6 +4363,14 @@ export default function WorkboardContent() {
               </TabsTrigger>
             </TabsList>
             </Tabs>
+            {viewMode === 'list' ? (
+              <Tabs value={groupMode} onValueChange={(v) => setGroupMode(v as 'employee' | 'task')}>
+                <TabsList className="h-9" aria-label="List grouping">
+                  <TabsTrigger value="employee" className="text-xs px-3">By Employee</TabsTrigger>
+                  <TabsTrigger value="task" className="text-xs px-3">By Task</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            ) : null}
             {!isReadOnly ? (
               <Button
                 size="sm"
@@ -4751,6 +4761,13 @@ export default function WorkboardContent() {
                 />
               </Suspense>
             </SafeSection>
+          ) : groupMode === 'task' ? (
+            <TaskGroupedBoard
+              assignments={dayAssignments}
+              tasks={taskList}
+              employees={employeeList}
+              onEditAssignment={openEditAssignmentDialog}
+            />
           ) : (
             <>
             <div className="hidden space-y-2 md:block">
