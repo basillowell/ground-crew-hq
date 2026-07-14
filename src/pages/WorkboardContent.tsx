@@ -193,6 +193,50 @@ type AssignmentTimelineMeta = {
   actualHours: number | null;
 };
 
+type AssignmentWithPublishState = Assignment & {
+  isPublished?: boolean;
+  is_published?: boolean;
+  publishedAt?: string | null;
+  published_at?: string | null;
+  publishedBy?: string | null;
+  published_by?: string | null;
+};
+
+type WorkboardAssignmentPublishState = {
+  id: string;
+  isPublished: boolean;
+  publishedAt: string | null;
+  publishedBy: string | null;
+};
+
+function isAssignmentPublished(assignment: Assignment) {
+  const assignmentRecord = assignment as AssignmentWithPublishState;
+  const value = assignmentRecord.isPublished ?? assignmentRecord.is_published;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return true;
+}
+
+function markAssignmentPublishState(
+  assignment: Assignment,
+  publishState: WorkboardAssignmentPublishState | undefined,
+): AssignmentWithPublishState {
+  if (!publishState) return assignment as AssignmentWithPublishState;
+  return {
+    ...assignment,
+    isPublished: publishState.isPublished,
+    publishedAt: publishState.publishedAt,
+    publishedBy: publishState.publishedBy,
+  };
+}
+
+function markAssignmentDraft(assignment: Assignment): AssignmentWithPublishState {
+  return {
+    ...assignment,
+    isPublished: false,
+  };
+}
+
 type WorkboardClockEventRow = {
   id: string;
   employeeId: string;
@@ -625,6 +669,7 @@ export default function WorkboardContent() {
   const [selectedTemplateEmployeeIds, setSelectedTemplateEmployeeIds] = useState<string[]>([]);
   const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
   const [applyingTaskTemplate, setApplyingTaskTemplate] = useState(false);
+  const [publishingDay, setPublishingDay] = useState(false);
   const [expandedMobileCrewIds, setExpandedMobileCrewIds] = useState<string[]>([]);
   const [expandedDesktopCrewId, setExpandedDesktopCrewId] = useState<string | null>(null);
   const [quickPlanLoading, setQuickPlanLoading] = useState(false);
@@ -762,6 +807,30 @@ export default function WorkboardContent() {
     orgId,
   );
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, orgId);
+  const assignmentPublishStateQuery = useQuery({
+    queryKey: ['assignments', 'publish-state', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as WorkboardAssignmentPublishState[];
+      let query = supabase
+        .from('assignments')
+        .select('id, is_published, published_at, published_by')
+        .eq('org_id', orgId)
+        .eq('date', boardDate);
+      if (effectivePropertyId && effectivePropertyId !== 'all') {
+        query = query.eq('property_id', effectivePropertyId);
+      }
+      const { data, error } = await withWorkboardRequestTimeout(query);
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: String(row.id ?? ''),
+        isPublished: row.is_published === true,
+        publishedAt: row.published_at ? String(row.published_at) : null,
+        publishedBy: row.published_by ? String(row.published_by) : null,
+      }));
+    },
+    staleTime: 1000 * 30,
+  });
   const scheduleQuery = useScheduleEntries(boardDate, effectivePropertyId, orgId);
   const {
     data: taskOptions = [],
@@ -920,7 +989,20 @@ export default function WorkboardContent() {
     employeeListRef.current = employeeList;
   }, [employeeList]);
 
-  const assignmentList = assignmentsQuery.data ?? [];
+  const assignmentPublishStateById = useMemo(() => {
+    const map = new Map<string, WorkboardAssignmentPublishState>();
+    for (const row of assignmentPublishStateQuery.data ?? []) {
+      if (row.id) map.set(row.id, row);
+    }
+    return map;
+  }, [assignmentPublishStateQuery.data]);
+
+  const assignmentList = useMemo(
+    () => (assignmentsQuery.data ?? []).map((assignment) =>
+      markAssignmentPublishState(assignment, assignmentPublishStateById.get(assignment.id)),
+    ),
+    [assignmentPublishStateById, assignmentsQuery.data],
+  );
   useEffect(() => {
     if (!process.env.NODE_ENV === 'development') return;
     console.info('[workboard:data]', {
@@ -1005,6 +1087,10 @@ export default function WorkboardContent() {
   const dayAssignments = useMemo(() => {
     return assignmentList.filter((assignment) => assignment.date === boardDate);
   }, [assignmentList, boardDate]);
+  const draftAssignmentCount = useMemo(
+    () => dayAssignments.filter((assignment) => !isAssignmentPublished(assignment)).length,
+    [dayAssignments],
+  );
   const noteList = notesQuery.data ?? [];
   const taskRequests = taskRequestsQuery.data ?? [];
   const pendingTaskRequests = pendingTaskRequestsQuery.data ?? [];
@@ -2606,6 +2692,53 @@ export default function WorkboardContent() {
     selectedQuickPlanIds,
   ]);
 
+  const publishDayAssignments = useCallback(async () => {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
+    if (!supabase) return;
+    const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+    if (!resolvedOrgId) {
+      toast.error('Session is reconnecting - please try again in a moment.');
+      return;
+    }
+    const currentEmployeeId = currentUser?.employeeId;
+    if (!currentEmployeeId) {
+      toast.error('Session is reconnecting - please try again in a moment.');
+      return;
+    }
+
+    setPublishingDay(true);
+    let query = supabase
+      .from('assignments')
+      .update({
+        is_published: true,
+        published_at: new Date().toISOString(),
+        published_by: currentEmployeeId,
+      })
+      .eq('date', boardDate)
+      .eq('org_id', resolvedOrgId)
+      .eq('is_published', false);
+    if (effectivePropertyId && effectivePropertyId !== 'all') {
+      query = query.eq('property_id', effectivePropertyId);
+    }
+
+    const { error } = await withWorkboardMutationTimeout(query);
+    setPublishingDay(false);
+
+    if (error) {
+      toast.error(`Could not publish the day: ${error.message}`);
+      return;
+    }
+
+    toast.success(draftAssignmentCount > 0
+      ? `Published ${draftAssignmentCount} draft task${draftAssignmentCount === 1 ? '' : 's'}.`
+      : 'Workflow is already published.');
+    window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    }, 0);
+  }, [authOrgId, boardDate, currentUser?.employeeId, currentUser?.orgId, draftAssignmentCount, effectivePropertyId, isReadOnly, queryClient]);
   const applyDailyTaskTemplate = useCallback(async () => {
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
@@ -3420,7 +3553,7 @@ export default function WorkboardContent() {
         pendingMinutes += estimatedMinutes;
         nextOrder += 1;
         rowsToInsert.push(row);
-        optimisticAssignments.push({
+        optimisticAssignments.push(markAssignmentDraft({
           id: assignmentId,
           employeeId: employee.id,
           taskId: selectedTaskId,
@@ -3431,7 +3564,7 @@ export default function WorkboardContent() {
           duration: estimatedMinutes,
           area: properties.find((property) => property.id === propertyIdForRow)?.name ?? 'Assigned property',
           status: normalizeAssignmentStatus(writeStatus) as Assignment['status'],
-        });
+        }));
       }
       if (rowsToInsert.length === 0) {
         toast.error('No valid assignments to dispatch.');
@@ -3498,7 +3631,8 @@ export default function WorkboardContent() {
             duration: Math.round(Number(row.estimated_hours ?? 0) * 60),
             area: properties.find((property) => property.id === String(row.property_id ?? ''))?.name ?? 'Assigned property',
             status: normalizeAssignmentStatus(String(row.status ?? 'planned')) as Assignment['status'],
-          });
+            isPublished: row.is_published === true,
+          } as AssignmentWithPublishState);
         });
       } else {
         optimisticAssignments.forEach((assignment) => appendAssignmentToCaches(assignment));
@@ -3582,7 +3716,7 @@ export default function WorkboardContent() {
         return;
       }
 
-      const optimisticAssignment: Assignment = {
+      const optimisticAssignment: Assignment = markAssignmentDraft({
         id: assignmentId,
         employeeId: String(data?.employee_id ?? assignmentDraft.employeeId),
         taskId: String(data?.task_id ?? selectedTaskId),
@@ -3592,7 +3726,7 @@ export default function WorkboardContent() {
         duration: Math.round(Number(data?.estimated_hours ?? estimatedHours) * 60),
         area: String(data?.location ?? activeProperty?.name ?? 'Assigned property'),
         status: normalizeAssignmentStatus(String(data?.status ?? writeStatus)) as Assignment['status'],
-      };
+      });
       appendAssignmentToCaches(optimisticAssignment);
       const selectedEmployee = employeeList.find((employee) => employee.id === optimisticAssignment.employeeId);
       const employeeName = selectedEmployee ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}`.trim() : 'crew member';
@@ -3882,7 +4016,8 @@ export default function WorkboardContent() {
       duration: Math.round(Number(assignmentRow?.estimated_hours ?? 0) * 60),
       area: String(assignmentRow?.location ?? payload.location ?? 'Requested'),
       status: normalizeAssignmentStatus(String(assignmentRow?.status ?? payload.status)) as Assignment['status'],
-    });
+      isPublished: assignmentRow?.is_published === true,
+    } as AssignmentWithPublishState);
 
     const { error: requestError } = await withWorkboardMutationTimeout(supabase
       .from('task_requests')
@@ -4126,6 +4261,23 @@ export default function WorkboardContent() {
               </TabsTrigger>
             </TabsList>
             </Tabs>
+            {!isReadOnly ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0 gap-1.5 border-status-pending/30 bg-status-pending/10 text-status-pending hover:bg-status-pending/15"
+                onClick={() => void publishDayAssignments()}
+                disabled={publishingDay || assignmentPublishStateQuery.isLoading || draftAssignmentCount === 0}
+                data-testid="button-publish-workboard-day"
+                title={draftAssignmentCount === 0 ? 'No draft tasks to publish' : 'Publish draft tasks for this day'}
+              >
+                <Radio className="h-3.5 w-3.5" />
+                {publishingDay ? 'Publishing...' : 'Publish Day'}
+                {draftAssignmentCount > 0 ? (
+                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{draftAssignmentCount}</Badge>
+                ) : null}
+              </Button>
+            ) : null}
             {!isReadOnly ? (
               <Button
                 size="sm"
@@ -4439,9 +4591,18 @@ export default function WorkboardContent() {
                         <div className="space-y-2">
                           {empAssignments.map((a) => {
                             const ns = normalizeAssignmentStatus(a.status);
+                            const isDraft = !isAssignmentPublished(a);
                             return (
-                              <div key={a.id} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2">
-                                <span className="text-sm">{a.title}</span>
+                              <div
+                                key={a.id}
+                                className={isDraft ? 'flex items-center justify-between rounded-lg border border-dashed border-status-pending/40 bg-status-pending/10 px-3 py-2' : 'flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2'}
+                              >
+                                <span className="flex min-w-0 items-center gap-2 text-sm">
+                                  <span className="truncate">{a.title}</span>
+                                  {isDraft ? (
+                                    <Badge variant="outline" className="shrink-0 border-status-pending/40 bg-status-pending/10 text-[10px] text-status-pending">Draft</Badge>
+                                  ) : null}
+                                </span>
                                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                                   ns === 'done'
                                     ? 'bg-green-500/10 text-green-400'
@@ -4573,11 +4734,15 @@ export default function WorkboardContent() {
                       isDropTarget={dropTargetEmployeeId === lane.employee.id}
                       shiftLabel={lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : undefined}
                       shiftEndTime={lane.shift?.shiftEnd ?? null}
-                      laneSummary={
-                        lane.shift
-                          ? `Est: ${lane.estimatedHours.toFixed(1)}h · Actual: ${lane.actualHours.toFixed(1)}h`
-                          : `${lane.employeeAssignments.length} tasks assigned`
-                      }
+                      laneSummary={(() => {
+                        const baseSummary = lane.shift
+                          ? `Est: ${lane.estimatedHours.toFixed(1)}h - Actual: ${lane.actualHours.toFixed(1)}h`
+                          : `${lane.employeeAssignments.length} tasks assigned`;
+                        const laneDraftCount = lane.employeeAssignments.filter((assignment) => !isAssignmentPublished(assignment)).length;
+                        return laneDraftCount > 0
+                          ? `${baseSummary} - ${laneDraftCount} draft${laneDraftCount === 1 ? '' : 's'}`
+                          : baseSummary;
+                      })()}
                       laneWarning={
                         lane.shiftMinutes > 0 && lane.assignedMinutes > lane.shiftMinutes
                           ? `Assigned hours exceed scheduled shift by ${Math.ceil((lane.assignedMinutes - lane.shiftMinutes) / 60)}h ${(lane.assignedMinutes - lane.shiftMinutes) % 60}m`
@@ -4680,6 +4845,7 @@ export default function WorkboardContent() {
                           <div className="space-y-2">
                             {laneOrderedAssignments.map((assignment) => {
                               const task = taskList.find((candidate) => candidate.id === assignment.taskId);
+                              const isDraft = !isAssignmentPublished(assignment);
                               const estimatedHours = getEstimatedHoursForAssignment(assignment);
                               const { canonicalStartAt, canonicalCompletedAt } = getCanonicalActualTimes(assignment);
                               const canonicalStartHHMM = canonicalStartAt
@@ -4705,10 +4871,18 @@ export default function WorkboardContent() {
                                       ? `Completed: ${toLocalTimeLabel(canonicalCompletedAt, operationalTimezone)}`
                                       : '';
                               return (
-                                <div key={`mobile-assignment-${assignment.id}`} className="relative overflow-visible rounded-xl border bg-muted/20 p-2.5">
+                                <div
+                                  key={`mobile-assignment-${assignment.id}`}
+                                  className={isDraft ? 'relative overflow-visible rounded-xl border border-dashed border-status-pending/50 bg-status-pending/10 p-2.5' : 'relative overflow-visible rounded-xl border bg-muted/20 p-2.5'}
+                                >
                                   <div className="flex items-start justify-between gap-2">
                                     <div>
-                                      <p className="text-sm font-medium">{assignment.title || task?.name || 'Untitled task'}</p>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-medium">{assignment.title || task?.name || 'Untitled task'}</p>
+                                        {isDraft ? (
+                                          <Badge variant="outline" className="border-status-pending/40 bg-status-pending/10 text-[10px] text-status-pending">Draft</Badge>
+                                        ) : null}
+                                      </div>
                                       <p className="text-xs text-muted-foreground">
                                         {formatMinutesAsHoursAndMinutes(assignment.duration)} · {assignment.status}
                                       </p>
