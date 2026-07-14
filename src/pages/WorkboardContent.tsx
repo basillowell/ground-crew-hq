@@ -48,7 +48,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { useAssignments, useDepartmentOptions, useEmployees, useEquipmentUnits, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import {
   getOperationalTimezone,
   getNowHHMMInTimezone,
@@ -808,6 +808,7 @@ export default function WorkboardContent() {
 
   const orgId = authOrgId ?? currentUser?.orgId;
   const safeOrgId = authOrgId ?? currentUser?.orgId ?? '';
+  const employeeEquipmentHistoryQuery = useEmployeeEquipmentHistory(assignmentDraft.employeeId, orgId);
   const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
   const { data: storeEmployees = [], isLoading: employeesLoading } = useEmployees(
     effectivePropertyId === 'all' ? undefined : effectivePropertyId,
@@ -2908,6 +2909,46 @@ export default function WorkboardContent() {
     () =>
       availableEquipmentList.filter((unit) => unit.active !== false && String(unit.status ?? '').toLowerCase() === 'available'),
     [availableEquipmentList],
+  );
+  const recentEquipmentOptions = useMemo(() => {
+    const historyRows = employeeEquipmentHistoryQuery.data ?? [];
+    return historyRows
+      .map((entry) => {
+        if (!entry.equipment_unit_id) return null;
+        const unit = equipmentList.find((item) => item.id === entry.equipment_unit_id);
+        if (!unit) return null;
+        const dateLabel = new Date(`${entry.date}T00:00:00`).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        });
+        return {
+          equipmentId: entry.equipment_unit_id,
+          label: unit.unitNumber || 'Equipment',
+          dateLabel,
+        };
+      })
+      .filter((entry): entry is { equipmentId: string; label: string; dateLabel: string } => Boolean(entry));
+  }, [employeeEquipmentHistoryQuery.data, equipmentList]);
+
+  const renderRecentEquipmentChips = (onSelect: (equipmentId: string) => void) => (
+    recentEquipmentOptions.length > 0 ? (
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Recently used</span>
+        {recentEquipmentOptions.map((option) => (
+          <button
+            key={`${option.equipmentId}-${option.dateLabel}`}
+            type="button"
+            className="rounded-full border border-amber-300/60 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-800/70 dark:bg-amber-950/20 dark:text-amber-300"
+            onClick={() => {
+              setIsAssignmentModalDirty(true);
+              onSelect(option.equipmentId);
+            }}
+          >
+            {option.label} - {option.dateLabel}
+          </button>
+        ))}
+      </div>
+    ) : null
   );
 
   const [todayDateKey] = useState(() => new Date().toLocaleDateString('en-CA'));
@@ -5467,6 +5508,9 @@ export default function WorkboardContent() {
 
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Equipment</label>
+              {renderRecentEquipmentChips((equipmentId) => {
+                setAssignmentDraft({ ...assignmentDraft, equipmentId });
+              })}
                 <select
                   value={assignmentDraft.equipmentId}
                   onChange={(e) => {
@@ -5626,6 +5670,9 @@ export default function WorkboardContent() {
                       </div>
                       <div className="col-span-2">
                         <label className="text-xs text-muted-foreground">Equipment</label>
+                        {renderRecentEquipmentChips((equipmentId) => {
+                          setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, equipmentId } : item)));
+                        })}
                         <select
                           value={row.equipmentId}
                           onChange={(e) => {

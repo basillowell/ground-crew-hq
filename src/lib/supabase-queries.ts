@@ -122,6 +122,15 @@ type DbAssignment = {
   created_at: string;
 };
 
+export type EmployeeEquipmentHistoryRow = {
+  id: string;
+  date: string;
+  equipment_unit_id: string | null;
+  actual_hours: number | null;
+  title: string | null;
+  task_id: string | null;
+};
+
 type DbTask = {
   id: string;
   org_id?: string | null;
@@ -704,6 +713,32 @@ async function fetchAssignmentsRange(startDate: string, endDate: string, propert
   return (data as DbAssignment[]).map(toAssignment);
 }
 
+async function fetchEmployeeEquipmentHistory(employeeId: string, orgId?: string): Promise<EmployeeEquipmentHistoryRow[]> {
+  const client = ensureSupabase();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    let query = client
+      .from('assignments')
+      .select('id, date, equipment_unit_id, actual_hours, title, task_id')
+      .eq('employee_id', employeeId)
+      .not('equipment_unit_id', 'is', null)
+      .order('date', { ascending: false })
+      .limit(3);
+    if (orgId) query = query.eq('org_id', orgId);
+    const { data, error } = await query.abortSignal(controller.signal);
+    if (error) throw error;
+    return (data ?? []) as EmployeeEquipmentHistoryRow[];
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Employee equipment history request timed out after 15 seconds.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function fetchTasks(orgId?: string): Promise<Task[]> {
   const client = ensureSupabase();
   let query = client.from('tasks').select('*');
@@ -1029,6 +1064,18 @@ export function useAssignmentsRange(startDate: string, endDate: string, property
     queryFn: () => fetchAssignmentsRange(startDate, endDate, propertyId, orgId),
     enabled: Boolean(startDate && endDate && orgId),
     staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 1000,
+  });
+}
+
+export function useEmployeeEquipmentHistory(employeeId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['employee-equipment-history', employeeId ?? 'no-employee', orgId ?? 'all-orgs'],
+    queryFn: () => fetchEmployeeEquipmentHistory(employeeId!, orgId),
+    enabled: Boolean(employeeId && orgId),
+    staleTime: 1000 * 60 * 3,
     placeholderData: (prev) => prev,
     retry: 3,
     retryDelay: 1000,
