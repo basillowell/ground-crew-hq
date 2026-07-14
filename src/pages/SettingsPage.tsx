@@ -860,6 +860,12 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const categoryOptions = ['Mowing', 'Transport', 'Chemical', 'Trimming', 'Maintenance', 'General'] as const;
+  const invalidateEquipmentTypeCaches = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: equipmentTypesQueryKey }),
+      queryClient.invalidateQueries({ queryKey: ['equipment-page-data', orgId ?? 'no-org'] }),
+    ]);
+  }, [equipmentTypesQueryKey, orgId, queryClient]);
 
   const addType = async () => {
     if (!supabase || !orgId || !newName.trim()) return;
@@ -869,7 +875,7 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
     if (insertError) { toast.error(`Failed to add: ${insertError.message}`); return; }
     setNewName('');
     toast.success('Equipment type added');
-    void queryClient.invalidateQueries({ queryKey: equipmentTypesQueryKey });
+    await invalidateEquipmentTypeCaches();
   };
 
   const saveEdit = async (id: string) => {
@@ -879,7 +885,7 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
     if (updateError) { toast.error(`Failed to update: ${updateError.message}`); return; }
     setEditingId(null); setEditingName('');
     toast.success('Updated');
-    void queryClient.invalidateQueries({ queryKey: equipmentTypesQueryKey });
+    await invalidateEquipmentTypeCaches();
   };
 
   const deactivate = async (id: string, name: string) => {
@@ -888,7 +894,7 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
       .from('equipment_types').update({ active: false }).eq('id', id).eq('org_id', orgId);
     if (updateError) { toast.error(`Failed to remove: ${updateError.message}`); return; }
     toast.success(`Removed ${name}`);
-    void queryClient.invalidateQueries({ queryKey: equipmentTypesQueryKey });
+    await invalidateEquipmentTypeCaches();
   };
 
   if (loading) return <div className="h-32 animate-pulse rounded-xl bg-surface-elevated" />;
@@ -1111,6 +1117,14 @@ function WorkspaceTab({
     return () => window.clearTimeout(timer);
   }, [hasWorkspaceResult]);
 
+  const invalidateEquipmentTypeCaches = useCallback(async () => {
+    if (!orgId) return;
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['settings-equipment-types', orgId] }),
+      queryClient.invalidateQueries({ queryKey: ['equipment-page-data', orgId] }),
+    ]);
+  }, [orgId, queryClient]);
+
   const saveOrganization = async () => {
     if (!supabase || !orgId || !orgNameDraft.trim()) return;
     setSavingOrg(true);
@@ -1314,6 +1328,7 @@ function WorkspaceTab({
     setNewEquipmentTypeName('');
     setNewEquipmentTypeCategory('General');
     await fetchWorkspaceData();
+    await invalidateEquipmentTypeCaches();
   };
 
   const saveEquipmentTypeEdit = async (equipmentTypeId: string) => {
@@ -1332,6 +1347,7 @@ function WorkspaceTab({
     setEditingEquipmentTypeId(null);
     setEditingEquipmentTypeName('');
     await fetchWorkspaceData();
+    await invalidateEquipmentTypeCaches();
   };
 
   const deactivateEquipmentType = async (equipmentTypeId: string, name: string) => {
@@ -1350,6 +1366,7 @@ function WorkspaceTab({
     }
     toast.success(`Equipment type deleted: ${name}`);
     await fetchWorkspaceData();
+    await invalidateEquipmentTypeCaches();
   };
 
   const loadDemoData = async () => {
@@ -1661,6 +1678,7 @@ function WorkspaceTab({
 
     setLoadingDemoData(false);
     await fetchWorkspaceData();
+    await invalidateEquipmentTypeCaches();
     toast.success('Demo data loaded! Navigate to the Workboard to see it.');
   };
 
