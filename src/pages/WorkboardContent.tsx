@@ -1102,6 +1102,14 @@ export default function WorkboardContent() {
     () => dayAssignments.filter((assignment) => !isAssignmentPublished(assignment)).length,
     [dayAssignments],
   );
+  const plannedCount = useMemo(
+    () => dayAssignments.filter((assignment) => assignment.status === 'planned').length,
+    [dayAssignments],
+  );
+  const assignedCount = useMemo(
+    () => dayAssignments.filter((assignment) => Boolean(assignment.employeeId)).length,
+    [dayAssignments],
+  );
   const noteList = notesQuery.data ?? [];
   const taskRequests = taskRequestsQuery.data ?? [];
   const pendingTaskRequests = pendingTaskRequestsQuery.data ?? [];
@@ -2451,6 +2459,10 @@ export default function WorkboardContent() {
 
     return alerts.filter((alert) => !dismissedEscalationIds.includes(alert.id));
   }, [boardDate, dayAssignments, dismissedEscalationIds, equipmentList, escalationThresholds.equipmentServiceOverdueDays, escalationThresholds.shiftCoverageWarningPct, isRequestOpen, orderedDispatchBoard, propertyRequests, scheduleList]);
+  const criticalCount = useMemo(
+    () => escalationAlerts.filter((alert) => alert.severity === 'critical').length,
+    [escalationAlerts],
+  );
 
   const dismissEscalation = useCallback((alertId: string) => {
     setDismissedEscalationIds((current) => (current.includes(alertId) ? current : [...current, alertId]));
@@ -4329,6 +4341,20 @@ export default function WorkboardContent() {
                 <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
               </Button>
             ) : null}
+            <div className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-surface-border bg-surface-elevated px-2 text-[10px] text-text-muted">
+              <span className="inline-flex items-center gap-1">
+                Planned
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{plannedCount}</Badge>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                Critical
+                <Badge variant={criticalCount > 0 ? "destructive" : "secondary"} className="h-5 px-1.5 text-[10px]">{criticalCount}</Badge>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                Assigned
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{assignedCount}</Badge>
+              </span>
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" className="h-9 shrink-0 rounded-lg">
