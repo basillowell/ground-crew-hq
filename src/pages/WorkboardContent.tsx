@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TimeSelect } from '@/components/TimeSelect';
 import { TaskGroupedBoard } from '@/components/workboard/TaskGroupedBoard';
+import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { toast } from '@/components/ui/sonner';
 import {
   type ApplicationArea,
@@ -42,6 +43,7 @@ import {
   Pencil,
   Printer,
   Radio,
+  Scissors,
   Sparkles,
   StickyNote,
   Users,
@@ -642,6 +644,7 @@ export default function WorkboardContent() {
   const [taskTemplateDialogOpen, setTaskTemplateDialogOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [turfPanelOpen, setTurfPanelOpen] = useState(false);
   const [noteScope, setNoteScope] = useState<NoteScope>('org');
   const [noteTypeFilter, setNoteTypeFilter] = useState<'all' | 'daily' | 'general' | 'geo' | 'alert'>('all');
   const [selectedNotePropertyId, setSelectedNotePropertyId] = useState('');
@@ -4411,6 +4414,18 @@ export default function WorkboardContent() {
                 <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
               </Button>
             ) : null}
+            {!isReadOnly ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0 gap-1.5"
+                onClick={() => setTurfPanelOpen(true)}
+                data-testid="button-open-turf-panel"
+              >
+                <Scissors className="h-3.5 w-3.5" />
+                Turf
+              </Button>
+            ) : null}
             <div className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-surface-border bg-surface-elevated px-2 text-[10px] text-text-muted">
               <span className="inline-flex items-center gap-1">
                 Planned
@@ -6150,6 +6165,25 @@ export default function WorkboardContent() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={turfPanelOpen} onOpenChange={setTurfPanelOpen}>
+        <DialogContent role="dialog" aria-modal="true" className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogDescription className="sr-only">
+            Review current turf mow patterns, apply new rotations, and inspect per-area pattern history.
+          </DialogDescription>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Scissors className="h-4 w-4" /> Turf Management
+            </DialogTitle>
+          </DialogHeader>
+          <TurfPanel
+            orgId={orgId}
+            propertyId={effectivePropertyId}
+            currentEmployeeId={currentUser?.employeeId ?? null}
+            employees={employeeList}
+          />
         </DialogContent>
       </Dialog>
 
