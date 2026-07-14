@@ -1,6 +1,6 @@
 # live-db-state.md
 > Authoritative DB schema for Ground Crew HQ — Supabase project `fjqeekwisnbpxgebrnpl`
-> Last updated: 2026-06-08 (auto-generated from information_schema)
+> Last updated: 2026-07-14 (auto-generated from information_schema)
 > Rule 10: All column names in queries must come from this file, never from memory.
 
 ---
@@ -53,6 +53,9 @@
 | equipment_unit_id   | uuid        | YES      |            |
 | actual_start_at     | timestamptz | YES      |            |
 | actual_completed_at | timestamptz | YES      |            |
+| is_published        | boolean     | NO       | false      |
+| published_at        | timestamptz | YES      |            |
+| published_by        | uuid        | YES      |            |
 
 ---
 
