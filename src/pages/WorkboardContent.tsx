@@ -45,6 +45,7 @@ import {
   StickyNote,
   Users,
   Wrench,
+  Zap,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
@@ -633,6 +634,8 @@ export default function WorkboardContent() {
   const [department, setDepartment] = useState('All Departments');
   const [groupFilter, setGroupFilter] = useState('all');
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [quickMode, setQuickMode] = useState(false);
+  const [quickAssignmentSaving, setQuickAssignmentSaving] = useState(false);
   const [isAssignmentModalDirty, setIsAssignmentModalDirty] = useState(false);
   const [quickPlanDialogOpen, setQuickPlanDialogOpen] = useState(false);
   const [taskTemplateDialogOpen, setTaskTemplateDialogOpen] = useState(false);
@@ -713,6 +716,7 @@ export default function WorkboardContent() {
   const [isGeneratingTaskNotes, setIsGeneratingTaskNotes] = useState(false);
   const boardDateInputRef = useRef<HTMLInputElement>(null);
   const assignmentFirstFieldRef = useRef<HTMLSelectElement | null>(null);
+  const assignmentTaskFieldRef = useRef<HTMLSelectElement | null>(null);
   const lastAssignmentModalTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -3394,6 +3398,8 @@ export default function WorkboardContent() {
     const defaultStartTime = getDefaultStartTimeForEmployee(scheduleList, targetEmployeeId, boardDate, operationalTimezone);
     const targetPropertyId =
       effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id ?? '';
+    setQuickMode(false);
+    setQuickAssignmentSaving(false);
     setEditingAssignmentId(null);
     setSelectedEmployeeId(targetEmployeeId);
     setTaskRows([makeEmptyTaskRow(defaultStartTime, effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
@@ -3411,9 +3417,16 @@ export default function WorkboardContent() {
     setAssignmentDialogOpen(true);
   }
 
+  function openQuickAssignmentDialog(employeeId: string) {
+    openAssignmentDialog(employeeId);
+    setQuickMode(true);
+  }
+
   function openEditAssignmentDialog(assignment: Assignment) {
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const currentEstimatedHours = getEstimatedHoursForAssignment(assignment);
+    setQuickMode(false);
+    setQuickAssignmentSaving(false);
     setEditingAssignmentId(assignment.id);
     setSelectedEmployeeId(assignment.employeeId);
     setAssignmentDraft({
@@ -3437,6 +3450,8 @@ export default function WorkboardContent() {
       return;
     }
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setQuickMode(false);
+    setQuickAssignmentSaving(false);
     setLinkedRequestId(request.id);
     setLinkedRequestTitle(request.title);
     const targetTaskId = request.taskId || taskList[0]?.id || '';
@@ -3466,6 +3481,8 @@ export default function WorkboardContent() {
         if (!shouldDiscard) return false;
       }
       setAssignmentDialogOpen(false);
+      setQuickMode(false);
+      setQuickAssignmentSaving(false);
       setLinkedRequestId(null);
       setLinkedRequestTitle(null);
       setTaskRows([makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate, operationalTimezone), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')]);
@@ -3488,10 +3505,11 @@ export default function WorkboardContent() {
   useEffect(() => {
     if (!assignmentDialogOpen) return;
     const timerId = window.setTimeout(() => {
-      assignmentFirstFieldRef.current?.focus();
+      const targetField = quickMode ? assignmentTaskFieldRef.current : assignmentFirstFieldRef.current;
+      targetField?.focus();
     }, 0);
     return () => window.clearTimeout(timerId);
-  }, [assignmentDialogOpen]);
+  }, [assignmentDialogOpen, quickMode]);
 
   useEffect(() => {
     const handleOpenAddTask = () => {
@@ -3514,7 +3532,7 @@ export default function WorkboardContent() {
     };
   }, [assignmentDialogOpen, closeAssignmentDialog, fallbackEligibleEmployees, isReadOnly, openAssignmentDialog, selectedEmployeeId]);
 
-  async function saveAssignment() {
+  async function saveAssignment(taskRowsOverride?: TaskRowDraft[]) {
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
       return;
@@ -3537,6 +3555,7 @@ export default function WorkboardContent() {
       return;
     }
 
+    const rowsForSave = taskRowsOverride ?? taskRows;
     let linkedRequestTaskId: string | null = editingAssignmentId ? assignmentDraft.taskId || null : null;
 
     if (!editingAssignmentId) {
@@ -3544,7 +3563,7 @@ export default function WorkboardContent() {
         toast.error('Select a crew member.');
         return;
       }
-      if (taskRows.every((row) => !row.taskId)) {
+      if (rowsForSave.every((row) => !row.taskId)) {
         toast.error('Add at least one task.');
         return;
       }
@@ -3565,7 +3584,7 @@ export default function WorkboardContent() {
       let nextOrder = dayAssignments.filter((assignment) => assignment.employeeId === employee.id).length + 1;
       let pendingMinutes = 0;
 
-      for (const taskRow of taskRows) {
+      for (const taskRow of rowsForSave) {
         if (!taskRow.taskId) continue;
         const propertyIdForRow = taskRow.propertyId || activeProperty?.id || properties[0]?.id || null;
         if (!propertyIdForRow) {
@@ -4777,37 +4796,50 @@ export default function WorkboardContent() {
                           : ''
                     }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggleDesktopCrew(lane.employee.id)}
-                      className="flex h-[52px] min-h-[52px] max-h-[52px] w-full items-center gap-3 border-b bg-muted/40 px-3 text-left hover:bg-muted/60"
-                    >
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                        {initials}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                        {lane.employee.firstName} {lane.employee.lastName}
-                      </span>
-                      <span className="w-[90px] text-right font-mono text-xs text-muted-foreground">
-                        {lane.shift ? `${formatTime(lane.shift.shiftStart)}-${formatTime(lane.shift.shiftEnd)}` : 'No shift'}
-                      </span>
-                      <span className="w-[60px] text-right">
-                        <span className="inline-flex rounded-full bg-brand-bright/10 px-2 py-0.5 text-[11px] font-medium text-brand-bright">
-                          {lane.employeeAssignments.length}
+                    <div className="flex h-[52px] min-h-[52px] max-h-[52px] w-full items-center gap-2 border-b bg-muted/40 px-3 hover:bg-muted/60">
+                      <button
+                        type="button"
+                        onClick={() => toggleDesktopCrew(lane.employee.id)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {initials}
                         </span>
-                      </span>
-                      <span className="w-[90px] text-right">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${coverageToneClass}`}>
-                          {coverageRounded}%
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {lane.employee.firstName} {lane.employee.lastName}
                         </span>
-                      </span>
-                      <span className="w-[80px] text-right text-xs text-muted-foreground">
-                        {lane.assignedMinutes}min
-                      </span>
-                      <span className="w-6 text-muted-foreground">
-                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </span>
-                    </button>
+                        <span className="w-[90px] text-right font-mono text-xs text-muted-foreground">
+                          {lane.shift ? `${formatTime(lane.shift.shiftStart)}-${formatTime(lane.shift.shiftEnd)}` : 'No shift'}
+                        </span>
+                        <span className="w-[60px] text-right">
+                          <span className="inline-flex rounded-full bg-brand-bright/10 px-2 py-0.5 text-[11px] font-medium text-brand-bright">
+                            {lane.employeeAssignments.length}
+                          </span>
+                        </span>
+                        <span className="w-[90px] text-right">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${coverageToneClass}`}>
+                            {coverageRounded}%
+                          </span>
+                        </span>
+                        <span className="w-[80px] text-right text-xs text-muted-foreground">
+                          {lane.assignedMinutes}min
+                        </span>
+                        <span className="w-6 text-muted-foreground">
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </span>
+                      </button>
+                      {!isReadOnly ? (
+                        <button
+                          type="button"
+                          aria-label={`Quick add task for ${lane.employee.firstName} ${lane.employee.lastName}`}
+                          title="Quick add task"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-300/60 bg-amber-50 text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-800/70 dark:bg-amber-950/20 dark:text-amber-300"
+                          onClick={() => openQuickAssignmentDialog(lane.employee.id)}
+                        >
+                          <Zap className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
                     {isExpanded ? (
                 <SafeSection fallback={<div className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">This crew lane could not be rendered.</div>}>
                   <Suspense
@@ -4932,9 +4964,22 @@ export default function WorkboardContent() {
                           <div className="rounded-xl border border-dashed p-4 text-center">
                             <p className="text-sm text-muted-foreground">No tasks assigned</p>
                             {!isReadOnly ? (
-                              <Button size="sm" className="mt-3 min-h-11 w-full" onClick={() => openAssignmentDialog(lane.employee.id)}>
-                                + Assign Task
-                              </Button>
+                              <div className="mt-3 flex gap-2">
+                                <Button size="sm" className="min-h-11 flex-1" onClick={() => openAssignmentDialog(lane.employee.id)}>
+                                  + Assign Task
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className="min-h-11 min-w-11 text-amber-700"
+                                  aria-label={`Quick add task for ${lane.employee.firstName} ${lane.employee.lastName}`}
+                                  title="Quick add task"
+                                  onClick={() => openQuickAssignmentDialog(lane.employee.id)}
+                                >
+                                  <Zap className="h-4 w-4" />
+                                </Button>
+                              </div>
                             ) : null}
                           </div>
                         ) : (
@@ -5217,13 +5262,26 @@ export default function WorkboardContent() {
                           </div>
                         )}
                         {!isReadOnly ? (
-                          <Button
-                            size="sm"
-                            className="mt-3 min-h-11 w-full"
-                            onClick={() => openAssignmentDialog(lane.employee.id)}
-                          >
-                            + Add Task
-                          </Button>
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              size="sm"
+                              className="min-h-11 flex-1"
+                              onClick={() => openAssignmentDialog(lane.employee.id)}
+                            >
+                              + Add Task
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="min-h-11 min-w-11 text-amber-700"
+                              aria-label={`Quick add task for ${lane.employee.firstName} ${lane.employee.lastName}`}
+                              title="Quick add task"
+                              onClick={() => openQuickAssignmentDialog(lane.employee.id)}
+                            >
+                              <Zap className="h-4 w-4" />
+                            </Button>
+                          </div>
                         ) : null}
                       </div>
                     ) : null}
@@ -5378,7 +5436,8 @@ export default function WorkboardContent() {
           className="sm:max-w-md max-h-[85vh] overflow-y-auto"
           onOpenAutoFocus={(event) => {
             event.preventDefault();
-            assignmentFirstFieldRef.current?.focus();
+            const targetField = quickMode ? assignmentTaskFieldRef.current : assignmentFirstFieldRef.current;
+            targetField?.focus();
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
@@ -5391,7 +5450,7 @@ export default function WorkboardContent() {
           <div className="flex h-full flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>
-              {editingAssignmentId ? 'Edit Assignment' : linkedRequestId ? 'Dispatch Need to Crew' : 'Assign Task to Crew'}
+              {quickMode ? 'Quick Add Task' : editingAssignmentId ? 'Edit Assignment' : linkedRequestId ? 'Dispatch Need to Crew' : 'Assign Task to Crew'}
             </DialogTitle>
           </DialogHeader>
 
@@ -5404,6 +5463,7 @@ export default function WorkboardContent() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
+            {!quickMode ? (
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Crew member</label>
               <select
@@ -5432,6 +5492,7 @@ export default function WorkboardContent() {
                 })}
               </select>
             </div>
+            ) : null}
 
             {editingAssignmentId ? (
               <>
@@ -5559,6 +5620,82 @@ export default function WorkboardContent() {
               </select>
             </div>
               </>
+            ) : quickMode ? (
+              <div className="col-span-2 grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground">Task</label>
+                  <select
+                    ref={assignmentTaskFieldRef}
+                    value={taskRows[0]?.taskId ?? ''}
+                    disabled={quickAssignmentSaving}
+                    onChange={(e) => {
+                      const taskId = e.target.value;
+                      if (taskId === '__manage_task_library__') {
+                        if (!closeAssignmentDialog()) return;
+                        router.push('/app/settings?tab=Tasks');
+                        return;
+                      }
+                      const baseRows = taskRows.length > 0
+                        ? taskRows
+                        : [makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate, operationalTimezone), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')];
+                      const nextRows = baseRows.map((item, itemIndex) => (itemIndex === 0 ? { ...item, taskId } : item));
+                      setIsAssignmentModalDirty(true);
+                      setAssignmentDraft({ ...assignmentDraft, taskId });
+                      setTaskRows(nextRows);
+                      if (!taskId) return;
+                      setQuickAssignmentSaving(true);
+                      void saveAssignment(nextRows).finally(() => setQuickAssignmentSaving(false));
+                    }}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="select-assignment-task"
+                  >
+                    <option value="">Select task</option>
+                    {showTaskLoading ? <option value="" disabled>Loading tasks...</option> : null}
+                    {taskLibrary.length === 0 && !isLoadingTasks ? (
+                      <option value="" disabled>No tasks in library - add tasks in Settings to Tasks</option>
+                    ) : null}
+                    {orderedTaskCategories.map((category) => (
+                      <optgroup key={category} label={category}>
+                        {groupedTaskLibrary[category].map((task) => (
+                          <option key={task.id} value={task.id}>
+                            {task.name} ({Number(task.estimated_hours ?? 0)}h)
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                    <option value="__manage_task_library__">+ Manage task library</option>
+                  </select>
+                  {taskLibraryError ? (
+                    <button
+                      type="button"
+                      className="mt-2 text-xs font-medium text-primary hover:underline"
+                      onClick={() => void refetchTasks()}
+                    >
+                      Retry loading tasks
+                    </button>
+                  ) : null}
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground">Start time</label>
+                  <TimeSelect
+                    value={taskRows[0]?.startTime ?? assignmentDraft.startTime}
+                    onChange={(value) => {
+                      setIsAssignmentModalDirty(true);
+                      setAssignmentDraft({ ...assignmentDraft, startTime: value });
+                      setTaskRows((current) => {
+                        const baseRows = current.length > 0
+                          ? current
+                          : [makeEmptyTaskRow(value, effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')];
+                        return baseRows.map((item, itemIndex) => (itemIndex === 0 ? { ...item, startTime: value } : item));
+                      });
+                    }}
+                  />
+                  <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(taskRows[0]?.startTime ?? assignmentDraft.startTime)}</div>
+                </div>
+                {quickAssignmentSaving ? (
+                  <p className="col-span-2 text-xs text-muted-foreground">Dispatching quick task...</p>
+                ) : null}
+              </div>
             ) : (
               <div className="col-span-2 space-y-3">
                 <div className="flex items-center justify-between">
@@ -5733,6 +5870,7 @@ export default function WorkboardContent() {
               </div>
             )}
 
+            {!quickMode ? (
             <div className="col-span-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs text-muted-foreground">Notes</label>
@@ -5758,6 +5896,7 @@ export default function WorkboardContent() {
                 data-testid="input-assignment-notes"
               />
             </div>
+            ) : null}
 
           </div>
 
@@ -5767,13 +5906,15 @@ export default function WorkboardContent() {
             <Button className="min-h-11" variant="outline" onClick={() => closeAssignmentDialog()}>
               Cancel
             </Button>
-            <Button
-              className="min-h-11"
-              onClick={saveAssignment}
-              data-testid="button-save-assignment"
-            >
-              {editingAssignmentId ? 'Save Changes' : 'Dispatch'}
-            </Button>
+            {!quickMode ? (
+              <Button
+                className="min-h-11"
+                onClick={() => void saveAssignment()}
+                data-testid="button-save-assignment"
+              >
+                {editingAssignmentId ? 'Save Changes' : 'Dispatch'}
+              </Button>
+            ) : null}
           </div>
           </div>
         </DialogContent>
