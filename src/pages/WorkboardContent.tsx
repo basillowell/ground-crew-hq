@@ -768,6 +768,7 @@ export default function WorkboardContent() {
     taskId: '',
     equipmentId: '',
     startTime: '05:30',
+    estimatedHours: '',
     status: 'planned' as Assignment['status'],
     notes: '',
   });
@@ -807,8 +808,12 @@ export default function WorkboardContent() {
     orgId,
   );
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, orgId);
+  const assignmentPublishStateQueryKey = useMemo(
+    () => ['assignments', 'publish-state', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'] as const,
+    [boardDate, effectivePropertyId, orgId],
+  );
   const assignmentPublishStateQuery = useQuery({
-    queryKey: ['assignments', 'publish-state', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
+    queryKey: assignmentPublishStateQueryKey,
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return [] as WorkboardAssignmentPublishState[];
@@ -2735,10 +2740,11 @@ export default function WorkboardContent() {
     toast.success(draftAssignmentCount > 0
       ? `Published ${draftAssignmentCount} draft task${draftAssignmentCount === 1 ? '' : 's'}.`
       : 'Workflow is already published.');
-    window.setTimeout(() => {
-      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
-    }, 0);
-  }, [authOrgId, boardDate, currentUser?.employeeId, currentUser?.orgId, draftAssignmentCount, effectivePropertyId, isReadOnly, queryClient]);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+      queryClient.invalidateQueries({ queryKey: assignmentPublishStateQueryKey, exact: true }),
+    ]);
+  }, [assignmentPublishStateQueryKey, authOrgId, boardDate, currentUser?.employeeId, currentUser?.orgId, draftAssignmentCount, effectivePropertyId, isReadOnly, queryClient]);
   const applyDailyTaskTemplate = useCallback(async () => {
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
@@ -3330,6 +3336,7 @@ export default function WorkboardContent() {
       taskId: '',
       equipmentId: '',
       startTime: defaultStartTime,
+      estimatedHours: '',
       status: 'planned',
       notes: '',
     });
@@ -3339,6 +3346,7 @@ export default function WorkboardContent() {
 
   function openEditAssignmentDialog(assignment: Assignment) {
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const currentEstimatedHours = getEstimatedHoursForAssignment(assignment);
     setEditingAssignmentId(assignment.id);
     setSelectedEmployeeId(assignment.employeeId);
     setAssignmentDraft({
@@ -3347,6 +3355,7 @@ export default function WorkboardContent() {
       taskId: assignment.taskId,
       equipmentId: assignment.equipmentId ?? '',
       startTime: assignment.startTime,
+      estimatedHours: currentEstimatedHours > 0 ? String(Number(currentEstimatedHours.toFixed(2))) : '',
       status: assignment.status,
       notes: '',
     });
@@ -3375,6 +3384,7 @@ export default function WorkboardContent() {
       taskId: targetTaskId,
       equipmentId: '',
       startTime: defaultStartTime,
+      estimatedHours: '',
       status: 'planned',
       notes: request.description ?? '',
     });
@@ -3667,7 +3677,10 @@ export default function WorkboardContent() {
         toast.error('Selected task is invalid. Please reselect the task.');
         return;
       }
-      const estimatedHours = Number(selectedTask?.estimated_hours ?? 0);
+      const overrideHours = Number(assignmentDraft.estimatedHours);
+      const estimatedHours = assignmentDraft.estimatedHours.trim() && Number.isFinite(overrideHours) && overrideHours >= 0
+        ? overrideHours
+        : Number(selectedTask?.estimated_hours ?? 0);
       const estimatedMinutes = Math.round(estimatedHours * 60);
       if (shiftMinutes > 0 && assignedMinutes + estimatedMinutes > shiftMinutes) {
         toast('Assigned tasks exceed shift hours', {
@@ -3723,6 +3736,7 @@ export default function WorkboardContent() {
         equipmentId: data?.equipment_unit_id ? String(data.equipment_unit_id) : assignmentDraft.equipmentId || undefined,
         date: String(data?.date ?? boardDate),
         startTime: String(data?.start_time ?? (assignmentDraft.startTime || '06:00')),
+        estimatedHours: Number(data?.estimated_hours ?? estimatedHours),
         duration: Math.round(Number(data?.estimated_hours ?? estimatedHours) * 60),
         area: String(data?.location ?? activeProperty?.name ?? 'Assigned property'),
         status: normalizeAssignmentStatus(String(data?.status ?? writeStatus)) as Assignment['status'],
@@ -5392,6 +5406,22 @@ export default function WorkboardContent() {
               >
                 + Manage task library
               </button>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground">Hours</label>
+              <Input
+                type="number"
+                min={0}
+                step={0.25}
+                value={assignmentDraft.estimatedHours}
+                placeholder={`Default: ${selectedTaskForDraft?.estimated_hours ?? 0}h`}
+                onChange={(e) => {
+                  setIsAssignmentModalDirty(true);
+                  setAssignmentDraft({ ...assignmentDraft, estimatedHours: e.target.value });
+                }}
+                className="mt-1 h-10 border-border bg-background text-foreground"
+              />
             </div>
 
             <div className="col-span-2">
