@@ -31,6 +31,29 @@
 
 ---
 
+## turf_mow_patterns  ⏳ PENDING — not yet applied to live DB
+| column               | type        | nullable | default           |
+|----------------------|-------------|----------|-------------------|
+| id                   | uuid        | NO       | gen_random_uuid() |
+| org_id               | uuid        | YES      |                   |
+| application_area_id  | text        | NO       |                   |
+| pattern              | text        | NO       |                   |
+| rotation             | text        | NO       |                   |
+| applied_by           | uuid        | YES      |                   |
+| applied_at           | timestamptz | NO       | now()             |
+| created_at           | timestamptz | NO       | now()             |
+
+> FK: application_area_id -> application_areas.id (text, cascade delete —
+> matches application_areas' text-id convention, do not use gen_random_uuid()).
+> FK: applied_by -> employees.id.
+> "Current" pattern per area = latest row by applied_at desc. "History" =
+> full row list for that application_area_id.
+> ⏳ Scheduled for equipment/workboard Phase 6 (Turf Management panel).
+> Migration not yet run — remove this ⏳ marker and the "PENDING" note once
+> applied, per the equipment_module_v2 precedent.
+
+---
+
 ## assignments
 | column              | type        | nullable | default    |
 |---------------------|-------------|----------|------------|
@@ -900,5 +923,6 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 
 ---
 
-## Table count: 45
+## Table count: 45 (46 once turf_mow_patterns is applied — see PENDING note above)
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl (equipment_module_v2 migration applied — added equipment_specs, work_order_jobs, equipment_favorites; extended equipment_units and work_orders)
+## Pending: turf_mow_patterns migration (Workboard Phase 6) not yet applied — do not treat as live schema until this note is removed.
