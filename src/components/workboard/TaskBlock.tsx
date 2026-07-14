@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Task, Assignment, Property } from '@/data/seedData';
-import { Pencil, X } from 'lucide-react';
+import { AlertTriangle, Pencil, X } from 'lucide-react';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { formatTime } from '@/utils/formatTime';
@@ -13,6 +13,7 @@ interface TaskBlockProps {
   assignment: Assignment;
   properties: Property[];
   shiftEndTime: string | null;
+  equipmentOverdueThresholdDays?: number;
   operationalTimezone?: string;
   priorityIndex?: number;
   onEdit?: () => void;
@@ -56,6 +57,7 @@ export function TaskBlock({
   assignment,
   properties,
   shiftEndTime,
+  equipmentOverdueThresholdDays = 90,
   operationalTimezone = 'America/New_York',
   priorityIndex,
   onEdit,
@@ -70,6 +72,19 @@ export function TaskBlock({
   const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const equipmentUnits = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
   const equipment = assignment.equipmentId ? equipmentUnits.find((unit) => unit.id === assignment.equipmentId) : null;
+  const isEquipmentOverdue = useMemo(() => {
+    if (!equipment?.lastService) return false;
+    const overdueThresholdDays = Math.max(1, equipmentOverdueThresholdDays);
+    const overdueThresholdDate = new Date();
+    overdueThresholdDate.setDate(overdueThresholdDate.getDate() - overdueThresholdDays);
+    const lastServicedDate = new Date(String(equipment.lastService));
+    if (Number.isNaN(lastServicedDate.getTime()) || lastServicedDate >= overdueThresholdDate) return false;
+    const overdueDays = Math.max(
+      0,
+      Math.floor((Date.now() - lastServicedDate.getTime()) / (1000 * 60 * 60 * 24)) - overdueThresholdDays,
+    );
+    return overdueDays >= 0;
+  }, [equipment?.lastService, equipmentOverdueThresholdDays]);
   const status = normalizeStatus(assignment.status);
   const assignmentRecord = assignment as Assignment & Record<string, unknown>;
 
@@ -187,8 +202,17 @@ export function TaskBlock({
           {status === 'done' && doneLabel ? <span className="shrink-0 text-[11px] text-muted-foreground">{doneLabel}</span> : null}
           <Badge variant="outline" className="shrink-0 text-[10px]">{task.category}</Badge>
           {typeof priorityIndex === 'number' ? <Badge variant="secondary" className="shrink-0 text-[10px]">#{priorityIndex + 1}</Badge> : null}
-          <span className="truncate text-[11px] text-muted-foreground">
-            {formatTime(assignment.startTime)} · {assignment.duration}m · {equipment ? equipment.unitNumber : 'None'}
+          <span className="inline-flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground">
+            <span className="truncate">
+              {formatTime(assignment.startTime)} · {assignment.duration}m · {equipment ? equipment.unitNumber : 'None'}
+            </span>
+            {isEquipmentOverdue ? (
+              <AlertTriangle
+                className="h-3.5 w-3.5 shrink-0 text-amber-600"
+                aria-label="Equipment overdue for service"
+                title="Equipment overdue for service"
+              />
+            ) : null}
           </span>
         </div>
       </div>
