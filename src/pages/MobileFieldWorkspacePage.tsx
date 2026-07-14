@@ -514,6 +514,7 @@ export default function MobileFieldWorkspacePage() {
         .eq('org_id', orgId)
         .eq('employee_id', employeeId)
         .eq('date', boardDate)
+        .eq('is_published', true)
         .order('order_index', { ascending: true }),
       supabase
         .from('tasks')
@@ -602,6 +603,7 @@ export default function MobileFieldWorkspacePage() {
       .select('id, employee_id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at')
       .eq('org_id', orgId)
       .eq('date', boardDate)
+      .eq('is_published', true)
       .order('order_index', { ascending: true });
     if (fieldPropertyId) {
       void teammateScheduleQuery.eq('property_id', fieldPropertyId);
