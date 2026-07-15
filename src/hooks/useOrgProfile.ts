@@ -22,12 +22,14 @@ type OrgProfileUser = {
   title: string
   email: string
   phone: string
+  themePresetOverride: string | null
 }
 
 type AppUserRow = {
   org_id: string
   role: AuthRole
   employee_id: string | null
+  theme_preset_override: string | null
 }
 
 type EmployeeRow = {
@@ -90,6 +92,7 @@ function buildProfile(authUser: User, appUser: AppUserRow, employee: EmployeeRow
     title: employee?.role ?? appUser.role,
     email: employee?.email ?? authUser.email ?? '',
     phone: employee?.phone ?? '',
+    themePresetOverride: appUser.theme_preset_override ?? null,
   }
 }
 
@@ -134,7 +137,7 @@ function useOrgProfileState() {
         const fetchAppUser = async () => {
           const { data } = await supabase
             .from('app_users')
-            .select('org_id, role, employee_id')
+            .select('org_id, role, employee_id, theme_preset_override')
             .eq('id', user.id)
             .single()
 

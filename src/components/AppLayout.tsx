@@ -39,6 +39,7 @@ import {
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { OperationsProvider } from '@/contexts/OperationsContext';
 import { createClient } from '@/lib/supabase';
+import { getColorTheme } from '@/lib/colorThemes';
 import { cn } from '@/lib/utils';
 
 const supabase = createClient();
@@ -94,15 +95,23 @@ function hexToHslValues(hex: string | undefined, fallback: string) {
   return `${hue} ${sat}% ${light}%`;
 }
 
-function applyBranding(programSetting?: ProgramSettings) {
-  if (typeof document === 'undefined' || !programSetting) return;
-  document.title = `${programSetting.appName || 'Ground Crew HQ'}${programSetting.clientLabel ? ` | ${programSetting.clientLabel}` : ''}`;
+function applyBranding(programSetting?: ProgramSettings, userOverridePresetId?: string | null) {
+  if (typeof document === 'undefined') return;
+  const overrideTheme = userOverridePresetId ? getColorTheme(userOverridePresetId) : undefined;
+  if (!programSetting && !overrideTheme) return;
+  if (programSetting) {
+    document.title = `${programSetting.appName || 'Ground Crew HQ'}${programSetting.clientLabel ? ` | ${programSetting.clientLabel}` : ''}`;
+  }
+  const primaryColor = overrideTheme?.primaryColor ?? programSetting?.primaryColor;
+  const accentColor = overrideTheme?.accentColor ?? programSetting?.accentColor;
+  const sidebarColor = overrideTheme?.sidebarColor ?? programSetting?.sidebarColor;
+  const fontThemePreset = overrideTheme?.fontThemePreset ?? programSetting?.fontThemePreset ?? 'modern-sans';
   const root = document.documentElement;
-  root.style.setProperty('--primary', hexToHslValues(programSetting.primaryColor, '152 55% 38%'));
-  root.style.setProperty('--ring', hexToHslValues(programSetting.primaryColor, '152 55% 38%'));
-  root.style.setProperty('--accent', hexToHslValues(programSetting.accentColor, '152 30% 94%'));
-  root.style.setProperty('--sidebar-background', hexToHslValues(programSetting.sidebarColor, '220 20% 14%'));
-  root.style.setProperty('--sidebar-primary', hexToHslValues(programSetting.primaryColor, '152 55% 48%'));
+  root.style.setProperty('--primary', hexToHslValues(primaryColor, '152 55% 38%'));
+  root.style.setProperty('--ring', hexToHslValues(primaryColor, '152 55% 38%'));
+  root.style.setProperty('--accent', hexToHslValues(accentColor, '152 30% 94%'));
+  root.style.setProperty('--sidebar-background', hexToHslValues(sidebarColor, '220 20% 14%'));
+  root.style.setProperty('--sidebar-primary', hexToHslValues(primaryColor, '152 55% 48%'));
   const fontThemes: Record<string, { body: string; heading: string }> = {
     'modern-sans': {
       body: '"Inter", "Segoe UI", sans-serif',
@@ -121,10 +130,10 @@ function applyBranding(programSetting?: ProgramSettings) {
       heading: '"Segoe UI", "Arial", sans-serif',
     },
   };
-  const chosenFontTheme = fontThemes[programSetting.fontThemePreset || 'modern-sans'] || fontThemes['modern-sans'];
+  const chosenFontTheme = fontThemes[fontThemePreset] || fontThemes['modern-sans'];
   root.style.setProperty('--brand-body-font', chosenFontTheme.body);
   root.style.setProperty('--brand-heading-font', chosenFontTheme.heading);
-  if (programSetting.logoUrl) {
+  if (programSetting?.logoUrl) {
     let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!favicon) {
       favicon = document.createElement('link');
@@ -237,8 +246,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [currentPropertyId, currentUser?.role, properties, setCurrentPropertyId]);
 
   useEffect(() => {
-    applyBranding(programSetting ?? undefined);
-  }, [programSetting]);
+    applyBranding(programSetting ?? undefined, currentUser?.themePresetOverride ?? null);
+  }, [currentUser?.themePresetOverride, programSetting]);
 
   const computedNotifications = useMemo(() => {
     const currentDayKey = currentDate.toISOString().slice(0, 10);
