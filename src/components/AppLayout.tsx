@@ -95,6 +95,25 @@ function hexToHslValues(hex: string | undefined, fallback: string) {
   return `${hue} ${sat}% ${light}%`;
 }
 
+function hexToRgbTriplet(hex: string | undefined, fallback: string, multiplier = 1) {
+  if (!hex) return fallback;
+  const sanitized = hex.replace('#', '').trim();
+  if (![3, 6].includes(sanitized.length)) return fallback;
+  const normalized = sanitized.length === 3
+    ? sanitized.split('').map((char) => char + char).join('')
+    : sanitized;
+  const red = parseInt(normalized.slice(0, 2), 16);
+  const green = parseInt(normalized.slice(2, 4), 16);
+  const blue = parseInt(normalized.slice(4, 6), 16);
+  if ([red, green, blue].some((value) => Number.isNaN(value))) return fallback;
+  const scale = Number.isFinite(multiplier) ? Math.max(0, Math.min(1, multiplier)) : 1;
+  return [
+    Math.round(red * scale),
+    Math.round(green * scale),
+    Math.round(blue * scale),
+  ].join(' ');
+}
+
 function applyBranding(programSetting?: ProgramSettings, userOverridePresetId?: string | null) {
   if (typeof document === 'undefined') return;
   const overrideTheme = userOverridePresetId ? getColorTheme(userOverridePresetId) : undefined;
@@ -109,6 +128,10 @@ function applyBranding(programSetting?: ProgramSettings, userOverridePresetId?: 
   root.style.setProperty('--ring', hexToHslValues(primaryColor, '152 55% 38%'));
   root.style.setProperty('--accent', hexToHslValues(accentColor, '152 30% 94%'));
   root.style.setProperty('--sidebar-primary', hexToHslValues(primaryColor, '152 55% 48%'));
+  root.style.setProperty('--brand-default', hexToRgbTriplet(primaryColor, '74 184 110'));
+  root.style.setProperty('--brand-bright', hexToRgbTriplet(accentColor, '110 211 145'));
+  root.style.setProperty('--brand-dim', hexToRgbTriplet(primaryColor, '45 122 76', 0.7));
+  root.style.setProperty('--brand-ghost', hexToRgbTriplet(primaryColor, '18 44 30', 0.15));
   root.style.setProperty('--brand-body-font', '"Segoe UI", "Arial", sans-serif');
   root.style.setProperty('--brand-heading-font', '"Segoe UI", "Arial", sans-serif');
   if (programSetting?.logoUrl) {
