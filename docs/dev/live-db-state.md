@@ -6,15 +6,20 @@
 ---
 
 ## app_users
-| column      | type        | nullable | default        |
-|-------------|-------------|----------|----------------|
-| id          | uuid        | NO       |                |
-| employee_id | uuid        | NO       |                |
-| role        | text        | NO       |                |
-| department  | text        | YES      |                |
-| status      | text        | NO       | 'active'       |
-| created_at  | timestamptz | NO       | now()          |
-| org_id      | uuid        | YES      |                |
+| column                | type        | nullable | default        |
+|-----------------------|-------------|----------|----------------|
+| id                    | uuid        | NO       |                |
+| employee_id           | uuid        | NO       |                |
+| role                  | text        | NO       |                |
+| department            | text        | YES      |                |
+| status                | text        | NO       | 'active'       |
+| created_at            | timestamptz | NO       | now()          |
+| org_id                | uuid        | YES      |                |
+| theme_preset_override | text        | YES      |                |
+
+> theme_preset_override: nullable, no FK. Stores a preset id (e.g. 'fairway',
+> 'polo-green') matching an entry in src/lib/colorThemes.ts's COLOR_THEMES
+> constant. null = inherit the org's program_settings color/font default.
 
 ---
 
