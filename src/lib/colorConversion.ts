@@ -77,8 +77,8 @@ const LIGHT_SURFACE_BASELINES: Record<string, string> = {
   '--surface-border': '168 184 168',
 };
 
-const SURFACE_TINT_AMOUNT_DARK = 0.08;
-const SURFACE_TINT_AMOUNT_LIGHT = 0.06;
+const SURFACE_TINT_AMOUNT_DARK = 0.32;
+const SURFACE_TINT_AMOUNT_LIGHT = 0.26;
 
 function clampRange(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
