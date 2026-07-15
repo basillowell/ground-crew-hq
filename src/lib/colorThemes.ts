@@ -33,11 +33,11 @@ export const COLOR_THEMES: ColorTheme[] = [
     fontThemePreset: 'classic-club',
   },
   {
-    id: 'sarasota-sky',
-    label: 'Sarasota Sky',
-    primaryColor: '#d4a017',
-    accentColor: '#f2c14e',
-    sidebarColor: '#0b1d33',
+    id: 'sunset-polo',
+    label: 'Sunset Polo',
+    primaryColor: '#f2711f',
+    accentColor: '#ffb347',
+    sidebarColor: '#d94f04',
     fontThemePreset: 'editorial-serif',
   },
   {
