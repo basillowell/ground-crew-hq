@@ -134,7 +134,7 @@ function NavItem({
       className={cn(
         'flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors',
         isActive
-          ? 'border-l-2 border-brand bg-surface-hover font-medium text-brand'
+          ? 'border-l-2 border-brand bg-brand-ghost font-medium text-brand'
           : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
       )}
     >
