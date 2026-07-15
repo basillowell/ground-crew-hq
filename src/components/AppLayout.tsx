@@ -144,8 +144,6 @@ function applyBranding(
   root.style.setProperty('--sidebar-primary', hexToHslValues(primaryColor, '152 55% 48%'));
   root.style.setProperty('--brand-default', hexToRgbTriplet(primaryColor, '74 184 110'));
   root.style.setProperty('--brand-bright', hexToRgbTriplet(accentColor, '110 211 145'));
-  root.style.setProperty('--brand-dim', hexToRgbTriplet(primaryColor, '45 122 76', 0.7));
-  root.style.setProperty('--brand-ghost', hexToRgbTriplet(primaryColor, '18 44 30', 0.15));
   root.style.setProperty('--brand-body-font', '"Segoe UI", "Arial", sans-serif');
   root.style.setProperty('--brand-heading-font', '"Segoe UI", "Arial", sans-serif');
   applyThemeSurfaces(root, { primaryColor, cardColor, sidebarColor }, isLightMode ?? false);

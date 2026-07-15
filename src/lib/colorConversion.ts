@@ -93,6 +93,22 @@ function cardTriplet(cardColorHex: string, isLightMode: boolean): string {
   return hslToRgbTriplet(h, Math.min(s, 22), 11);
 }
 
+export function ghostTriplet(primaryColorHex: string, isLightMode: boolean): string {
+  const { h, s } = hexToHsl(primaryColorHex);
+  if (isLightMode) {
+    return hslToRgbTriplet(h, Math.min(s, 45), 93);
+  }
+  return hslToRgbTriplet(h, Math.min(s, 35), 12);
+}
+
+export function dimTriplet(primaryColorHex: string, isLightMode: boolean): string {
+  const { h, s } = hexToHsl(primaryColorHex);
+  if (isLightMode) {
+    return hslToRgbTriplet(h, Math.min(s, 40), 58);
+  }
+  return hslToRgbTriplet(h, Math.min(s, 45), 33);
+}
+
 /** Mode-aware sidebar: keeps a readable lightness band while pushing scheme color so the rail pops. */
 function sidebarHslStrings(sidebarColorHex: string, isLightMode: boolean): { background: string; accent: string } {
   const { h, s } = hexToHsl(sidebarColorHex);
@@ -136,6 +152,8 @@ export function applyThemeSurfaces(root: HTMLElement, colors: ThemeSurfaceColors
       const tinted = tintHslPreservingLightness(baseHsl, target, surfaceAmount);
       root.style.setProperty(varName, hslToRgbTriplet(tinted.h, tinted.s, tinted.l));
     }
+    root.style.setProperty('--brand-ghost', ghostTriplet(primaryColor, isLightMode));
+    root.style.setProperty('--brand-dim', dimTriplet(primaryColor, isLightMode));
   }
 
   if (cardColor) {
