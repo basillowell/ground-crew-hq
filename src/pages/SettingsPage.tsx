@@ -10,9 +10,10 @@ import {
   useTasks,
   useWorkerTypes,
 } from '@/lib/supabase-queries';
-import type { Property as LiveProperty } from '@/data/seedData';
+import type { ProgramSettings, Property as LiveProperty } from '@/data/seedData';
 import { formatTime } from '@/utils/formatTime';
 import { APP_VERSION } from '@/constants/version';
+import { COLOR_THEMES, type ColorTheme } from '@/lib/colorThemes';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
@@ -252,6 +253,171 @@ const EMPTY_PROPERTY_FORM: PropertyFormData = {
   state: '',
   acreage: '0',
 };
+
+type ColorThemeProgramSettings = Pick<ProgramSettings, 'primaryColor' | 'accentColor' | 'sidebarColor' | 'fontThemePreset'>;
+
+const ORG_DEFAULT_THEME_OPTION_ID = 'org-default';
+
+function colorsMatch(left?: string | null, right?: string | null) {
+  return (left ?? '').toLowerCase() === (right ?? '').toLowerCase();
+}
+
+function getProgramSettingsThemeId(programSettings?: ColorThemeProgramSettings | null) {
+  if (!programSettings) return null;
+  return COLOR_THEMES.find((theme) =>
+    colorsMatch(theme.primaryColor, programSettings.primaryColor) &&
+    colorsMatch(theme.accentColor, programSettings.accentColor) &&
+    colorsMatch(theme.sidebarColor, programSettings.sidebarColor) &&
+    theme.fontThemePreset === programSettings.fontThemePreset,
+  )?.id ?? null;
+}
+
+function getColorThemeLabel(themeId: string | null) {
+  return COLOR_THEMES.find((theme) => theme.id === themeId)?.label ?? null;
+}
+
+function hexToHslValues(hex: string | undefined | null, fallback: string) {
+  if (!hex) return fallback;
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return fallback;
+  const r = Number.parseInt(clean.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(clean.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(clean.slice(4, 6), 16) / 255;
+  if ([r, g, b].some((value) => Number.isNaN(value))) return fallback;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let hue = 0;
+  let sat = 0;
+  const light = (max + min) / 2;
+  if (max !== min) {
+    const delta = max - min;
+    sat = light > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+    switch (max) {
+      case r:
+        hue = (g - b) / delta + (g < b ? 6 : 0);
+        break;
+      case g:
+        hue = (b - r) / delta + 2;
+        break;
+      default:
+        hue = (r - g) / delta + 4;
+    }
+    hue /= 6;
+  }
+  return Math.round(hue * 360) + ' ' + Math.round(sat * 100) + '% ' + Math.round(light * 100) + '%';
+}
+
+function applyColorThemeToDocument(theme: ColorTheme | null, programSettings?: ColorThemeProgramSettings | null) {
+  if (typeof document === 'undefined') return;
+  const primaryColor = theme?.primaryColor ?? programSettings?.primaryColor;
+  const accentColor = theme?.accentColor ?? programSettings?.accentColor;
+  const sidebarColor = theme?.sidebarColor ?? programSettings?.sidebarColor;
+  const fontThemePreset = theme?.fontThemePreset ?? programSettings?.fontThemePreset ?? 'modern-sans';
+  const root = document.documentElement;
+  root.style.setProperty('--primary', hexToHslValues(primaryColor, '152 55% 38%'));
+  root.style.setProperty('--ring', hexToHslValues(primaryColor, '152 55% 38%'));
+  root.style.setProperty('--accent', hexToHslValues(accentColor, '152 30% 94%'));
+  root.style.setProperty('--sidebar-background', hexToHslValues(sidebarColor, '220 20% 14%'));
+  root.style.setProperty('--sidebar-primary', hexToHslValues(primaryColor, '152 55% 48%'));
+  const fontThemes: Record<string, { body: string; heading: string }> = {
+    'modern-sans': {
+      body: '"Inter", "Segoe UI", sans-serif',
+      heading: '"Inter", "Segoe UI", sans-serif',
+    },
+    'editorial-serif': {
+      body: '"Inter", "Segoe UI", sans-serif',
+      heading: '"Georgia", "Times New Roman", serif',
+    },
+    'classic-club': {
+      body: '"Trebuchet MS", "Segoe UI", sans-serif',
+      heading: '"Palatino Linotype", "Book Antiqua", serif',
+    },
+    'compact-ops': {
+      body: '"Segoe UI", "Arial", sans-serif',
+      heading: '"Segoe UI", "Arial", sans-serif',
+    },
+  };
+  const chosenFontTheme = fontThemes[fontThemePreset] || fontThemes['modern-sans'];
+  root.style.setProperty('--brand-body-font', chosenFontTheme.body);
+  root.style.setProperty('--brand-heading-font', chosenFontTheme.heading);
+}
+
+function ColorThemeSwatchGrid({
+  activeThemeId,
+  disabled = false,
+  savingThemeId = null,
+  defaultOption,
+  onSelectTheme,
+}: {
+  activeThemeId: string | null;
+  disabled?: boolean;
+  savingThemeId?: string | null;
+  defaultOption?: {
+    active: boolean;
+    label: string;
+    description: string;
+    onSelect: () => void | Promise<void>;
+  };
+  onSelectTheme: (theme: ColorTheme) => void | Promise<void>;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {defaultOption ? (
+        <button
+          type="button"
+          disabled={disabled || savingThemeId === ORG_DEFAULT_THEME_OPTION_ID}
+          onClick={() => void defaultOption.onSelect()}
+          className={[
+            'min-h-[74px] rounded-xl border px-3 py-2 text-left transition-colors duration-150',
+            defaultOption.active
+              ? 'border-brand bg-brand-ghost text-text-primary'
+              : 'border-surface-border bg-surface-elevated text-text-secondary hover:border-brand/40 hover:text-text-primary',
+            disabled ? 'cursor-not-allowed opacity-60' : '',
+          ].filter(Boolean).join(' ')}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold">{defaultOption.label}</span>
+            {savingThemeId === ORG_DEFAULT_THEME_OPTION_ID ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          </div>
+          <p className="mt-1 text-xs text-text-muted">{defaultOption.description}</p>
+        </button>
+      ) : null}
+      {COLOR_THEMES.map((theme) => {
+        const active = activeThemeId === theme.id;
+        const saving = savingThemeId === theme.id;
+        return (
+          <button
+            key={theme.id}
+            type="button"
+            disabled={disabled || saving}
+            onClick={() => void onSelectTheme(theme)}
+            className={[
+              'min-h-[74px] rounded-xl border px-3 py-2 text-left transition-colors duration-150',
+              active
+                ? 'border-brand bg-brand-ghost text-text-primary'
+                : 'border-surface-border bg-surface-elevated text-text-secondary hover:border-brand/40 hover:text-text-primary',
+              disabled ? 'cursor-not-allowed opacity-60' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">{theme.label}</span>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            </div>
+            <div className="mt-2 flex items-center gap-1.5" aria-hidden="true">
+              {[theme.primaryColor, theme.accentColor, theme.sidebarColor].map((color) => (
+                <span
+                  key={theme.id + '-' + color}
+                  className="h-4 w-4 rounded-full border border-surface-border"
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function SettingsCard({
   title,
@@ -781,6 +947,8 @@ export default function SettingsPage() {
           userRole={userRole}
           orgId={orgId}
           employeeName={currentUser?.fullName ?? ''}
+          userId={user?.id ?? null}
+          themePresetOverride={currentUser?.themePresetOverride ?? null}
           onSignOut={signOut}
         />
       )}
@@ -975,6 +1143,7 @@ function WorkspaceTab({
     retry: 3,
     retryDelay: 1000,
   });
+  const programSettingsQuery = useProgramSettings(orgId ?? undefined);
   const [orgInfo, setOrgInfo] = useState<OrganizationInfo | null>(null);
   const [orgNameDraft, setOrgNameDraft] = useState('');
   const properties = useMemo(
@@ -1001,6 +1170,7 @@ function WorkspaceTab({
   const [editingEquipmentTypeId, setEditingEquipmentTypeId] = useState<string | null>(null);
   const [editingEquipmentTypeName, setEditingEquipmentTypeName] = useState('');
   const [loadingDemoData, setLoadingDemoData] = useState(false);
+  const [savingOrgColorThemeId, setSavingOrgColorThemeId] = useState<string | null>(null);
   const [sops, setSops] = useState<StandardOperatingProcedure[]>([]);
   const [sopsLoading, setSopsLoading] = useState(false);
   const [sopsError, setSopsError] = useState<string | null>(null);
@@ -1139,6 +1309,34 @@ function WorkspaceTab({
     await queryClient.invalidateQueries({ queryKey: ['organization-info', orgId] });
     setOrgInfo((current) => (current ? { ...current, name: orgNameDraft.trim() } : current));
     toast.success('Organization updated');
+  };
+
+  const saveOrgColorTheme = async (theme: ColorTheme) => {
+    if (!supabase || !orgId) {
+      toast.error('Organization context is unavailable.');
+      return;
+    }
+    setSavingOrgColorThemeId(theme.id);
+    try {
+      const { error: updateError } = await supabase
+        .from('program_settings')
+        .update({
+          primary_color: theme.primaryColor,
+          accent_color: theme.accentColor,
+          sidebar_color: theme.sidebarColor,
+          font_theme_preset: theme.fontThemePreset,
+        })
+        .eq('org_id', orgId);
+      if (updateError) {
+        toast.error('Failed to update color scheme: ' + updateError.message);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
+      await queryClient.refetchQueries({ queryKey: ['program-settings', orgId] });
+      toast.success('Organization color scheme updated');
+    } finally {
+      setSavingOrgColorThemeId(null);
+    }
   };
 
   const resetPropertyForm = () => {
@@ -2214,6 +2412,21 @@ function WorkspaceTab({
           ))}
         </div>
       </div>
+
+      {['admin', 'manager'].includes(String(userRole ?? '').toLowerCase()) ? (
+        <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-text-primary">Color Scheme</h3>
+            <p className="mt-0.5 text-xs text-text-muted">Set the default color and font preset for this organization.</p>
+          </div>
+          <ColorThemeSwatchGrid
+            activeThemeId={getProgramSettingsThemeId(programSettingsQuery.data)}
+            disabled={programSettingsQuery.isLoading || Boolean(savingOrgColorThemeId)}
+            savingThemeId={savingOrgColorThemeId}
+            onSelectTheme={saveOrgColorTheme}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2541,12 +2754,16 @@ function AccessTab({
   userRole,
   orgId,
   employeeName,
+  userId,
+  themePresetOverride,
   onSignOut,
 }: {
   userEmail: string;
   userRole: string | null;
   orgId: string | null;
   employeeName: string;
+  userId: string | null;
+  themePresetOverride: string | null;
   onSignOut: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
@@ -2571,6 +2788,7 @@ function AccessTab({
     retry: 3,
     retryDelay: 1000,
   });
+  const programSettingsQuery = useProgramSettings(orgId ?? undefined);
   const organizationName = orgInfoQuery.data?.name ?? '';
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -2584,6 +2802,8 @@ function AccessTab({
     equipmentUnits: 0,
   });
   const [appUsers, setAppUsers] = useState<AppUserRow[]>([]);
+  const [personalThemeOverride, setPersonalThemeOverride] = useState<string | null>(themePresetOverride);
+  const [savingPersonalColorThemeId, setSavingPersonalColorThemeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -2655,6 +2875,10 @@ function AccessTab({
     void fetchOrganizationName();
   }, [employeesQuery.isLoading, fetchOrganizationName, orgId, orgInfoQuery.isLoading, propertiesQuery.isLoading]);
 
+  useEffect(() => {
+    setPersonalThemeOverride(themePresetOverride);
+  }, [themePresetOverride]);
+
   const handleSignOut = async () => {
     let redirectedByFallback = false;
     const fallbackTimeoutId = window.setTimeout(() => {
@@ -2706,7 +2930,33 @@ function AccessTab({
     toast.success('User role updated');
   };
 
-  const maskedOrgId = orgId ? `${orgId.slice(0, 8)}...` : 'Not available';
+  const savePersonalColorTheme = async (themeId: string | null) => {
+    if (!supabase || !orgId || !userId) {
+      toast.error('User context is unavailable.');
+      return;
+    }
+    const savingId = themeId ?? ORG_DEFAULT_THEME_OPTION_ID;
+    setSavingPersonalColorThemeId(savingId);
+    try {
+      const { error: updateError } = await supabase
+        .from('app_users')
+        .update({ theme_preset_override: themeId })
+        .eq('id', userId)
+        .eq('org_id', orgId);
+      if (updateError) {
+        toast.error('Unable to update your color scheme: ' + updateError.message);
+        return;
+      }
+      setPersonalThemeOverride(themeId);
+      const selectedTheme = themeId ? COLOR_THEMES.find((theme) => theme.id === themeId) ?? null : null;
+      applyColorThemeToDocument(selectedTheme, programSettingsQuery.data);
+      toast.success(themeId ? 'Personal color scheme updated' : 'Using organization color scheme');
+    } finally {
+      setSavingPersonalColorThemeId(null);
+    }
+  };
+
+  const maskedOrgId = orgId ? orgId.slice(0, 8) + '...' : 'Not available';
   const browserInfo = typeof navigator !== 'undefined'
     ? `${navigator.userAgent.slice(0, 50)}${navigator.userAgent.length > 50 ? '...' : ''}`
     : 'Not available';
@@ -2836,6 +3086,23 @@ Your role: ${inviteRole}
             </div>
           ))}
         </div>
+      </SettingsCard>
+
+      <SettingsCard title="Color Scheme" subtitle="Choose a personal color preset or inherit the organization default.">
+        <ColorThemeSwatchGrid
+          activeThemeId={personalThemeOverride}
+          disabled={Boolean(savingPersonalColorThemeId)}
+          savingThemeId={savingPersonalColorThemeId}
+          defaultOption={{
+            active: personalThemeOverride === null,
+            label: 'Use org default',
+            description: getProgramSettingsThemeId(programSettingsQuery.data)
+              ? 'Currently ' + (getColorThemeLabel(getProgramSettingsThemeId(programSettingsQuery.data)) ?? 'workspace colors')
+              : 'Inherit workspace colors',
+            onSelect: () => savePersonalColorTheme(null),
+          }}
+          onSelectTheme={(colorTheme) => savePersonalColorTheme(colorTheme.id)}
+        />
       </SettingsCard>
 
       <SettingsCard title="Session Management">
