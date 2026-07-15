@@ -13,7 +13,8 @@ import {
 import type { ProgramSettings, Property as LiveProperty } from '@/data/seedData';
 import { formatTime } from '@/utils/formatTime';
 import { APP_VERSION } from '@/constants/version';
-import { COLOR_THEMES, type ColorTheme } from '@/lib/colorThemes';
+import { COLOR_THEMES, resolveThemeCardColor, type ColorTheme, type CustomThemeColors } from '@/lib/colorThemes';
+import { applyThemeSurfaces } from '@/lib/colorConversion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
@@ -313,12 +314,19 @@ function applyColorThemeToDocument(theme: ColorTheme | null, programSettings?: C
   const accentColor = theme?.accentColor ?? programSettings?.accentColor;
   const sidebarColor = theme?.sidebarColor ?? programSettings?.sidebarColor;
   const fontThemePreset = theme?.fontThemePreset ?? programSettings?.fontThemePreset ?? 'modern-sans';
+  const cardColor = theme?.cardColor ?? resolveThemeCardColor(
+    programSettings?.primaryColor,
+    programSettings?.accentColor,
+    programSettings?.sidebarColor,
+    programSettings?.fontThemePreset,
+  );
+  const isLightMode = typeof document !== 'undefined' && document.documentElement.classList.contains('light');
   const root = document.documentElement;
   root.style.setProperty('--primary', hexToHslValues(primaryColor, '152 55% 38%'));
   root.style.setProperty('--ring', hexToHslValues(primaryColor, '152 55% 38%'));
   root.style.setProperty('--accent', hexToHslValues(accentColor, '152 30% 94%'));
-  root.style.setProperty('--sidebar-background', hexToHslValues(sidebarColor, '220 20% 14%'));
   root.style.setProperty('--sidebar-primary', hexToHslValues(primaryColor, '152 55% 48%'));
+  applyThemeSurfaces(root, { primaryColor, cardColor, sidebarColor }, isLightMode);
   const fontThemes: Record<string, { body: string; heading: string }> = {
     'modern-sans': {
       body: '"Inter", "Segoe UI", sans-serif',
@@ -415,6 +423,88 @@ function ColorThemeSwatchGrid({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const CUSTOM_THEME_OPTION_ID = 'custom';
+
+function CustomColorTile({
+  active,
+  saving,
+  disabled = false,
+  onSelect,
+}: {
+  active: boolean;
+  saving: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled || saving}
+      onClick={onSelect}
+      className={[
+        'min-h-[74px] rounded-xl border px-3 py-2 text-left transition-colors duration-150',
+        active
+          ? 'border-brand bg-brand-ghost text-text-primary'
+          : 'border-surface-border bg-surface-elevated text-text-secondary hover:border-brand/40 hover:text-text-primary',
+        disabled ? 'cursor-not-allowed opacity-60' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold">Custom</span>
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+      </div>
+      <div
+        className="mt-2 h-4 w-full rounded-full border border-surface-border"
+        style={{ background: 'linear-gradient(90deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7)' }}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+const CUSTOM_COLOR_FIELDS: { key: keyof CustomThemeColors; label: string; hint: string }[] = [
+  { key: 'primaryColor', label: 'Primary', hint: 'Buttons & primary actions' },
+  { key: 'accentColor', label: 'Accent', hint: 'Selected-item state' },
+  { key: 'sidebarColor', label: 'Sidebar', hint: 'Navigation rail' },
+];
+
+function CustomColorInputs({
+  value,
+  saving = false,
+  onChange,
+}: {
+  value: CustomThemeColors;
+  saving?: boolean;
+  onChange: (next: CustomThemeColors) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-xl border border-surface-border bg-surface-elevated p-3">
+      <div className="flex flex-wrap gap-4">
+        {CUSTOM_COLOR_FIELDS.map((field) => (
+          <label key={field.key} className="grid gap-1.5 text-xs font-medium text-text-muted">
+            <span className="text-text-secondary">{field.label}</span>
+            <span className="flex items-center gap-2">
+              <span className="h-9 w-9 overflow-hidden rounded-full border border-surface-border">
+                <input
+                  type="color"
+                  value={value[field.key]}
+                  disabled={saving}
+                  onChange={(event) => onChange({ ...value, [field.key]: event.target.value })}
+                  className="h-12 w-12 -translate-x-1.5 -translate-y-1.5 cursor-pointer border-0 bg-transparent p-0"
+                  aria-label={`${field.label} color`}
+                />
+              </span>
+              <span className="text-[11px] uppercase text-text-secondary">{value[field.key]}</span>
+            </span>
+            <span className="text-[10px] text-text-muted">{field.hint}</span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-text-muted">Card tint is derived automatically from the primary color.</p>
     </div>
   );
 }
@@ -949,6 +1039,7 @@ export default function SettingsPage() {
           employeeName={currentUser?.fullName ?? ''}
           userId={user?.id ?? null}
           themePresetOverride={currentUser?.themePresetOverride ?? null}
+          themeCustomColors={currentUser?.themeCustomColors ?? null}
           onSignOut={signOut}
         />
       )}
@@ -1171,6 +1262,7 @@ function WorkspaceTab({
   const [editingEquipmentTypeName, setEditingEquipmentTypeName] = useState('');
   const [loadingDemoData, setLoadingDemoData] = useState(false);
   const [savingOrgColorThemeId, setSavingOrgColorThemeId] = useState<string | null>(null);
+  const [orgCustomOpen, setOrgCustomOpen] = useState(false);
   const [sops, setSops] = useState<StandardOperatingProcedure[]>([]);
   const [sopsLoading, setSopsLoading] = useState(false);
   const [sopsError, setSopsError] = useState<string | null>(null);
@@ -1334,6 +1426,32 @@ function WorkspaceTab({
       await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
       await queryClient.refetchQueries({ queryKey: ['program-settings', orgId] });
       toast.success('Organization color scheme updated');
+    } finally {
+      setSavingOrgColorThemeId(null);
+    }
+  };
+
+  const saveOrgCustomColors = async (colors: CustomThemeColors) => {
+    if (!supabase || !orgId) {
+      toast.error('Organization context is unavailable.');
+      return;
+    }
+    setSavingOrgColorThemeId(CUSTOM_THEME_OPTION_ID);
+    try {
+      const { error: updateError } = await supabase
+        .from('program_settings')
+        .update({
+          primary_color: colors.primaryColor,
+          accent_color: colors.accentColor,
+          sidebar_color: colors.sidebarColor,
+        })
+        .eq('org_id', orgId);
+      if (updateError) {
+        toast.error('Failed to update custom colors: ' + updateError.message);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
+      await queryClient.refetchQueries({ queryKey: ['program-settings', orgId] });
     } finally {
       setSavingOrgColorThemeId(null);
     }
@@ -2414,18 +2532,47 @@ function WorkspaceTab({
       </div>
 
       {['admin', 'manager'].includes(String(userRole ?? '').toLowerCase()) ? (
-        <div className="rounded-xl border border-surface-border bg-surface-card p-4">
-          <div className="mb-3">
-            <h3 className="text-sm font-semibold text-text-primary">Color Scheme</h3>
-            <p className="mt-0.5 text-xs text-text-muted">Set the default color and font preset for this organization.</p>
-          </div>
-          <ColorThemeSwatchGrid
-            activeThemeId={getProgramSettingsThemeId(programSettingsQuery.data)}
-            disabled={programSettingsQuery.isLoading || Boolean(savingOrgColorThemeId)}
-            savingThemeId={savingOrgColorThemeId}
-            onSelectTheme={saveOrgColorTheme}
-          />
-        </div>
+        (() => {
+          const orgThemeId = getProgramSettingsThemeId(programSettingsQuery.data);
+          const orgCustomActive = orgThemeId === null;
+          const orgCustomValue: CustomThemeColors = {
+            primaryColor: programSettingsQuery.data?.primaryColor ?? '#2FA866',
+            accentColor: programSettingsQuery.data?.accentColor ?? '#16a34a',
+            sidebarColor: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+          };
+          return (
+            <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold text-text-primary">Color Scheme</h3>
+                <p className="mt-0.5 text-xs text-text-muted">Set the default colors for this organization, or pick Custom for your own.</p>
+              </div>
+              <ColorThemeSwatchGrid
+                activeThemeId={orgThemeId}
+                disabled={programSettingsQuery.isLoading || Boolean(savingOrgColorThemeId)}
+                savingThemeId={savingOrgColorThemeId}
+                onSelectTheme={(theme) => { setOrgCustomOpen(false); return saveOrgColorTheme(theme); }}
+              />
+              <div className="mt-2">
+                <CustomColorTile
+                  active={orgCustomActive}
+                  saving={savingOrgColorThemeId === CUSTOM_THEME_OPTION_ID}
+                  disabled={programSettingsQuery.isLoading}
+                  onSelect={() => setOrgCustomOpen((open) => !open || !orgCustomActive ? true : false)}
+                />
+                {orgCustomActive && !orgCustomOpen ? (
+                  <p className="mt-1 text-xs text-text-muted">No preset selected — using custom workspace colors. Click Custom to edit.</p>
+                ) : null}
+                {orgCustomOpen || orgCustomActive ? (
+                  <CustomColorInputs
+                    value={orgCustomValue}
+                    saving={savingOrgColorThemeId === CUSTOM_THEME_OPTION_ID}
+                    onChange={(next) => { void saveOrgCustomColors(next); }}
+                  />
+                ) : null}
+              </div>
+            </div>
+          );
+        })()
       ) : null}
     </div>
   );
@@ -2756,6 +2903,7 @@ function AccessTab({
   employeeName,
   userId,
   themePresetOverride,
+  themeCustomColors,
   onSignOut,
 }: {
   userEmail: string;
@@ -2764,6 +2912,7 @@ function AccessTab({
   employeeName: string;
   userId: string | null;
   themePresetOverride: string | null;
+  themeCustomColors: CustomThemeColors | null;
   onSignOut: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
@@ -2804,6 +2953,7 @@ function AccessTab({
   const [appUsers, setAppUsers] = useState<AppUserRow[]>([]);
   const [personalThemeOverride, setPersonalThemeOverride] = useState<string | null>(themePresetOverride);
   const [savingPersonalColorThemeId, setSavingPersonalColorThemeId] = useState<string | null>(null);
+  const [personalCustomOpen, setPersonalCustomOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -2956,6 +3106,32 @@ function AccessTab({
     }
   };
 
+  const savePersonalCustomColors = async (colors: CustomThemeColors) => {
+    if (!supabase || !orgId || !userId) {
+      toast.error('User context is unavailable.');
+      return;
+    }
+    setSavingPersonalColorThemeId(CUSTOM_THEME_OPTION_ID);
+    try {
+      const { error: updateError } = await supabase
+        .from('app_users')
+        .update({ theme_preset_override: CUSTOM_THEME_OPTION_ID, theme_custom_colors: colors })
+        .eq('id', userId)
+        .eq('org_id', orgId);
+      if (updateError) {
+        toast.error('Unable to update your custom colors: ' + updateError.message);
+        return;
+      }
+      setPersonalThemeOverride(CUSTOM_THEME_OPTION_ID);
+      applyColorThemeToDocument(
+        { id: 'custom', label: 'Custom', ...colors, cardColor: colors.primaryColor, fontThemePreset: programSettingsQuery.data?.fontThemePreset ?? 'modern-sans' },
+        programSettingsQuery.data,
+      );
+    } finally {
+      setSavingPersonalColorThemeId(null);
+    }
+  };
+
   const maskedOrgId = orgId ? orgId.slice(0, 8) + '...' : 'Not available';
   const browserInfo = typeof navigator !== 'undefined'
     ? `${navigator.userAgent.slice(0, 50)}${navigator.userAgent.length > 50 ? '...' : ''}`
@@ -3088,7 +3264,7 @@ Your role: ${inviteRole}
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Color Scheme" subtitle="Choose a personal color preset or inherit the organization default.">
+      <SettingsCard title="Color Scheme" subtitle="Choose a personal color preset, pick Custom, or inherit the organization default.">
         <ColorThemeSwatchGrid
           activeThemeId={personalThemeOverride}
           disabled={Boolean(savingPersonalColorThemeId)}
@@ -3099,10 +3275,35 @@ Your role: ${inviteRole}
             description: getProgramSettingsThemeId(programSettingsQuery.data)
               ? 'Currently ' + (getColorThemeLabel(getProgramSettingsThemeId(programSettingsQuery.data)) ?? 'workspace colors')
               : 'Inherit workspace colors',
-            onSelect: () => savePersonalColorTheme(null),
+            onSelect: () => { setPersonalCustomOpen(false); return savePersonalColorTheme(null); },
           }}
-          onSelectTheme={(colorTheme) => savePersonalColorTheme(colorTheme.id)}
+          onSelectTheme={(colorTheme) => { setPersonalCustomOpen(false); return savePersonalColorTheme(colorTheme.id); }}
         />
+        {(() => {
+          const personalCustomActive = personalThemeOverride === CUSTOM_THEME_OPTION_ID;
+          const personalCustomValue: CustomThemeColors = themeCustomColors ?? {
+            primaryColor: programSettingsQuery.data?.primaryColor ?? '#2FA866',
+            accentColor: programSettingsQuery.data?.accentColor ?? '#16a34a',
+            sidebarColor: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+          };
+          return (
+            <div className="mt-2">
+              <CustomColorTile
+                active={personalCustomActive}
+                saving={savingPersonalColorThemeId === CUSTOM_THEME_OPTION_ID}
+                disabled={Boolean(savingPersonalColorThemeId)}
+                onSelect={() => setPersonalCustomOpen((open) => (!open || !personalCustomActive ? true : false))}
+              />
+              {personalCustomOpen || personalCustomActive ? (
+                <CustomColorInputs
+                  value={personalCustomValue}
+                  saving={savingPersonalColorThemeId === CUSTOM_THEME_OPTION_ID}
+                  onChange={(next) => { void savePersonalCustomColors(next); }}
+                />
+              ) : null}
+            </div>
+          );
+        })()}
       </SettingsCard>
 
       <SettingsCard title="Session Management">

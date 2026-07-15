@@ -16,10 +16,17 @@
 | created_at            | timestamptz | NO       | now()          |
 | org_id                | uuid        | YES      |                |
 | theme_preset_override | text        | YES      |                |
+| theme_custom_colors   | jsonb       | YES      |                |
 
 > theme_preset_override: nullable, no FK. Stores a preset id (e.g. 'fairway',
 > 'polo-green') matching an entry in src/lib/colorThemes.ts's COLOR_THEMES
-> constant. null = inherit the org's program_settings color/font default.
+> constant, or the literal string 'custom'. null = inherit the org's
+> program_settings color/font default.
+
+> theme_custom_colors: nullable jsonb, shape `{primaryColor, accentColor,
+> sidebarColor}` (hex strings). Only meaningful when theme_preset_override
+> is 'custom'. null/absent = no personal custom colors set. Added in
+> migration 023_add_app_users_theme_custom_colors.sql.
 
 ---
 

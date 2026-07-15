@@ -37,9 +37,11 @@ import {
   useScheduleEntries,
 } from '@/lib/supabase-queries';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { useTheme } from '@/hooks/useTheme';
 import { OperationsProvider } from '@/contexts/OperationsContext';
 import { createClient } from '@/lib/supabase';
-import { getColorTheme } from '@/lib/colorThemes';
+import { resolveEffectiveTheme, resolveThemeCardColor, type CustomThemeColors } from '@/lib/colorThemes';
+import { applyThemeSurfaces } from '@/lib/colorConversion';
 import { cn } from '@/lib/utils';
 
 const supabase = createClient();
@@ -114,15 +116,27 @@ function hexToRgbTriplet(hex: string | undefined, fallback: string, multiplier =
   ].join(' ');
 }
 
-function applyBranding(programSetting?: ProgramSettings, userOverridePresetId?: string | null) {
+function applyBranding(
+  programSetting?: ProgramSettings,
+  userOverridePresetId?: string | null,
+  personalCustomColors?: CustomThemeColors | null,
+  isLightMode?: boolean,
+) {
   if (typeof document === 'undefined') return;
-  const overrideTheme = userOverridePresetId ? getColorTheme(userOverridePresetId) : undefined;
+  const overrideTheme = resolveEffectiveTheme(userOverridePresetId, personalCustomColors, programSetting?.fontThemePreset);
   if (!programSetting && !overrideTheme) return;
   if (programSetting) {
     document.title = `${programSetting.appName || 'Ground Crew HQ'}${programSetting.clientLabel ? ` | ${programSetting.clientLabel}` : ''}`;
   }
   const primaryColor = overrideTheme?.primaryColor ?? programSetting?.primaryColor;
   const accentColor = overrideTheme?.accentColor ?? programSetting?.accentColor;
+  const sidebarColor = overrideTheme?.sidebarColor ?? programSetting?.sidebarColor;
+  const cardColor = overrideTheme?.cardColor ?? resolveThemeCardColor(
+    programSetting?.primaryColor,
+    programSetting?.accentColor,
+    programSetting?.sidebarColor,
+    programSetting?.fontThemePreset,
+  );
   const root = document.documentElement;
   root.style.setProperty('--primary', hexToHslValues(primaryColor, '152 55% 38%'));
   root.style.setProperty('--ring', hexToHslValues(primaryColor, '152 55% 38%'));
@@ -134,6 +148,7 @@ function applyBranding(programSetting?: ProgramSettings, userOverridePresetId?: 
   root.style.setProperty('--brand-ghost', hexToRgbTriplet(primaryColor, '18 44 30', 0.15));
   root.style.setProperty('--brand-body-font', '"Segoe UI", "Arial", sans-serif');
   root.style.setProperty('--brand-heading-font', '"Segoe UI", "Arial", sans-serif');
+  applyThemeSurfaces(root, { primaryColor, cardColor, sidebarColor }, isLightMode ?? false);
   if (programSetting?.logoUrl) {
     let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!favicon) {
@@ -159,6 +174,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
   const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive, isOrgReady } = useOrgProfile();
+  const { resolvedTheme } = useTheme();
   const [showDemoBanner, setShowDemoBanner] = useState(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true' : true));
   const [orgReadyTimeout, setOrgReadyTimeout] = useState(false);
   const [shortcutsOverlayOpen, setShortcutsOverlayOpen] = useState(false);
@@ -247,8 +263,13 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [currentPropertyId, currentUser?.role, properties, setCurrentPropertyId]);
 
   useEffect(() => {
-    applyBranding(programSetting ?? undefined, currentUser?.themePresetOverride ?? null);
-  }, [currentUser?.themePresetOverride, programSetting]);
+    applyBranding(
+      programSetting ?? undefined,
+      currentUser?.themePresetOverride ?? null,
+      currentUser?.themeCustomColors ?? null,
+      resolvedTheme === 'light',
+    );
+  }, [currentUser?.themePresetOverride, currentUser?.themeCustomColors, programSetting, resolvedTheme]);
 
   const computedNotifications = useMemo(() => {
     const currentDayKey = currentDate.toISOString().slice(0, 10);

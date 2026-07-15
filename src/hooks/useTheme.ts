@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { createClient } from '@/lib/supabase';
 
 const supabase = createClient();
 
 export type ThemeMode = 'dark' | 'light' | 'system';
+export type ResolvedTheme = 'light' | 'dark';
 
 const STORAGE_KEY = 'gchq-theme';
 
@@ -16,16 +17,40 @@ function readStoredTheme(): ThemeMode {
   return 'dark';
 }
 
+let resolvedThemeSnapshot: ResolvedTheme = 'dark';
+const resolvedThemeListeners = new Set<() => void>();
+
+function subscribeToResolvedTheme(listener: () => void) {
+  resolvedThemeListeners.add(listener);
+  return () => resolvedThemeListeners.delete(listener);
+}
+
+function getResolvedThemeSnapshot() {
+  return resolvedThemeSnapshot;
+}
+
+function setResolvedThemeSnapshot(next: ResolvedTheme) {
+  if (resolvedThemeSnapshot === next) return;
+  resolvedThemeSnapshot = next;
+  resolvedThemeListeners.forEach((listener) => listener());
+}
+
 function applyTheme(mode: ThemeMode) {
   const isDark =
     mode === 'dark' ||
     (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.classList.toggle('light', !isDark);
+  setResolvedThemeSnapshot(isDark ? 'dark' : 'light');
 }
 
 export function useTheme() {
   const { orgId } = useOrgProfile();
   const [theme, setThemeState] = useState<ThemeMode>(readStoredTheme);
+  const resolvedTheme = useSyncExternalStore(
+    subscribeToResolvedTheme,
+    getResolvedThemeSnapshot,
+    getResolvedThemeSnapshot,
+  );
 
   // Apply theme to DOM whenever state changes
   useEffect(() => {
@@ -52,7 +77,7 @@ export function useTheme() {
     } catch { /* silently ignore until DB migration runs */ }
   }, [orgId]);
 
-  return { theme, setTheme };
+  return { theme, setTheme, resolvedTheme };
 }
 
 // Standalone initializer — call once at app root to apply theme before any data loads
