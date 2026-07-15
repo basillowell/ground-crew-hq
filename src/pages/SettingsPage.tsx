@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { createClient } from '@/lib/supabase';
 import {
@@ -255,7 +255,7 @@ const EMPTY_PROPERTY_FORM: PropertyFormData = {
   acreage: '0',
 };
 
-type ColorThemeProgramSettings = Pick<ProgramSettings, 'primaryColor' | 'accentColor' | 'sidebarColor' | 'fontThemePreset'>;
+type ColorThemeProgramSettings = Pick<ProgramSettings, 'primaryColor' | 'accentColor' | 'sidebarColor' | 'fontThemePreset' | 'themeDarkness'>;
 
 const ORG_DEFAULT_THEME_OPTION_ID = 'org-default';
 
@@ -275,6 +275,12 @@ function getProgramSettingsThemeId(programSettings?: ColorThemeProgramSettings |
 
 function getColorThemeLabel(themeId: string | null) {
   return COLOR_THEMES.find((theme) => theme.id === themeId)?.label ?? null;
+}
+
+function normalizeThemeDarkness(value: unknown, fallback = 50) {
+  const numeric = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.round(Math.min(100, Math.max(0, numeric)));
 }
 
 function hexToHslValues(hex: string | undefined | null, fallback: string) {
@@ -308,12 +314,13 @@ function hexToHslValues(hex: string | undefined | null, fallback: string) {
   return Math.round(hue * 360) + ' ' + Math.round(sat * 100) + '% ' + Math.round(light * 100) + '%';
 }
 
-function applyColorThemeToDocument(theme: ColorTheme | null, programSettings?: ColorThemeProgramSettings | null) {
+function applyColorThemeToDocument(theme: ColorTheme | null, programSettings?: ColorThemeProgramSettings | null, darknessOverride?: number | null) {
   if (typeof document === 'undefined') return;
   const primaryColor = theme?.primaryColor ?? programSettings?.primaryColor;
   const accentColor = theme?.accentColor ?? programSettings?.accentColor;
   const sidebarColor = theme?.sidebarColor ?? programSettings?.sidebarColor;
   const fontThemePreset = theme?.fontThemePreset ?? programSettings?.fontThemePreset ?? 'modern-sans';
+  const themeDarkness = darknessOverride ?? theme?.darkness ?? programSettings?.themeDarkness ?? 50;
   const cardColor = theme?.cardColor ?? resolveThemeCardColor(
     programSettings?.primaryColor,
     programSettings?.accentColor,
@@ -326,7 +333,7 @@ function applyColorThemeToDocument(theme: ColorTheme | null, programSettings?: C
   root.style.setProperty('--ring', hexToHslValues(primaryColor, '152 55% 38%'));
   root.style.setProperty('--accent', hexToHslValues(accentColor, '152 30% 94%'));
   root.style.setProperty('--sidebar-primary', hexToHslValues(primaryColor, '152 55% 48%'));
-  applyThemeSurfaces(root, { primaryColor, cardColor, sidebarColor }, isLightMode);
+  applyThemeSurfaces(root, { primaryColor, cardColor, sidebarColor }, isLightMode, themeDarkness);
   const fontThemes: Record<string, { body: string; heading: string }> = {
     'modern-sans': {
       body: '"Inter", "Segoe UI", sans-serif',
@@ -505,6 +512,107 @@ function CustomColorInputs({
         ))}
       </div>
       <p className="mt-2 text-[11px] text-text-muted">Card tint is derived automatically from the primary color.</p>
+    </div>
+  );
+}
+
+function BackgroundDarknessSlider({
+  value,
+  disabled = false,
+  saving = false,
+  onPreview,
+  onCommit,
+  resetOption,
+}: {
+  value: number;
+  disabled?: boolean;
+  saving?: boolean;
+  onPreview: (value: number) => void;
+  onCommit: (value: number) => void | Promise<void>;
+  resetOption?: {
+    label: string;
+    disabled?: boolean;
+    onReset: () => void | Promise<void>;
+  };
+}) {
+  const normalizedValue = normalizeThemeDarkness(value);
+  const [draft, setDraft] = useState(normalizedValue);
+  const commitTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const lastRequestedValueRef = useRef(normalizedValue);
+
+  const clearCommitTimer = useCallback(() => {
+    if (commitTimerRef.current) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    setDraft(normalizedValue);
+    lastRequestedValueRef.current = normalizedValue;
+  }, [normalizedValue]);
+
+  useEffect(() => clearCommitTimer, [clearCommitTimer]);
+
+  const commitValue = useCallback((nextValue: number) => {
+    const next = normalizeThemeDarkness(nextValue);
+    clearCommitTimer();
+    if (next === lastRequestedValueRef.current) return;
+    lastRequestedValueRef.current = next;
+    void onCommit(next);
+  }, [clearCommitTimer, onCommit]);
+
+  const scheduleCommit = useCallback((nextValue: number) => {
+    clearCommitTimer();
+    commitTimerRef.current = window.setTimeout(() => commitValue(nextValue), 550);
+  }, [clearCommitTimer, commitValue]);
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const next = normalizeThemeDarkness(event.target.value);
+    setDraft(next);
+    onPreview(next);
+    scheduleCommit(next);
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-surface-border bg-surface-elevated p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-text-primary">Background Darkness</h4>
+          <p className="mt-0.5 text-xs text-text-muted">Adjust surface and card depth without changing the selected color scheme.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-surface-border bg-surface-card px-2.5 py-1 text-xs font-medium text-text-secondary">{draft}</span>
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin text-text-muted" /> : null}
+          {resetOption ? (
+            <button
+              type="button"
+              disabled={disabled || saving || resetOption.disabled}
+              onClick={() => void resetOption.onReset()}
+              className="rounded-full border border-surface-border bg-surface-card px-3 py-1 text-xs font-medium text-text-secondary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {resetOption.label}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={draft}
+        disabled={disabled || saving}
+        onChange={handleChange}
+        onPointerUp={() => commitValue(draft)}
+        onKeyUp={() => commitValue(draft)}
+        onBlur={() => commitValue(draft)}
+        className="mt-3 w-full accent-brand disabled:cursor-not-allowed disabled:opacity-60"
+        aria-label="Background darkness"
+      />
+      <div className="mt-1 flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-text-muted">
+        <span>Lighter</span>
+        <span>Darker</span>
+      </div>
     </div>
   );
 }
@@ -1040,6 +1148,7 @@ export default function SettingsPage() {
           userId={user?.id ?? null}
           themePresetOverride={currentUser?.themePresetOverride ?? null}
           themeCustomColors={currentUser?.themeCustomColors ?? null}
+          themeDarknessOverride={currentUser?.themeDarknessOverride ?? null}
           onSignOut={signOut}
         />
       )}
@@ -1262,6 +1371,7 @@ function WorkspaceTab({
   const [editingEquipmentTypeName, setEditingEquipmentTypeName] = useState('');
   const [loadingDemoData, setLoadingDemoData] = useState(false);
   const [savingOrgColorThemeId, setSavingOrgColorThemeId] = useState<string | null>(null);
+  const [savingOrgDarkness, setSavingOrgDarkness] = useState(false);
   const [orgCustomOpen, setOrgCustomOpen] = useState(false);
   const [sops, setSops] = useState<StandardOperatingProcedure[]>([]);
   const [sopsLoading, setSopsLoading] = useState(false);
@@ -1454,6 +1564,35 @@ function WorkspaceTab({
       await queryClient.refetchQueries({ queryKey: ['program-settings', orgId] });
     } finally {
       setSavingOrgColorThemeId(null);
+    }
+  };
+
+  const previewOrgBackgroundDarkness = useCallback((darkness: number) => {
+    applyColorThemeToDocument(null, programSettingsQuery.data, darkness);
+  }, [programSettingsQuery.data]);
+
+  const saveOrgBackgroundDarkness = async (darkness: number) => {
+    if (!supabase || !orgId) {
+      toast.error('Organization context is unavailable.');
+      return;
+    }
+    const nextDarkness = normalizeThemeDarkness(darkness);
+    setSavingOrgDarkness(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('program_settings')
+        .update({ theme_darkness: nextDarkness })
+        .eq('org_id', orgId);
+      if (updateError) {
+        toast.error('Failed to update background darkness: ' + updateError.message);
+        return;
+      }
+      applyColorThemeToDocument(null, programSettingsQuery.data, nextDarkness);
+      await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
+      await queryClient.refetchQueries({ queryKey: ['program-settings', orgId] });
+      toast.success('Organization background darkness updated');
+    } finally {
+      setSavingOrgDarkness(false);
     }
   };
 
@@ -2570,6 +2709,13 @@ function WorkspaceTab({
                   />
                 ) : null}
               </div>
+              <BackgroundDarknessSlider
+                value={programSettingsQuery.data?.themeDarkness ?? 50}
+                disabled={programSettingsQuery.isLoading}
+                saving={savingOrgDarkness}
+                onPreview={previewOrgBackgroundDarkness}
+                onCommit={(next) => saveOrgBackgroundDarkness(next)}
+              />
             </div>
           );
         })()
@@ -2904,6 +3050,7 @@ function AccessTab({
   userId,
   themePresetOverride,
   themeCustomColors,
+  themeDarknessOverride,
   onSignOut,
 }: {
   userEmail: string;
@@ -2913,6 +3060,7 @@ function AccessTab({
   userId: string | null;
   themePresetOverride: string | null;
   themeCustomColors: CustomThemeColors | null;
+  themeDarknessOverride: number | null;
   onSignOut: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
@@ -2952,7 +3100,9 @@ function AccessTab({
   });
   const [appUsers, setAppUsers] = useState<AppUserRow[]>([]);
   const [personalThemeOverride, setPersonalThemeOverride] = useState<string | null>(themePresetOverride);
+  const [personalDarknessOverride, setPersonalDarknessOverride] = useState<number | null>(themeDarknessOverride);
   const [savingPersonalColorThemeId, setSavingPersonalColorThemeId] = useState<string | null>(null);
+  const [savingPersonalDarkness, setSavingPersonalDarkness] = useState(false);
   const [personalCustomOpen, setPersonalCustomOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -3029,6 +3179,10 @@ function AccessTab({
     setPersonalThemeOverride(themePresetOverride);
   }, [themePresetOverride]);
 
+  useEffect(() => {
+    setPersonalDarknessOverride(themeDarknessOverride);
+  }, [themeDarknessOverride]);
+
   const handleSignOut = async () => {
     let redirectedByFallback = false;
     const fallbackTimeoutId = window.setTimeout(() => {
@@ -3080,6 +3234,30 @@ function AccessTab({
     toast.success('User role updated');
   };
 
+  const getPersonalPreviewTheme = useCallback((themeId = personalThemeOverride, customColors = themeCustomColors): ColorTheme | null => {
+    if (themeId === CUSTOM_THEME_OPTION_ID) {
+      const colors = customColors ?? {
+        primaryColor: programSettingsQuery.data?.primaryColor ?? '#2FA866',
+        accentColor: programSettingsQuery.data?.accentColor ?? '#16a34a',
+        sidebarColor: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+      };
+      return {
+        id: CUSTOM_THEME_OPTION_ID,
+        label: 'Custom',
+        primaryColor: colors.primaryColor,
+        accentColor: colors.accentColor,
+        sidebarColor: colors.sidebarColor,
+        cardColor: colors.primaryColor,
+        fontThemePreset: programSettingsQuery.data?.fontThemePreset ?? 'modern-sans',
+      };
+    }
+    return themeId ? COLOR_THEMES.find((theme) => theme.id === themeId) ?? null : null;
+  }, [personalThemeOverride, programSettingsQuery.data, themeCustomColors]);
+
+  const previewPersonalBackgroundDarkness = useCallback((darkness: number) => {
+    applyColorThemeToDocument(getPersonalPreviewTheme(), programSettingsQuery.data, darkness);
+  }, [getPersonalPreviewTheme, programSettingsQuery.data]);
+
   const savePersonalColorTheme = async (themeId: string | null) => {
     if (!supabase || !orgId || !userId) {
       toast.error('User context is unavailable.');
@@ -3099,7 +3277,7 @@ function AccessTab({
       }
       setPersonalThemeOverride(themeId);
       const selectedTheme = themeId ? COLOR_THEMES.find((theme) => theme.id === themeId) ?? null : null;
-      applyColorThemeToDocument(selectedTheme, programSettingsQuery.data);
+      applyColorThemeToDocument(selectedTheme, programSettingsQuery.data, personalDarknessOverride);
       toast.success(themeId ? 'Personal color scheme updated' : 'Using organization color scheme');
     } finally {
       setSavingPersonalColorThemeId(null);
@@ -3126,9 +3304,36 @@ function AccessTab({
       applyColorThemeToDocument(
         { id: 'custom', label: 'Custom', ...colors, cardColor: colors.primaryColor, fontThemePreset: programSettingsQuery.data?.fontThemePreset ?? 'modern-sans' },
         programSettingsQuery.data,
+        personalDarknessOverride,
       );
     } finally {
       setSavingPersonalColorThemeId(null);
+    }
+  };
+
+  const savePersonalBackgroundDarkness = async (darkness: number | null) => {
+    if (!supabase || !orgId || !userId) {
+      toast.error('User context is unavailable.');
+      return;
+    }
+    const nextDarkness = darkness === null ? null : normalizeThemeDarkness(darkness);
+    setSavingPersonalDarkness(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('app_users')
+        .update({ theme_darkness_override: nextDarkness })
+        .eq('id', userId)
+        .eq('org_id', orgId);
+      if (updateError) {
+        toast.error('Unable to update background darkness: ' + updateError.message);
+        return;
+      }
+      setPersonalDarknessOverride(nextDarkness);
+      applyColorThemeToDocument(getPersonalPreviewTheme(), programSettingsQuery.data, nextDarkness);
+      await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
+      toast.success(nextDarkness === null ? 'Using organization background darkness' : 'Personal background darkness updated');
+    } finally {
+      setSavingPersonalDarkness(false);
     }
   };
 
@@ -3304,6 +3509,22 @@ Your role: ${inviteRole}
             </div>
           );
         })()}
+        <BackgroundDarknessSlider
+          value={personalDarknessOverride ?? programSettingsQuery.data?.themeDarkness ?? 50}
+          disabled={!userId}
+          saving={savingPersonalDarkness}
+          onPreview={previewPersonalBackgroundDarkness}
+          onCommit={(next) => savePersonalBackgroundDarkness(next)}
+          resetOption={{
+            label: 'Use org default',
+            disabled: personalDarknessOverride === null,
+            onReset: () => {
+              setPersonalDarknessOverride(null);
+              applyColorThemeToDocument(getPersonalPreviewTheme(), programSettingsQuery.data, programSettingsQuery.data?.themeDarkness ?? 50);
+              return savePersonalBackgroundDarkness(null);
+            },
+          }}
+        />
       </SettingsCard>
 
       <SettingsCard title="Session Management">

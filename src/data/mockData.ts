@@ -222,6 +222,7 @@ export interface ProgramSettings {
   primaryColor: string;
   accentColor: string;
   sidebarColor: string;
+  themeDarkness?: number | null;
   defaultDepartment: string;
   timeZone: string;
   fiscalYearStart: string;

@@ -17,6 +17,7 @@
 | org_id                | uuid        | YES      |                |
 | theme_preset_override | text        | YES      |                |
 | theme_custom_colors   | jsonb       | YES      |                |
+| theme_darkness_override | numeric    | YES      |                |
 
 > theme_preset_override: nullable, no FK. Stores a preset id (e.g. 'fairway',
 > 'polo-green') matching an entry in src/lib/colorThemes.ts's COLOR_THEMES
@@ -27,6 +28,9 @@
 > sidebarColor}` (hex strings). Only meaningful when theme_preset_override
 > is 'custom'. null/absent = no personal custom colors set. Added in
 > migration 023_add_app_users_theme_custom_colors.sql.
+
+> theme_darkness_override: nullable numeric, 0-100 scale. Overrides the org-level
+> program_settings.theme_darkness for this user. null = inherit org/default darkness.
 
 ---
 
@@ -469,6 +473,10 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 | weather_default_longitude     | numeric     | YES      |                            |
 | weather_preferred_provider    | text        | YES      | 'open-meteo'               |
 | weather_enabled_panels        | text[]      | YES      | ['current-conditions', ...] |
+| theme_darkness                | numeric     | YES      |                            |
+
+> theme_darkness: nullable numeric, 0-100 scale. Controls theme surface/card
+> darkness at the org level. null = default 50.
 
 ---
 

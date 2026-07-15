@@ -84,13 +84,24 @@ function clampRange(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function normalizeDarkness(darkness = 50): number {
+  return clampRange(darkness, 0, 100);
+}
+
+function darknessLightnessOffset(darkness = 50): number {
+  return ((normalizeDarkness(darkness) - 50) / 50) * 4;
+}
+
 /** Mode-aware card tint: bright (high-L) in light mode, dark (low-L) in dark mode. */
-function cardTriplet(cardColorHex: string, isLightMode: boolean): string {
+function cardTriplet(cardColorHex: string, isLightMode: boolean, darkness = 50): string {
   const { h, s } = hexToHsl(cardColorHex);
+  const normalizedDarkness = normalizeDarkness(darkness);
   if (isLightMode) {
-    return hslToRgbTriplet(h, Math.min(s, 30), 96);
+    const lightness = clampRange(96 - (normalizedDarkness - 50) * 0.06, 88, 98);
+    return hslToRgbTriplet(h, Math.min(s, 30), lightness);
   }
-  return hslToRgbTriplet(h, Math.min(s, 38), 11);
+  const lightness = clampRange(11 - (normalizedDarkness - 50) * 0.1, 6, 16);
+  return hslToRgbTriplet(h, Math.min(s, 38), lightness);
 }
 
 export function ghostTriplet(primaryColorHex: string, isLightMode: boolean): string {
@@ -110,19 +121,20 @@ export function dimTriplet(primaryColorHex: string, isLightMode: boolean): strin
 }
 
 /** Mode-aware sidebar: keeps a readable lightness band while pushing scheme color so the rail pops. */
-function sidebarHslStrings(sidebarColorHex: string, isLightMode: boolean): { background: string; accent: string } {
+function sidebarHslStrings(sidebarColorHex: string, isLightMode: boolean, darkness = 50): { background: string; accent: string } {
   const { h, s } = hexToHsl(sidebarColorHex);
+  const lightnessOffset = darknessLightnessOffset(darkness);
   if (isLightMode) {
     const sat = clampRange(s, 12, 24);
     return {
-      background: `${h.toFixed(1)} ${sat.toFixed(1)}% 90%`,
-      accent: `${h.toFixed(1)} ${sat.toFixed(1)}% 82%`,
+      background: `${h.toFixed(1)} ${sat.toFixed(1)}% ${clampRange(90 - lightnessOffset, 0, 100).toFixed(1)}%`,
+      accent: `${h.toFixed(1)} ${sat.toFixed(1)}% ${clampRange(82 - lightnessOffset, 0, 100).toFixed(1)}%`,
     };
   }
   const sat = clampRange(s, 18, 45);
   return {
-    background: `${h.toFixed(1)} ${sat.toFixed(1)}% 10%`,
-    accent: `${h.toFixed(1)} ${sat.toFixed(1)}% 18%`,
+    background: `${h.toFixed(1)} ${sat.toFixed(1)}% ${clampRange(10 - lightnessOffset, 0, 100).toFixed(1)}%`,
+    accent: `${h.toFixed(1)} ${sat.toFixed(1)}% ${clampRange(18 - lightnessOffset, 0, 100).toFixed(1)}%`,
   };
 }
 
@@ -140,8 +152,9 @@ type ThemeSurfaceColors = {
  *  - sidebar background + hover/selected accent: mode-aware tint toward sidebarColor so the
  *    navigation rail reads as a distinct, scheme-colored panel with a shaded hover state.
  */
-export function applyThemeSurfaces(root: HTMLElement, colors: ThemeSurfaceColors, isLightMode: boolean): void {
+export function applyThemeSurfaces(root: HTMLElement, colors: ThemeSurfaceColors, isLightMode: boolean, darkness = 50): void {
   const { primaryColor, cardColor, sidebarColor } = colors;
+  const lightnessOffset = darknessLightnessOffset(darkness);
 
   if (primaryColor) {
     const target = hexToHsl(primaryColor);
@@ -150,18 +163,19 @@ export function applyThemeSurfaces(root: HTMLElement, colors: ThemeSurfaceColors
     for (const [varName, baselineTriplet] of Object.entries(surfaceBaselines)) {
       const baseHsl = rgbTripletToHsl(baselineTriplet);
       const tinted = tintHslPreservingLightness(baseHsl, target, surfaceAmount);
-      root.style.setProperty(varName, hslToRgbTriplet(tinted.h, tinted.s, tinted.l));
+      const adjustedLightness = clampRange(tinted.l - lightnessOffset, 0, 100);
+      root.style.setProperty(varName, hslToRgbTriplet(tinted.h, tinted.s, adjustedLightness));
     }
     root.style.setProperty('--brand-ghost', ghostTriplet(primaryColor, isLightMode));
     root.style.setProperty('--brand-dim', dimTriplet(primaryColor, isLightMode));
   }
 
   if (cardColor) {
-    root.style.setProperty('--surface-card', cardTriplet(cardColor, isLightMode));
+    root.style.setProperty('--surface-card', cardTriplet(cardColor, isLightMode, darkness));
   }
 
   if (sidebarColor) {
-    const sidebar = sidebarHslStrings(sidebarColor, isLightMode);
+    const sidebar = sidebarHslStrings(sidebarColor, isLightMode, darkness);
     root.style.setProperty('--sidebar-background', sidebar.background);
     root.style.setProperty('--sidebar-accent', sidebar.accent);
   }

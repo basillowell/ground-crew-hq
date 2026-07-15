@@ -22,6 +22,7 @@ import type {
   WorkLocation,
 } from '@/data/seedData';
 import { createClient } from '@/lib/supabase';
+import { parseThemeDarkness } from '@/lib/colorThemes';
 
 const supabase = createClient();
 
@@ -186,6 +187,7 @@ type DbProgramSettings = {
   accent_color: string;
   sidebar_color: string;
   font_theme_preset: string;
+  theme_darkness: unknown;
   logo_url: string | null;
   default_department: string;
   created_at: string;
@@ -543,6 +545,7 @@ function toProgramSettings(row: DbProgramSettings): ProgramSettings {
     accentColor: row.accent_color,
     sidebarColor: row.sidebar_color,
     fontThemePreset: row.font_theme_preset,
+    themeDarkness: parseThemeDarkness(row.theme_darkness),
     defaultDepartment: row.default_department,
     timeZone: 'America/New_York',
     fiscalYearStart: '01-01',

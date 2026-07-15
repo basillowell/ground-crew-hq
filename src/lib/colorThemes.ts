@@ -5,6 +5,7 @@ export type ColorTheme = {
   accentColor: string;    // selected-item state
   sidebarColor: string;   // navigation rail
   cardColor: string;      // card surface tint (mode-aware lightness applied at runtime)
+  darkness?: number;
   fontThemePreset: string;
 };
 
@@ -73,17 +74,30 @@ export type CustomThemeColors = {
   primaryColor: string;
   accentColor: string;
   sidebarColor: string;
+  darkness?: number;
 };
 
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
+export function parseThemeDarkness(raw: unknown): number | null {
+  const value = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() ? Number(raw) : Number.NaN;
+  if (!Number.isFinite(value)) return null;
+  return Math.min(100, Math.max(0, value));
+}
+
 /** Validates a value read back from `app_users.theme_custom_colors` (unconstrained jsonb). */
 export function parseCustomThemeColors(raw: unknown): CustomThemeColors | null {
   if (!raw || typeof raw !== 'object') return null;
-  const { primaryColor, accentColor, sidebarColor } = raw as Record<string, unknown>;
+  const { primaryColor, accentColor, sidebarColor, darkness } = raw as Record<string, unknown>;
   const isHex = (v: unknown): v is string => typeof v === 'string' && HEX_COLOR_PATTERN.test(v);
   if (!isHex(primaryColor) || !isHex(accentColor) || !isHex(sidebarColor)) return null;
-  return { primaryColor, accentColor, sidebarColor };
+  const parsedDarkness = parseThemeDarkness(darkness);
+  return {
+    primaryColor,
+    accentColor,
+    sidebarColor,
+    ...(parsedDarkness !== null ? { darkness: parsedDarkness } : {}),
+  };
 }
 
 /**
@@ -102,6 +116,7 @@ export function resolveEffectiveTheme(
       ...personalCustomColors,
       // Custom picks 3 roles; card tint is derived from the primary hue.
       cardColor: personalCustomColors.primaryColor,
+      darkness: personalCustomColors.darkness,
       fontThemePreset: fallbackFontThemePreset ?? 'modern-sans',
     };
   }

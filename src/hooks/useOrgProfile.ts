@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/browser'
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { useUser } from './useUser'
-import { parseCustomThemeColors, type CustomThemeColors } from '@/lib/colorThemes'
+import { parseCustomThemeColors, parseThemeDarkness, type CustomThemeColors } from '@/lib/colorThemes'
 
 type AuthRole = 'admin' | 'manager' | 'employee' | 'viewer' | string
 
@@ -25,6 +25,7 @@ type OrgProfileUser = {
   phone: string
   themePresetOverride: string | null
   themeCustomColors: CustomThemeColors | null
+  themeDarknessOverride: number | null
 }
 
 type AppUserRow = {
@@ -33,6 +34,7 @@ type AppUserRow = {
   employee_id: string | null
   theme_preset_override: string | null
   theme_custom_colors: unknown
+  theme_darkness_override: unknown
 }
 
 type EmployeeRow = {
@@ -97,6 +99,7 @@ function buildProfile(authUser: User, appUser: AppUserRow, employee: EmployeeRow
     phone: employee?.phone ?? '',
     themePresetOverride: appUser.theme_preset_override ?? null,
     themeCustomColors: parseCustomThemeColors(appUser.theme_custom_colors),
+    themeDarknessOverride: parseThemeDarkness(appUser.theme_darkness_override),
   }
 }
 
@@ -141,7 +144,7 @@ function useOrgProfileState() {
         const fetchAppUser = async () => {
           const { data } = await supabase
             .from('app_users')
-            .select('org_id, role, employee_id, theme_preset_override, theme_custom_colors')
+            .select('org_id, role, employee_id, theme_preset_override, theme_custom_colors, theme_darkness_override')
             .eq('id', user.id)
             .single()
 

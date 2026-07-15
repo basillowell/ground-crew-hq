@@ -121,6 +121,7 @@ function applyBranding(
   userOverridePresetId?: string | null,
   personalCustomColors?: CustomThemeColors | null,
   isLightMode?: boolean,
+  userThemeDarknessOverride?: number | null,
 ) {
   if (typeof document === 'undefined') return;
   const overrideTheme = resolveEffectiveTheme(userOverridePresetId, personalCustomColors, programSetting?.fontThemePreset);
@@ -131,6 +132,7 @@ function applyBranding(
   const primaryColor = overrideTheme?.primaryColor ?? programSetting?.primaryColor;
   const accentColor = overrideTheme?.accentColor ?? programSetting?.accentColor;
   const sidebarColor = overrideTheme?.sidebarColor ?? programSetting?.sidebarColor;
+  const themeDarkness = userThemeDarknessOverride ?? programSetting?.themeDarkness ?? 50;
   const cardColor = overrideTheme?.cardColor ?? resolveThemeCardColor(
     programSetting?.primaryColor,
     programSetting?.accentColor,
@@ -146,7 +148,7 @@ function applyBranding(
   root.style.setProperty('--brand-bright', hexToRgbTriplet(accentColor, '110 211 145'));
   root.style.setProperty('--brand-body-font', '"Segoe UI", "Arial", sans-serif');
   root.style.setProperty('--brand-heading-font', '"Segoe UI", "Arial", sans-serif');
-  applyThemeSurfaces(root, { primaryColor, cardColor, sidebarColor }, isLightMode ?? false);
+  applyThemeSurfaces(root, { primaryColor, cardColor, sidebarColor }, isLightMode ?? false, themeDarkness);
   if (programSetting?.logoUrl) {
     let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!favicon) {
@@ -266,8 +268,9 @@ export function AppLayout({ children }: AppLayoutProps) {
       currentUser?.themePresetOverride ?? null,
       currentUser?.themeCustomColors ?? null,
       resolvedTheme === 'light',
+      currentUser?.themeDarknessOverride ?? null,
     );
-  }, [currentUser?.themePresetOverride, currentUser?.themeCustomColors, programSetting, resolvedTheme]);
+  }, [currentUser?.themePresetOverride, currentUser?.themeCustomColors, currentUser?.themeDarknessOverride, programSetting, resolvedTheme]);
 
   const computedNotifications = useMemo(() => {
     const currentDayKey = currentDate.toISOString().slice(0, 10);
