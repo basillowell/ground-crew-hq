@@ -5740,7 +5740,7 @@ export default function WorkboardContent() {
                       setTaskRows((current) => [
                         ...current,
                         makeEmptyTaskRow(
-                          getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate, operationalTimezone),
+                          getNowHHMMInTimezone(operationalTimezone),
                           effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '',
                         ),
                       ]);
