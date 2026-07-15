@@ -104,35 +104,13 @@ function applyBranding(programSetting?: ProgramSettings, userOverridePresetId?: 
   }
   const primaryColor = overrideTheme?.primaryColor ?? programSetting?.primaryColor;
   const accentColor = overrideTheme?.accentColor ?? programSetting?.accentColor;
-  const sidebarColor = overrideTheme?.sidebarColor ?? programSetting?.sidebarColor;
-  const fontThemePreset = overrideTheme?.fontThemePreset ?? programSetting?.fontThemePreset ?? 'modern-sans';
   const root = document.documentElement;
   root.style.setProperty('--primary', hexToHslValues(primaryColor, '152 55% 38%'));
   root.style.setProperty('--ring', hexToHslValues(primaryColor, '152 55% 38%'));
   root.style.setProperty('--accent', hexToHslValues(accentColor, '152 30% 94%'));
-  root.style.setProperty('--sidebar-background', hexToHslValues(sidebarColor, '220 20% 14%'));
   root.style.setProperty('--sidebar-primary', hexToHslValues(primaryColor, '152 55% 48%'));
-  const fontThemes: Record<string, { body: string; heading: string }> = {
-    'modern-sans': {
-      body: '"Inter", "Segoe UI", sans-serif',
-      heading: '"Inter", "Segoe UI", sans-serif',
-    },
-    'editorial-serif': {
-      body: '"Inter", "Segoe UI", sans-serif',
-      heading: '"Georgia", "Times New Roman", serif',
-    },
-    'classic-club': {
-      body: '"Trebuchet MS", "Segoe UI", sans-serif',
-      heading: '"Palatino Linotype", "Book Antiqua", serif',
-    },
-    'compact-ops': {
-      body: '"Segoe UI", "Arial", sans-serif',
-      heading: '"Segoe UI", "Arial", sans-serif',
-    },
-  };
-  const chosenFontTheme = fontThemes[fontThemePreset] || fontThemes['modern-sans'];
-  root.style.setProperty('--brand-body-font', chosenFontTheme.body);
-  root.style.setProperty('--brand-heading-font', chosenFontTheme.heading);
+  root.style.setProperty('--brand-body-font', '"Segoe UI", "Arial", sans-serif');
+  root.style.setProperty('--brand-heading-font', '"Segoe UI", "Arial", sans-serif');
   if (programSetting?.logoUrl) {
     let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!favicon) {

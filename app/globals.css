@@ -24,10 +24,10 @@ All colors MUST be HSL.
 }
 
 html.light {
-  --surface-base: 248 250 248;    /* #f8faf8 */
+  --surface-base: 236 240 236;    /* #ecf0ec */
   --surface-card: 255 255 255;    /* #ffffff */
-  --surface-elevated: 240 244 240; /* #f0f4f0 */
-  --surface-border: 212 224 212;  /* #d4e0d4 */
+  --surface-elevated: 246 249 246; /* #f6f9f6 */
+  --surface-border: 200 214 200;  /* #c8d6c8 */
   --surface-hover: 232 240 232;   /* #e8f0e8 */
   --text-primary: 10 15 12;       /* #0a0f0c */
   --text-secondary: 61 92 61;     /* #3d5c3d */
@@ -35,13 +35,13 @@ html.light {
   --text-inverse: 240 244 240;    /* #f0f4f0 */
   --brand-ghost: 220 245 232;     /* #dcf5e8 - light emerald tint */
   /* shadcn/ui overrides for light mode */
-  --background: 120 15% 97%;
+  --background: 120 15% 94%;
   --foreground: 147 27% 8%;
   --card: 0 0% 100%;
   --card-foreground: 147 27% 8%;
   --popover: 0 0% 100%;
   --popover-foreground: 147 27% 8%;
-  --muted: 120 10% 94%;
+  --muted: 120 10% 90%;
   --muted-foreground: 147 20% 35%;
   --border: 120 20% 83%;
   --input: 120 20% 83%;
