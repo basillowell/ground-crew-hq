@@ -88,9 +88,9 @@ function clampRange(value: number, min: number, max: number): number {
 function cardTriplet(cardColorHex: string, isLightMode: boolean): string {
   const { h, s } = hexToHsl(cardColorHex);
   if (isLightMode) {
-    return hslToRgbTriplet(h, Math.min(s, 16), 96);
+    return hslToRgbTriplet(h, Math.min(s, 30), 96);
   }
-  return hslToRgbTriplet(h, Math.min(s, 22), 11);
+  return hslToRgbTriplet(h, Math.min(s, 38), 11);
 }
 
 export function ghostTriplet(primaryColorHex: string, isLightMode: boolean): string {
