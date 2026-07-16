@@ -223,8 +223,8 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   );
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-surface-border bg-surface-base">
-      <SidebarHeader className="border-b border-surface-border bg-surface-base p-4">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
+      <SidebarHeader className="border-b border-sidebar-border bg-sidebar p-4">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-ghost ring-1 ring-brand-dim">
             {logoUrl ? (
@@ -244,7 +244,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="gap-0 bg-gradient-to-b from-surface-card to-surface-base px-2 py-3">
+      <SidebarContent className="gap-0 bg-gradient-to-b from-sidebar to-sidebar-accent px-2 py-3">
         <section className="pb-3">
           {!collapsed ? (
             <div className="mb-1 px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted/60">Primary Operations</div>
@@ -262,7 +262,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
         ) : null}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-surface-border bg-surface-base p-2">
+      <SidebarFooter className="border-t border-sidebar-border bg-sidebar p-2">
         {!collapsed ? (
           <div className="mb-1 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted/60">Settings & Compliance</div>
         ) : null}
