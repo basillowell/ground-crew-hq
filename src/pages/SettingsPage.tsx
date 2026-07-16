@@ -416,11 +416,9 @@ function CustomColorTile({
   );
 }
 
-// Phase 5 owns the copy/UX for this reduction (3 pickers -> 2). These labels are
-// mechanical placeholders so the engine can be exercised.
 const CUSTOM_COLOR_FIELDS: { key: 'base' | 'accent'; label: string; hint: string }[] = [
-  { key: 'base', label: 'Base', hint: 'Surfaces & navigation rail' },
-  { key: 'accent', label: 'Accent', hint: 'Buttons, links & selected state' },
+  { key: 'base', label: 'Base', hint: 'Backgrounds, cards & the nav rail' },
+  { key: 'accent', label: 'Accent', hint: 'Buttons, links & selected items' },
 ];
 
 function CustomColorInputs({
@@ -434,6 +432,10 @@ function CustomColorInputs({
 }) {
   return (
     <div className="mt-3 rounded-xl border border-surface-border bg-surface-elevated p-3">
+      <p className="mb-3 text-xs text-text-muted">
+        Pick two colors — we derive the rest. Card, hover, border and text shades are
+        generated from these so they stay readable in both light and dark mode.
+      </p>
       <div className="flex flex-wrap gap-4">
         {CUSTOM_COLOR_FIELDS.map((field) => (
           <label key={field.key} className="grid gap-1.5 text-xs font-medium text-text-muted">
