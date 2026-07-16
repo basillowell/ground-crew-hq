@@ -15,27 +15,24 @@ export type ColorTheme = {
 };
 
 /**
- * NOTE (Phase 6 owes these a design pass): these triples were remapped
- * mechanically from the old four-colour presets — `base` from the old
- * `sidebarColor`, `accent` from the old `primaryColor` — so the build and the
- * engine can be exercised. They are NOT final.
+ * `base` carries each preset's surface hue; it comes from the old four-colour
+ * presets' `cardColor`, which is the field that actually described the surface
+ * family. (The old `sidebarColor` only ever described the rail — using it here
+ * is what turned Sunset Polo orange and Fairway navy.) Only base's hue and
+ * chroma are used; its lightness is discarded in favour of the mode's ladder,
+ * so these read as the intended colour in both light and dark.
  *
- * Two known consequences to resolve there:
- *  - Backgrounds shift. Fairway's surfaces used to tint toward the old
- *    primary (green); they now follow `base` (navy). That difference is the
- *    old "accent bleeds into the background" bug being corrected, but it does
- *    change each preset's character.
- *  - `sunset-polo` is wrong on purpose. Its old sidebarColor (#d94f04) is a
- *    saturated orange, not a surface colour, so as `base` it tints the whole
- *    app orange. It needs a real base chosen by eye.
+ * Under two inputs each preset gets one hue family, so Fairway is green rather
+ * than navy-rail-over-green, and Polo Green's cream accent (#e8dcb5) gives way
+ * to its primary, since accent now drives buttons.
  */
 export const COLOR_THEMES: ColorTheme[] = [
-  { id: 'fairway', label: 'Fairway', base: '#0f172a', accent: '#2FA866', fontThemePreset: 'modern-sans' },
-  { id: 'midnight-turf', label: 'Midnight Turf', base: '#020617', accent: '#34d399', fontThemePreset: 'compact-ops' },
-  { id: 'clay-court', label: 'Clay Court', base: '#1c1410', accent: '#c2703d', fontThemePreset: 'classic-club' },
-  { id: 'sunset-polo', label: 'Sunset Polo', base: '#d94f04', accent: '#f2711f', fontThemePreset: 'editorial-serif' },
-  { id: 'polo-green', label: 'Polo Green', base: '#0d2818', accent: '#145a32', fontThemePreset: 'classic-club' },
-  { id: 'slate-citrus', label: 'Slate & Citrus', base: '#1e293b', accent: '#ea7c3c', fontThemePreset: 'modern-sans' },
+  { id: 'fairway', label: 'Fairway', base: '#1e4633', accent: '#2FA866', fontThemePreset: 'modern-sans' },
+  { id: 'midnight-turf', label: 'Midnight Turf', base: '#0f3b30', accent: '#34d399', fontThemePreset: 'compact-ops' },
+  { id: 'clay-court', label: 'Clay Court', base: '#3d2a1e', accent: '#c2703d', fontThemePreset: 'classic-club' },
+  { id: 'sunset-polo', label: 'Sunset Polo', base: '#40260f', accent: '#f2711f', fontThemePreset: 'editorial-serif' },
+  { id: 'polo-green', label: 'Polo Green', base: '#123d26', accent: '#145a32', fontThemePreset: 'classic-club' },
+  { id: 'slate-citrus', label: 'Slate & Citrus', base: '#2a323d', accent: '#ea7c3c', fontThemePreset: 'modern-sans' },
 ];
 
 export function getColorTheme(id: string) {
