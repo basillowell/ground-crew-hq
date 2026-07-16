@@ -91,7 +91,7 @@ function NavItem({
   const content = (
     <>
       <Icon className="h-4 w-4 shrink-0" />
-      {!collapsed ? <span className="[-webkit-text-stroke:0.5px_black]">{label}</span> : null}
+      {!collapsed ? <span className="[-webkit-text-stroke:0.5px_rgb(var(--text-inverse))]">{label}</span> : null}
       {!collapsed && badge ? (
         <span className="ml-auto rounded-full bg-status-pending px-1.5 py-0.5 text-xs text-text-inverse">
           {badge}
@@ -237,7 +237,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
           </div>
           {!collapsed ? (
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-bold text-brand-bright [-webkit-text-stroke:0.5px_black]">{navigationTitle}</h1>
+              <h1 className="truncate text-sm font-bold text-brand-bright [-webkit-text-stroke:0.5px_rgb(var(--text-inverse))]">{navigationTitle}</h1>
               <p className="truncate text-xs uppercase text-text-muted">{navigationSubtitle}</p>
             </div>
           ) : null}
