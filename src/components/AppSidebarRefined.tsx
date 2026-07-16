@@ -91,7 +91,7 @@ function NavItem({
   const content = (
     <>
       <Icon className="h-4 w-4 shrink-0" />
-      {!collapsed ? <span>{label}</span> : null}
+      {!collapsed ? <span className="[-webkit-text-stroke:0.5px_black]">{label}</span> : null}
       {!collapsed && badge ? (
         <span className="ml-auto rounded-full bg-status-pending px-1.5 py-0.5 text-xs text-text-inverse">
           {badge}
@@ -119,7 +119,7 @@ function NavItem({
         href={href}
         onClick={onNavigate}
         title={collapsed ? label : undefined}
-        className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+        className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-brand-bright transition-colors hover:bg-surface-hover hover:text-text-primary"
       >
         {content}
       </a>
@@ -134,8 +134,8 @@ function NavItem({
       className={cn(
         'flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors',
         isActive
-          ? 'border-l-2 border-brand bg-brand-ghost font-medium text-brand'
-          : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
+          ? 'border-l-2 border-brand bg-brand-bright/15 font-medium text-brand'
+          : 'text-brand-bright hover:bg-surface-hover hover:text-text-primary',
       )}
     >
       {content}
@@ -237,7 +237,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
           </div>
           {!collapsed ? (
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-bold text-text-primary">{navigationTitle}</h1>
+              <h1 className="truncate text-sm font-bold text-brand-bright [-webkit-text-stroke:0.5px_black]">{navigationTitle}</h1>
               <p className="truncate text-xs uppercase text-text-muted">{navigationSubtitle}</p>
             </div>
           ) : null}
