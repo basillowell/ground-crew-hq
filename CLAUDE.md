@@ -6,7 +6,8 @@
 
 * SaaS app for lawn/grounds crew management
 * Production: ground-crew-hq.vercel.app
-* Stack: React + Vite + TypeScript + Tailwind CSS + Supabase + Vercel
+* Stack: Next.js 16 (App Router) + React 18 + TypeScript + Tailwind CSS + Supabase + Vercel
+* NOT Vite — migrated off it. `npm run build` is `next build`; there is no vite.config/index.html/src/main.tsx
 * Repo: C:\\Projects\\ground-crew-hq
 
 ## Supabase
@@ -34,6 +35,8 @@
 
 ## Architecture
 
+* `app/` is a thin Next.js App Router shell (routes, layout, providers); the real application code lives in `src/` (pages, components, lib) and is live
+* Stylesheet: `app/globals.css` is the ONLY one loaded, via `app/layout.tsx`. `src/index.css` is a dead Vite-era leftover imported by nothing — edit globals.css
 * Auth lives in LaunchPortalPage.tsx as a dialog (not separate pages)
 * Reset password is a standalone page: /auth/reset → ResetPasswordPage.tsx
 * AppLayout.tsx handles sidebar, topbar, mobile nav

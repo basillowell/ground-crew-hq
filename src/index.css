@@ -1,8 +1,22 @@
+/* ============================================================================
+ * DEAD FILE — NOT LOADED. DO NOT EDIT.
+ *
+ * Left over from the pre-Next.js (Vite) build. Nothing imports it: the app is
+ * Next.js App Router, and the stylesheet it actually renders is
+ * app/globals.css, imported by app/layout.tsx.
+ *
+ * Its token values are stale (light-mode surfaces predate the v2.5.32 contrast
+ * work) and it still contains a filter:invert() rule that CLAUDE.md forbids.
+ * Editing this file changes nothing on screen — edit app/globals.css instead.
+ *
+ * Kept rather than deleted only to preserve history; safe to remove.
+ * ==========================================================================*/
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
 All colors MUST be HSL.
 */
 
