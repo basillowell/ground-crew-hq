@@ -91,12 +91,18 @@ function darknessLightnessOffset(darkness = 50): number {
   return ((normalizeDarkness(darkness) - 50) / 50) * 4;
 }
 
+function surfaceLightnessOffset(darkness = 50, isLightMode: boolean): number {
+  const normalizedDarkness = normalizeDarkness(darkness);
+  if (isLightMode) return (normalizedDarkness - 50) * 0.24;
+  return darknessLightnessOffset(normalizedDarkness);
+}
+
 /** Mode-aware card tint: bright (high-L) in light mode, dark (low-L) in dark mode. */
 function cardTriplet(cardColorHex: string, isLightMode: boolean, darkness = 50): string {
   const { h, s } = hexToHsl(cardColorHex);
   const normalizedDarkness = normalizeDarkness(darkness);
   if (isLightMode) {
-    const lightness = clampRange(96 - (normalizedDarkness - 50) * 0.06, 88, 98);
+    const lightness = clampRange(96 - (normalizedDarkness - 50) * 0.24, 78, 98);
     return hslToRgbTriplet(h, Math.min(s, 30), lightness);
   }
   const lightness = clampRange(11 - (normalizedDarkness - 50) * 0.1, 6, 16);
@@ -153,7 +159,7 @@ type ThemeSurfaceColors = {
  */
 export function applyThemeSurfaces(root: HTMLElement, colors: ThemeSurfaceColors, isLightMode: boolean, darkness = 50): void {
   const { primaryColor, cardColor, sidebarColor } = colors;
-  const lightnessOffset = darknessLightnessOffset(darkness);
+  const lightnessOffset = surfaceLightnessOffset(darkness, isLightMode);
 
   if (primaryColor) {
     const target = hexToHsl(primaryColor);
