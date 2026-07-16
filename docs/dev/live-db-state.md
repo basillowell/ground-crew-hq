@@ -24,13 +24,24 @@
 > constant, or the literal string 'custom'. null = inherit the org's
 > program_settings color/font default.
 
-> theme_custom_colors: nullable jsonb, shape `{primaryColor, accentColor,
-> sidebarColor}` (hex strings). Only meaningful when theme_preset_override
-> is 'custom'. null/absent = no personal custom colors set. Added in
-> migration 023_add_app_users_theme_custom_colors.sql.
+> theme_custom_colors: nullable jsonb, shape `{base, accent, contrast?}` —
+> two hex strings + an optional 0-100 number. Only meaningful when
+> theme_preset_override is 'custom'. null/absent = no personal custom colors set.
+> Added in migration 023_add_app_users_theme_custom_colors.sql.
+>
+> Shape changed from `{primaryColor, accentColor, sidebarColor}` when the theme
+> engine moved to OKLCH (base + accent + contrast). No data migration was run:
+> zero personal custom-color records existed. Rows in the old shape fail
+> parseCustomThemeColors() and return null, falling back to the preset — the
+> intended degradation. The column is unconstrained jsonb, so that parse in
+> src/lib/colorThemes.ts is the only validation boundary.
 
 > theme_darkness_override: nullable numeric, 0-100 scale. Overrides the org-level
 > program_settings.theme_darkness for this user. null = inherit org/default darkness.
+>
+> NAMING DRIFT (open decision): the engine now reads this as *contrast* — it sets
+> both the surface ladder's spread and the WCAG ratio text must hit. The column
+> name still says darkness. Not renamed; see program_settings.theme_darkness.
 
 ---
 
@@ -477,6 +488,20 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 
 > theme_darkness: nullable numeric, 0-100 scale. Controls theme surface/card
 > darkness at the org level. null = default 50.
+>
+> NAMING DRIFT (open decision): read as *contrast* by the OKLCH engine, not
+> darkness. 50 reproduces the shipped design. Renaming to theme_contrast is a
+> migration nobody has approved yet, so the name still says darkness.
+
+> COLUMN REUSE (open decision): the theme is now two colors, but these three
+> columns predate that. Current mapping, applied in AppLayout.applyBranding and
+> SettingsPage:
+>   - sidebar_color  -> `base`   (drives every surface's hue + chroma)
+>   - primary_color  -> `accent` (buttons, links, ring, active states)
+>   - accent_color   -> UNUSED. No longer read or written.
+> So `base` lives in a column named sidebar_color, which is misleading. Options:
+> rename the columns to base_color/accent_color, or leave the drift documented.
+> Not decided — flagged rather than actioned.
 
 ---
 
