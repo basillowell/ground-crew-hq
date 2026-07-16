@@ -55,10 +55,9 @@ export function hslToRgbTriplet(h: number, s: number, l: number): string {
   return `${toByte(r)} ${toByte(g)} ${toByte(b)}`;
 }
 
-/** Blends hue/saturation toward `target` by `amount` (0-1), holding `base.l` fixed. */
+/** Uses target hue and blends saturation by `amount` (0-1), holding `base.l` fixed. */
 export function tintHslPreservingLightness(base: Hsl, target: { h: number; s: number }, amount: number): Hsl {
-  const delta = ((target.h - base.h + 540) % 360) - 180;
-  const h = (base.h + delta * amount + 360) % 360;
+  const h = target.h;
   const s = base.s + (target.s - base.s) * amount;
   return { h, s, l: base.l };
 }
