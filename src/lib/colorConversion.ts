@@ -148,7 +148,10 @@ const BRAND_LADDER = {
 };
 
 const SURFACE_CHROMA_CEILING = 0.03; // one ceiling, every hue, every surface
-const TEXT_CHROMA_CEILING = 0.012; // text stays near-neutral
+// Text is pure neutral (no hue tint) so it reads as its own element and the
+// accent is the only chromatic colour on screen — the separation between text
+// and accent that makes the scheme feel intentional rather than monochrome.
+const TEXT_CHROMA_CEILING = 0;
 const GHOST_CHROMA_CEILING = 0.045; // accent-tinted surface, slightly richer
 
 /**
