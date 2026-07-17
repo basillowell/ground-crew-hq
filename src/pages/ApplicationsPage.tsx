@@ -1168,7 +1168,7 @@ export default function ApplicationsPage() {
         log.siteConditions ?? '',
         `Wind ${log.windSpeedAtApplication ?? 0} mph`,
         `Temp ${log.temperatureAtApplication ?? 0}F`,
-      ].filter(Boolean).join(' Â· ');
+      ].filter(Boolean).join(' · ');
 
       return [
         quoteCsv(log.applicationDate),
