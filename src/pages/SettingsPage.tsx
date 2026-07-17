@@ -868,7 +868,7 @@ function SortablePropertyCard({
         <div className="min-w-0 flex-1 py-1">
           <p className="truncate text-sm font-medium text-text-primary">{property.name}</p>
           <p className="text-xs text-text-muted">
-            {property.short_name || 'No short name'} Â· {property.city || 'No city'}{property.state ? `, ${property.state}` : ''}
+            {property.short_name || 'No short name'} · {property.city || 'No city'}{property.state ? `, ${property.state}` : ''}
           </p>
         </div>
         {!isEditing ? (

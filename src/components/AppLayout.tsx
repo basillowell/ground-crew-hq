@@ -595,7 +595,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         ) : null}
         <div
-          className={`fixed left-0 top-0 z-40 h-screen w-60 flex-col overflow-y-hidden border-r border-surface-border bg-surface-base transition-transform duration-200 ease-in-out ${
+          className={`fixed left-0 top-0 z-40 h-screen w-60 flex-col overflow-hidden border-r border-surface-border bg-surface-base transition-transform duration-200 ease-in-out ${
             currentRole === 'employee' ? 'hidden md:flex' : 'flex'
           } ${
             mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'

@@ -346,6 +346,16 @@ input[type="color"] {
 }
 
 @layer utilities {
+  /* Keep an element horizontally scrollable but hide the native scrollbar,
+     which otherwise renders as a raw OS bar inside the UI chrome. */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
   .animate-fade-up {
     animation: fade-up 0.2s ease-out;
   }

@@ -136,7 +136,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
           </div>
 
           {isSettingsRoute ? (
-            <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-1" aria-label="Settings sections">
+            <nav className="scrollbar-hide flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Settings sections">
               {settingsTabs.map((tab) => (
                 <button
                   key={tab}
