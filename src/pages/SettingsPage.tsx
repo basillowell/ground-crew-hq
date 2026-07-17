@@ -13,7 +13,7 @@ import {
 import type { ProgramSettings, Property as LiveProperty } from '@/data/seedData';
 import { formatTime } from '@/utils/formatTime';
 import { APP_VERSION } from '@/constants/version';
-import { COLOR_THEMES, resolveThemeCardColor, type ColorTheme, type CustomThemeColors } from '@/lib/colorThemes';
+import { applyFontTheme, COLOR_THEMES, type ColorTheme, type CustomThemeColors } from '@/lib/colorThemes';
 import { applyThemeSurfaces } from '@/lib/colorConversion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -265,10 +265,12 @@ function colorsMatch(left?: string | null, right?: string | null) {
 
 function getProgramSettingsThemeId(programSettings?: ColorThemeProgramSettings | null) {
   if (!programSettings) return null;
+  // Org colours still live in the legacy program_settings columns: `base` is
+  // stored in sidebar_color and `accent` in primary_color. accent_color is now
+  // unused. Phase 4 decides whether to rename those columns.
   return COLOR_THEMES.find((theme) =>
-    colorsMatch(theme.primaryColor, programSettings.primaryColor) &&
-    colorsMatch(theme.accentColor, programSettings.accentColor) &&
-    colorsMatch(theme.sidebarColor, programSettings.sidebarColor) &&
+    colorsMatch(theme.base, programSettings.sidebarColor) &&
+    colorsMatch(theme.accent, programSettings.primaryColor) &&
     theme.fontThemePreset === programSettings.fontThemePreset,
   )?.id ?? null;
 }
@@ -283,78 +285,19 @@ function normalizeThemeDarkness(value: unknown, fallback = 50) {
   return Math.round(Math.min(100, Math.max(0, numeric)));
 }
 
-function hexToHslValues(hex: string | undefined | null, fallback: string) {
-  if (!hex) return fallback;
-  const clean = hex.replace('#', '');
-  if (clean.length !== 6) return fallback;
-  const r = Number.parseInt(clean.slice(0, 2), 16) / 255;
-  const g = Number.parseInt(clean.slice(2, 4), 16) / 255;
-  const b = Number.parseInt(clean.slice(4, 6), 16) / 255;
-  if ([r, g, b].some((value) => Number.isNaN(value))) return fallback;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let hue = 0;
-  let sat = 0;
-  const light = (max + min) / 2;
-  if (max !== min) {
-    const delta = max - min;
-    sat = light > 0.5 ? delta / (2 - max - min) : delta / (max + min);
-    switch (max) {
-      case r:
-        hue = (g - b) / delta + (g < b ? 6 : 0);
-        break;
-      case g:
-        hue = (b - r) / delta + 2;
-        break;
-      default:
-        hue = (r - g) / delta + 4;
-    }
-    hue /= 6;
-  }
-  return Math.round(hue * 360) + ' ' + Math.round(sat * 100) + '% ' + Math.round(light * 100) + '%';
-}
-
 function applyColorThemeToDocument(theme: ColorTheme | null, programSettings?: ColorThemeProgramSettings | null, darknessOverride?: number | null) {
   if (typeof document === 'undefined') return;
-  const primaryColor = theme?.primaryColor ?? programSettings?.primaryColor;
-  const accentColor = theme?.accentColor ?? programSettings?.accentColor;
-  const sidebarColor = theme?.sidebarColor ?? programSettings?.sidebarColor;
+  const base = theme?.base ?? programSettings?.sidebarColor;
+  const accent = theme?.accent ?? programSettings?.primaryColor;
   const fontThemePreset = theme?.fontThemePreset ?? programSettings?.fontThemePreset ?? 'modern-sans';
-  const themeDarkness = darknessOverride ?? theme?.darkness ?? programSettings?.themeDarkness ?? 50;
-  const cardColor = theme?.cardColor ?? resolveThemeCardColor(
-    programSettings?.primaryColor,
-    programSettings?.accentColor,
-    programSettings?.sidebarColor,
-    programSettings?.fontThemePreset,
-  );
+  const contrast = darknessOverride ?? theme?.contrast ?? programSettings?.themeDarkness ?? 50;
   const isLightMode = typeof document !== 'undefined' && document.documentElement.classList.contains('light');
   const root = document.documentElement;
-  root.style.setProperty('--primary', hexToHslValues(primaryColor, '152 55% 38%'));
-  root.style.setProperty('--ring', hexToHslValues(primaryColor, '152 55% 38%'));
-  root.style.setProperty('--accent', hexToHslValues(accentColor, '152 30% 94%'));
-  root.style.setProperty('--sidebar-primary', hexToHslValues(primaryColor, '152 55% 48%'));
-  applyThemeSurfaces(root, { primaryColor, cardColor, sidebarColor }, isLightMode, themeDarkness);
-  const fontThemes: Record<string, { body: string; heading: string }> = {
-    'modern-sans': {
-      body: '"Inter", "Segoe UI", sans-serif',
-      heading: '"Inter", "Segoe UI", sans-serif',
-    },
-    'editorial-serif': {
-      body: '"Inter", "Segoe UI", sans-serif',
-      heading: '"Georgia", "Times New Roman", serif',
-    },
-    'classic-club': {
-      body: '"Trebuchet MS", "Segoe UI", sans-serif',
-      heading: '"Palatino Linotype", "Book Antiqua", serif',
-    },
-    'compact-ops': {
-      body: '"Segoe UI", "Arial", sans-serif',
-      heading: '"Segoe UI", "Arial", sans-serif',
-    },
-  };
-  const chosenFontTheme = fontThemes[fontThemePreset] || fontThemes['modern-sans'];
-  root.style.setProperty('--brand-body-font', chosenFontTheme.body);
-  root.style.setProperty('--brand-heading-font', chosenFontTheme.heading);
+  // applyThemeSurfaces now derives --primary/--ring/--accent/--sidebar-* itself,
+  // so this call site no longer sets them by hand. That hand-setting is what had
+  // drifted out of sync with AppLayout's copy.
+  applyThemeSurfaces(root, { base, accent }, isLightMode, contrast);
+  applyFontTheme(root, fontThemePreset);
 }
 
 function ColorThemeSwatchGrid({
@@ -419,7 +362,7 @@ function ColorThemeSwatchGrid({
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             </div>
             <div className="mt-2 flex items-center gap-1.5" aria-hidden="true">
-              {[theme.primaryColor, theme.accentColor, theme.sidebarColor].map((color) => (
+              {[theme.base, theme.accent].map((color) => (
                 <span
                   key={theme.id + '-' + color}
                   className="h-4 w-4 rounded-full border border-surface-border"
@@ -473,10 +416,9 @@ function CustomColorTile({
   );
 }
 
-const CUSTOM_COLOR_FIELDS: { key: keyof CustomThemeColors; label: string; hint: string }[] = [
-  { key: 'primaryColor', label: 'Primary', hint: 'Buttons & primary actions' },
-  { key: 'accentColor', label: 'Accent', hint: 'Selected-item state' },
-  { key: 'sidebarColor', label: 'Sidebar', hint: 'Navigation rail' },
+const CUSTOM_COLOR_FIELDS: { key: 'base' | 'accent'; label: string; hint: string }[] = [
+  { key: 'base', label: 'Base', hint: 'Backgrounds, cards & the nav rail' },
+  { key: 'accent', label: 'Accent', hint: 'Buttons, links & selected items' },
 ];
 
 function CustomColorInputs({
@@ -490,6 +432,10 @@ function CustomColorInputs({
 }) {
   return (
     <div className="mt-3 rounded-xl border border-surface-border bg-surface-elevated p-3">
+      <p className="mb-3 text-xs text-text-muted">
+        Pick two colors — we derive the rest. Card, hover, border and text shades are
+        generated from these so they stay readable in both light and dark mode.
+      </p>
       <div className="flex flex-wrap gap-4">
         {CUSTOM_COLOR_FIELDS.map((field) => (
           <label key={field.key} className="grid gap-1.5 text-xs font-medium text-text-muted">
@@ -1523,9 +1469,8 @@ function WorkspaceTab({
       const { error: updateError } = await supabase
         .from('program_settings')
         .update({
-          primary_color: theme.primaryColor,
-          accent_color: theme.accentColor,
-          sidebar_color: theme.sidebarColor,
+          primary_color: theme.accent,
+          sidebar_color: theme.base,
           font_theme_preset: theme.fontThemePreset,
         })
         .eq('org_id', orgId);
@@ -1551,9 +1496,8 @@ function WorkspaceTab({
       const { error: updateError } = await supabase
         .from('program_settings')
         .update({
-          primary_color: colors.primaryColor,
-          accent_color: colors.accentColor,
-          sidebar_color: colors.sidebarColor,
+          primary_color: colors.accent,
+          sidebar_color: colors.base,
         })
         .eq('org_id', orgId);
       if (updateError) {
@@ -2675,9 +2619,8 @@ function WorkspaceTab({
           const orgThemeId = getProgramSettingsThemeId(programSettingsQuery.data);
           const orgCustomActive = orgThemeId === null;
           const orgCustomValue: CustomThemeColors = {
-            primaryColor: programSettingsQuery.data?.primaryColor ?? '#2FA866',
-            accentColor: programSettingsQuery.data?.accentColor ?? '#16a34a',
-            sidebarColor: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+            base: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+            accent: programSettingsQuery.data?.primaryColor ?? '#2FA866',
           };
           return (
             <div className="rounded-xl border border-surface-border bg-surface-card p-4">
@@ -3237,17 +3180,15 @@ function AccessTab({
   const getPersonalPreviewTheme = useCallback((themeId = personalThemeOverride, customColors = themeCustomColors): ColorTheme | null => {
     if (themeId === CUSTOM_THEME_OPTION_ID) {
       const colors = customColors ?? {
-        primaryColor: programSettingsQuery.data?.primaryColor ?? '#2FA866',
-        accentColor: programSettingsQuery.data?.accentColor ?? '#16a34a',
-        sidebarColor: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+        base: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+        accent: programSettingsQuery.data?.primaryColor ?? '#2FA866',
       };
       return {
         id: CUSTOM_THEME_OPTION_ID,
         label: 'Custom',
-        primaryColor: colors.primaryColor,
-        accentColor: colors.accentColor,
-        sidebarColor: colors.sidebarColor,
-        cardColor: colors.primaryColor,
+        base: colors.base,
+        accent: colors.accent,
+        contrast: colors.contrast,
         fontThemePreset: programSettingsQuery.data?.fontThemePreset ?? 'modern-sans',
       };
     }
@@ -3302,7 +3243,7 @@ function AccessTab({
       }
       setPersonalThemeOverride(CUSTOM_THEME_OPTION_ID);
       applyColorThemeToDocument(
-        { id: 'custom', label: 'Custom', ...colors, cardColor: colors.primaryColor, fontThemePreset: programSettingsQuery.data?.fontThemePreset ?? 'modern-sans' },
+        { id: 'custom', label: 'Custom', ...colors, fontThemePreset: programSettingsQuery.data?.fontThemePreset ?? 'modern-sans' },
         programSettingsQuery.data,
         personalDarknessOverride,
       );
@@ -3487,9 +3428,8 @@ Your role: ${inviteRole}
         {(() => {
           const personalCustomActive = personalThemeOverride === CUSTOM_THEME_OPTION_ID;
           const personalCustomValue: CustomThemeColors = themeCustomColors ?? {
-            primaryColor: programSettingsQuery.data?.primaryColor ?? '#2FA866',
-            accentColor: programSettingsQuery.data?.accentColor ?? '#16a34a',
-            sidebarColor: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+            base: programSettingsQuery.data?.sidebarColor ?? '#0f172a',
+            accent: programSettingsQuery.data?.primaryColor ?? '#2FA866',
           };
           return (
             <div className="mt-2">
