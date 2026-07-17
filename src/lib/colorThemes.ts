@@ -15,24 +15,30 @@ export type ColorTheme = {
 };
 
 /**
- * `base` carries each preset's surface hue; it comes from the old four-colour
- * presets' `cardColor`, which is the field that actually described the surface
- * family. (The old `sidebarColor` only ever described the rail — using it here
- * is what turned Sunset Polo orange and Fairway navy.) Only base's hue and
- * chroma are used; its lightness is discarded in favour of the mode's ladder,
- * so these read as the intended colour in both light and dark.
+ * Three curated schemes, not six computed ones. The products that look cleanest
+ * in this category (Linear, Vercel) converge on the same two moves: near-neutral
+ * surfaces carrying almost no chroma, and a single accent used sparingly — on
+ * the brand mark, focus rings, and one primary action. Six hue-saturated presets
+ * were working against that.
  *
- * Under two inputs each preset gets one hue family, so Fairway is green rather
- * than navy-rail-over-green, and Polo Green's cream accent (#e8dcb5) gives way
- * to its primary, since accent now drives buttons.
+ * `base` supplies hue + chroma only; its lightness is discarded in favour of the
+ * mode's ladder. So a near-neutral base (very low chroma) is not a "grey theme" —
+ * it is what makes surfaces read as clean rather than tinted.
+ *
+ * Named descriptively rather than after the products they take cues from: these
+ * are other companies' trademarks, and shipping a "Linear" theme in a commercial
+ * product trades on their brand.
  */
 export const COLOR_THEMES: ColorTheme[] = [
-  { id: 'fairway', label: 'Fairway', base: '#1e4633', accent: '#2FA866', fontThemePreset: 'modern-sans' },
-  { id: 'midnight-turf', label: 'Midnight Turf', base: '#0f3b30', accent: '#34d399', fontThemePreset: 'compact-ops' },
-  { id: 'clay-court', label: 'Clay Court', base: '#3d2a1e', accent: '#c2703d', fontThemePreset: 'classic-club' },
-  { id: 'sunset-polo', label: 'Sunset Polo', base: '#40260f', accent: '#f2711f', fontThemePreset: 'editorial-serif' },
-  { id: 'polo-green', label: 'Polo Green', base: '#123d26', accent: '#145a32', fontThemePreset: 'classic-club' },
-  { id: 'slate-citrus', label: 'Slate & Citrus', base: '#2a323d', accent: '#ea7c3c', fontThemePreset: 'modern-sans' },
+  // GCHQ's own documented design system (CLAUDE.md: base #0f1a14, accent
+  // #a3e635 electric lime). None of the previous presets used it, so the app
+  // could not actually look like its own spec.
+  { id: 'turf', label: 'Turf', base: '#0f1a14', accent: '#a3e635', fontThemePreset: 'modern-sans' },
+  // Linear-style: near-neutral cool surfaces (their Surface 1 is #0f1011) with
+  // a single lavender accent.
+  { id: 'graphite', label: 'Graphite', base: '#0f1011', accent: '#5e6ad2', fontThemePreset: 'modern-sans' },
+  // Vercel/Geist-style: pure neutral surfaces, one blue accent, nothing else.
+  { id: 'mono', label: 'Mono', base: '#0a0a0a', accent: '#0070f3', fontThemePreset: 'modern-sans' },
 ];
 
 export function getColorTheme(id: string) {

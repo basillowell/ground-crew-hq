@@ -208,12 +208,28 @@ function solveTextL(bg: Rgb, target: number, isLight: boolean, H: number, C: num
   return { L: (lo + hi) / 2, C, H };
 }
 
-/** Pick whichever of near-black / near-white reads better on `on`. */
+/**
+ * Pick whichever of black / white reads better on `on`.
+ *
+ * Deliberately pure (L=0 / L=1) rather than softened endpoints. A mid-lightness
+ * brand colour — #5e6ad2, #0070f3 — clears AA against pure white by a hair
+ * (4.71 and 4.60) and fails against anything dimmer, so hedging the endpoints
+ * costs exactly the margin these need. Body text elsewhere is softened via the
+ * contrast solver; on-accent foregrounds want the maximum.
+ */
 function foregroundFor(on: Oklch): Oklch {
   const bg = gamutMap(on);
-  const dark: Oklch = { L: 0.15, C: 0, H: 0 };
-  const light: Oklch = { L: 0.98, C: 0, H: 0 };
-  return contrastRatio(bg, gamutMap(dark)) >= contrastRatio(bg, gamutMap(light)) ? dark : light;
+  const black: Oklch = { L: 0, C: 0, H: 0 };
+  const white: Oklch = { L: 1, C: 0, H: 0 };
+  // Prefer white whenever it clears AA, rather than maximising contrast. On a
+  // mid-lightness accent the two land within ~0.01 of each other, and pure
+  // contrast-maximising flips to black on colours the whole industry sets in
+  // white (#0070f3). White-on-brand is the convention; black is the fallback
+  // for accents too light to carry it (e.g. #a3e635 lime).
+  // Gate on the real WCAG threshold, not the solver's AA safety target: that
+  // target carries a margin for 8-bit rounding, and pure white needs none.
+  // #0070f3 with white lands at ~4.60 — passing 4.5, failing 4.6.
+  return contrastRatio(bg, gamutMap(white)) >= 4.5 ? white : black;
 }
 
 export type ThemeInput = {
