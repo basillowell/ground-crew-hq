@@ -39,6 +39,10 @@ export const COLOR_THEMES: ColorTheme[] = [
   { id: 'graphite', label: 'Graphite', base: '#0f1011', accent: '#5e6ad2', fontThemePreset: 'modern-sans' },
   // Vercel/Geist-style: pure neutral surfaces, one blue accent, nothing else.
   { id: 'mono', label: 'Mono', base: '#0a0a0a', accent: '#0070f3', fontThemePreset: 'modern-sans' },
+  // The one warm scheme: deep polo green surfaces with a gold accent (country-
+  // club heritage). Gold is light enough that on-accent button text resolves to
+  // black (verified 10:1); text and surfaces stay neutral/green as usual.
+  { id: 'clubhouse', label: 'Clubhouse', base: '#14432c', accent: '#d4af37', fontThemePreset: 'modern-sans' },
 ];
 
 export function getColorTheme(id: string) {
