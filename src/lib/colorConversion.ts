@@ -137,8 +137,10 @@ type SurfaceRole = 'base' | 'card' | 'hover' | 'elevated' | 'border' | 'sidebar'
 
 const LADDER: Record<'dark' | 'light', Record<SurfaceRole, number>> = {
   //          base    card    hover   elevated border  sidebar sidebarAccent
-  dark: { base: 0.1871, card: 0.2274, hover: 0.2589, elevated: 0.2672, border: 0.3211, sidebar: 0.1861, sidebarAccent: 0.2891 },
-  light: { base: 0.8922, card: 1.0, hover: 0.9287, elevated: 0.953, border: 0.7656, sidebar: 0.9267, sidebarAccent: 0.868 },
+  // card lifted slightly further from base for more separation; border pulled
+  // toward the surfaces so it reads as a refined hairline rather than a hard line.
+  dark: { base: 0.1871, card: 0.242, hover: 0.2589, elevated: 0.2672, border: 0.295, sidebar: 0.1861, sidebarAccent: 0.2891 },
+  light: { base: 0.8922, card: 1.0, hover: 0.9287, elevated: 0.953, border: 0.805, sidebar: 0.9267, sidebarAccent: 0.868 },
 };
 
 /** Brand shades as perceptual offsets from the user's accent. */
