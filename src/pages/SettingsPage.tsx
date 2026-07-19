@@ -524,8 +524,8 @@ function BackgroundDarknessSlider({
     <div className="mt-4 rounded-xl border border-surface-border bg-surface-elevated p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h4 className="text-sm font-semibold text-text-primary">Background Darkness</h4>
-          <p className="mt-0.5 text-xs text-text-muted">Adjust surface and card depth without changing the selected color scheme.</p>
+          <h4 className="text-sm font-semibold text-text-primary">Contrast</h4>
+          <p className="mt-0.5 text-xs text-text-muted">Adjust surface depth and text contrast without changing the selected color scheme.</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-full border border-surface-border bg-surface-card px-2.5 py-1 text-xs font-medium text-text-secondary">{draft}</span>
@@ -553,11 +553,11 @@ function BackgroundDarknessSlider({
         onKeyUp={() => commitValue(draft)}
         onBlur={() => commitValue(draft)}
         className="mt-3 w-full accent-brand disabled:cursor-not-allowed disabled:opacity-60"
-        aria-label="Background darkness"
+        aria-label="Contrast"
       />
       <div className="mt-1 flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-text-muted">
-        <span>Lighter</span>
-        <span>Darker</span>
+        <span>Softer</span>
+        <span>Stronger</span>
       </div>
     </div>
   );
@@ -1528,13 +1528,13 @@ function WorkspaceTab({
         .update({ theme_darkness: nextDarkness })
         .eq('org_id', orgId);
       if (updateError) {
-        toast.error('Failed to update background darkness: ' + updateError.message);
+        toast.error('Failed to update contrast: ' + updateError.message);
         return;
       }
       applyColorThemeToDocument(null, programSettingsQuery.data, nextDarkness);
       await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
       await queryClient.refetchQueries({ queryKey: ['program-settings', orgId] });
-      toast.success('Organization background darkness updated');
+      toast.success('Organization contrast updated');
     } finally {
       setSavingOrgDarkness(false);
     }
@@ -3266,13 +3266,13 @@ function AccessTab({
         .eq('id', userId)
         .eq('org_id', orgId);
       if (updateError) {
-        toast.error('Unable to update background darkness: ' + updateError.message);
+        toast.error('Unable to update contrast: ' + updateError.message);
         return;
       }
       setPersonalDarknessOverride(nextDarkness);
       applyColorThemeToDocument(getPersonalPreviewTheme(), programSettingsQuery.data, nextDarkness);
       await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
-      toast.success(nextDarkness === null ? 'Using organization background darkness' : 'Personal background darkness updated');
+      toast.success(nextDarkness === null ? 'Using organization contrast' : 'Personal contrast updated');
     } finally {
       setSavingPersonalDarkness(false);
     }
