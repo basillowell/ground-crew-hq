@@ -21,6 +21,15 @@ All colors MUST be HSL.
   --text-secondary: 148 163 184;  /* #94a3b8 - pure slate-400, no green tint */
   --text-muted: 71 85 105;        /* #475569 - slate-600 */
   --text-inverse: 17 20 18;       /* #111413 */
+
+  /* Elevation shadows (dark). Black drop shadows read weakly on dark surfaces,
+     so md+ pair a low-alpha top-edge inset highlight (light catching the top)
+     with layered drops — the combination is what makes dark elevation read. */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: inset 0 1px 0 0 rgba(255, 255, 255, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.45);
+  --shadow-lg: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), 0 6px 16px -2px rgba(0, 0, 0, 0.5), 0 2px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-xl: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 12px 32px -4px rgba(0, 0, 0, 0.55), 0 4px 12px -2px rgba(0, 0, 0, 0.4);
+  --shadow-2xl: inset 0 1px 0 0 rgba(255, 255, 255, 0.07), 0 24px 56px -8px rgba(0, 0, 0, 0.6), 0 8px 20px -4px rgba(0, 0, 0, 0.45);
 }
 
 html.light {
@@ -48,6 +57,14 @@ html.light {
   --sidebar-background: 120 15% 90%;
   --sidebar-foreground: 147 20% 35%;
   --sidebar-border: 120 20% 83%;
+
+  /* Elevation shadows (light). Drop shadows read on their own here — no inset
+     highlight needed; tinted slightly cool (16 24 40) rather than pure black. */
+  --shadow-sm: 0 1px 2px 0 rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 2px 6px -1px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 6px 16px -2px rgba(16, 24, 40, 0.1), 0 2px 6px -1px rgba(16, 24, 40, 0.06);
+  --shadow-xl: 0 12px 32px -4px rgba(16, 24, 40, 0.12), 0 4px 12px -2px rgba(16, 24, 40, 0.08);
+  --shadow-2xl: 0 24px 56px -8px rgba(16, 24, 40, 0.16), 0 8px 20px -4px rgba(16, 24, 40, 0.1);
 }
 
 @layer base {
