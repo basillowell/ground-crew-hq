@@ -104,6 +104,18 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      // Theme-aware elevation: shadow-* map to CSS vars that swap per mode, so
+      // the ~45 existing shadow-* utilities become visible on dark surfaces
+      // instead of rendering Tailwind's default black-on-white scale. Merges
+      // with defaults, so shadow-none / shadow-inner are unaffected.
+      boxShadow: {
+        sm: "var(--shadow-sm)",
+        DEFAULT: "var(--shadow-md)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
+        xl: "var(--shadow-xl)",
+        "2xl": "var(--shadow-2xl)",
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },
