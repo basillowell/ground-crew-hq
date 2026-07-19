@@ -1178,13 +1178,13 @@ export default function EmployeesPage() {
         <table className="min-w-full text-sm">
           <thead className="bg-surface-elevated text-xs uppercase tracking-wider text-text-muted">
             <tr>
-              <th className="px-3 py-2 text-left font-medium">Name</th>
-              <th className="px-3 py-2 text-left font-medium">Role</th>
-              <th className="px-3 py-2 text-left font-medium">Department</th>
-              <th className="px-3 py-2 text-left font-medium">Status</th>
-              <th className="px-3 py-2 text-left font-medium">Property</th>
-              <th className="px-3 py-2 text-left font-medium">Hourly Rate</th>
-              <th className="px-3 py-2 text-right font-medium">Actions</th>
+              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Name</th>
+              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Role</th>
+              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Department</th>
+              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Status</th>
+              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Property</th>
+              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Hourly Rate</th>
+              <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Actions</th>
             </tr>
           </thead>
           <tbody>
