@@ -36,6 +36,17 @@ const supabase = createClient();
 const EMPLOYEES_PER_PAGE = 20;
 const FALLBACK_SHIFT_START = '07:30';
 const FALLBACK_SHIFT_END = '16:00';
+/** Sun..Sat, matching Date#getDay(). Mon-Fri is the default range selection. */
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
+  { value: 0, label: 'Sun' },
+];
+
 const AVAILABILITY_STATUS_OPTIONS = [
   { value: 'scheduled', label: 'Scheduled' },
   { value: 'off', label: 'Day Off' },
@@ -374,6 +385,16 @@ export default function EmployeesPage() {
     shift_end: availabilityShiftEndDefault,
   });
   const [bulkShiftSaving, setBulkShiftSaving] = useState(false);
+  // Range scheduler: picks one employee + a span of days + which weekdays, then
+  // hands the resulting cell keys to the existing bulk flow so there is exactly
+  // one write path for availability.
+  const [rangeDialogOpen, setRangeDialogOpen] = useState(false);
+  const [rangeDraft, setRangeDraft] = useState<{
+    employee_id: string;
+    start: string;
+    end: string;
+    dows: number[];
+  }>({ employee_id: '', start: '', end: '', dows: [1, 2, 3, 4, 5] });
   const isDraggingRef = useRef(false);
   const dragSelectionRef = useRef<Set<string>>(new Set());
   const suppressNextAvailabilityClickRef = useRef(false);
@@ -450,6 +471,7 @@ export default function EmployeesPage() {
       return {
         day: index + 1,
         key: date.toISOString().slice(0, 10),
+        dow: date.getDay(), // 0=Sun..6=Sat, used by the range scheduler
       };
     });
   }, [monthCursor]);
@@ -537,6 +559,54 @@ export default function EmployeesPage() {
     dragSelectionRef.current = emptySelection;
     setDragSelection(emptySelection);
   }, []);
+
+  const openRangeDialog = useCallback(() => {
+    const firstDayKey = monthDays[0]?.key ?? '';
+    const lastDayKey = monthDays[monthDays.length - 1]?.key ?? '';
+    setRangeDraft((current) => ({
+      employee_id: current.employee_id || employees[0]?.id || '',
+      start: firstDayKey,
+      end: lastDayKey,
+      dows: current.dows.length ? current.dows : [1, 2, 3, 4, 5],
+    }));
+    setRangeDialogOpen(true);
+  }, [employees, monthDays]);
+
+  /**
+   * Turns the range into the same cell keys a drag would produce, then defers to
+   * the bulk dialog for status/time/property. Deliberately limited to the month
+   * on screen: entryByEmployeeDay only holds the loaded month, so dates outside
+   * it would look "new" and upsert fresh rows, duplicating existing entries.
+   */
+  const applyAvailabilityRange = useCallback(() => {
+    if (!rangeDraft.employee_id) {
+      toast.error('Choose an employee first.');
+      return;
+    }
+    if (!rangeDraft.start || !rangeDraft.end || rangeDraft.start > rangeDraft.end) {
+      toast.error('Choose a valid start and end date.');
+      return;
+    }
+    if (rangeDraft.dows.length === 0) {
+      toast.error('Select at least one day of the week.');
+      return;
+    }
+
+    const keys = monthDays
+      .filter((day) => day.key >= rangeDraft.start && day.key <= rangeDraft.end && rangeDraft.dows.includes(day.dow))
+      .map((day) => `${rangeDraft.employee_id}:${day.key}`);
+
+    if (keys.length === 0) {
+      toast.error('No days in that range match the selected weekdays.');
+      return;
+    }
+
+    const selection = new Set(keys);
+    dragSelectionRef.current = selection;
+    setDragSelection(selection);
+    setRangeDialogOpen(false);
+    openBulkShiftDialog(selection);
+  }, [monthDays, openBulkShiftDialog, rangeDraft]);
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -644,7 +714,9 @@ export default function EmployeesPage() {
   const saveBulkAvailabilityEntries = useCallback(async () => {
     if (isReadOnly) return;
     if (!supabase || !orgId) return;
-    if (bulkSelectionKeys.length < 2) return;
+    // >=1 (not >=2): a drag of a single cell never reaches this path (it opens the
+    // single-day dialog), but a one-day range legitimately can.
+    if (bulkSelectionKeys.length < 1) return;
     if (bulkShiftDraft.status === 'scheduled' && !bulkShiftDraft.property_id) {
       toast.error('Property is required for scheduled shifts.');
       return;
@@ -1080,8 +1152,15 @@ export default function EmployeesPage() {
             >
               Previous
             </Button>
-            <div className="font-medium">
-              {availabilityMonthLabel}
+            <div className="flex items-center gap-3">
+              <div className="font-medium">
+                {availabilityMonthLabel}
+              </div>
+              {!isReadOnly ? (
+                <Button size="sm" className="h-9" onClick={openRangeDialog}>
+                  Schedule range
+                </Button>
+              ) : null}
             </div>
             <Button
               variant="outline"
@@ -1708,6 +1787,93 @@ export default function EmployeesPage() {
             <Button onClick={() => void saveAvailabilityEntry()} disabled={shiftSaving}>
               {shiftSaving ? 'Saving...' : editingShiftId ? 'Save Shift' : 'Add Shift'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rangeDialogOpen && !isReadOnly} onOpenChange={setRangeDialogOpen}>
+        <DialogContent aria-describedby="range-shift-dialog-desc" className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Schedule a Date Range</DialogTitle>
+            <DialogDescription id="range-shift-dialog-desc">
+              Pick one employee and a span of days — you&apos;ll set the status and times once on the next step.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground">Employee</label>
+              <select
+                value={rangeDraft.employee_id}
+                onChange={(event) => setRangeDraft((current) => ({ ...current, employee_id: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Select employee</option>
+                {employees.map((employee) => (
+                  <option key={`range-emp-${employee.id}`} value={employee.id}>
+                    {`${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground">Start date</label>
+                <input
+                  type="date"
+                  value={rangeDraft.start}
+                  min={monthDays[0]?.key}
+                  max={monthDays[monthDays.length - 1]?.key}
+                  onChange={(event) => setRangeDraft((current) => ({ ...current, start: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">End date</label>
+                <input
+                  type="date"
+                  value={rangeDraft.end}
+                  min={monthDays[0]?.key}
+                  max={monthDays[monthDays.length - 1]?.key}
+                  onChange={(event) => setRangeDraft((current) => ({ ...current, end: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Days of week</label>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {WEEKDAY_OPTIONS.map((weekday) => {
+                  const active = rangeDraft.dows.includes(weekday.value);
+                  return (
+                    <button
+                      key={`range-dow-${weekday.value}`}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setRangeDraft((current) => ({
+                        ...current,
+                        dows: active
+                          ? current.dows.filter((value) => value !== weekday.value)
+                          : [...current.dows, weekday.value],
+                      }))}
+                      className={`h-9 w-11 rounded-md border text-xs font-medium transition-colors ${
+                        active
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-input bg-background text-text-secondary hover:bg-surface-hover'
+                      }`}
+                    >
+                      {weekday.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-text-muted">
+                Limited to {availabilityMonthLabel}. Use Previous/Next to schedule another month.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setRangeDialogOpen(false)}>Cancel</Button>
+            <Button onClick={applyAvailabilityRange}>Continue</Button>
           </div>
         </DialogContent>
       </Dialog>
