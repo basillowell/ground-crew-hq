@@ -218,6 +218,8 @@ export default function EquipmentPage() {
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'readiness'>('list');
+  const addEquipmentDisabledReason = !propertyId ? 'Select a specific property to add equipment.' : null;
+  const canAddEquipment = !isReadOnly && !addEquipmentDisabledReason;
 
   useEffect(() => {
     document.title = 'Equipment — Ground Crew HQ';
@@ -301,9 +303,13 @@ export default function EquipmentPage() {
   }, [scopedRows]);
 
   const startAdd = useCallback(() => {
+    if (!propertyId) {
+      toast.error('Select a specific property to add equipment.');
+      return;
+    }
     setAddDraft(emptyAddDraft());
     setAddOpen(true);
-  }, []);
+  }, [propertyId]);
 
   const cancelAdd = useCallback(() => {
     setAddOpen(false);
@@ -312,6 +318,10 @@ export default function EquipmentPage() {
 
   const saveAdd = useCallback(async () => {
     if (isReadOnly) return;
+    if (!propertyId) {
+      toast.error('Select a specific property to add equipment.');
+      return;
+    }
     if (!supabase || !orgId || !addDraft.name.trim()) return;
 
     setAddSaving(true);
@@ -448,13 +458,21 @@ export default function EquipmentPage() {
             </Button>
           </div>
           {!isReadOnly ? (
-            <Button size="sm" className="h-9 gap-1.5" onClick={startAdd}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add Equipment
-            </Button>
+            <span className="inline-flex" title={addEquipmentDisabledReason ?? undefined}>
+              <Button size="sm" className="h-9 gap-1.5" onClick={startAdd} disabled={!canAddEquipment}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add Equipment
+              </Button>
+            </span>
           ) : null}
         </div>
       </div>
+
+      {!isReadOnly && addEquipmentDisabledReason ? (
+        <div className="rounded-xl border border-status-pending/20 bg-status-pending/10 px-4 py-3 text-sm text-status-pending">
+          {addEquipmentDisabledReason}
+        </div>
+      ) : null}
 
       {displayError ? <ErrorRetry message={displayError} onRetry={() => { setError(null); void equipmentQuery.refetch(); }} /> : null}
 
@@ -481,7 +499,7 @@ export default function EquipmentPage() {
                     title="No equipment tracked yet"
                     description="Add your first piece of equipment to start tracking maintenance."
                     actionLabel="Add Equipment"
-                    onAction={!isReadOnly ? startAdd : undefined}
+                    onAction={canAddEquipment ? startAdd : undefined}
                   />
                 </td>
               </tr>
@@ -614,7 +632,7 @@ export default function EquipmentPage() {
             title="No equipment tracked yet"
             description="Add your first piece of equipment to start tracking maintenance."
             actionLabel="Add Equipment"
-            onAction={!isReadOnly ? startAdd : undefined}
+            onAction={canAddEquipment ? startAdd : undefined}
           />
         ) : (
           scopedRows.map((row) => {
@@ -691,7 +709,7 @@ export default function EquipmentPage() {
                 title="No equipment tracked yet"
                 description="Add your first piece of equipment to start tracking maintenance."
                 actionLabel="Add Equipment"
-                onAction={!isReadOnly ? startAdd : undefined}
+                onAction={canAddEquipment ? startAdd : undefined}
               />
             </div>
           ) : (
