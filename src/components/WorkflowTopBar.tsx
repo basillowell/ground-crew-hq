@@ -90,6 +90,10 @@ const formatDate = (d: Date) =>
 export const WorkflowTopBar = memo(function WorkflowTopBar({
   currentDate,
   setCurrentDate,
+  properties,
+  currentPropertyId,
+  onSelectProperty,
+  allowAllProperties = false,
   notifications,
   unreadNotificationCount,
   pendingSyncCount = 0,
@@ -106,6 +110,9 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const isSettingsRoute = pathname === '/app/settings' || pathname.startsWith('/app/settings/');
   const activeSettingsTab = getSettingsTab(searchParams.get('tab'));
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const selectedProperty = properties.find((property) => property.id === currentPropertyId);
+  const selectedPropertyName = currentPropertyId === 'all' ? 'All Properties' : selectedProperty?.name ?? 'Select property';
+  const canSwitchProperties = allowAllProperties || properties.length > 1;
   const formatTimestamp = (isoTimestamp: string) =>
     new Date(isoTimestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
 
@@ -156,6 +163,40 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         </div>
 
         <div className="ml-auto hidden items-center gap-2 md:flex">
+          <div className="hidden min-w-[220px] lg:block">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Property</div>
+            {canSwitchProperties ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-surface-border bg-surface-card/80 px-3 text-left font-medium text-text-primary hover:bg-surface-elevated/80 hover:text-text-primary">
+                    <span className="truncate">{selectedPropertyName}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>Property</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {allowAllProperties ? (
+                    <DropdownMenuItem onClick={() => onSelectProperty('all')} className={currentPropertyId === 'all' ? 'bg-surface-hover font-medium text-brand' : undefined}>
+                      All Properties
+                    </DropdownMenuItem>
+                  ) : null}
+                  {properties.map((property) => (
+                    <DropdownMenuItem
+                      key={property.id}
+                      onClick={() => onSelectProperty(property.id)}
+                      className={currentPropertyId === property.id ? 'bg-surface-hover font-medium text-brand' : undefined}
+                    >
+                      {property.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="mt-1 flex h-10 items-center rounded-xl border border-surface-border bg-surface-card/80 px-3 text-sm font-medium text-text-primary">
+                <span className="truncate">{selectedPropertyName}</span>
+              </div>
+            )}
+          </div>
           <div className="hidden min-w-[250px] lg:block">
             <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
             <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
