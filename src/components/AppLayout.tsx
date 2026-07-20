@@ -40,7 +40,7 @@ import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useTheme } from '@/hooks/useTheme';
 import { OperationsProvider } from '@/contexts/OperationsContext';
 import { createClient } from '@/lib/supabase';
-import { applyFontTheme, resolveEffectiveTheme, type CustomThemeColors } from '@/lib/colorThemes';
+import { applyFontTheme, resolveEffectiveTheme, THEME_VARS_STORAGE_KEY, type CustomThemeColors } from '@/lib/colorThemes';
 import { applyThemeSurfaces } from '@/lib/colorConversion';
 import { cn } from '@/lib/utils';
 
@@ -86,6 +86,20 @@ function applyBranding(
   // and this copy hardcoded Segoe UI, ignoring fontThemePreset entirely).
   applyThemeSurfaces(root, { base, accent }, isLightMode ?? false, contrast);
   applyFontTheme(root, overrideTheme?.fontThemePreset ?? programSetting?.fontThemePreset);
+  // Cache the resolved variables so the inline boot script in app/layout.tsx can
+  // paint them before hydration. Without this the first paint uses globals.css
+  // defaults and visibly flashes to the org's theme once this effect runs.
+  try {
+    // Stored with the mode it was computed for: the boot script only replays it
+    // when the booting mode matches, so a `system` preference that flipped while
+    // the app was closed can't paint the wrong mode's colours.
+    window.localStorage.setItem(
+      THEME_VARS_STORAGE_KEY,
+      JSON.stringify({ mode: isLightMode ? 'light' : 'dark', vars: root.style.cssText }),
+    );
+  } catch {
+    /* storage unavailable (private mode / quota) — flash-prevention is best-effort */
+  }
   if (programSetting?.logoUrl) {
     let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!favicon) {

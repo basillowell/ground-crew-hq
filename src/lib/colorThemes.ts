@@ -49,6 +49,14 @@ export function getColorTheme(id: string) {
   return COLOR_THEMES.find((theme) => theme.id === id);
 }
 
+/**
+ * localStorage key holding the last resolved theme variables (root style cssText).
+ * The inline boot script in app/layout.tsx reads this to paint the correct theme
+ * before hydration. If you change this string, change it there too — the script
+ * is a raw string and cannot import.
+ */
+export const THEME_VARS_STORAGE_KEY = 'gchq-theme-vars';
+
 /** Shared so AppLayout and SettingsPage cannot drift. AppLayout previously
  *  hardcoded Segoe UI here and ignored the preset entirely, so fonts changed
  *  only after visiting Settings. */
