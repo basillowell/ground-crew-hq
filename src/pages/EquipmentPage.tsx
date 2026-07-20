@@ -42,16 +42,26 @@ type EquipmentTypeRow = {
   active: boolean | null;
 };
 
+type PropertyRow = {
+  id: string;
+  name: string | null;
+  short_name: string | null;
+  status: string | null;
+  org_id: string | null;
+};
+
 type EquipmentStatus = 'available' | 'in_use' | 'maintenance' | 'retired';
 
 type EquipmentPageData = {
   units: EquipmentUnitRow[];
   types: EquipmentTypeRow[];
+  properties: PropertyRow[];
 };
 
 type AddDraft = {
   name: string;
   equipmentTypeId: string;
+  propertyId: string;
   status: EquipmentStatus;
   location: string;
   notes: string;
@@ -115,6 +125,7 @@ function emptyAddDraft(): AddDraft {
   return {
     name: '',
     equipmentTypeId: '',
+    propertyId: 'shared',
     status: 'available',
     location: '',
     notes: '',
@@ -169,7 +180,7 @@ export default function EquipmentPage() {
     queryKey: equipmentQueryKey,
     enabled: Boolean(orgId),
     queryFn: async () => {
-      if (!supabase || !orgId) return { units: [], types: [] };
+      if (!supabase || !orgId) return { units: [], types: [], properties: [] };
 
       const unitsQuery = supabase
         .from('equipment_units')
@@ -183,21 +194,34 @@ export default function EquipmentPage() {
         .eq('org_id', orgId)
         .order('name', { ascending: true });
 
+      const propertiesQuery = supabase
+        .from('properties')
+        .select('id, name, short_name, status, org_id')
+        .eq('org_id', orgId)
+        .order('sort_order', { ascending: true });
+
       if (propertyId) {
-        unitsQuery.eq('property_id', propertyId);
+        unitsQuery.or(`property_id.is.null,property_id.eq.${propertyId}`);
       }
 
-      const [unitsResult, typesResult] = await Promise.all([
+      const [unitsResult, typesResult, propertiesResult] = await Promise.all([
         withEquipmentRequestTimeout(unitsQuery),
         withEquipmentRequestTimeout(typesQuery),
+        withEquipmentRequestTimeout(propertiesQuery),
       ]);
-      if (unitsResult.error || typesResult.error) {
-        throw new Error(unitsResult.error?.message ?? typesResult.error?.message ?? 'Could not load equipment data.');
+      if (unitsResult.error || typesResult.error || propertiesResult.error) {
+        throw new Error(
+          unitsResult.error?.message
+          ?? typesResult.error?.message
+          ?? propertiesResult.error?.message
+          ?? 'Could not load equipment data.',
+        );
       }
 
       return {
         units: (unitsResult.data ?? []) as EquipmentUnitRow[],
         types: (typesResult.data ?? []) as EquipmentTypeRow[],
+        properties: (propertiesResult.data ?? []) as PropertyRow[],
       };
     },
     staleTime: 1000 * 60 * 5,
@@ -205,6 +229,7 @@ export default function EquipmentPage() {
 
   const units = equipmentQuery.data?.units ?? [];
   const types = equipmentQuery.data?.types ?? [];
+  const properties = equipmentQuery.data?.properties ?? [];
   const loading = equipmentQuery.isLoading && !equipmentQuery.data;
   const loadError = equipmentQuery.error instanceof Error ? equipmentQuery.error.message : null;
   const [error, setError] = useState<string | null>(null);
@@ -218,8 +243,7 @@ export default function EquipmentPage() {
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'readiness'>('list');
-  const addEquipmentDisabledReason = !propertyId ? 'Select a specific property to add equipment.' : null;
-  const canAddEquipment = !isReadOnly && !addEquipmentDisabledReason;
+  const canAddEquipment = !isReadOnly;
 
   useEffect(() => {
     document.title = 'Equipment — Ground Crew HQ';
@@ -236,6 +260,17 @@ export default function EquipmentPage() {
     () => types.filter((type) => type.active !== false),
     [types],
   );
+  const activeProperties = useMemo(
+    () => properties.filter((property) => property.status !== 'inactive'),
+    [properties],
+  );
+  const propertyNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const property of properties) {
+      map.set(property.id, property.name ?? property.short_name ?? 'Unnamed property');
+    }
+    return map;
+  }, [properties]);
 
   const rows = useMemo(() => {
     return units.map((unit) => {
@@ -243,18 +278,22 @@ export default function EquipmentPage() {
       const resolvedType = unit.equipment_type_id
         ? typeNameById.get(unit.equipment_type_id) || unit.type || 'Unassigned'
         : unit.type || 'Unassigned';
+      const displayPropertyName = unit.property_id
+        ? propertyNameById.get(unit.property_id) ?? 'Unknown property'
+        : 'Shared';
       return {
         ...unit,
         displayName: resolvedName,
         displayType: resolvedType,
+        displayPropertyName,
         normalizedStatus: normalizeStatus(unit.status),
       };
     });
-  }, [typeNameById, units]);
+  }, [propertyNameById, typeNameById, units]);
 
   const scopedRows = useMemo(() => {
     if (!propertyId) return rows;
-    return rows.filter((row) => row.property_id === propertyId);
+    return rows.filter((row) => row.property_id === propertyId || row.property_id === null);
   }, [propertyId, rows]);
 
   const readinessRows = useMemo(() => {
@@ -303,13 +342,9 @@ export default function EquipmentPage() {
   }, [scopedRows]);
 
   const startAdd = useCallback(() => {
-    if (!propertyId) {
-      toast.error('Select a specific property to add equipment.');
-      return;
-    }
     setAddDraft(emptyAddDraft());
     setAddOpen(true);
-  }, [propertyId]);
+  }, []);
 
   const cancelAdd = useCallback(() => {
     setAddOpen(false);
@@ -318,18 +353,19 @@ export default function EquipmentPage() {
 
   const saveAdd = useCallback(async () => {
     if (isReadOnly) return;
-    if (!propertyId) {
-      toast.error('Select a specific property to add equipment.');
+    if (!supabase || !orgId || !addDraft.name.trim()) return;
+    if (addDraft.propertyId !== 'shared' && !addDraft.propertyId) {
+      toast.error('Choose Shared or select a specific property.');
       return;
     }
-    if (!supabase || !orgId || !addDraft.name.trim()) return;
 
     setAddSaving(true);
     const selectedTypeName = typeNameById.get(addDraft.equipmentTypeId) ?? null;
+    const selectedPropertyId = addDraft.propertyId === 'shared' ? null : addDraft.propertyId;
     const payload = {
       id: crypto.randomUUID(),
       org_id: orgId,
-      property_id: propertyId,
+      property_id: selectedPropertyId,
       unit_name: addDraft.name.trim(),
       name: addDraft.name.trim(),
       equipment_type_id: addDraft.equipmentTypeId || null,
@@ -353,7 +389,7 @@ export default function EquipmentPage() {
     setError(null);
     await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
     toast.success(`Added equipment: ${addDraft.name.trim()}`);
-  }, [addDraft, cancelAdd, equipmentQueryKey, isReadOnly, orgId, propertyId, queryClient, typeNameById]);
+  }, [addDraft, cancelAdd, equipmentQueryKey, isReadOnly, orgId, queryClient, typeNameById]);
 
   const startEdit = useCallback((row: EquipmentUnitRow & { displayName: string; displayType: string; normalizedStatus: EquipmentStatus }) => {
     setEditingId(row.id);
@@ -458,21 +494,13 @@ export default function EquipmentPage() {
             </Button>
           </div>
           {!isReadOnly ? (
-            <span className="inline-flex" title={addEquipmentDisabledReason ?? undefined}>
-              <Button size="sm" className="h-9 gap-1.5" onClick={startAdd} disabled={!canAddEquipment}>
-                <Plus className="mr-1.5 h-4 w-4" />
-                Add Equipment
-              </Button>
-            </span>
+            <Button size="sm" className="h-9 gap-1.5" onClick={startAdd} disabled={!canAddEquipment}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Equipment
+            </Button>
           ) : null}
         </div>
       </div>
-
-      {!isReadOnly && addEquipmentDisabledReason ? (
-        <div className="rounded-xl border border-status-pending/20 bg-status-pending/10 px-4 py-3 text-sm text-status-pending">
-          {addEquipmentDisabledReason}
-        </div>
-      ) : null}
 
       {displayError ? <ErrorRetry message={displayError} onRetry={() => { setError(null); void equipmentQuery.refetch(); }} /> : null}
 
@@ -563,7 +591,14 @@ export default function EquipmentPage() {
                           onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value })}
                         />
                       ) : (
-                        row.location || '—'
+                        <div className="space-y-1">
+                          {row.property_id === null ? (
+                            <Badge variant="outline" className="border-brand-dim bg-brand-ghost text-brand">Shared</Badge>
+                          ) : (
+                            <span className="font-medium text-text-primary">{row.displayPropertyName}</span>
+                          )}
+                          {row.location ? <p className="text-xs text-text-muted">{row.location}</p> : null}
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -668,7 +703,15 @@ export default function EquipmentPage() {
                 ) : (
                   <div className="space-y-1 text-sm text-text-muted">
                     <p>Type: {row.displayType}</p>
-                    <p>Location: {row.location || '—'}</p>
+                    <div className="flex items-center gap-2">
+                      <span>Property:</span>
+                      {row.property_id === null ? (
+                        <Badge variant="outline" className="border-brand-dim bg-brand-ghost text-brand">Shared</Badge>
+                      ) : (
+                        <span>{row.displayPropertyName}</span>
+                      )}
+                    </div>
+                    {row.location ? <p>Location: {row.location}</p> : null}
                     <p className="flex items-center gap-1">Last Serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}{overdue ? <AlertTriangle className="h-4 w-4 text-status-pending" /> : null}</p>
                   </div>
                 )}
@@ -740,6 +783,7 @@ export default function EquipmentPage() {
                   <div className="mt-3 space-y-1 text-xs text-text-muted">
                     <p>Last serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}</p>
                     <p>{row.dueText}</p>
+                    <p>Property: {row.displayPropertyName}</p>
                     <p>Status: {statusLabel(row.normalizedStatus)}</p>
                   </div>
                 </div>
@@ -787,6 +831,21 @@ export default function EquipmentPage() {
                       {type.name ?? 'Unnamed Type'}
                     </option>
                   ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Property assignment</label>
+              <select
+                value={addDraft.propertyId}
+                onChange={(event) => setAddDraft({ ...addDraft, propertyId: event.target.value })}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="shared">Shared (all properties)</option>
+                {activeProperties.map((property) => (
+                  <option key={property.id} value={property.id}>
+                    {property.name ?? property.short_name ?? 'Unnamed property'}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
