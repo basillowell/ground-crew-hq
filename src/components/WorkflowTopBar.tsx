@@ -41,14 +41,16 @@ interface WorkflowTopBarProps {
 type RouteTitle = {
   title: string;
   subtitle: string;
+  showDateSelector?: boolean;
+  showPropertySelector?: boolean;
 };
 
 const routeTitles: Record<string, RouteTitle> = {
   '/app': { title: 'Command Center', subtitle: 'Cross-property operations at a glance' },
   '/app/dashboard': { title: 'Command Center', subtitle: 'Cross-property operations at a glance' },
-  '/app/dispatch': { title: 'Dispatch', subtitle: "Today's crew assignments" },
-  '/app/workboard': { title: 'Workflow', subtitle: 'Assign tasks and manage daily operations.' },
-  '/app/scheduler': { title: 'Scheduler', subtitle: 'Manage employee shifts.' },
+  '/app/dispatch': { title: 'Dispatch', subtitle: "Today's crew assignments", showDateSelector: true, showPropertySelector: true },
+  '/app/workboard': { title: 'Workflow', subtitle: 'Assign tasks and manage daily operations.', showDateSelector: true, showPropertySelector: true },
+  '/app/scheduler': { title: 'Scheduler', subtitle: 'Manage employee shifts.', showDateSelector: true, showPropertySelector: true },
   '/app/employees': { title: 'Team', subtitle: 'Manage your crew roster.' },
   '/app/equipment': { title: 'Equipment', subtitle: 'Track maintenance and availability.' },
   '/app/invoicing': { title: 'Invoicing', subtitle: 'Manage and track invoices.' },
@@ -163,7 +165,8 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         </div>
 
         <div className="ml-auto hidden items-center gap-2 md:flex">
-          <div className="hidden min-w-[220px] lg:block">
+          {pageTitle.showPropertySelector ? (
+            <div className="hidden min-w-[220px] lg:block">
             <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Property</div>
             {canSwitchProperties ? (
               <DropdownMenu>
@@ -197,7 +200,9 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
               </div>
             )}
           </div>
-          <div className="hidden min-w-[250px] lg:block">
+          ) : null}
+          {pageTitle.showDateSelector ? (
+            <div className="hidden min-w-[250px] lg:block">
             <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
             <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
@@ -219,7 +224,8 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                 />
               </PopoverContent>
             </Popover>
-          </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">

@@ -71,6 +71,7 @@ type AddDraft = {
 type EditDraft = {
   name: string;
   equipmentTypeId: string;
+  propertyId: string;
   status: EquipmentStatus;
   location: string;
   lastServiced: string;
@@ -396,6 +397,7 @@ export default function EquipmentPage() {
     setEditDraft({
       name: row.displayName,
       equipmentTypeId: row.equipment_type_id ?? '',
+      propertyId: row.property_id ?? 'shared',
       status: row.normalizedStatus,
       location: row.location ?? '',
       lastServiced: toDateInput(row.last_serviced),
@@ -411,13 +413,19 @@ export default function EquipmentPage() {
   const saveEdit = useCallback(async (id: string) => {
     if (isReadOnly) return;
     if (!supabase || !editDraft || !orgId || !editDraft.name.trim()) return;
+    if (editDraft.propertyId !== 'shared' && !editDraft.propertyId) {
+      toast.error('Choose Shared or select a specific property.');
+      return;
+    }
     setRowSavingId(id);
 
     const selectedTypeName = typeNameById.get(editDraft.equipmentTypeId) ?? null;
+    const selectedPropertyId = editDraft.propertyId === 'shared' ? null : editDraft.propertyId;
     const payload = {
       unit_name: editDraft.name.trim(),
       name: editDraft.name.trim(),
       equipment_type_id: editDraft.equipmentTypeId || null,
+      property_id: selectedPropertyId,
       type: selectedTypeName,
       status: editDraft.status,
       location: editDraft.location.trim() || null,
@@ -586,10 +594,25 @@ export default function EquipmentPage() {
                     </td>
                     <td className="px-3 py-2">
                       {isEditing ? (
-                        <Input
-                          value={editDraft.location}
-                          onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value })}
-                        />
+                        <div className="space-y-2">
+                          <select
+                            value={editDraft.propertyId}
+                            onChange={(event) => setEditDraft({ ...editDraft, propertyId: event.target.value })}
+                            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          >
+                            <option value="shared">Shared (all properties)</option>
+                            {activeProperties.map((property) => (
+                              <option key={property.id} value={property.id}>
+                                {property.name ?? property.short_name ?? 'Unnamed property'}
+                              </option>
+                            ))}
+                          </select>
+                          <Input
+                            value={editDraft.location}
+                            onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value })}
+                            placeholder="Location"
+                          />
+                        </div>
                       ) : (
                         <div className="space-y-1">
                           {row.property_id === null ? (
@@ -693,6 +716,18 @@ export default function EquipmentPage() {
                       {activeEquipmentTypes.map((type) => (
                         <option key={`mobile-type-${type.id}`} value={type.id}>
                           {type.name ?? 'Unnamed Type'}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={editDraft.propertyId}
+                      onChange={(event) => setEditDraft({ ...editDraft, propertyId: event.target.value })}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="shared">Shared (all properties)</option>
+                      {activeProperties.map((property) => (
+                        <option key={`mobile-property-${property.id}`} value={property.id}>
+                          {property.name ?? property.short_name ?? 'Unnamed property'}
                         </option>
                       ))}
                     </select>
