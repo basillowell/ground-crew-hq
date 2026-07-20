@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -4293,6 +4294,8 @@ export default function WorkboardContent() {
         <div className="border-b border-surface-border bg-surface-card px-3 py-3 md:px-5">
           <div className="flex items-center gap-3 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
             <div className="flex min-w-max items-center gap-3">
+          <PropertySelector className="w-64" />
+
           <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-elevated px-3 py-1.5">
             <span className="text-[10px] uppercase tracking-wider text-text-muted">Board Date</span>
             <div className="relative flex items-center">
@@ -6394,6 +6397,8 @@ export default function WorkboardContent() {
     </>
   );
 }
+
+
 
 
 

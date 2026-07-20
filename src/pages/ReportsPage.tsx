@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase';
 import { useSearchParams } from 'next/navigation';
 import { toast } from '@/components/ui/sonner';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { DateInput } from '@/components/ui/date-input';
@@ -209,9 +210,7 @@ export default function ReportsPage() {
   const { orgId, currentPropertyId, currentUser } = useOrgProfile();
   const [startDate, setStartDate] = useState<string>(() => queryStartDate || toIsoDate(startOfWeek(new Date())));
   const [endDate, setEndDate] = useState<string>(() => queryEndDate || toIsoDate(endOfWeek(new Date())));
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
-    queryPropertyId || (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : 'all'),
-  );
+  const selectedPropertyId = queryPropertyId || (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : 'all');
   const propertiesQuery = useProperties(orgId ?? undefined);
   const employeesQuery = useEmployees(
     selectedPropertyId === 'all' ? undefined : selectedPropertyId,
@@ -1116,17 +1115,7 @@ export default function ReportsPage() {
             <label className="text-xs text-text-muted">End Date</label>
             <DateInput className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </div>
-          <div style={{ display: 'grid', gap: '4px' }}>
-            <label className="text-xs text-text-muted">Property</label>
-            <select className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}>
-              <option value="all">All Properties</option>
-              {properties.map((property) => (
-                <option key={property.id} value={property.id}>
-                  {property.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <PropertySelector className="w-full" />
         </div>
       </div>
 
@@ -1721,5 +1710,7 @@ export default function ReportsPage() {
     </div>
   );
 }
+
+
 
 

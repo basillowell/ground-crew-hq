@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import { useSearchParams } from 'next/navigation';
 import { Loader2, MoreHorizontal, Plus, UserCog, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { createClient } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
@@ -1087,8 +1088,8 @@ export default function EmployeesPage() {
 
   return (
     <div className="animate-fade-up mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <PropertySelector className="w-full md:w-64" />
         {!isReadOnly ? (
           <Button size="sm" className="h-9 gap-1.5" onClick={openAddModal}>
             <Plus className="mr-1.5 h-4 w-4" />
@@ -1970,5 +1971,7 @@ export default function EmployeesPage() {
     </div>
   );
 }
+
+
 
 
