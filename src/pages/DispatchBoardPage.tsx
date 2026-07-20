@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -164,7 +165,8 @@ export default function DispatchBoardPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <PropertySelector className="w-full md:w-64" />
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setIsCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -342,5 +344,6 @@ export default function DispatchBoardPage() {
     </div>
   );
 }
+
 
 

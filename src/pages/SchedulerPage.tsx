@@ -3,6 +3,7 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import type { Employee, Property, ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1120,6 +1121,7 @@ export default function SchedulerPage() {
             </Button>
           ) : null}
         </div>
+        <PropertySelector className="w-full md:w-64" />
 
         {/* Search */}
         <div className="relative w-full md:w-auto">
@@ -1848,5 +1850,9 @@ export default function SchedulerPage() {
     </div>
   );
 }
+
+
+
+
 
 

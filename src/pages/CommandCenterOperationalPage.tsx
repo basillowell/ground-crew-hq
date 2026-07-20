@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -106,7 +107,8 @@ export default function CommandCenterOperationalPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-6">
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <PropertySelector className="w-full md:w-64" />
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="px-3 py-1.5 text-xs">
             <MapPin className="mr-1.5 h-3 w-3" />
@@ -274,4 +276,5 @@ export default function CommandCenterOperationalPage() {
     </div>
   );
 }
+
 
