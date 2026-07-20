@@ -1025,7 +1025,10 @@ export default function WorkboardContent() {
     [assignmentPublishStateById, assignmentsQuery.data],
   );
   useEffect(() => {
-    if (!process.env.NODE_ENV === 'development') return;
+    // Was `!process.env.NODE_ENV === 'development'`, which parses as
+    // (!NODE_ENV) === 'development' -> false === 'development' -> always false,
+    // so this debug log shipped to production and spammed the console.
+    if (process.env.NODE_ENV !== 'development') return;
     console.info('[workboard:data]', {
       boardDate,
       orgId,
