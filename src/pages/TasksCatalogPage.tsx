@@ -3,6 +3,7 @@ import { ListChecks } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
@@ -64,8 +65,8 @@ export default function TasksCatalogPage() {
 
   return (
     <div className="animate-fade-up mx-auto max-w-6xl space-y-4 p-4">
-
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <PropertySelector className="w-full md:w-64" />
         <Badge variant="secondary">{tasks.length} tasks</Badge>
       </div>
 
@@ -123,4 +124,5 @@ export default function TasksCatalogPage() {
     </div>
   );
 }
+
 

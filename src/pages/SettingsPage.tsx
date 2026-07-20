@@ -19,6 +19,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TimeInput } from '@/components/ui/date-input';
@@ -1064,6 +1065,10 @@ export default function SettingsPage() {
 
   return (
     <div className="settings-theme mx-auto max-w-6xl space-y-4 bg-surface-base p-4 text-text-primary md:p-6">
+      <div className="flex justify-start">
+        <PropertySelector className="w-full md:w-64" />
+      </div>
+
       {isReadOnly ? (
         <div className="mb-4 rounded-lg border border-status-complete/30 bg-status-complete/10 px-3 py-2 text-xs text-status-complete">
           Demo Mode — Viewing sample data (read-only)
@@ -4889,5 +4894,6 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
     </div>
   );
 }
+
 
 

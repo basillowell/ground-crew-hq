@@ -4,6 +4,7 @@ import { AlertTriangle, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { createClient } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -479,7 +480,8 @@ export default function EquipmentPage() {
 
   return (
     <div className="animate-fade-up space-y-6 p-4 md:p-6">
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <PropertySelector className="w-full md:w-64" />
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-surface-border bg-surface-card p-0.5">
             <Button
@@ -936,5 +938,6 @@ export default function EquipmentPage() {
     </div>
   );
 }
+
 
 
