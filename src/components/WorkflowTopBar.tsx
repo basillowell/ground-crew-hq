@@ -42,26 +42,25 @@ type RouteTitle = {
   title: string;
   subtitle: string;
   showDateSelector?: boolean;
-  showPropertySelector?: boolean;
 };
 
 const routeTitles: Record<string, RouteTitle> = {
-  '/app': { title: 'Command Center', subtitle: 'Cross-property operations at a glance', showPropertySelector: true },
-  '/app/dashboard': { title: 'Command Center', subtitle: 'Cross-property operations at a glance', showPropertySelector: true },
-  '/app/dispatch': { title: 'Dispatch', subtitle: "Today's crew assignments", showPropertySelector: true },
-  '/app/workboard': { title: 'Workflow', subtitle: 'Assign tasks and manage daily operations.', showPropertySelector: true },
-  '/app/scheduler': { title: 'Scheduler', subtitle: 'Manage employee shifts.', showPropertySelector: true },
-  '/app/employees': { title: 'Team', subtitle: 'Manage your crew roster.', showPropertySelector: true },
-  '/app/equipment': { title: 'Equipment', subtitle: 'Track maintenance and availability.', showPropertySelector: true },
+  '/app': { title: 'Command Center', subtitle: 'Cross-property operations at a glance' },
+  '/app/dashboard': { title: 'Command Center', subtitle: 'Cross-property operations at a glance' },
+  '/app/dispatch': { title: 'Dispatch', subtitle: "Today's crew assignments" },
+  '/app/workboard': { title: 'Workflow', subtitle: 'Assign tasks and manage daily operations.' },
+  '/app/scheduler': { title: 'Scheduler', subtitle: 'Manage employee shifts.' },
+  '/app/employees': { title: 'Team', subtitle: 'Manage your crew roster.' },
+  '/app/equipment': { title: 'Equipment', subtitle: 'Track maintenance and availability.' },
   '/app/invoicing': { title: 'Invoicing', subtitle: 'Manage and track invoices.' },
-  '/app/reports': { title: 'Reports', subtitle: 'Labor summaries and cost analysis.', showPropertySelector: true },
+  '/app/reports': { title: 'Reports', subtitle: 'Labor summaries and cost analysis.' },
   '/app/job-costing': { title: 'Job Costing', subtitle: 'Labor cost and margin analysis.' },
-  '/app/applications': { title: 'Applications', subtitle: 'Chemical logging with tank mix and site condition detail.', showPropertySelector: true },
-  '/app/breakroom': { title: 'Breakroom', subtitle: 'Share updates with your team.', showPropertySelector: true },
-  '/app/messaging': { title: 'Messaging', subtitle: 'Compose and send a message to your crew.', showPropertySelector: true },
-  '/app/tasks': { title: 'Task Management', subtitle: 'Task library for Workflow assignment and operations planning.', showPropertySelector: true },
+  '/app/applications': { title: 'Applications', subtitle: 'Chemical logging with tank mix and site condition detail.' },
+  '/app/breakroom': { title: 'Breakroom', subtitle: 'Share updates with your team.' },
+  '/app/messaging': { title: 'Messaging', subtitle: 'Compose and send a message to your crew.' },
+  '/app/tasks': { title: 'Task Management', subtitle: 'Task library for Workflow assignment and operations planning.' },
   '/app/safety': { title: 'Safety', subtitle: 'Toolbox talks and compliance records.' },
-  '/app/settings': { title: 'Settings', subtitle: 'Workspace settings', showPropertySelector: true },
+  '/app/settings': { title: 'Settings', subtitle: 'Workspace settings' },
   '/app/field': { title: 'Field', subtitle: "Mobile workspace for today's work" },
 };
 
@@ -112,9 +111,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   const isSettingsRoute = pathname === '/app/settings' || pathname.startsWith('/app/settings/');
   const activeSettingsTab = getSettingsTab(searchParams.get('tab'));
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const selectedProperty = properties.find((property) => property.id === currentPropertyId);
-  const selectedPropertyName = currentPropertyId === 'all' ? 'All Properties' : selectedProperty?.name ?? 'Select property';
-  const canSwitchProperties = allowAllProperties || properties.length > 1;
   const formatTimestamp = (isoTimestamp: string) =>
     new Date(isoTimestamp).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
 
@@ -165,42 +161,6 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         </div>
 
         <div className="ml-auto hidden items-center gap-2 md:flex">
-          {pageTitle.showPropertySelector ? (
-            <div className="hidden min-w-[220px] lg:block">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Property</div>
-            {canSwitchProperties ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-surface-border bg-surface-card/80 px-3 text-left font-medium text-text-primary hover:bg-surface-elevated/80 hover:text-text-primary">
-                    <span className="truncate">{selectedPropertyName}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <DropdownMenuLabel>Property</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {allowAllProperties ? (
-                    <DropdownMenuItem onClick={() => onSelectProperty('all')} className={currentPropertyId === 'all' ? 'bg-surface-hover font-medium text-brand' : undefined}>
-                      All Properties
-                    </DropdownMenuItem>
-                  ) : null}
-                  {properties.map((property) => (
-                    <DropdownMenuItem
-                      key={property.id}
-                      onClick={() => onSelectProperty(property.id)}
-                      className={currentPropertyId === property.id ? 'bg-surface-hover font-medium text-brand' : undefined}
-                    >
-                      {property.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <div className="mt-1 flex h-10 items-center rounded-xl border border-surface-border bg-surface-card/80 px-3 text-sm font-medium text-text-primary">
-                <span className="truncate">{selectedPropertyName}</span>
-              </div>
-            )}
-          </div>
-          ) : null}
           {pageTitle.showDateSelector ? (
             <div className="hidden min-w-[250px] lg:block">
             <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
