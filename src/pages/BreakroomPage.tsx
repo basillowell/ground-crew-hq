@@ -3,6 +3,7 @@ import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { createClient } from '@/lib/supabase';
 import { useAssignments, useEmployees, useNotes, useProperties, useTasks } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { ClipboardList, Hash, MessageSquare, Send, StickyNote } from 'lucide-react';
@@ -270,7 +271,8 @@ export default function BreakroomPage() {
 
       {/* Message area */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="border-b border-surface-border px-4 pt-3">
+        <div className="border-b border-surface-border px-4 py-3">
+          <PropertySelector allowAllProperties={false} className="w-full max-w-xs" />
         </div>
         <div className="grid gap-3 border-b border-surface-border bg-surface-base p-4 lg:grid-cols-2">
           <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-2">
@@ -412,5 +414,6 @@ export default function BreakroomPage() {
     </div>
   );
 }
+
 
 

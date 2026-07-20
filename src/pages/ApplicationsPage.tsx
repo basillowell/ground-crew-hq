@@ -14,6 +14,7 @@ import {
   Wind,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1523,13 +1524,15 @@ export default function ApplicationsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4">
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <PropertySelector className="w-full sm:w-64" />
+          <div className="flex items-center gap-2">
           <Badge variant="secondary">{applicationMode === 'chemical' ? totalApplications : totalFertilizerApplications} logs</Badge>
           <Badge className="bg-status-active/10 text-status-active border-status-active/20">
             {applicationMode === 'chemical' ? 'EPA-Compliant Record Keeping' : 'Fertilizer Application Records'}
           </Badge>
+        </div>
         </div>
         {activeTab === 'logs' ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -1984,6 +1987,9 @@ export default function ApplicationsPage() {
     </div>
   );
 }
+
+
+
 
 
 

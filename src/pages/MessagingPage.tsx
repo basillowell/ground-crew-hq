@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +66,7 @@ export default function MessagingPage() {
       {/* Recipients */}
       <div className="w-72 border-r bg-card overflow-auto p-3">
         <h3 className="text-sm font-semibold mb-3">Recipients</h3>
+        <PropertySelector className="mb-3 w-full" />
         <div className="relative mb-3">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 pl-7 text-xs" />
@@ -155,4 +157,5 @@ export default function MessagingPage() {
     </div>
   );
 }
+
 
