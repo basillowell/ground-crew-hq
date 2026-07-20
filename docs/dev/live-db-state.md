@@ -323,7 +323,7 @@
 | column              | type             | nullable | default            |
 |---------------------|------------------|----------|--------------------|
 | id                  | uuid             | NO       | gen_random_uuid()  |
-| property_id         | uuid             | NO       |                    |
+| property_id         | uuid             | YES      |                    |
 | name                | text             | NO       |                    |
 | type                | text             | NO       |                    |
 | status              | text             | NO       | 'available'        |
@@ -342,6 +342,15 @@
 | qr_token            | uuid             | YES      | gen_random_uuid()  |
 
 > qr_token has a unique index (equipment_units_qr_token_key) — used for mobile scan-to-login.
+> property_id is nullable as of equipment_units_shared_property_nullable migration:
+> null = "shared" equipment, usable/visible across all of an org's properties.
+> Non-null = scoped to that one property, as before.
+> RLS (both select and manage policies): null property_id rows are allowed for any
+> active app_users row in the same org (manage additionally requires role
+> admin/manager); non-null property_id rows still gate through
+> can_read_property()/can_manage_property() as before. Application code should
+> treat property_id === null as "shared across all properties," not as an error
+> or an unassigned/incomplete record.
 
 ---
 
