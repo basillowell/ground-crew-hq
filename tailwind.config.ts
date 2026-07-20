@@ -104,6 +104,15 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      // Motion: one easing for the whole app. Only ~6 explicit ease-* utilities
+      // existed, so ~150 transitions were running on Tailwind's stock
+      // ease-in-out. This expo-out curve starts fast and settles, which reads as
+      // responsive rather than floaty. Overriding DEFAULT means every existing
+      // transition-* utility picks it up with no component edits; explicit
+      // ease-linear / ease-in-out usages still win where they were chosen.
+      transitionTimingFunction: {
+        DEFAULT: "cubic-bezier(0.16, 1, 0.3, 1)",
+      },
       // Theme-aware elevation: shadow-* map to CSS vars that swap per mode, so
       // the ~45 existing shadow-* utilities become visible on dark surfaces
       // instead of rendering Tailwind's default black-on-white scale. Merges
