@@ -38,7 +38,6 @@ import {
 } from '@/lib/supabase-queries';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useTheme } from '@/hooks/useTheme';
-import { OperationsProvider } from '@/contexts/OperationsContext';
 import { createClient } from '@/lib/supabase';
 import { applyFontTheme, resolveEffectiveTheme, THEME_VARS_STORAGE_KEY, type CustomThemeColors } from '@/lib/colorThemes';
 import { applyThemeSurfaces } from '@/lib/colorConversion';
@@ -644,14 +643,6 @@ export function AppLayout({ children }: AppLayoutProps) {
             planTier={planTier}
             onOpenCommandBar={() => setCommandBarOpen(true)}
           />
-          <OperationsProvider
-            value={{
-              currentDate,
-              setCurrentDate,
-              department,
-              setDepartment,
-            }}
-          >
             <main className="flex flex-1 flex-col h-full min-h-0 bg-surface-base pb-20 page-enter md:pb-0">
               {isOffline ? (
                 <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-900">
@@ -775,7 +766,6 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </div>
               </SheetContent>
             </Sheet>
-          </OperationsProvider>
         </div>
       </div>
     </SidebarProvider>
