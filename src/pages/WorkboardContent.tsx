@@ -750,7 +750,7 @@ export default function WorkboardContent() {
   const [applyingTaskTemplate, setApplyingTaskTemplate] = useState(false);
   const [publishingDay, setPublishingDay] = useState(false);
   const [expandedMobileCrewIds, setExpandedMobileCrewIds] = useState<string[]>([]);
-  const [expandedDesktopCrewId, setExpandedDesktopCrewId] = useState<string | null>(null);
+  const [expandedDesktopCrewIds, setExpandedDesktopCrewIds] = useState<string[]>([]);
   const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<Set<string>>(() => new Set());
   const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
   const [bulkEditDraft, setBulkEditDraft] = useState<BulkAssignmentEditDraft>(() => ({ ...EMPTY_BULK_ASSIGNMENT_EDIT }));
@@ -2698,7 +2698,17 @@ export default function WorkboardContent() {
   }, []);
 
   const toggleDesktopCrew = useCallback((employeeId: string) => {
-    setExpandedDesktopCrewId((current) => (current === employeeId ? null : employeeId));
+    setExpandedDesktopCrewIds((current) =>
+      current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
+    );
+  }, []);
+
+  const expandAllDesktopCrew = useCallback(() => {
+    setExpandedDesktopCrewIds(orderedDispatchBoard.map((lane) => lane.employee.id));
+  }, [orderedDispatchBoard]);
+
+  const collapseAllDesktopCrew = useCallback(() => {
+    setExpandedDesktopCrewIds([]);
   }, []);
 
   const toggleMobileSection = useCallback((section: keyof typeof mobileSectionsOpen) => {
@@ -4657,6 +4667,28 @@ export default function WorkboardContent() {
                 </TabsList>
               </Tabs>
             ) : null}
+            {viewMode === 'list' && groupMode === 'employee' ? (
+              <div className="hidden items-center gap-2 md:flex">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 shrink-0 px-3 text-xs"
+                  onClick={expandAllDesktopCrew}
+                  disabled={orderedDispatchBoard.length === 0 || orderedDispatchBoard.every((lane) => expandedDesktopCrewIds.includes(lane.employee.id))}
+                >
+                  Expand All
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 shrink-0 px-3 text-xs"
+                  onClick={collapseAllDesktopCrew}
+                  disabled={expandedDesktopCrewIds.length === 0}
+                >
+                  Collapse All
+                </Button>
+              </div>
+            ) : null}
             {!isReadOnly ? (
               <Button
                 size="sm"
@@ -5086,7 +5118,7 @@ export default function WorkboardContent() {
                   return nextTone ?? tone;
                 }, null);
                 const initials = `${lane.employee.firstName?.[0] ?? ''}${lane.employee.lastName?.[0] ?? ''}`.toUpperCase();
-                const isExpanded = expandedDesktopCrewId === lane.employee.id;
+                const isExpanded = expandedDesktopCrewIds.includes(lane.employee.id);
                 const coverageRounded = Math.round(lane.coveragePercent);
                 const coverageIndicator = getCoverageFillIndicator(coverageRounded);
                 const coverageFillPercent = Math.min(Math.max(coverageRounded, 0), 100);
@@ -6826,3 +6858,4 @@ export default function WorkboardContent() {
     </>
   );
 }
+
