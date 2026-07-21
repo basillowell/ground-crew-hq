@@ -551,8 +551,15 @@ type WorkOrderBoardItem = {
   title: string;
   status: string;
   priority: string;
-  source: 'work_order' | 'schedule_fallback';
-  employeeName?: string;
+  source: 'work_order';
+  description?: string;
+};
+
+type WorkOrderDraft = {
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high';
+  propertyId: string;
 };
 
 type NoteScope = 'org' | 'property' | 'employee' | 'task';
@@ -780,6 +787,9 @@ export default function WorkboardContent() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   const [workOrdersExpanded, setWorkOrdersExpanded] = useState(false);
+  const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
+  const [workOrderSaving, setWorkOrderSaving] = useState(false);
+  const [workOrderDraft, setWorkOrderDraft] = useState<WorkOrderDraft>({ title: '', description: '', priority: 'medium', propertyId: '' });
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [selectedScheduleRecipientIds, setSelectedScheduleRecipientIds] = useState<string[]>([]);
   const [endOfDayDialogOpen, setEndOfDayDialogOpen] = useState(false);
@@ -1036,7 +1046,14 @@ export default function WorkboardContent() {
     enabled: Boolean(orgId && workOrdersExpanded),
     queryFn: async () => {
       if (!supabase) return [] as Array<Record<string, unknown>>;
-      let query = supabase.from('work_orders').select('*').order('created_at', { ascending: false });
+      const dayStart = `${boardDate}T00:00:00.000Z`;
+      const dayEnd = `${addDaysToDateKey(boardDate, 1)}T00:00:00.000Z`;
+      let query = supabase
+        .from('work_orders')
+        .select('*')
+        .gte('created_at', dayStart)
+        .lt('created_at', dayEnd)
+        .order('created_at', { ascending: false });
       if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
       const { data, error } = await withWorkboardRequestTimeout(query);
@@ -1204,6 +1221,79 @@ export default function WorkboardContent() {
   const pendingTaskRequests = pendingTaskRequestsQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
   const workOrders = workOrdersQuery.data ?? [];
+  const defaultWorkOrderPropertyId = useMemo(
+    () => (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id ?? ''),
+    [effectivePropertyId, properties],
+  );
+
+  const openSubmitWorkOrderDialog = useCallback(() => {
+    setWorkOrderDraft({
+      title: '',
+      description: '',
+      priority: 'medium',
+      propertyId: defaultWorkOrderPropertyId,
+    });
+    setWorkOrderDialogOpen(true);
+  }, [defaultWorkOrderPropertyId]);
+
+  const closeSubmitWorkOrderDialog = useCallback(() => {
+    if (workOrderSaving) return;
+    setWorkOrderDialogOpen(false);
+  }, [workOrderSaving]);
+
+  const submitGeneralWorkOrder = useCallback(async () => {
+    const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+    const submittedBy = currentUser?.employeeId ?? null;
+    const title = workOrderDraft.title.trim();
+    const propertyId = workOrderDraft.propertyId || defaultWorkOrderPropertyId;
+
+    if (!supabase || !resolvedOrgId) {
+      toast.error('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
+    if (!submittedBy) {
+      toast.error('Your employee profile is still loading. Please try again in a moment.');
+      return;
+    }
+    if (!title) {
+      toast.error('Enter a work order title.');
+      return;
+    }
+    if (!propertyId || propertyId === 'all') {
+      toast.error('Select a property for this work order.');
+      return;
+    }
+
+    setWorkOrderSaving(true);
+    try {
+      const { error } = await withWorkboardRequestTimeout(
+        supabase.from('work_orders').insert({
+          org_id: resolvedOrgId,
+          property_id: propertyId,
+          equipment_unit_id: null,
+          title,
+          description: workOrderDraft.description.trim() || null,
+          priority: workOrderDraft.priority,
+          category: 'general',
+          submitted_by: submittedBy,
+          status: 'open',
+        }),
+      );
+
+      if (error) {
+        toast.error(`Failed to submit work order: ${error.message}`);
+        return;
+      }
+
+      toast.success('Work order submitted');
+      setWorkOrderDialogOpen(false);
+      setWorkOrderDraft({ title: '', description: '', priority: 'medium', propertyId: defaultWorkOrderPropertyId });
+      setWorkOrdersExpanded(true);
+      await queryClient.invalidateQueries({ queryKey: ['work-orders'] });
+    } finally {
+      setWorkOrderSaving(false);
+    }
+  }, [authOrgId, currentUser?.employeeId, currentUser?.orgId, defaultWorkOrderPropertyId, queryClient, workOrderDraft]);
   const departmentOptions = useMemo(
     () => ['All Departments', ...(departmentsQuery.data?.map((entry) => entry.name) ?? [])],
     [departmentsQuery.data],
@@ -2521,29 +2611,15 @@ export default function WorkboardContent() {
   );
 
   const workOrderBoardItems = useMemo<WorkOrderBoardItem[]>(() => {
-    if (workOrders.length > 0) {
-      return workOrders.slice(0, 6).map((row) => ({
-        id: String(row.id ?? ''),
-        title: String(row.title ?? 'Untitled work order'),
-        status: String(row.status ?? 'open'),
-        priority: String(row.priority ?? 'medium'),
-        source: 'work_order',
-      }));
-    }
-
-    const byEmployeeId = new Map(employeeList.map((employee) => [employee.id, `${employee.firstName} ${employee.lastName}`]));
-    return scheduleList
-      .filter((entry) => entry.date === boardDate)
-      .slice(0, 6)
-      .map((entry) => ({
-        id: `sched-${entry.id}`,
-        title: `Crew shift coverage ${formatTime(entry.shiftStart)} - ${formatTime(entry.shiftEnd)}`,
-        status: 'planned',
-        priority: 'medium',
-        source: 'schedule_fallback',
-        employeeName: byEmployeeId.get(entry.employeeId) ?? 'Scheduled crew',
-      }));
-  }, [boardDate, employeeList, scheduleList, workOrders]);
+    return workOrders.slice(0, 6).map((row) => ({
+      id: String(row.id ?? ''),
+      title: String(row.title ?? 'Untitled work order'),
+      description: row.description ? String(row.description) : undefined,
+      status: String(row.status ?? 'open'),
+      priority: String(row.priority ?? 'medium'),
+      source: 'work_order',
+    }));
+  }, [workOrders]);
 
   const assignedEmployeeIds = useMemo(
     () => new Set(dayAssignments.map((a) => a.employeeId)),
@@ -4965,11 +5041,22 @@ export default function WorkboardContent() {
               <div className="flex items-center gap-2">
                 <ListChecks className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold">
-                  {workOrders.length > 0 ? 'Work Orders' : 'Work Orders (Schedule fallback)'}
+                  Work Orders
                 </h3>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{boardDate}</span>
+                {!isReadOnly ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={openSubmitWorkOrderDialog}
+                  >
+                    Submit Work Order
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
@@ -4986,15 +5073,20 @@ export default function WorkboardContent() {
             ) : workOrdersQuery.isLoading ? (
               <p className="text-xs text-muted-foreground">Loading work orders...</p>
             ) : workOrderBoardItems.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No work orders or schedule entries found for this date.</p>
+              <div className="rounded-2xl border border-dashed bg-muted/20 p-4 text-center">
+                <p className="text-sm font-medium text-foreground">No work orders submitted for this date.</p>
+                {!isReadOnly ? (
+                  <Button type="button" size="sm" className="mt-3 h-8 text-xs" onClick={openSubmitWorkOrderDialog}>
+                    Submit Work Order
+                  </Button>
+                ) : null}
+              </div>
             ) : (
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {workOrderBoardItems.map((item) => (
                   <div key={item.id} className={`min-w-[420px] rounded-xl border px-3 py-2 ${PRIORITY_COLOR[item.priority] ?? 'bg-muted/20 border-border'}`}>
                     <p className="truncate text-sm">
-                      <span className="font-medium">{item.employeeName || 'Crew'}</span>
-                      <span className="text-muted-foreground"> · </span>
-                      <span>{item.title}</span>
+                      <span className="font-medium">{item.title}</span>
                       <span className="text-muted-foreground"> · </span>
                       <span className="capitalize">{item.status || 'planned'}</span>
                     </p>
@@ -5748,6 +5840,69 @@ export default function WorkboardContent() {
       </div>
 
       {/* ─── ASSIGNMENT DIALOG ─── */}
+      <Dialog open={workOrderDialogOpen} onOpenChange={(open) => (open ? setWorkOrderDialogOpen(true) : closeSubmitWorkOrderDialog())}>
+        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
+          <DialogDescription className="sr-only">
+            Submit a general crew work order for the selected workboard date.
+          </DialogDescription>
+          <DialogHeader>
+            <DialogTitle>Submit Work Order</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Title *</label>
+              <Input
+                className="mt-1"
+                value={workOrderDraft.title}
+                onChange={(event) => setWorkOrderDraft((current) => ({ ...current, title: event.target.value }))}
+                placeholder="Brief issue or request"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Description</label>
+              <textarea
+                className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={workOrderDraft.description}
+                onChange={(event) => setWorkOrderDraft((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Add details for the crew or maintenance team"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Priority</label>
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={workOrderDraft.priority}
+                  onChange={(event) => setWorkOrderDraft((current) => ({ ...current, priority: event.target.value as WorkOrderDraft['priority'] }))}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Property</label>
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={workOrderDraft.propertyId}
+                  onChange={(event) => setWorkOrderDraft((current) => ({ ...current, propertyId: event.target.value }))}
+                >
+                  <option value="">Select property</option>
+                  {properties.map((property) => (
+                    <option key={property.id} value={property.id}>{property.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={closeSubmitWorkOrderDialog} disabled={workOrderSaving}>Cancel</Button>
+              <Button onClick={() => void submitGeneralWorkOrder()} disabled={workOrderSaving}>
+                {workOrderSaving ? 'Submitting...' : 'Submit Work Order'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={quickPlanDialogOpen}
         onOpenChange={(nextOpen) => {
