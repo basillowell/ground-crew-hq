@@ -291,6 +291,12 @@
 | preferred_shift_template_id  | text        | YES      |              |
 | active                       | boolean     | YES      | true         |
 | employment_type              | text        | YES      | 'full-time'  |
+| applicator_license_number    | text        | YES      |              |
+
+> applicator_license_number: nullable free text. On-file chemical/pesticide
+> applicator license for this employee, independent of any license number
+> typed into a specific chemical_application_logs entry. null = no license
+> on file.
 
 ---
 
