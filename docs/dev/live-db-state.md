@@ -725,6 +725,12 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | color           | text        | YES      |           |
 | estimated_hours | numeric     | YES      | 1         |
 | location        | text        | YES      |           |
+| sop_id          | uuid        | YES      |           |
+
+> sop_id: nullable FK to sops.id. When set, this task has an associated
+> SOP that should be surfaced to the assigned employee (see
+> MobileFieldWorkspacePage.tsx) when they're working the task. null = no
+> SOP required for this task.
 
 ---
 
@@ -829,7 +835,7 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | id               | uuid        | NO       | gen_random_uuid() |
 | org_id           | uuid        | NO       |                |
 | property_id      | uuid        | NO       |                |
-| equipment_unit_id| uuid        | NO       |                |
+| equipment_unit_id| uuid        | YES      |                |
 | title            | text        | NO       |                |
 | description      | text        | YES      |                |
 | status           | text        | NO       | 'open'         |
@@ -844,8 +850,15 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | due_at_hours     | numeric     | YES      |                |
 | due_at_date      | date        | YES      |                |
 | planned_status   | text        | NO       | 'not_started'  |
+| submitted_by     | uuid        | YES      |                |
 
-> category CHECK: ('preventative','repair')
+> category CHECK: ('preventative','repair','general')
+> equipment_unit_id is now nullable: null = a general crew-submitted work
+> order (issue/request), not tied to a specific equipment unit. Non-null =
+> equipment maintenance work order, as before.
+> submitted_by: nullable FK to employees.id. Who submitted the work order
+> (relevant for general/crew-submitted category, optional for equipment
+> maintenance entries created by the system/admin).
 > planned_status CHECK: ('not_started','in_progress','completed','skipped')
 
 ---
