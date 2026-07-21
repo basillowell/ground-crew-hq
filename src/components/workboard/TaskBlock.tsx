@@ -15,6 +15,8 @@ interface TaskBlockProps {
   shiftEndTime: string | null;
   equipmentOverdueThresholdDays?: number;
   doubleBookedAssignmentIds?: ReadonlySet<string>;
+  selectedAssignmentIds?: ReadonlySet<string>;
+  onToggleSelect?: (assignmentId: string) => void;
   operationalTimezone?: string;
   priorityIndex?: number;
   onEdit?: () => void;
@@ -60,6 +62,8 @@ export function TaskBlock({
   shiftEndTime,
   equipmentOverdueThresholdDays = 90,
   doubleBookedAssignmentIds,
+  selectedAssignmentIds,
+  onToggleSelect,
   operationalTimezone = 'America/New_York',
   priorityIndex,
   onEdit,
@@ -88,6 +92,8 @@ export function TaskBlock({
     return overdueDays >= 0;
   }, [equipment?.lastService, equipmentOverdueThresholdDays]);
   const isEquipmentDoubleBooked = assignment.id ? Boolean(doubleBookedAssignmentIds?.has(assignment.id)) : false;
+  const isSelected = assignment.id ? Boolean(selectedAssignmentIds?.has(assignment.id)) : false;
+  const canSelect = Boolean(assignment.id && onToggleSelect);
   const status = normalizeStatus(assignment.status);
   const assignmentRecord = assignment as Assignment & Record<string, unknown>;
 
@@ -160,13 +166,25 @@ export function TaskBlock({
 
   return (
     <div
-      className={`grid min-h-[58px] grid-cols-[1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)}`}
+      className={`grid min-h-[58px] grid-cols-[auto_1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)} ${isSelected ? 'ring-1 ring-primary/40 bg-primary/5' : ''}`}
       draggable={Boolean(draggable)}
       onDragStart={draggable ? onDragStart : undefined}
       onDragEnter={draggable ? onDragEnter : undefined}
       onDragOver={draggable ? (event) => event.preventDefault() : undefined}
       onDrop={draggable ? onDrop : undefined}
     >
+      {canSelect ? (
+        <input
+          type="checkbox"
+          aria-label={`Select ${task.name}`}
+          checked={isSelected}
+          onChange={() => assignment.id && onToggleSelect?.(assignment.id)}
+          onClick={(event) => event.stopPropagation()}
+          className="mt-1 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary"
+        />
+      ) : (
+        <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      )}
       <div className="min-w-0 space-y-1">
         <div className="flex min-w-0 items-center gap-2 overflow-hidden">
           <span className={`truncate text-sm font-semibold ${status === 'done' ? 'line-through text-muted-foreground' : ''}`} style={{ color: status === 'done' ? undefined : task.color }}>

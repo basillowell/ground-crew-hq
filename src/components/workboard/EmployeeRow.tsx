@@ -29,6 +29,8 @@ interface EmployeeRowProps {
   shiftEndTime: string | null;
   equipmentOverdueThresholdDays?: number;
   doubleBookedAssignmentIds?: ReadonlySet<string>;
+  selectedAssignmentIds?: ReadonlySet<string>;
+  onToggleSelect?: (assignmentId: string) => void;
   laneSummary?: string;
   laneWarning?: string;
   orderIndex?: number;
@@ -87,6 +89,8 @@ export function EmployeeRow({
   shiftEndTime,
   equipmentOverdueThresholdDays,
   doubleBookedAssignmentIds,
+  selectedAssignmentIds,
+  onToggleSelect,
   laneSummary: _laneSummary,
   laneWarning,
   orderIndex,
@@ -337,6 +341,8 @@ export function EmployeeRow({
                       shiftEndTime={shiftEndTime}
                       equipmentOverdueThresholdDays={equipmentOverdueThresholdDays}
                       doubleBookedAssignmentIds={doubleBookedAssignmentIds}
+                      selectedAssignmentIds={selectedAssignmentIds}
+                      onToggleSelect={onToggleSelect}
                       operationalTimezone={operationalTimezone}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
                       draggable

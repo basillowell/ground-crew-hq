@@ -282,6 +282,19 @@ type TaskRowDraft = {
   status: 'planned' | 'in_progress' | 'done';
   hoursOverride: string;
 };
+
+type BulkAssignmentEditDraft = {
+  status: '' | 'planned' | 'in_progress' | 'done';
+  startTime: string;
+  propertyId: string;
+};
+
+const EMPTY_BULK_ASSIGNMENT_EDIT: BulkAssignmentEditDraft = {
+  status: '',
+  startTime: '',
+  propertyId: '',
+};
+
 type ShiftCoverageWarning = {
   employeeName: string;
   totalMinutes: number;
@@ -709,6 +722,10 @@ export default function WorkboardContent() {
   const [publishingDay, setPublishingDay] = useState(false);
   const [expandedMobileCrewIds, setExpandedMobileCrewIds] = useState<string[]>([]);
   const [expandedDesktopCrewId, setExpandedDesktopCrewId] = useState<string | null>(null);
+  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<Set<string>>(() => new Set());
+  const [bulkEditDialogOpen, setBulkEditDialogOpen] = useState(false);
+  const [bulkEditDraft, setBulkEditDraft] = useState<BulkAssignmentEditDraft>(() => ({ ...EMPTY_BULK_ASSIGNMENT_EDIT }));
+  const [bulkEditSaving, setBulkEditSaving] = useState(false);
   const [quickPlanLoading, setQuickPlanLoading] = useState(false);
   const [quickPlanApplying, setQuickPlanApplying] = useState(false);
   const [quickPlanError, setQuickPlanError] = useState<string | null>(null);
@@ -1134,6 +1151,13 @@ export default function WorkboardContent() {
   const dayAssignments = useMemo(() => {
     return assignmentList.filter((assignment) => assignment.date === boardDate);
   }, [assignmentList, boardDate]);
+  useEffect(() => {
+    const visibleAssignmentIds = new Set(dayAssignments.map((assignment) => assignment.id).filter(Boolean));
+    setSelectedAssignmentIds((current) => {
+      const next = new Set(Array.from(current).filter((id) => visibleAssignmentIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [dayAssignments]);
   const draftAssignmentCount = useMemo(
     () => dayAssignments.filter((assignment) => !isAssignmentPublished(assignment)).length,
     [dayAssignments],
@@ -1250,6 +1274,22 @@ export default function WorkboardContent() {
     );
   }, []);
 
+  const toggleAssignmentSelection = useCallback((assignmentId: string) => {
+    if (!assignmentId) return;
+    setSelectedAssignmentIds((current) => {
+      const next = new Set(current);
+      if (next.has(assignmentId)) {
+        next.delete(assignmentId);
+      } else {
+        next.add(assignmentId);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearAssignmentSelection = useCallback(() => {
+    setSelectedAssignmentIds(new Set());
+  }, []);
   const applyRecurringTasks = useCallback(async () => {
     if (!supabase) return;
     const resolvedOrgId = authOrgId ?? currentUser?.orgId;
@@ -4026,6 +4066,57 @@ export default function WorkboardContent() {
     }, 0);
   }
 
+  async function saveBulkAssignmentEdit() {
+    if (isReadOnly) {
+      toast.info('Demo mode is read-only.');
+      return;
+    }
+    if (!supabase) return;
+    const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+    if (!resolvedOrgId) {
+      toast.error('Session is reconnecting - please try again in a moment.');
+      return;
+    }
+    const assignmentIds = Array.from(selectedAssignmentIds).filter(Boolean);
+    if (assignmentIds.length === 0) {
+      toast.info('Select at least one assignment.');
+      return;
+    }
+
+    const payload: Record<string, unknown> = {};
+    if (bulkEditDraft.status) payload.status = toAssignmentWriteStatus(bulkEditDraft.status);
+    if (bulkEditDraft.startTime) payload.start_time = bulkEditDraft.startTime;
+    if (bulkEditDraft.propertyId) payload.property_id = bulkEditDraft.propertyId;
+
+    if (Object.keys(payload).length === 0) {
+      toast.info('Choose at least one field to update.');
+      return;
+    }
+
+    setBulkEditSaving(true);
+    try {
+      const { error } = await withWorkboardMutationTimeout(supabase
+        .from('assignments')
+        .update(payload)
+        .in('id', assignmentIds)
+        .eq('org_id', resolvedOrgId));
+
+      if (error) {
+        console.error('[BULK ASSIGNMENT ERROR]', { error, payload, assignmentIds });
+        toast.error(`Bulk edit failed: ${error.message}`);
+        return;
+      }
+
+      toast.success(`Updated ${assignmentIds.length} assignment${assignmentIds.length === 1 ? '' : 's'}.`);
+      setBulkEditDialogOpen(false);
+      setBulkEditDraft({ ...EMPTY_BULK_ASSIGNMENT_EDIT });
+      clearAssignmentSelection();
+      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    } finally {
+      setBulkEditSaving(false);
+    }
+  }
+
   async function removeAssignment(assignmentId: string) {
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
@@ -5062,6 +5153,8 @@ export default function WorkboardContent() {
                       shiftEndTime={lane.shift?.shiftEnd ?? null}
                       equipmentOverdueThresholdDays={escalationThresholds.equipmentServiceOverdueDays}
                       doubleBookedAssignmentIds={doubleBookedAssignmentIds}
+                      selectedAssignmentIds={!isReadOnly ? selectedAssignmentIds : undefined}
+                      onToggleSelect={!isReadOnly ? toggleAssignmentSelection : undefined}
                       laneSummary={(() => {
                         const baseSummary = lane.shift
                           ? `Est: ${lane.estimatedHours.toFixed(1)}h - Actual: ${lane.actualHours.toFixed(1)}h`
@@ -5495,6 +5588,34 @@ export default function WorkboardContent() {
       </div>
 
       {/* ─── RIGHT RAIL ─── */}
+      {!isReadOnly && selectedAssignmentIds.size > 0 ? (
+        <div className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface-card px-3 py-2 shadow-lg">
+          <span className="text-xs font-semibold text-foreground">
+            {selectedAssignmentIds.size} selected
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={() => {
+              setBulkEditDraft({ ...EMPTY_BULK_ASSIGNMENT_EDIT });
+              setBulkEditDialogOpen(true);
+            }}
+          >
+            Bulk Edit
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={clearAssignmentSelection}
+          >
+            Clear
+          </Button>
+        </div>
+      ) : null}
+
       <div className="border-t bg-card md:hidden">
         <div className="space-y-2 p-3">
           <div className="rounded-2xl border">
@@ -5615,6 +5736,80 @@ export default function WorkboardContent() {
               }
             >
               {quickPlanApplying ? 'Applying...' : 'Apply'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={bulkEditDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setBulkEditDialogOpen(nextOpen);
+          if (!nextOpen) setBulkEditDraft({ ...EMPTY_BULK_ASSIGNMENT_EDIT });
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Bulk Edit Assignments</DialogTitle>
+            <DialogDescription>
+              Apply only the fields you choose to {selectedAssignmentIds.size} selected assignment{selectedAssignmentIds.size === 1 ? '' : 's'}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-xs text-muted-foreground">Status</label>
+              <select
+                value={bulkEditDraft.status}
+                onChange={(event) => setBulkEditDraft((current) => ({ ...current, status: event.target.value as BulkAssignmentEditDraft['status'] }))}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No change</option>
+                <option value="planned">Planned</option>
+                <option value="in_progress">In Progress</option>
+                <option value="done">Completed</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Start Time</label>
+              <Input
+                type="time"
+                value={bulkEditDraft.startTime}
+                onChange={(event) => setBulkEditDraft((current) => ({ ...current, startTime: event.target.value }))}
+                className="mt-1 h-10 border-border bg-background text-foreground"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">Leave blank to keep each assignment's current start time.</p>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Property</label>
+              <select
+                value={bulkEditDraft.propertyId}
+                onChange={(event) => setBulkEditDraft((current) => ({ ...current, propertyId: event.target.value }))}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No change</option>
+                {properties.map((property) => (
+                  <option key={property.id} value={property.id}>
+                    {property.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBulkEditDialogOpen(false)}
+              disabled={bulkEditSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void saveBulkAssignmentEdit()}
+              disabled={bulkEditSaving || selectedAssignmentIds.size === 0}
+            >
+              {bulkEditSaving ? 'Saving...' : 'Apply Changes'}
             </Button>
           </div>
         </DialogContent>
