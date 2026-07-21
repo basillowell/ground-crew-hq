@@ -28,6 +28,7 @@ interface EmployeeRowProps {
   shiftLabel?: string;
   shiftEndTime: string | null;
   equipmentOverdueThresholdDays?: number;
+  doubleBookedEquipmentIds?: ReadonlySet<string>;
   laneSummary?: string;
   laneWarning?: string;
   orderIndex?: number;
@@ -56,6 +57,7 @@ interface EmployeeRowProps {
 
 function coverageBadgeClass(coveragePercent: number | undefined) {
   if (typeof coveragePercent !== 'number') return 'bg-muted text-muted-foreground border-border';
+  if (coveragePercent > 100) return 'border-status-warning bg-status-warning text-text-inverse shadow-sm ring-1 ring-status-warning/40';
   if (coveragePercent >= 80) return 'border-status-active/20 bg-status-active/10 text-status-active';
   if (coveragePercent >= 50) return 'border-status-pending/20 bg-status-pending/10 text-status-pending';
   return 'border-status-warning/20 bg-status-warning/10 text-status-warning';
@@ -84,6 +86,7 @@ export function EmployeeRow({
   shiftLabel,
   shiftEndTime,
   equipmentOverdueThresholdDays,
+  doubleBookedEquipmentIds,
   laneSummary: _laneSummary,
   laneWarning,
   orderIndex,
@@ -333,6 +336,7 @@ export function EmployeeRow({
                       properties={properties}
                       shiftEndTime={shiftEndTime}
                       equipmentOverdueThresholdDays={equipmentOverdueThresholdDays}
+                      doubleBookedEquipmentIds={doubleBookedEquipmentIds}
                       operationalTimezone={operationalTimezone}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
                       draggable

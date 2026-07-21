@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Task, Assignment, Property } from '@/data/seedData';
-import { AlertTriangle, Pencil, X } from 'lucide-react';
+import { AlertTriangle, CircleAlert, Pencil, X } from 'lucide-react';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { formatTime } from '@/utils/formatTime';
@@ -14,6 +14,7 @@ interface TaskBlockProps {
   properties: Property[];
   shiftEndTime: string | null;
   equipmentOverdueThresholdDays?: number;
+  doubleBookedEquipmentIds?: ReadonlySet<string>;
   operationalTimezone?: string;
   priorityIndex?: number;
   onEdit?: () => void;
@@ -58,6 +59,7 @@ export function TaskBlock({
   properties,
   shiftEndTime,
   equipmentOverdueThresholdDays = 90,
+  doubleBookedEquipmentIds,
   operationalTimezone = 'America/New_York',
   priorityIndex,
   onEdit,
@@ -85,6 +87,7 @@ export function TaskBlock({
     );
     return overdueDays >= 0;
   }, [equipment?.lastService, equipmentOverdueThresholdDays]);
+  const isEquipmentDoubleBooked = assignment.equipmentId ? Boolean(doubleBookedEquipmentIds?.has(assignment.equipmentId)) : false;
   const status = normalizeStatus(assignment.status);
   const assignmentRecord = assignment as Assignment & Record<string, unknown>;
 
@@ -211,6 +214,13 @@ export function TaskBlock({
                 className="h-3.5 w-3.5 shrink-0 text-status-pending"
                 aria-label="Equipment overdue for service"
                 title="Equipment overdue for service"
+              />
+            ) : null}
+            {isEquipmentDoubleBooked ? (
+              <CircleAlert
+                className="h-3.5 w-3.5 shrink-0 text-status-warning"
+                aria-label="Equipment double-booked today"
+                title="Equipment double-booked today"
               />
             ) : null}
           </span>

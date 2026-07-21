@@ -172,6 +172,7 @@ function toAssignmentWriteStatus(status?: string) {
 }
 
 function coverageBadgeClass(coveragePercent: number) {
+  if (coveragePercent > 100) return 'border-status-warning bg-status-warning text-text-inverse shadow-sm ring-1 ring-status-warning/40';
   if (coveragePercent >= 80) return 'border-status-active/20 bg-status-active/10 text-status-active';
   if (coveragePercent >= 50) return 'border-status-pending/20 bg-status-pending/10 text-status-pending';
   return 'border-status-warning/20 bg-status-warning/10 text-status-warning';
@@ -1697,6 +1698,13 @@ export default function WorkboardContent() {
     return map;
   }, [dayAssignments, editingAssignmentId, employeeNameById]);
 
+  const doubleBookedEquipmentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const [equipmentId, assignmentsForEquipment] of equipmentAssignmentConflicts) {
+      if (assignmentsForEquipment.size > 1) ids.add(equipmentId);
+    }
+    return ids;
+  }, [equipmentAssignmentConflicts]);
   const getEquipmentConflictNames = useCallback(
     (equipmentId: string | undefined, employeeId?: string | null) => {
       if (!equipmentId) return [];
@@ -4922,14 +4930,18 @@ export default function WorkboardContent() {
                 const isExpanded = expandedDesktopCrewId === lane.employee.id;
                 const coverageRounded = Math.round(lane.coveragePercent);
                 const coverageToneClass =
-                  coverageRounded > 80
-                    ? 'bg-status-active/10 text-status-active'
+                  coverageRounded > 100
+                    ? 'bg-status-warning text-text-inverse shadow-sm ring-1 ring-status-warning/40'
+                    : coverageRounded > 80
+                      ? 'bg-status-active/10 text-status-active'
                     : coverageRounded >= 50
                       ? 'bg-status-pending/10 text-status-pending'
                       : 'bg-status-warning/10 text-status-warning';
                 const laneAccentClass =
-                  coverageRounded > 80
-                    ? 'border-l-2 border-l-status-active/60'
+                  coverageRounded > 100
+                    ? 'border-l-4 border-l-status-warning'
+                    : coverageRounded > 80
+                      ? 'border-l-2 border-l-status-active/60'
                     : coverageRounded >= 50
                       ? 'border-l-2 border-l-status-pending/60'
                       : 'border-l-2 border-l-status-warning/60';
@@ -5010,6 +5022,7 @@ export default function WorkboardContent() {
                       shiftLabel={lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : undefined}
                       shiftEndTime={lane.shift?.shiftEnd ?? null}
                       equipmentOverdueThresholdDays={escalationThresholds.equipmentServiceOverdueDays}
+                      doubleBookedEquipmentIds={doubleBookedEquipmentIds}
                       laneSummary={(() => {
                         const baseSummary = lane.shift
                           ? `Est: ${lane.estimatedHours.toFixed(1)}h - Actual: ${lane.actualHours.toFixed(1)}h`
