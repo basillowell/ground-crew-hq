@@ -32,9 +32,9 @@ function normalizeStatus(status?: string) {
 }
 
 function statusContainerClass(status: string) {
-  if (status === 'in-progress') return 'border-l-[3px] border-l-blue-500 bg-card';
-  if (status === 'done') return 'border-l-[3px] border-l-green-500 bg-card';
-  return 'border-l-[3px] border-l-gray-400 bg-card';
+  if (status === 'in-progress') return 'border-l-[3px] border-l-status-complete bg-card';
+  if (status === 'done') return 'border-l-[3px] border-l-status-active bg-card';
+  return 'border-l-[3px] border-l-status-hold bg-card';
 }
 
 function parseShiftEndToTimestamp(
@@ -118,8 +118,8 @@ export function TaskBlock({
     actualHours == null || estimatedHours <= 0
       ? 'text-muted-foreground'
       : actualHours > estimatedHours
-        ? 'text-amber-700'
-        : 'text-emerald-700';
+        ? 'text-status-pending'
+        : 'text-status-active';
 
   const elapsedState = useMemo(() => {
     if (status !== 'in-progress' || !actualStartAt) return null;
@@ -174,9 +174,9 @@ export function TaskBlock({
             variant="outline"
             className={
               status === 'in-progress'
-                ? 'shrink-0 border-blue-200 text-blue-700'
+                ? 'shrink-0 border-status-complete/20 text-status-complete'
                 : status === 'done'
-                  ? 'shrink-0 border-green-200 text-green-700'
+                  ? 'shrink-0 border-status-active/20 text-status-active'
                   : 'shrink-0 border-surface-border text-text-secondary'
             }
           >
@@ -192,8 +192,8 @@ export function TaskBlock({
             <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
               <span>Live {elapsedLabel}</span>
               {isElapsedCappedAtShiftEnd ? (
-                <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 px-1.5 py-0 text-[10px] text-amber-700">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                <Badge variant="outline" className="gap-1 border-status-pending/20 bg-status-pending/10 px-1.5 py-0 text-[10px] text-status-pending">
+                  <span className="h-1.5 w-1.5 rounded-full bg-status-pending" aria-hidden="true" />
                   Past shift end
                 </Badge>
               ) : null}
@@ -208,7 +208,7 @@ export function TaskBlock({
             </span>
             {isEquipmentOverdue ? (
               <AlertTriangle
-                className="h-3.5 w-3.5 shrink-0 text-amber-600"
+                className="h-3.5 w-3.5 shrink-0 text-status-pending"
                 aria-label="Equipment overdue for service"
                 title="Equipment overdue for service"
               />
@@ -232,4 +232,3 @@ export function TaskBlock({
     </div>
   );
 }
-

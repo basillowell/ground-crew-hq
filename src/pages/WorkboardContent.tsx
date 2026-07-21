@@ -457,14 +457,14 @@ function normalizeClockEvent(row: Record<string, unknown>): WorkboardClockEventR
 
 const PRIORITY_LABEL: Record<string, string> = { high: 'High', medium: 'Med', low: 'Low' };
 const PRIORITY_COLOR: Record<string, string> = {
-  high: 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800',
-  medium: 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800',
+  high: 'border-status-warning/20 bg-status-warning/10',
+  medium: 'border-status-pending/20 bg-status-pending/10',
   low: 'bg-muted/40 border-border',
 };
 const STATUS_ICON: Record<string, React.ReactNode> = {
-  new: <AlertCircle className="h-3.5 w-3.5 text-amber-500" />,
-  assigned: <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />,
-  'in-progress': <Radio className="h-3.5 w-3.5 text-blue-500 animate-pulse" />,
+  new: <AlertCircle className="h-3.5 w-3.5 text-status-pending" />,
+  assigned: <CheckCircle2 className="h-3.5 w-3.5 text-status-active" />,
+  'in-progress': <Radio className="h-3.5 w-3.5 text-status-complete animate-pulse" />,
 };
 
 type NullableOrgId = string | null;
@@ -580,7 +580,7 @@ const SOP_ITEMS: SopItem[] = [
   {
     id: 'mowing-greens',
     title: 'Mowing Greens',
-    icon: <Wrench className="h-4 w-4 text-emerald-600" />,
+    icon: <Wrench className="h-4 w-4 text-status-active" />,
     checklist: [
       'Verify mower height setting',
       'Check fuel',
@@ -592,7 +592,7 @@ const SOP_ITEMS: SopItem[] = [
   {
     id: 'spray-application',
     title: 'Spray Application',
-    icon: <AlertCircle className="h-4 w-4 text-amber-600" />,
+    icon: <AlertCircle className="h-4 w-4 text-status-pending" />,
     checklist: [
       'Check wind speed (<10mph)',
       'Verify product label',
@@ -604,7 +604,7 @@ const SOP_ITEMS: SopItem[] = [
   {
     id: 'irrigation-check',
     title: 'Irrigation Check',
-    icon: <Radio className="h-4 w-4 text-blue-600" />,
+    icon: <Radio className="h-4 w-4 text-status-complete" />,
     checklist: [
       'Walk all zones',
       'Check for leaks/broken heads',
@@ -2986,7 +2986,7 @@ export default function WorkboardContent() {
           <button
             key={`${option.equipmentId}-${option.dateLabel}`}
             type="button"
-            className="rounded-full border border-amber-300/60 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-800/70 dark:bg-amber-950/20 dark:text-amber-300"
+            className="rounded-full border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-[11px] font-medium text-status-pending transition-colors hover:bg-status-pending/15"
             onClick={() => {
               setIsAssignmentModalDirty(true);
               onSelect(option.equipmentId);
@@ -3002,7 +3002,7 @@ export default function WorkboardContent() {
     const conflictNames = getEquipmentConflictNames(equipmentId, employeeId);
     if (conflictNames.length === 0) return null;
     return (
-      <p className="mt-1 rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/20 dark:text-amber-300">
+      <p className="mt-1 rounded-md border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-[11px] font-medium text-status-pending">
         Already assigned to {conflictNames.join(', ')} today. You can still save if the unit is being shared.
       </p>
     );
@@ -4585,7 +4585,7 @@ export default function WorkboardContent() {
           )}
           {unscheduledEmployees.length > 0 && (
             <div className="flex items-center gap-1.5 text-muted-foreground">
-              <span className="text-orange-500 font-semibold">{unscheduledEmployees.length}</span>
+              <span className="text-status-pending font-semibold">{unscheduledEmployees.length}</span>
               <span>unscheduled</span>
             </div>
           )}
@@ -4641,7 +4641,7 @@ export default function WorkboardContent() {
                         <ul className="mt-2 space-y-1">
                           {sop.checklist.map((item) => (
                             <li key={`${sop.id}-${item}`} className="flex items-start gap-2 text-xs text-muted-foreground">
-                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-status-active" />
                               <span>{item}</span>
                             </li>
                           ))}
@@ -4794,9 +4794,9 @@ export default function WorkboardContent() {
                                 </span>
                                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                                   ns === 'done'
-                                    ? 'bg-green-500/10 text-green-400'
+                                    ? 'bg-status-active/10 text-status-active'
                                     : ns === 'in-progress'
-                                      ? 'bg-blue-500/10 text-blue-400'
+                                      ? 'bg-status-complete/10 text-status-complete'
                                       : 'bg-muted text-muted-foreground'
                                 }`}>
                                   {ns}
@@ -4857,24 +4857,24 @@ export default function WorkboardContent() {
                 const coverageRounded = Math.round(lane.coveragePercent);
                 const coverageToneClass =
                   coverageRounded > 80
-                    ? 'bg-emerald-100 text-emerald-800'
+                    ? 'bg-status-active/10 text-status-active'
                     : coverageRounded >= 50
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-red-100 text-red-800';
+                      ? 'bg-status-pending/10 text-status-pending'
+                      : 'bg-status-warning/10 text-status-warning';
                 const laneAccentClass =
                   coverageRounded > 80
-                    ? 'border-l-2 border-l-green-500/60'
+                    ? 'border-l-2 border-l-status-active/60'
                     : coverageRounded >= 50
-                      ? 'border-l-2 border-l-amber-500/60'
-                      : 'border-l-2 border-l-red-500/60';
+                      ? 'border-l-2 border-l-status-pending/60'
+                      : 'border-l-2 border-l-status-warning/60';
                 return (
                   <div
                     key={lane.employee.id}
                     className={`rounded-xl border bg-card transition-all duration-500 ${laneAccentClass} ${
                       laneFlashTone === 'complete'
-                        ? 'ring-2 ring-green-400/70 bg-green-50/40'
+                        ? 'ring-2 ring-status-active/70 bg-status-active/10'
                         : laneFlashTone === 'started'
-                          ? 'ring-2 ring-blue-400/70 bg-blue-50/40'
+                          ? 'ring-2 ring-status-complete/70 bg-status-complete/10'
                           : ''
                     }`}
                   >
@@ -4915,7 +4915,7 @@ export default function WorkboardContent() {
                           type="button"
                           aria-label={`Quick add task for ${lane.employee.firstName} ${lane.employee.lastName}`}
                           title="Quick add task"
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-300/60 bg-amber-50 text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-800/70 dark:bg-amber-950/20 dark:text-amber-300"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-status-pending/30 bg-status-pending/10 text-status-pending transition-colors hover:bg-status-pending/15"
                           onClick={() => openQuickAssignmentDialog(lane.employee.id)}
                         >
                           <Zap className="h-4 w-4" />
@@ -5054,7 +5054,7 @@ export default function WorkboardContent() {
                                   type="button"
                                   size="icon"
                                   variant="outline"
-                                  className="min-h-11 min-w-11 text-amber-700"
+                                  className="min-h-11 min-w-11 text-status-pending"
                                   aria-label={`Quick add task for ${lane.employee.firstName} ${lane.employee.lastName}`}
                                   title="Quick add task"
                                   onClick={() => openQuickAssignmentDialog(lane.employee.id)}
@@ -5356,7 +5356,7 @@ export default function WorkboardContent() {
                               type="button"
                               size="icon"
                               variant="outline"
-                              className="min-h-11 min-w-11 text-amber-700"
+                              className="min-h-11 min-w-11 text-status-pending"
                               aria-label={`Quick add task for ${lane.employee.firstName} ${lane.employee.lastName}`}
                               title="Quick add task"
                               onClick={() => openQuickAssignmentDialog(lane.employee.id)}
@@ -5447,7 +5447,7 @@ export default function WorkboardContent() {
                 <div className="h-10 animate-pulse rounded-md bg-muted/40" />
               </div>
             ) : quickPlanError ? (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <div className="rounded-md border border-status-warning/20 bg-status-warning/10 p-3 text-sm text-status-warning">
                 Failed to load quick plan: {quickPlanError}
               </div>
             ) : quickPlanEmptyMessage ? (
@@ -5539,7 +5539,7 @@ export default function WorkboardContent() {
           <div className="flex-1 overflow-y-auto px-4 pb-3 md:px-0 md:pb-0">
 
           {linkedRequestId && (
-            <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 mb-1">
+            <div className="rounded-xl border border-status-pending/20 bg-status-pending/10 px-3 py-2 text-xs text-status-pending mb-1">
               Dispatching from needs queue — assignment will mark the request as handled.
             </div>
           )}
@@ -6116,7 +6116,7 @@ export default function WorkboardContent() {
               {showTaskLoading ? (
                 <div className="rounded-md border p-4 text-sm text-muted-foreground">Loading task library...</div>
               ) : taskLibraryError ? (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <div className="rounded-md border border-status-warning/20 bg-status-warning/10 p-3 text-sm text-status-warning">
                   <p>Could not load tasks: {taskLibraryError}</p>
                   <Button type="button" size="sm" variant="outline" className="mt-2" onClick={() => void refetchTasks()}>
                     Retry
@@ -6443,4 +6443,3 @@ export default function WorkboardContent() {
     </>
   );
 }
-

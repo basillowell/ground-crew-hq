@@ -56,9 +56,9 @@ interface EmployeeRowProps {
 
 function coverageBadgeClass(coveragePercent: number | undefined) {
   if (typeof coveragePercent !== 'number') return 'bg-muted text-muted-foreground border-border';
-  if (coveragePercent >= 80) return 'bg-green-100 text-green-800 border-green-200';
-  if (coveragePercent >= 50) return 'bg-amber-100 text-amber-800 border-amber-200';
-  return 'bg-red-100 text-red-800 border-red-200';
+  if (coveragePercent >= 80) return 'border-status-active/20 bg-status-active/10 text-status-active';
+  if (coveragePercent >= 50) return 'border-status-pending/20 bg-status-pending/10 text-status-pending';
+  return 'border-status-warning/20 bg-status-warning/10 text-status-warning';
 }
 
 function normalizeStatus(status: string | null | undefined): string {
@@ -153,9 +153,9 @@ export function EmployeeRow({
   const getActualHoursTone = (actualHours: number, estimatedHours: number) => {
     if (actualHours <= 0 || estimatedHours <= 0) return 'text-muted-foreground';
     const ratio = actualHours / estimatedHours;
-    if (ratio <= 1) return 'text-emerald-700';
-    if (ratio < 1.25) return 'text-amber-700';
-    return 'text-red-700';
+    if (ratio <= 1) return 'text-status-active';
+    if (ratio < 1.25) return 'text-status-pending';
+    return 'text-status-warning';
   };
 
   const getAssignmentSortMinutes = (assignment: Assignment, fallbackIndex: number) => {
@@ -243,7 +243,7 @@ export function EmployeeRow({
           </div>
 
           {laneWarning ? (
-            <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+            <div className="mb-3 rounded-xl border border-status-pending/30 bg-status-pending/10 px-3 py-2 text-[11px] font-medium text-status-pending">
               {laneWarning}
             </div>
           ) : null}

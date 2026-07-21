@@ -35,10 +35,10 @@ function minuteToPct(minute: number) {
 
 function categoryTone(category: string | null | undefined) {
   const value = String(category ?? '').toLowerCase();
-  if (value.includes('maintenance')) return { bg: '#dcfce7', border: '#16a34a', text: '#14532d' };
-  if (value.includes('irrigation')) return { bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a' };
-  if (value.includes('field') || value.includes('mowing')) return { bg: '#fef3c7', border: '#d97706', text: '#78350f' };
-  return { bg: '#f3f4f6', border: '#6b7280', text: '#1f2937' };
+  if (value.includes('maintenance')) return 'border-status-active/30 bg-status-active/10 text-status-active';
+  if (value.includes('irrigation')) return 'border-status-complete/30 bg-status-complete/10 text-status-complete';
+  if (value.includes('field') || value.includes('mowing')) return 'border-status-pending/30 bg-status-pending/10 text-status-pending';
+  return 'border-status-hold/30 bg-status-hold/10 text-text-secondary';
 }
 
 function normalizeStatus(status?: string) {
@@ -194,13 +194,10 @@ export function GanttTimeline({
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              className="absolute top-2 h-[calc(100%-16px)] rounded-md border px-2 text-left text-[11px] font-semibold shadow-sm transition hover:brightness-105"
+                              className={`absolute top-2 h-[calc(100%-16px)] rounded-md border px-2 text-left text-[11px] font-semibold shadow-sm transition hover:brightness-105 ${tone}`}
                               style={{
                                 left: `${bar.leftPct}%`,
                                 width: `${bar.widthPct}%`,
-                                backgroundColor: tone.bg,
-                                borderColor: tone.border,
-                                color: tone.text,
                                 opacity,
                               }}
                               onClick={() => onAssignmentClick?.(bar.assignment)}
