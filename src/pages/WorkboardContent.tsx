@@ -5180,17 +5180,10 @@ export default function WorkboardContent() {
                           </span>
                         </span>
                         <span
-                          className="w-[80px] text-right font-mono text-xs leading-tight text-muted-foreground"
+                          className="w-[80px] truncate text-right font-mono text-xs text-muted-foreground"
                           title={lane.openMinutes > 0 ? `${lane.assignedMinutes}min assigned, ${lane.openMinutes}min open` : `${lane.assignedMinutes}min assigned`}
                         >
-                          {lane.openMinutes > 0 ? (
-                            <>
-                              <span className="block">{lane.assignedMinutes}m assigned</span>
-                              <span className="block text-status-warning">{lane.openMinutes}m open</span>
-                            </>
-                          ) : (
-                            `${lane.assignedMinutes}min`
-                          )}
+                          {lane.assignedMinutes}m{lane.openMinutes > 0 ? <span className="text-status-warning"> / {lane.openMinutes}m open</span> : null}
                         </span>
                         <span className="w-6 text-muted-foreground">
                           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
