@@ -170,6 +170,11 @@ type FertilizerProductDraft = {
   rateUnit: string;
 };
 
+type EmployeeApplicatorLicenseRow = {
+  id: string;
+  applicator_license_number: string | null;
+};
+
 const emptyFertilizerProductDraft: FertilizerProductDraft = {
   name: '',
   fertilizerType: '',
@@ -289,6 +294,24 @@ export default function ApplicationsPage() {
   const orgScope = currentUser?.orgId;
 
   const employeesQuery = useEmployees(propertyScope, orgScope);
+  const employeeApplicatorLicensesQuery = useQuery({
+    queryKey: ['employee-applicator-licenses', orgScope ?? 'all-orgs'],
+    enabled: Boolean(orgScope),
+    staleTime: 1000 * 60 * 30,
+    retry: 3,
+    retryDelay: 1000,
+    queryFn: async () => {
+      if (!orgScope) return [] as EmployeeApplicatorLicenseRow[];
+      const { data, error } = await withChemicalLookupRequestTimeout(
+        supabase
+          .from('employees')
+          .select('id, applicator_license_number')
+          .eq('org_id', orgScope),
+      );
+      if (error) throw error;
+      return (data ?? []) as EmployeeApplicatorLicenseRow[];
+    },
+  });
   const propertiesQuery = useProperties(orgScope);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgScope);
   const logsQuery = useChemicalLogs(orgScope, propertyScope);
@@ -356,6 +379,7 @@ export default function ApplicationsPage() {
   const applicationAreas = applicationAreasQuery.data ?? [];
 
   const employees = employeesQuery.data ?? [];
+  const employeeApplicatorLicenses = employeeApplicatorLicensesQuery.data ?? [];
   const equipmentUnits = equipmentUnitsQuery.data ?? [];
   const properties = propertiesQuery.data ?? [];
   const logs = logsQuery.data ?? [];
@@ -375,6 +399,7 @@ export default function ApplicationsPage() {
   const [draftMixItems, setDraftMixItems] = useState<DraftMixItem[]>([{ ...emptyMixItem }]);
   const [saving, setSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [saveApplicatorLicenseToProfile, setSaveApplicatorLicenseToProfile] = useState(false);
   const [fertilizerFilterProduct, setFertilizerFilterProduct] = useState('all');
   const [fertilizerDialogOpen, setFertilizerDialogOpen] = useState(false);
   const [editingFertilizerLogId, setEditingFertilizerLogId] = useState<string | null>(null);
@@ -387,6 +412,12 @@ export default function ApplicationsPage() {
   const [fertilizerProductSaving, setFertilizerProductSaving] = useState(false);
   const [editingFertilizerProductId, setEditingFertilizerProductId] = useState<string | null>(null);
   const [editingFertilizerProductDraft, setEditingFertilizerProductDraft] = useState<FertilizerProductDraft>(emptyFertilizerProductDraft);
+  const selectedApplicator = employees.find((employee) => employee.id === draft.applicatorId) ?? null;
+  const selectedApplicatorName = selectedApplicator
+    ? `${selectedApplicator.firstName} ${selectedApplicator.lastName}`.trim()
+    : 'Selected applicator';
+  const selectedApplicatorLicenseNumber =
+    employeeApplicatorLicenses.find((employee) => employee.id === draft.applicatorId)?.applicator_license_number?.trim() ?? '';
 
   useEffect(() => {
     document.title = applicationMode === 'chemical' ? 'Applications - Ground Crew HQ' : 'Fertilizer Applications - Ground Crew HQ';
@@ -416,13 +447,10 @@ export default function ApplicationsPage() {
   }, [chemicalProducts, employees, equipmentUnits, properties, propertyScope]);
 
   useEffect(() => {
-    if (!draft.applicatorId) return;
-    const selectedEmployee = employees.find((employee) => employee.id === draft.applicatorId);
-    if (!selectedEmployee) return;
-    const knownLicense = (selectedEmployee as Employee & { licenseNumber?: string }).licenseNumber;
-    if (!knownLicense || draft.applicatorLicenseNumber) return;
-    setDraft((current) => ({ ...current, applicatorLicenseNumber: knownLicense }));
-  }, [draft.applicatorId, draft.applicatorLicenseNumber, employees]);
+    setSaveApplicatorLicenseToProfile(false);
+    if (!draft.applicatorId || editingChemicalLogId || !selectedApplicatorLicenseNumber || draft.applicatorLicenseNumber) return;
+    setDraft((current) => ({ ...current, applicatorLicenseNumber: selectedApplicatorLicenseNumber }));
+  }, [draft.applicatorId, draft.applicatorLicenseNumber, editingChemicalLogId, selectedApplicatorLicenseNumber]);
 
 
   useEffect(() => {
@@ -853,6 +881,7 @@ export default function ApplicationsPage() {
   function openNewChemicalApplicationDialog() {
     setEditingChemicalLogId(null);
     setValidationErrors([]);
+    setSaveApplicatorLicenseToProfile(false);
     setDraft(buildChemicalDraftDefaults());
     setDraftMixItems(buildChemicalMixDefaults());
     setDialogOpen(true);
@@ -860,7 +889,10 @@ export default function ApplicationsPage() {
 
   function handleChemicalDialogOpenChange(open: boolean) {
     setDialogOpen(open);
-    if (!open) setEditingChemicalLogId(null);
+    if (!open) {
+      setEditingChemicalLogId(null);
+      setSaveApplicatorLicenseToProfile(false);
+    }
   }
 
   function openEditChemicalLog(log: ChemicalApplicationLog) {
@@ -872,6 +904,7 @@ export default function ApplicationsPage() {
 
     setEditingChemicalLogId(log.id);
     setValidationErrors([]);
+    setSaveApplicatorLicenseToProfile(false);
     setDraft({
       applicationDate: log.applicationDate,
       startTime: log.startTime,
@@ -1016,15 +1049,38 @@ export default function ApplicationsPage() {
         }
       }
 
+      const shouldSaveApplicatorLicense =
+        saveApplicatorLicenseToProfile &&
+        draft.applicatorId &&
+        !selectedApplicatorLicenseNumber &&
+        draft.applicatorLicenseNumber.trim();
+      if (shouldSaveApplicatorLicense) {
+        const { error: employeeLicenseError } = await withChemicalMutationTimeout(
+          supabase
+            .from('employees')
+            .update({ applicator_license_number: draft.applicatorLicenseNumber.trim() })
+            .eq('id', draft.applicatorId)
+            .eq('org_id', orgScope),
+        );
+        if (employeeLicenseError) {
+          toast.error('Application saved, but failed to save applicator license to employee profile: ' + getErrorMessage(employeeLicenseError, 'Unknown error'));
+        } else {
+          toast.success(`Saved applicator license to ${selectedApplicatorName}'s profile.`);
+        }
+      }
+
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['chemical-logs'] }),
         queryClient.invalidateQueries({ queryKey: ['chemical-application-logs-all'] }),
         queryClient.invalidateQueries({ queryKey: ['chemical-application-tank-mix-items'] }),
+        queryClient.invalidateQueries({ queryKey: ['employees'] }),
+        queryClient.invalidateQueries({ queryKey: ['employee-applicator-licenses'] }),
       ]);
 
       toast.success(editingChemicalLogId ? 'Chemical application updated' : 'Chemical application logged');
       setEditingChemicalLogId(null);
       setDialogOpen(false);
+      setSaveApplicatorLicenseToProfile(false);
       setDraft(buildChemicalDraftDefaults());
       setDraftMixItems(buildChemicalMixDefaults());
     } catch (error) {
@@ -1793,7 +1849,18 @@ export default function ApplicationsPage() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Applicator *</label>
-                  <select id="application-applicator" name="applicator_id" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={draft.applicatorId} onChange={(e) => setDraft((current) => ({ ...current, applicatorId: e.target.value }))}>
+                  <select
+                    id="application-applicator"
+                    name="applicator_id"
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={draft.applicatorId}
+                    onChange={(e) => {
+                      const nextApplicatorId = e.target.value;
+                      const nextLicense = employeeApplicatorLicenses.find((employee) => employee.id === nextApplicatorId)?.applicator_license_number?.trim() ?? '';
+                      setSaveApplicatorLicenseToProfile(false);
+                      setDraft((current) => ({ ...current, applicatorId: nextApplicatorId, applicatorLicenseNumber: nextLicense }));
+                    }}
+                  >
                     {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.firstName} {employee.lastName}</option>)}
                   </select>
                 </div>
@@ -1845,7 +1912,33 @@ export default function ApplicationsPage() {
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Applicator License #</label>
-                    <Input id="applicator-license-number" name="applicator_license_number" className="mt-1" value={draft.applicatorLicenseNumber} onChange={(e) => setDraft((current) => ({ ...current, applicatorLicenseNumber: e.target.value }))} />
+                    <Input
+                      id="applicator-license-number"
+                      name="applicator_license_number"
+                      className="mt-1"
+                      value={draft.applicatorLicenseNumber}
+                      onChange={(e) => {
+                        const nextLicense = e.target.value;
+                        if (!nextLicense.trim()) setSaveApplicatorLicenseToProfile(false);
+                        setDraft((current) => ({ ...current, applicatorLicenseNumber: nextLicense }));
+                      }}
+                    />
+                    {selectedApplicator && !employeeApplicatorLicensesQuery.isLoading && !selectedApplicatorLicenseNumber && !draft.applicatorLicenseNumber.trim() ? (
+                      <p className="mt-2 rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs font-medium text-status-warning">
+                        {selectedApplicatorName} has no applicator license on file - required for pesticide application records under Florida law.
+                      </p>
+                    ) : null}
+                    {selectedApplicator && !selectedApplicatorLicenseNumber && draft.applicatorLicenseNumber.trim() ? (
+                      <label className="mt-2 flex items-start gap-2 rounded-md border border-dashed border-surface-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+                          checked={saveApplicatorLicenseToProfile}
+                          onChange={(event) => setSaveApplicatorLicenseToProfile(event.target.checked)}
+                        />
+                        <span>Save this license number to {selectedApplicatorName}'s profile</span>
+                      </label>
+                    ) : null}
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Supervisor</label>
