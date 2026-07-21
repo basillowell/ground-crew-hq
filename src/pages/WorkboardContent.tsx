@@ -184,6 +184,35 @@ function coverageBadgeClass(coveragePercent: number) {
   return 'border-status-warning/20 bg-status-warning/10 text-status-warning';
 }
 
+function getCoverageFillIndicator(coverageRounded: number) {
+  if (coverageRounded > 100) {
+    return {
+      trackClass: 'border-status-warning/70 bg-status-warning/10 text-status-warning ring-1 ring-status-warning/40',
+      fillClass: 'bg-status-warning',
+      markerClass: 'bg-text-inverse shadow-[0_0_0_1px_rgb(var(--status-warning))]',
+    };
+  }
+  if (coverageRounded > 80) {
+    return {
+      trackClass: 'border-status-active/30 bg-status-active/10 text-status-active',
+      fillClass: 'bg-status-active',
+      markerClass: '',
+    };
+  }
+  if (coverageRounded >= 50) {
+    return {
+      trackClass: 'border-status-pending/30 bg-status-pending/10 text-status-pending',
+      fillClass: 'bg-status-pending',
+      markerClass: '',
+    };
+  }
+  return {
+    trackClass: 'border-status-warning/30 bg-status-warning/10 text-status-warning',
+    fillClass: 'bg-status-warning',
+    markerClass: '',
+  };
+}
+
 function getEstimatedHoursForAssignment(assignment: Assignment) {
   const estimate = Number(assignment.estimatedHours ?? 0);
   if (Number.isFinite(estimate) && estimate > 0) return estimate;
@@ -5059,14 +5088,8 @@ export default function WorkboardContent() {
                 const initials = `${lane.employee.firstName?.[0] ?? ''}${lane.employee.lastName?.[0] ?? ''}`.toUpperCase();
                 const isExpanded = expandedDesktopCrewId === lane.employee.id;
                 const coverageRounded = Math.round(lane.coveragePercent);
-                const coverageToneClass =
-                  coverageRounded > 100
-                    ? 'bg-status-warning text-text-inverse shadow-sm ring-1 ring-status-warning/40'
-                    : coverageRounded > 80
-                      ? 'bg-status-active/10 text-status-active'
-                    : coverageRounded >= 50
-                      ? 'bg-status-pending/10 text-status-pending'
-                      : 'bg-status-warning/10 text-status-warning';
+                const coverageIndicator = getCoverageFillIndicator(coverageRounded);
+                const coverageFillPercent = Math.min(Math.max(coverageRounded, 0), 100);
                 const laneAccentClass =
                   coverageRounded > 100
                     ? 'border-l-4 border-l-status-warning'
@@ -5107,8 +5130,21 @@ export default function WorkboardContent() {
                           </span>
                         </span>
                         <span className="w-[90px] text-right">
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${coverageToneClass}`}>
-                            {coverageRounded}%
+                          <span
+                            className={`relative inline-flex h-5 w-[76px] items-center justify-center overflow-hidden rounded-full border text-[11px] font-semibold ${coverageIndicator.trackClass}`}
+                            aria-label={`Coverage ${coverageRounded}%`}
+                          >
+                            <span
+                              className={`absolute inset-y-0 left-0 rounded-full opacity-80 ${coverageIndicator.fillClass}`}
+                              style={{ width: `${coverageFillPercent}%` }}
+                              aria-hidden="true"
+                            />
+                            {coverageIndicator.markerClass ? (
+                              <span className={`absolute right-0 top-0 h-full w-1 ${coverageIndicator.markerClass}`} aria-hidden="true" />
+                            ) : null}
+                            <span className="relative z-10 rounded-full bg-background/70 px-1 text-[10px] leading-none text-foreground shadow-sm">
+                              {coverageRounded}%
+                            </span>
                           </span>
                         </span>
                         <span className="w-[80px] text-right text-xs text-muted-foreground">
@@ -5234,6 +5270,9 @@ export default function WorkboardContent() {
               {orderedDispatchBoard.map((lane) => {
                 const isExpanded = expandedMobileCrewIds.includes(lane.employee.id);
                 const laneOrderedAssignments = orderEmployeeAssignments(lane.employeeAssignments);
+                const coverageRounded = Math.round(lane.coveragePercent);
+                const coverageIndicator = getCoverageFillIndicator(coverageRounded);
+                const coverageFillPercent = Math.min(Math.max(coverageRounded, 0), 100);
                 return (
                   <div key={`mobile-lane-${lane.employee.id}`} className="rounded-2xl border bg-card">
                     <button
@@ -5245,9 +5284,25 @@ export default function WorkboardContent() {
                         <p className="text-sm font-semibold">
                           {lane.employee.firstName} {lane.employee.lastName}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : 'No shift'} · Coverage {Math.round(lane.coveragePercent)}%
-                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span>{lane.shift ? `${formatTime(lane.shift.shiftStart)}-${formatTime(lane.shift.shiftEnd)}` : 'No shift'}</span>
+                          <span
+                            className={`relative inline-flex h-5 w-20 items-center justify-center overflow-hidden rounded-full border text-[11px] font-semibold ${coverageIndicator.trackClass}`}
+                            aria-label={`Coverage ${coverageRounded}%`}
+                          >
+                            <span
+                              className={`absolute inset-y-0 left-0 rounded-full opacity-80 ${coverageIndicator.fillClass}`}
+                              style={{ width: `${coverageFillPercent}%` }}
+                              aria-hidden="true"
+                            />
+                            {coverageIndicator.markerClass ? (
+                              <span className={`absolute right-0 top-0 h-full w-1 ${coverageIndicator.markerClass}`} aria-hidden="true" />
+                            ) : null}
+                            <span className="relative z-10 rounded-full bg-background/70 px-1 text-[10px] leading-none text-foreground shadow-sm">
+                              {coverageRounded}%
+                            </span>
+                          </span>
+                        </div>
                       </div>
                       {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                     </button>
