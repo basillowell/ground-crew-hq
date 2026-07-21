@@ -1625,6 +1625,41 @@ export default function WorkboardContent() {
     return map;
   }, [employeeList]);
 
+  const equipmentAssignmentConflicts = useMemo(() => {
+    const map = new Map<string, Map<string, string>>();
+    for (const assignment of dayAssignments) {
+      if (!assignment.equipmentId || assignment.id === editingAssignmentId) continue;
+      const employeeId = assignment.employeeId;
+      if (!employeeId) continue;
+      const employeeName = employeeNameById.get(employeeId) ?? 'another crew member';
+      const existing = map.get(assignment.equipmentId) ?? new Map<string, string>();
+      existing.set(employeeId, employeeName);
+      map.set(assignment.equipmentId, existing);
+    }
+    return map;
+  }, [dayAssignments, editingAssignmentId, employeeNameById]);
+
+  const getEquipmentConflictNames = useCallback(
+    (equipmentId: string | undefined, employeeId?: string | null) => {
+      if (!equipmentId) return [];
+      const assignmentsForEquipment = equipmentAssignmentConflicts.get(equipmentId);
+      if (!assignmentsForEquipment) return [];
+      return Array.from(assignmentsForEquipment.entries())
+        .filter(([assignedEmployeeId]) => assignedEmployeeId !== employeeId)
+        .map(([, employeeName]) => employeeName);
+    },
+    [equipmentAssignmentConflicts],
+  );
+
+  const formatEquipmentOptionLabel = useCallback(
+    (unit: AvailableEquipmentItem, employeeId?: string | null) => {
+      const baseLabel = `${unit.unit_name || unit.name || 'Equipment'} (${unit.type || 'General'})`;
+      const conflictNames = getEquipmentConflictNames(unit.id, employeeId);
+      if (conflictNames.length === 0) return baseLabel;
+      return `${baseLabel} - already assigned to ${conflictNames.join(', ')}`;
+    },
+    [getEquipmentConflictNames],
+  );
   const filteredRequests = useMemo(() => {
     if (needsFilter === 'all') return propertyRequests;
     if (needsFilter === 'open') return propertyRequests.filter((r) => isRequestOpen(String(r.status ?? '')));
@@ -2963,6 +2998,15 @@ export default function WorkboardContent() {
       </div>
     ) : null
   );
+  const renderEquipmentConflictWarning = (equipmentId: string, employeeId?: string | null) => {
+    const conflictNames = getEquipmentConflictNames(equipmentId, employeeId);
+    if (conflictNames.length === 0) return null;
+    return (
+      <p className="mt-1 rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/20 dark:text-amber-300">
+        Already assigned to {conflictNames.join(', ')} today. You can still save if the unit is being shared.
+      </p>
+    );
+  };
 
   const [todayDateKey] = useState(() => new Date().toLocaleDateString('en-CA'));
 
@@ -5622,10 +5666,11 @@ export default function WorkboardContent() {
                 <option value="">No equipment</option>
                 {availableEquipment.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {(u.unit_name || u.name || 'Equipment')} ({u.type || 'General'})
+                    {formatEquipmentOptionLabel(u, assignmentDraft.employeeId)}
                   </option>
                 ))}
               </select>
+              {renderEquipmentConflictWarning(assignmentDraft.equipmentId, assignmentDraft.employeeId)}
             </div>
 
             <div>
@@ -5860,10 +5905,11 @@ export default function WorkboardContent() {
                           <option value="">No equipment</option>
                           {availableEquipment.map((u) => (
                             <option key={u.id} value={u.id}>
-                              {(u.unit_name || u.name || 'Equipment')} ({u.type || 'General'})
+                              {formatEquipmentOptionLabel(u, assignmentDraft.employeeId)}
                             </option>
                           ))}
                         </select>
+                        {renderEquipmentConflictWarning(row.equipmentId, assignmentDraft.employeeId)}
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground">Start time</label>
@@ -6397,8 +6443,4 @@ export default function WorkboardContent() {
     </>
   );
 }
-
-
-
-
 
