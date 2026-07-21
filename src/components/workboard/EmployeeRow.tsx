@@ -28,7 +28,7 @@ interface EmployeeRowProps {
   shiftLabel?: string;
   shiftEndTime: string | null;
   equipmentOverdueThresholdDays?: number;
-  doubleBookedEquipmentIds?: ReadonlySet<string>;
+  doubleBookedAssignmentIds?: ReadonlySet<string>;
   laneSummary?: string;
   laneWarning?: string;
   orderIndex?: number;
@@ -86,7 +86,7 @@ export function EmployeeRow({
   shiftLabel,
   shiftEndTime,
   equipmentOverdueThresholdDays,
-  doubleBookedEquipmentIds,
+  doubleBookedAssignmentIds,
   laneSummary: _laneSummary,
   laneWarning,
   orderIndex,
@@ -336,7 +336,7 @@ export function EmployeeRow({
                       properties={properties}
                       shiftEndTime={shiftEndTime}
                       equipmentOverdueThresholdDays={equipmentOverdueThresholdDays}
-                      doubleBookedEquipmentIds={doubleBookedEquipmentIds}
+                      doubleBookedAssignmentIds={doubleBookedAssignmentIds}
                       operationalTimezone={operationalTimezone}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
                       draggable

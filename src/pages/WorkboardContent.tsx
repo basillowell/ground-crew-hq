@@ -135,6 +135,12 @@ function timeToMinutes(value?: string) {
   if (Number.isNaN(hours) || Number.isNaN(minutes)) return 0;
   return hours * 60 + minutes;
 }
+function minutesToTime(totalMinutes: number) {
+  const normalizedMinutes = ((Math.round(totalMinutes) % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const hours = Math.floor(normalizedMinutes / 60);
+  const minutes = normalizedMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
 
 function addDaysToDateKey(dateKey: string, days: number) {
   const [year, month, day] = dateKey.split('-').map(Number);
@@ -281,6 +287,15 @@ type ShiftCoverageWarning = {
   totalMinutes: number;
   overMinutes: number;
   shiftMinutes: number;
+};
+
+type EquipmentAssignmentWindow = {
+  assignmentId: string;
+  employeeId: string;
+  employeeName: string;
+  startMinutes: number;
+  endMinutes: number;
+  windowLabel: string;
 };
 
 function makeEmptyTaskRow(startTime = '05:30', propertyId = ''): TaskRowDraft {
@@ -1685,44 +1700,68 @@ export default function WorkboardContent() {
     [assignmentDraft.employeeId, bulkTaskRowsPendingMinutes, getShiftCoverageWarning],
   );
   const equipmentAssignmentConflicts = useMemo(() => {
-    const map = new Map<string, Map<string, string>>();
+    const map = new Map<string, EquipmentAssignmentWindow[]>();
     for (const assignment of dayAssignments) {
-      if (!assignment.equipmentId || assignment.id === editingAssignmentId) continue;
+      if (!assignment.equipmentId || !assignment.id || assignment.id === editingAssignmentId) continue;
+      if (normalizeAssignmentStatus(assignment.status) === 'done') continue;
       const employeeId = assignment.employeeId;
-      if (!employeeId) continue;
+      if (!employeeId || !assignment.startTime) continue;
+      const estimatedMinutes = Math.round((assignment.estimatedHours ?? 0) * 60);
+      if (estimatedMinutes <= 0) continue;
+      const startMinutes = timeToMinutes(assignment.startTime);
+      const endMinutes = startMinutes + estimatedMinutes;
       const employeeName = employeeNameById.get(employeeId) ?? 'another crew member';
-      const existing = map.get(assignment.equipmentId) ?? new Map<string, string>();
-      existing.set(employeeId, employeeName);
+      const existing = map.get(assignment.equipmentId) ?? [];
+      existing.push({
+        assignmentId: assignment.id,
+        employeeId,
+        employeeName,
+        startMinutes,
+        endMinutes,
+        windowLabel: `${formatTime(assignment.startTime)}-${formatTime(minutesToTime(endMinutes % (24 * 60)))}`,
+      });
       map.set(assignment.equipmentId, existing);
     }
     return map;
   }, [dayAssignments, editingAssignmentId, employeeNameById]);
 
-  const doubleBookedEquipmentIds = useMemo(() => {
+  const doubleBookedAssignmentIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const [equipmentId, assignmentsForEquipment] of equipmentAssignmentConflicts) {
-      if (assignmentsForEquipment.size > 1) ids.add(equipmentId);
+    for (const windows of equipmentAssignmentConflicts.values()) {
+      for (let index = 0; index < windows.length; index += 1) {
+        for (let otherIndex = index + 1; otherIndex < windows.length; otherIndex += 1) {
+          const window = windows[index];
+          const otherWindow = windows[otherIndex];
+          if (window.startMinutes < otherWindow.endMinutes && otherWindow.startMinutes < window.endMinutes) {
+            ids.add(window.assignmentId);
+            ids.add(otherWindow.assignmentId);
+          }
+        }
+      }
     }
     return ids;
   }, [equipmentAssignmentConflicts]);
   const getEquipmentConflictNames = useCallback(
-    (equipmentId: string | undefined, employeeId?: string | null) => {
-      if (!equipmentId) return [];
+    (equipmentId: string | undefined, employeeId?: string | null, startTime?: string, estimatedMinutes = 0) => {
+      if (!equipmentId || !startTime || estimatedMinutes <= 0) return [];
       const assignmentsForEquipment = equipmentAssignmentConflicts.get(equipmentId);
       if (!assignmentsForEquipment) return [];
-      return Array.from(assignmentsForEquipment.entries())
-        .filter(([assignedEmployeeId]) => assignedEmployeeId !== employeeId)
-        .map(([, employeeName]) => employeeName);
+      const proposedStart = timeToMinutes(startTime);
+      const proposedEnd = proposedStart + estimatedMinutes;
+      return assignmentsForEquipment
+        .filter((assignmentWindow) => assignmentWindow.employeeId !== employeeId)
+        .filter((assignmentWindow) => proposedStart < assignmentWindow.endMinutes && assignmentWindow.startMinutes < proposedEnd)
+        .map((assignmentWindow) => `${assignmentWindow.employeeName}, ${assignmentWindow.windowLabel}`);
     },
     [equipmentAssignmentConflicts],
   );
 
   const formatEquipmentOptionLabel = useCallback(
-    (unit: AvailableEquipmentItem, employeeId?: string | null) => {
+    (unit: AvailableEquipmentItem, employeeId?: string | null, startTime?: string, estimatedMinutes = 0) => {
       const baseLabel = `${unit.unit_name || unit.name || 'Equipment'} (${unit.type || 'General'})`;
-      const conflictNames = getEquipmentConflictNames(unit.id, employeeId);
+      const conflictNames = getEquipmentConflictNames(unit.id, employeeId, startTime, estimatedMinutes);
       if (conflictNames.length === 0) return baseLabel;
-      return `${baseLabel} - already assigned to ${conflictNames.join(', ')}`;
+      return `${baseLabel} - overlaps ${conflictNames.join(', ')}`;
     },
     [getEquipmentConflictNames],
   );
@@ -3072,12 +3111,12 @@ export default function WorkboardContent() {
       </p>
     );
   };
-  const renderEquipmentConflictWarning = (equipmentId: string, employeeId?: string | null) => {
-    const conflictNames = getEquipmentConflictNames(equipmentId, employeeId);
+  const renderEquipmentConflictWarning = (equipmentId: string, employeeId?: string | null, startTime?: string, estimatedMinutes = 0) => {
+    const conflictNames = getEquipmentConflictNames(equipmentId, employeeId, startTime, estimatedMinutes);
     if (conflictNames.length === 0) return null;
     return (
       <p className="mt-1 rounded-md border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-[11px] font-medium text-status-pending">
-        Already assigned to {conflictNames.join(', ')} today. You can still save if the unit is being shared.
+        Overlaps {conflictNames.join(', ')}. You can still save if the unit is being shared.
       </p>
     );
   };
@@ -5022,7 +5061,7 @@ export default function WorkboardContent() {
                       shiftLabel={lane.shift ? `${formatTime(lane.shift.shiftStart)}–${formatTime(lane.shift.shiftEnd)}` : undefined}
                       shiftEndTime={lane.shift?.shiftEnd ?? null}
                       equipmentOverdueThresholdDays={escalationThresholds.equipmentServiceOverdueDays}
-                      doubleBookedEquipmentIds={doubleBookedEquipmentIds}
+                      doubleBookedAssignmentIds={doubleBookedAssignmentIds}
                       laneSummary={(() => {
                         const baseSummary = lane.shift
                           ? `Est: ${lane.estimatedHours.toFixed(1)}h - Actual: ${lane.actualHours.toFixed(1)}h`
@@ -5750,11 +5789,11 @@ export default function WorkboardContent() {
                 <option value="">No equipment</option>
                 {availableEquipment.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {formatEquipmentOptionLabel(u, assignmentDraft.employeeId)}
+                    {formatEquipmentOptionLabel(u, assignmentDraft.employeeId, assignmentDraft.startTime, singleAssignmentPendingMinutes)}
                   </option>
                 ))}
               </select>
-              {renderEquipmentConflictWarning(assignmentDraft.equipmentId, assignmentDraft.employeeId)}
+              {renderEquipmentConflictWarning(assignmentDraft.equipmentId, assignmentDraft.employeeId, assignmentDraft.startTime, singleAssignmentPendingMinutes)}
             </div>
 
             <div>
@@ -5891,6 +5930,11 @@ export default function WorkboardContent() {
                 ) : null}
                 {taskRows.map((row, index) => {
                   const selectedTask = taskLibrary.find((task) => task.id === row.taskId) ?? null;
+                  const rowOverrideValue = Number(row.hoursOverride);
+                  const rowEstimatedHours = row.hoursOverride.trim() && Number.isFinite(rowOverrideValue) && rowOverrideValue > 0
+                    ? rowOverrideValue
+                    : Number(selectedTask?.estimated_hours ?? 0);
+                  const rowEstimatedMinutes = Math.round(rowEstimatedHours * 60);
                   return (
                   <div key={row.id} className="rounded-lg border bg-muted/20 p-3">
                     <div className="mb-2 flex items-center justify-between">
@@ -5994,11 +6038,11 @@ export default function WorkboardContent() {
                           <option value="">No equipment</option>
                           {availableEquipment.map((u) => (
                             <option key={u.id} value={u.id}>
-                              {formatEquipmentOptionLabel(u, assignmentDraft.employeeId)}
+                              {formatEquipmentOptionLabel(u, assignmentDraft.employeeId, row.startTime, rowEstimatedMinutes)}
                             </option>
                           ))}
                         </select>
-                        {renderEquipmentConflictWarning(row.equipmentId, assignmentDraft.employeeId)}
+                        {renderEquipmentConflictWarning(row.equipmentId, assignmentDraft.employeeId, row.startTime, rowEstimatedMinutes)}
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground">Start time</label>

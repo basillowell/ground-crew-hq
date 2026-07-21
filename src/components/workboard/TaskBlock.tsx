@@ -14,7 +14,7 @@ interface TaskBlockProps {
   properties: Property[];
   shiftEndTime: string | null;
   equipmentOverdueThresholdDays?: number;
-  doubleBookedEquipmentIds?: ReadonlySet<string>;
+  doubleBookedAssignmentIds?: ReadonlySet<string>;
   operationalTimezone?: string;
   priorityIndex?: number;
   onEdit?: () => void;
@@ -59,7 +59,7 @@ export function TaskBlock({
   properties,
   shiftEndTime,
   equipmentOverdueThresholdDays = 90,
-  doubleBookedEquipmentIds,
+  doubleBookedAssignmentIds,
   operationalTimezone = 'America/New_York',
   priorityIndex,
   onEdit,
@@ -87,7 +87,7 @@ export function TaskBlock({
     );
     return overdueDays >= 0;
   }, [equipment?.lastService, equipmentOverdueThresholdDays]);
-  const isEquipmentDoubleBooked = assignment.equipmentId ? Boolean(doubleBookedEquipmentIds?.has(assignment.equipmentId)) : false;
+  const isEquipmentDoubleBooked = assignment.id ? Boolean(doubleBookedAssignmentIds?.has(assignment.id)) : false;
   const status = normalizeStatus(assignment.status);
   const assignmentRecord = assignment as Assignment & Record<string, unknown>;
 
@@ -219,8 +219,8 @@ export function TaskBlock({
             {isEquipmentDoubleBooked ? (
               <CircleAlert
                 className="h-3.5 w-3.5 shrink-0 text-status-warning"
-                aria-label="Equipment double-booked today"
-                title="Equipment double-booked today"
+                aria-label="Equipment time-window conflict"
+                title="Equipment time-window conflict"
               />
             ) : null}
           </span>
