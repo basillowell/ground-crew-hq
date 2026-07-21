@@ -19,12 +19,27 @@ import { PageHeader } from '@/components/shared';
 
 const supabase = createClient();
 
+type AbortableSupabaseRequest<T> = {
+  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+};
+
+async function withFieldRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await request.abortSignal(controller.signal);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 type AssignmentStatus = 'planned' | 'in_progress' | 'done' | 'in-progress' | 'completed';
 type FieldTab = 'today' | 'team' | 'more';
 
 type FieldAssignment = {
   id: string;
   taskId: string | null;
+  sopId?: string | null;
   title: string;
   location: string | null;
   notes: string | null;
@@ -55,6 +70,29 @@ type EmployeeRecord = {
 type TaskMeta = {
   id: string;
   category: string | null;
+  sopId: string | null;
+};
+
+type SopMeta = {
+  id: string;
+  title: string;
+};
+
+type SopChecklistItem = {
+  id: string;
+  sopId: string;
+  label: string;
+  orderIndex: number;
+  isRequired: boolean;
+};
+
+type SopCompletion = {
+  id: string;
+  assignmentId: string;
+  sopChecklistItemId: string;
+  employeeId: string;
+  completed: boolean;
+  completedAt: string | null;
 };
 
 type PropertyRecord = {
@@ -324,6 +362,10 @@ export default function MobileFieldWorkspacePage() {
   const [shift, setShift] = useState<ShiftEntry | null>(null);
   const [assignments, setAssignments] = useState<FieldAssignment[]>([]);
   const [taskMetaById, setTaskMetaById] = useState<Record<string, TaskMeta>>({});
+  const [sopMetaById, setSopMetaById] = useState<Record<string, SopMeta>>({});
+  const [sopChecklistItemsBySopId, setSopChecklistItemsBySopId] = useState<Record<string, SopChecklistItem[]>>({});
+  const [sopCompletionsByAssignmentId, setSopCompletionsByAssignmentId] = useState<Record<string, Record<string, SopCompletion>>>({});
+  const [savingSopCompletionIds, setSavingSopCompletionIds] = useState<Record<string, boolean>>({});
   const [propertyName, setPropertyName] = useState<string>('Assigned Property');
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [actualHoursDraft, setActualHoursDraft] = useState<Record<string, string>>({});
@@ -518,7 +560,7 @@ export default function MobileFieldWorkspacePage() {
         .order('order_index', { ascending: true }),
       supabase
         .from('tasks')
-        .select('id, category')
+        .select('id, category, sop_id')
         .eq('org_id', orgId),
       supabase
         .from('clock_events')
@@ -574,23 +616,120 @@ export default function MobileFieldWorkspacePage() {
       : null;
     setShift(nextShift);
 
-    const normalizedAssignments: FieldAssignment[] = (assignmentRows ?? []).map((row) => ({
-      id: String(row.id),
-      employeeId: row.employee_id ? String(row.employee_id) : employeeId,
-      taskId: row.task_id ? String(row.task_id) : null,
-      title: String(row.title ?? 'Task'),
-      location: row.location ? String(row.location) : null,
-      notes: row.notes ? String(row.notes) : null,
-      status: (String(row.status ?? 'planned') as AssignmentStatus),
-      orderIndex: Number(row.order_index ?? 0),
-      estimatedHours: Number(row.estimated_hours ?? 0),
-      actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
-      startTime: row.start_time ? String(row.start_time).slice(0, 5) : null,
-      completedAt: row.completed_at ? String(row.completed_at) : null,
-      actualStartAt: row.actual_start_at ? String(row.actual_start_at) : null,
-      actualCompletedAt: row.actual_completed_at ? String(row.actual_completed_at) : null,
-    }));
+    const taskSopById = new Map((taskRows ?? []).map((row) => [String(row.id), row.sop_id ? String(row.sop_id) : null]));
+    const normalizedAssignments: FieldAssignment[] = (assignmentRows ?? []).map((row) => {
+      const taskId = row.task_id ? String(row.task_id) : null;
+      return {
+        id: String(row.id),
+        employeeId: row.employee_id ? String(row.employee_id) : employeeId,
+        taskId,
+        sopId: taskId ? taskSopById.get(taskId) ?? null : null,
+        title: String(row.title ?? 'Task'),
+        location: row.location ? String(row.location) : null,
+        notes: row.notes ? String(row.notes) : null,
+        status: (String(row.status ?? 'planned') as AssignmentStatus),
+        orderIndex: Number(row.order_index ?? 0),
+        estimatedHours: Number(row.estimated_hours ?? 0),
+        actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
+        startTime: row.start_time ? String(row.start_time).slice(0, 5) : null,
+        completedAt: row.completed_at ? String(row.completed_at) : null,
+        actualStartAt: row.actual_start_at ? String(row.actual_start_at) : null,
+        actualCompletedAt: row.actual_completed_at ? String(row.actual_completed_at) : null,
+      };
+    });
     setAssignments(normalizedAssignments);
+
+    const linkedSopIds = Array.from(
+      new Set(normalizedAssignments.map((assignment) => assignment.sopId).filter((sopId): sopId is string => Boolean(sopId))),
+    );
+    const assignmentIds = normalizedAssignments.map((assignment) => assignment.id);
+    if (linkedSopIds.length > 0) {
+      const [
+        { data: sopRows, error: sopsError },
+        { data: checklistRows, error: checklistError },
+        { data: completionRows, error: completionsError },
+      ] = await Promise.all([
+        withFieldRequestTimeout(
+          supabase
+            .from('sops')
+            .select('id, title')
+            .eq('org_id', orgId)
+            .in('id', linkedSopIds),
+        ),
+        withFieldRequestTimeout(
+          supabase
+            .from('sop_checklist_items')
+            .select('id, sop_id, label, order_index, is_required')
+            .eq('org_id', orgId)
+            .in('sop_id', linkedSopIds)
+            .order('order_index', { ascending: true }),
+        ),
+        assignmentIds.length > 0
+          ? withFieldRequestTimeout(
+              supabase
+                .from('sop_completions')
+                .select('id, assignment_id, sop_checklist_item_id, employee_id, completed, completed_at')
+                .eq('org_id', orgId)
+                .eq('employee_id', employeeId)
+                .in('assignment_id', assignmentIds),
+            )
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (sopsError || checklistError || completionsError) {
+        setError(sopsError?.message || checklistError?.message || completionsError?.message || 'Unable to load SOP checklist.');
+        setLoading(false);
+        return;
+      }
+
+      const nextSopMeta: Record<string, SopMeta> = {};
+      (sopRows ?? []).forEach((row) => {
+        nextSopMeta[String(row.id)] = {
+          id: String(row.id),
+          title: String(row.title ?? 'SOP Checklist'),
+        };
+      });
+      setSopMetaById(nextSopMeta);
+
+      const nextChecklistItems: Record<string, SopChecklistItem[]> = {};
+      (checklistRows ?? []).forEach((row) => {
+        const sopId = row.sop_id ? String(row.sop_id) : '';
+        if (!sopId) return;
+        const item: SopChecklistItem = {
+          id: String(row.id),
+          sopId,
+          label: String(row.label ?? ''),
+          orderIndex: Number(row.order_index ?? 0),
+          isRequired: Boolean(row.is_required ?? true),
+        };
+        nextChecklistItems[sopId] = [...(nextChecklistItems[sopId] ?? []), item];
+      });
+      Object.values(nextChecklistItems).forEach((items) => items.sort((a, b) => a.orderIndex - b.orderIndex));
+      setSopChecklistItemsBySopId(nextChecklistItems);
+
+      const nextCompletions: Record<string, Record<string, SopCompletion>> = {};
+      (completionRows ?? []).forEach((row) => {
+        const assignmentId = row.assignment_id ? String(row.assignment_id) : '';
+        const checklistItemId = row.sop_checklist_item_id ? String(row.sop_checklist_item_id) : '';
+        if (!assignmentId || !checklistItemId) return;
+        nextCompletions[assignmentId] = {
+          ...(nextCompletions[assignmentId] ?? {}),
+          [checklistItemId]: {
+            id: String(row.id),
+            assignmentId,
+            sopChecklistItemId: checklistItemId,
+            employeeId: row.employee_id ? String(row.employee_id) : employeeId,
+            completed: Boolean(row.completed),
+            completedAt: row.completed_at ? String(row.completed_at) : null,
+          },
+        };
+      });
+      setSopCompletionsByAssignmentId(nextCompletions);
+    } else {
+      setSopMetaById({});
+      setSopChecklistItemsBySopId({});
+      setSopCompletionsByAssignmentId({});
+    }
 
     const fieldPropertyId = nextShift?.propertyId ?? currentUser?.propertyId ?? null;
     const teammateScheduleQuery = supabase
@@ -711,6 +850,7 @@ export default function MobileFieldWorkspacePage() {
       taskMap[id] = {
         id,
         category: row.category ? String(row.category) : null,
+        sopId: row.sop_id ? String(row.sop_id) : null,
       };
     });
     setTaskMetaById(taskMap);
@@ -840,6 +980,62 @@ export default function MobileFieldWorkspacePage() {
     setActiveDonePromptId(null);
     setShowOtherActualInputId(null);
   };
+
+  const toggleSopChecklistItem = useCallback(
+    async (assignment: FieldAssignment, item: SopChecklistItem, completed: boolean) => {
+      if (!supabase || !orgId || !employeeId) return;
+      const savingKey = `${assignment.id}:${item.id}`;
+      setSavingSopCompletionIds((current) => ({ ...current, [savingKey]: true }));
+
+      try {
+        const completedAt = completed ? new Date().toISOString() : null;
+        const { data, error } = await withFieldRequestTimeout(
+          supabase
+            .from('sop_completions')
+            .upsert(
+              {
+                assignment_id: assignment.id,
+                sop_checklist_item_id: item.id,
+                employee_id: employeeId,
+                org_id: orgId,
+                completed,
+                completed_at: completedAt,
+              },
+              { onConflict: 'assignment_id,sop_checklist_item_id,employee_id' },
+            )
+            .select('id, assignment_id, sop_checklist_item_id, employee_id, completed, completed_at')
+            .single(),
+        );
+
+        if (error) {
+          toast.error(error.message || 'Unable to update SOP checklist.');
+          return;
+        }
+
+        setSopCompletionsByAssignmentId((current) => ({
+          ...current,
+          [assignment.id]: {
+            ...(current[assignment.id] ?? {}),
+            [item.id]: {
+              id: String(data.id),
+              assignmentId: String(data.assignment_id),
+              sopChecklistItemId: String(data.sop_checklist_item_id),
+              employeeId: String(data.employee_id),
+              completed: Boolean(data.completed),
+              completedAt: data.completed_at ? String(data.completed_at) : null,
+            },
+          },
+        }));
+      } finally {
+        setSavingSopCompletionIds((current) => {
+          const next = { ...current };
+          delete next[savingKey];
+          return next;
+        });
+      }
+    },
+    [employeeId, orgId],
+  );
 
   const doneCount = useMemo(
     () => assignments.filter((assignment) => displayStatus(assignment.status) === 'done').length,
@@ -1299,6 +1495,56 @@ export default function MobileFieldWorkspacePage() {
         : 'border-transparent text-text-muted hover:bg-surface-hover hover:text-text-primary'
     }`;
 
+  const renderSopChecklist = (assignment: FieldAssignment) => {
+    const sopId = assignment.sopId ?? null;
+    if (!sopId) return null;
+
+    const checklistItems = sopChecklistItemsBySopId[sopId] ?? [];
+    if (checklistItems.length === 0) return null;
+
+    const sopMeta = sopMetaById[sopId];
+    const completions = sopCompletionsByAssignmentId[assignment.id] ?? {};
+
+    return (
+      <div className="mt-3 rounded-xl border border-surface-border bg-surface-card/80 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{sopMeta?.title ?? 'SOP Checklist'}</p>
+          <Badge variant="secondary" className="shrink-0 text-[10px]">
+            SOP
+          </Badge>
+        </div>
+        <div className="mt-2 space-y-2">
+          {checklistItems.map((item) => {
+            const completion = completions[item.id];
+            const isChecked = Boolean(completion?.completed);
+            const savingKey = `${assignment.id}:${item.id}`;
+            const isSaving = Boolean(savingSopCompletionIds[savingKey]);
+
+            return (
+              <label
+                key={item.id}
+                className="flex min-h-10 items-start gap-2 rounded-lg border border-surface-border bg-surface-elevated/40 px-3 py-2 text-sm text-text-secondary"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-surface-border accent-brand"
+                  checked={isChecked}
+                  disabled={isSaving}
+                  onChange={(event) => void toggleSopChecklistItem(assignment, item, event.target.checked)}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className={isChecked ? 'line-through opacity-70' : ''}>{item.label}</span>
+                  {item.isRequired ? <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-brand">Required</span> : null}
+                </span>
+                {isSaving ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-text-muted" /> : null}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const displayOnlyLayout = (
     <div
       className="relative mx-auto w-full max-w-[520px] bg-surface-base px-4 pb-28 pt-4 font-sans"
@@ -1392,6 +1638,7 @@ export default function MobileFieldWorkspacePage() {
                         <span className="shrink-0 text-xs text-text-muted">{assignment.estimatedHours.toFixed(1)}h</span>
                         <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(assignment.status)}`}>{statusBadgeLabel(assignment.status)}</span>
                       </div>
+                      {renderSopChecklist(assignment)}
                       <div className="mt-2">
                         {displayStatus(assignment.status) === 'done' ? (
                           <button type="button" disabled className="w-full min-h-[44px] rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-text-muted">
@@ -1627,5 +1874,4 @@ export default function MobileFieldWorkspacePage() {
 
   return displayOnlyLayout;
 }
-
 
