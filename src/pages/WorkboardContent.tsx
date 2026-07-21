@@ -275,6 +275,12 @@ type TaskRowDraft = {
   status: 'planned' | 'in_progress' | 'done';
   hoursOverride: string;
 };
+type ShiftCoverageWarning = {
+  employeeName: string;
+  totalMinutes: number;
+  overMinutes: number;
+  shiftMinutes: number;
+};
 
 function makeEmptyTaskRow(startTime = '05:30', propertyId = ''): TaskRowDraft {
   return {
@@ -1625,6 +1631,58 @@ export default function WorkboardContent() {
     return map;
   }, [employeeList]);
 
+  const getShiftCoverageWarning = useCallback(
+    (employeeId: string, pendingMinutes: number, excludedAssignmentId?: string | null): ShiftCoverageWarning | null => {
+      if (!employeeId || pendingMinutes <= 0) return null;
+      const shift = getShiftForEmployee(scheduleList, employeeId, boardDate);
+      const shiftMinutes = shift ? Math.max(timeToMinutes(shift.shiftEnd) - timeToMinutes(shift.shiftStart), 0) : 0;
+      if (shiftMinutes <= 0) return null;
+      const assignedMinutes = dayAssignments
+        .filter((assignment) => assignment.employeeId === employeeId && assignment.id !== excludedAssignmentId)
+        .reduce((sum, assignment) => sum + Math.round((assignment.estimatedHours ?? 0) * 60), 0);
+      const totalMinutes = assignedMinutes + pendingMinutes;
+      if (totalMinutes <= shiftMinutes) return null;
+      return {
+        employeeName: employeeNameById.get(employeeId) ?? 'This crew member',
+        totalMinutes,
+        overMinutes: totalMinutes - shiftMinutes,
+        shiftMinutes,
+      };
+    },
+    [boardDate, dayAssignments, employeeNameById, scheduleList],
+  );
+
+  const singleAssignmentPendingMinutes = useMemo(() => {
+    if (!editingAssignmentId || !assignmentDraft.taskId) return 0;
+    const overrideHours = Number(assignmentDraft.estimatedHours);
+    const estimatedHours = assignmentDraft.estimatedHours.trim() && Number.isFinite(overrideHours) && overrideHours >= 0
+      ? overrideHours
+      : Number(selectedTaskForDraft?.estimated_hours ?? 0);
+    return Math.round(estimatedHours * 60);
+  }, [assignmentDraft.estimatedHours, assignmentDraft.taskId, editingAssignmentId, selectedTaskForDraft]);
+
+  const bulkTaskRowsPendingMinutes = useMemo(() => {
+    if (editingAssignmentId) return 0;
+    return taskRows.reduce((sum, taskRow) => {
+      if (!taskRow.taskId) return sum;
+      const selectedTask = taskLibrary.find((task) => task.id === taskRow.taskId) ?? null;
+      const overrideValue = Number(taskRow.hoursOverride);
+      const estimatedHours = taskRow.hoursOverride.trim() && Number.isFinite(overrideValue) && overrideValue > 0
+        ? overrideValue
+        : Number(selectedTask?.estimated_hours ?? 0);
+      return sum + Math.round(estimatedHours * 60);
+    }, 0);
+  }, [editingAssignmentId, taskLibrary, taskRows]);
+
+  const singleAssignmentShiftCoverageWarning = useMemo(
+    () => getShiftCoverageWarning(assignmentDraft.employeeId, singleAssignmentPendingMinutes, editingAssignmentId),
+    [assignmentDraft.employeeId, editingAssignmentId, getShiftCoverageWarning, singleAssignmentPendingMinutes],
+  );
+
+  const bulkAssignmentShiftCoverageWarning = useMemo(
+    () => getShiftCoverageWarning(assignmentDraft.employeeId, bulkTaskRowsPendingMinutes),
+    [assignmentDraft.employeeId, bulkTaskRowsPendingMinutes, getShiftCoverageWarning],
+  );
   const equipmentAssignmentConflicts = useMemo(() => {
     const map = new Map<string, Map<string, string>>();
     for (const assignment of dayAssignments) {
@@ -2998,6 +3056,14 @@ export default function WorkboardContent() {
       </div>
     ) : null
   );
+  const renderShiftCoverageWarning = (warning: ShiftCoverageWarning | null) => {
+    if (!warning) return null;
+    return (
+      <p className="mt-1 rounded-md border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-[11px] font-medium text-status-pending">
+        This pushes {warning.employeeName}'s shift to {formatMinutesAsHoursAndMinutes(warning.totalMinutes)}, {formatMinutesAsHoursAndMinutes(warning.overMinutes)} over their {formatMinutesAsHoursAndMinutes(warning.shiftMinutes)} shift.
+      </p>
+    );
+  };
   const renderEquipmentConflictWarning = (equipmentId: string, employeeId?: string | null) => {
     const conflictNames = getEquipmentConflictNames(equipmentId, employeeId);
     if (conflictNames.length === 0) return null;
@@ -5649,6 +5715,11 @@ export default function WorkboardContent() {
               />
             </div>
 
+            {singleAssignmentShiftCoverageWarning ? (
+              <div className="col-span-2">
+                {renderShiftCoverageWarning(singleAssignmentShiftCoverageWarning)}
+              </div>
+            ) : null}
             <div className="col-span-2">
               <label className="text-xs text-muted-foreground">Equipment</label>
               {renderRecentEquipmentChips((equipmentId) => {
@@ -5800,6 +5871,11 @@ export default function WorkboardContent() {
                     + Add another task
                   </button>
                 </div>
+                {bulkAssignmentShiftCoverageWarning ? (
+                  <div>
+                    {renderShiftCoverageWarning(bulkAssignmentShiftCoverageWarning)}
+                  </div>
+                ) : null}
                 {taskRows.map((row, index) => {
                   const selectedTask = taskLibrary.find((task) => task.id === row.taskId) ?? null;
                   return (
