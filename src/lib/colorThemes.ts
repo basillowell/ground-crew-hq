@@ -43,6 +43,11 @@ export const COLOR_THEMES: ColorTheme[] = [
   // club heritage). Gold is light enough that on-accent button text resolves to
   // black (verified 10:1); text and surfaces stay neutral/green as usual.
   { id: 'clubhouse', label: 'Clubhouse', base: '#14432c', accent: '#d4af37', fontThemePreset: 'modern-sans' },
+  // Warm sunset-over-the-field scheme: deep umber/brick surfaces with a
+  // coral-orange accent. Pairs with classic-club (serif headings) to match
+  // Clubhouse's heritage feel while reading distinctly warmer/dusk rather
+  // than daytime green.
+  { id: 'sunset-polo', label: 'Sunset Polo', base: '#2e1810', accent: '#ff8a4c', fontThemePreset: 'classic-club' },
 ];
 
 export function getColorTheme(id: string) {
