@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ApplicationArea,
   AppUser,
@@ -154,13 +154,17 @@ type DbTask = {
 type DbEquipmentUnit = {
   id: string;
   org_id?: string | null;
-  property_id: string;
+  property_id: string | null;
   name: string;
   type: string;
   status: string;
   location: string | null;
   last_serviced: string | null;
   created_at: string;
+  estimated_hours?: number | null;
+  qr_token?: string | null;
+  maintenance_interval_hours?: number | null;
+  hours_at_last_service?: number | null;
 };
 
 type DbNote = {
@@ -512,10 +516,14 @@ function toEquipmentUnit(row: DbEquipmentUnit): EquipmentUnit {
     unitNumber: row.name,
     status: row.status as EquipmentUnit['status'],
     location: row.location ?? '',
-    hours: 0,
+    hours: Number(row.estimated_hours ?? 0),
     lastService: row.last_serviced ?? '',
     nextService: row.last_serviced ?? '',
-    propertyId: row.property_id,
+    propertyId: row.property_id ?? undefined,
+    qrToken: row.qr_token ?? undefined,
+    estimatedHours: Number(row.estimated_hours ?? 0),
+    maintenanceIntervalHours: row.maintenance_interval_hours == null ? null : Number(row.maintenance_interval_hours),
+    hoursAtLastService: row.hours_at_last_service == null ? null : Number(row.hours_at_last_service),
   } as EquipmentUnit;
 }
 
@@ -757,12 +765,23 @@ async function fetchTasks(orgId?: string): Promise<Task[]> {
 async function fetchEquipmentUnits(propertyId?: string, orgId?: string): Promise<EquipmentUnit[]> {
   const client = ensureSupabase();
   const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
-  let query = client.from('equipment_units').select('*').order('name');
-  if (orgId) query = query.eq('org_id', orgId);
-  if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data as DbEquipmentUnit[]).map(toEquipmentUnit);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    let query = client.from('equipment_units').select('*').order('name');
+    if (orgId) query = query.eq('org_id', orgId);
+    if (scopedPropertyId) query = query.or(`property_id.is.null,property_id.eq.${scopedPropertyId}`);
+    const { data, error } = await query.abortSignal(controller.signal);
+    if (error) throw error;
+    return (data as DbEquipmentUnit[]).map(toEquipmentUnit);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Equipment units request timed out after 15 seconds.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function fetchNotes(propertyId?: string, orgId?: string): Promise<Note[]> {
@@ -1189,6 +1208,97 @@ export function useEquipmentUnits(propertyId?: string, orgId?: string) {
   });
 }
 
+type EquipmentUsageMutationPayload = {
+  unitId: string;
+  orgId: string;
+  estimatedHours: number;
+};
+
+type EquipmentIssueMutationPayload = {
+  unitId: string;
+  orgId: string;
+  notes?: string | null;
+};
+
+type EquipmentServiceMutationPayload = {
+  unitId: string;
+  orgId: string;
+  estimatedHours: number;
+};
+
+async function updateEquipmentUsage({ unitId, orgId, estimatedHours }: EquipmentUsageMutationPayload) {
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('equipment_units')
+    .update({ estimated_hours: estimatedHours, org_id: orgId })
+    .eq('id', unitId)
+    .eq('org_id', orgId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return toEquipmentUnit(data as DbEquipmentUnit);
+}
+
+async function flagEquipmentIssue({ unitId, orgId, notes }: EquipmentIssueMutationPayload) {
+  const client = ensureSupabase();
+  const payload: Record<string, unknown> = { status: 'maintenance', active: true, org_id: orgId };
+  if (notes && notes.trim()) payload.notes = notes.trim();
+  const { data, error } = await client
+    .from('equipment_units')
+    .update(payload)
+    .eq('id', unitId)
+    .eq('org_id', orgId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return toEquipmentUnit(data as DbEquipmentUnit);
+}
+
+async function logEquipmentService({ unitId, orgId, estimatedHours }: EquipmentServiceMutationPayload) {
+  const client = ensureSupabase();
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await client
+    .from('equipment_units')
+    .update({ hours_at_last_service: estimatedHours, last_serviced: today, status: 'available', active: true, org_id: orgId })
+    .eq('id', unitId)
+    .eq('org_id', orgId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return toEquipmentUnit(data as DbEquipmentUnit);
+}
+export function useUpdateEquipmentUsage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateEquipmentUsage,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['equipment-units'] });
+      void queryClient.invalidateQueries({ queryKey: ['equipment-page-data', variables.orgId] });
+    },
+  });
+}
+
+export function useFlagEquipmentIssue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: flagEquipmentIssue,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['equipment-units'] });
+      void queryClient.invalidateQueries({ queryKey: ['equipment-page-data', variables.orgId] });
+    },
+  });
+}
+
+export function useLogEquipmentService() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: logEquipmentService,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['equipment-units'] });
+      void queryClient.invalidateQueries({ queryKey: ['equipment-page-data', variables.orgId] });
+    },
+  });
+}
 export function useNotes(propertyId?: string, orgId?: string) {
   return useQuery({
     queryKey: ['notes', propertyId ?? 'all', orgId ?? 'all-orgs'],

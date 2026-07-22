@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Pencil, Plus, QrCode, Trash2, Wrench } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { createClient } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,8 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/ui/sonner';
 import Link from 'next/link';
+import { EquipmentMaintenanceBadge, getEquipmentMaintenanceState } from '@/components/equipment/EquipmentMaintenanceBadge';
+import { EquipmentQrCard } from '@/components/equipment/EquipmentQrCard';
 
 const supabase = createClient();
 
@@ -31,6 +33,10 @@ type EquipmentUnitRow = {
   unit_name: string | null;
   notes: string | null;
   active: boolean | null;
+  estimated_hours: number | null;
+  qr_token: string | null;
+  maintenance_interval_hours: number | null;
+  hours_at_last_service: number | null;
 };
 
 type EquipmentTypeRow = {
@@ -67,6 +73,7 @@ type AddDraft = {
   location: string;
   notes: string;
   lastServiced: string;
+  maintenanceIntervalHours: string;
 };
 
 type EditDraft = {
@@ -77,6 +84,7 @@ type EditDraft = {
   location: string;
   lastServiced: string;
   notes: string;
+  maintenanceIntervalHours: string;
 };
 
 const STATUS_OPTIONS: EquipmentStatus[] = ['available', 'in_use', 'maintenance', 'retired'];
@@ -115,12 +123,11 @@ function toDateInput(value: string | null | undefined) {
   return value.slice(0, 10);
 }
 
-function isServiceOverdue(lastServiced: string | null | undefined) {
-  if (!lastServiced) return false;
-  const servicedAt = new Date(lastServiced);
-  if (Number.isNaN(servicedAt.getTime())) return false;
-  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
-  return Date.now() - servicedAt.getTime() > ninetyDaysMs;
+function parseOptionalNumberInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : Number.NaN;
 }
 
 function emptyAddDraft(): AddDraft {
@@ -132,6 +139,7 @@ function emptyAddDraft(): AddDraft {
     location: '',
     notes: '',
     lastServiced: '',
+    maintenanceIntervalHours: '',
   };
 }
 
@@ -186,7 +194,7 @@ export default function EquipmentPage() {
 
       const unitsQuery = supabase
         .from('equipment_units')
-        .select('id, property_id, name, type, status, location, last_serviced, org_id, equipment_type_id, unit_name, notes, active')
+        .select('id, property_id, name, type, status, location, last_serviced, org_id, equipment_type_id, unit_name, notes, active, estimated_hours, qr_token, maintenance_interval_hours, hours_at_last_service')
         .eq('org_id', orgId)
         .order('unit_name', { ascending: true });
 
@@ -245,6 +253,8 @@ export default function EquipmentPage() {
   const [rowSavingId, setRowSavingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'readiness'>('list');
+  const [detailRowId, setDetailRowId] = useState<string | null>(null);
+  const [serviceSavingId, setServiceSavingId] = useState<string | null>(null);
   const canAddEquipment = !isReadOnly;
 
   useEffect(() => {
@@ -289,6 +299,7 @@ export default function EquipmentPage() {
         displayType: resolvedType,
         displayPropertyName,
         normalizedStatus: normalizeStatus(unit.status),
+        maintenanceState: getEquipmentMaintenanceState(unit),
       };
     });
   }, [propertyNameById, typeNameById, units]);
@@ -299,41 +310,16 @@ export default function EquipmentPage() {
   }, [propertyId, rows]);
 
   const readinessRows = useMemo(() => {
-    const now = Date.now();
-    const dueSoonWindowDays = 14;
-    const serviceThresholdDays = 90;
-    const msPerDay = 24 * 60 * 60 * 1000;
-
     return scopedRows
       .map((row) => {
-        const servicedAt = row.last_serviced ? new Date(row.last_serviced) : null;
-        const servicedTime = servicedAt && !Number.isNaN(servicedAt.getTime()) ? servicedAt.getTime() : null;
-        const dueAtTime = servicedTime !== null ? servicedTime + serviceThresholdDays * msPerDay : null;
-        const daysUntilDue = dueAtTime !== null ? Math.ceil((dueAtTime - now) / msPerDay) : null;
-        const daysOverdue = dueAtTime !== null ? Math.max(0, Math.floor((now - dueAtTime) / msPerDay)) : null;
-
-        let readinessLevel: 'green' | 'yellow' | 'red' = 'green';
-        let readinessLabel = 'Ready';
-        let sortWeight = 2;
-        let dueText = `Due in ${daysUntilDue ?? 0} day${Math.abs(daysUntilDue ?? 0) === 1 ? '' : 's'}`;
-
-        if (dueAtTime === null || (daysOverdue !== null && daysOverdue > 0)) {
-          readinessLevel = 'red';
-          sortWeight = 0;
-          readinessLabel = dueAtTime === null ? 'Overdue' : `Overdue ${daysOverdue} day${daysOverdue === 1 ? '' : 's'}`;
-          dueText = dueAtTime === null ? 'Service date missing' : `${daysOverdue} day${daysOverdue === 1 ? '' : 's'} overdue`;
-        } else if (daysUntilDue !== null && daysUntilDue <= dueSoonWindowDays) {
-          readinessLevel = 'yellow';
-          sortWeight = 1;
-          readinessLabel = 'Service Due Soon';
-          dueText = `Due in ${daysUntilDue} day${daysUntilDue === 1 ? '' : 's'}`;
-        }
-
+        const state = row.maintenanceState;
+        const readinessLevel: 'green' | 'yellow' | 'red' = state.due ? 'red' : state.dueSoon ? 'yellow' : 'green';
+        const sortWeight = state.due ? 0 : state.dueSoon ? 1 : 2;
         return {
           ...row,
           readinessLevel,
-          readinessLabel,
-          dueText,
+          readinessLabel: state.label,
+          dueText: state.description,
           sortWeight,
         };
       })
@@ -342,6 +328,13 @@ export default function EquipmentPage() {
         return a.displayName.localeCompare(b.displayName);
       });
   }, [scopedRows]);
+
+  const selectedDetailRow = useMemo(() => scopedRows.find((row) => row.id === detailRowId) ?? null, [detailRowId, scopedRows]);
+
+  const selectedDetailScanUrl = useMemo(() => {
+    if (!selectedDetailRow?.qr_token || typeof window === 'undefined') return '';
+    return `${window.location.origin}/app/equipment/scan/${selectedDetailRow.qr_token}`;
+  }, [selectedDetailRow?.qr_token]);
 
   const startAdd = useCallback(() => {
     setAddDraft(emptyAddDraft());
@@ -364,6 +357,12 @@ export default function EquipmentPage() {
     setAddSaving(true);
     const selectedTypeName = typeNameById.get(addDraft.equipmentTypeId) ?? null;
     const selectedPropertyId = addDraft.propertyId === 'shared' ? null : addDraft.propertyId;
+    const maintenanceIntervalHours = parseOptionalNumberInput(addDraft.maintenanceIntervalHours);
+    if (Number.isNaN(maintenanceIntervalHours)) {
+      toast.error('Maintenance interval must be a positive number of hours.');
+      setAddSaving(false);
+      return;
+    }
     const payload = {
       id: crypto.randomUUID(),
       org_id: orgId,
@@ -377,6 +376,8 @@ export default function EquipmentPage() {
       notes: addDraft.notes.trim() || null,
       active: addDraft.status !== 'retired',
       last_serviced: addDraft.lastServiced || null,
+      maintenance_interval_hours: maintenanceIntervalHours,
+      hours_at_last_service: addDraft.lastServiced ? 0 : null,
     };
 
     const { error: insertError } = await withEquipmentMutationTimeout(supabase.from('equipment_units').insert(payload));
@@ -403,6 +404,7 @@ export default function EquipmentPage() {
       location: row.location ?? '',
       lastServiced: toDateInput(row.last_serviced),
       notes: row.notes ?? '',
+      maintenanceIntervalHours: row.maintenance_interval_hours == null ? '' : String(row.maintenance_interval_hours),
     });
   }, []);
 
@@ -422,6 +424,12 @@ export default function EquipmentPage() {
 
     const selectedTypeName = typeNameById.get(editDraft.equipmentTypeId) ?? null;
     const selectedPropertyId = editDraft.propertyId === 'shared' ? null : editDraft.propertyId;
+    const maintenanceIntervalHours = parseOptionalNumberInput(editDraft.maintenanceIntervalHours);
+    if (Number.isNaN(maintenanceIntervalHours)) {
+      toast.error('Maintenance interval must be a positive number of hours.');
+      setRowSavingId(null);
+      return;
+    }
     const payload = {
       unit_name: editDraft.name.trim(),
       name: editDraft.name.trim(),
@@ -433,6 +441,7 @@ export default function EquipmentPage() {
       notes: editDraft.notes.trim() || null,
       active: editDraft.status !== 'retired',
       last_serviced: editDraft.lastServiced || null,
+      maintenance_interval_hours: maintenanceIntervalHours,
       org_id: orgId,
     };
 
@@ -450,6 +459,30 @@ export default function EquipmentPage() {
     await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
     toast.success(`Updated equipment: ${editDraft.name.trim()}`);
   }, [cancelEdit, editDraft, equipmentQueryKey, isReadOnly, orgId, queryClient, typeNameById]);
+
+  const logServiceForRow = useCallback(async (row: EquipmentUnitRow & { displayName: string }) => {
+    if (isReadOnly) return;
+    if (!supabase || !orgId) return;
+    setServiceSavingId(row.id);
+    const estimatedHours = Number(row.estimated_hours ?? 0);
+    const today = new Date().toISOString().slice(0, 10);
+    const { error: updateError } = await withEquipmentMutationTimeout(
+      supabase
+        .from('equipment_units')
+        .update({ hours_at_last_service: estimatedHours, last_serviced: today, status: 'available', active: true, org_id: orgId })
+        .eq('id', row.id)
+        .eq('org_id', orgId),
+    );
+    setServiceSavingId(null);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error(`Failed to log service: ${updateError.message}`);
+      return;
+    }
+    setError(null);
+    await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
+    toast.success(`Service logged for ${row.displayName}`);
+  }, [equipmentQueryKey, isReadOnly, orgId, queryClient]);
 
   const removeRow = useCallback(async (id: string) => {
     if (isReadOnly) return;
@@ -524,7 +557,7 @@ export default function EquipmentPage() {
               <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Type</th>
               <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Status</th>
               <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Location</th>
-              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Last Serviced</th>
+              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Maintenance</th>
               <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Actions</th>
             </tr>
           </thead>
@@ -544,7 +577,6 @@ export default function EquipmentPage() {
             ) : (
               scopedRows.map((row) => {
                 const isEditing = editingId === row.id && editDraft;
-                const overdue = isServiceOverdue(row.last_serviced);
                 return (
                   <tr key={row.id} className="border-t border-surface-border align-top transition-colors hover:bg-surface-hover">
                     <td className="px-3 py-2">
@@ -633,6 +665,14 @@ export default function EquipmentPage() {
                             value={editDraft.lastServiced}
                             onChange={(event) => setEditDraft({ ...editDraft, lastServiced: event.target.value })}
                           />
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={editDraft.maintenanceIntervalHours}
+                            onChange={(event) => setEditDraft({ ...editDraft, maintenanceIntervalHours: event.target.value })}
+                            placeholder="Interval hours"
+                          />
                           <Textarea
                             value={editDraft.notes}
                             onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })}
@@ -640,10 +680,13 @@ export default function EquipmentPage() {
                             className="min-h-16"
                           />
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span>{row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}</span>
-                          {overdue ? <AlertTriangle className="h-4 w-4 text-status-pending" aria-label="Service overdue" /> : null}
+                      ) : (                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <EquipmentMaintenanceBadge unit={row} />
+                            {row.maintenanceState.due ? <AlertTriangle className="h-4 w-4 text-status-warning" aria-label="Service due" /> : null}
+                          </div>
+                          <p className="text-xs text-text-muted">{Number(row.estimated_hours ?? 0).toFixed(1)}h current</p>
+                          <p className="text-xs text-text-muted">Last serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}</p>
                         </div>
                       )}
                     </td>
@@ -659,6 +702,9 @@ export default function EquipmentPage() {
                         </div>
                       ) : !isReadOnly ? (
                         <div className="flex justify-end gap-1">
+                          <Button variant="outline" size="icon" onClick={() => setDetailRowId(row.id)} aria-label="View equipment details">
+                            <QrCode className="h-4 w-4" />
+                          </Button>
                           <Button variant="outline" size="icon" onClick={() => startEdit(row)} aria-label="Edit equipment">
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -696,9 +742,7 @@ export default function EquipmentPage() {
           />
         ) : (
           scopedRows.map((row) => {
-            const isEditing = editingId === row.id && editDraft;
-            const overdue = isServiceOverdue(row.last_serviced);
-            return (
+            const isEditing = editingId === row.id && editDraft;            return (
               <div key={`mobile-eq-${row.id}`} className={`rounded-xl border border-surface-border border-l-4 bg-surface-card p-3 transition-colors hover:bg-surface-hover ${statusLaneClass(row.normalizedStatus)}`}>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="font-medium text-text-primary">{row.displayName}</p>
@@ -735,6 +779,7 @@ export default function EquipmentPage() {
                     </select>
                     <Input value={editDraft.location} onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value })} placeholder="Location" />
                     <DateInput value={editDraft.lastServiced} onChange={(event) => setEditDraft({ ...editDraft, lastServiced: event.target.value })} />
+                    <Input type="number" min="0" step="1" value={editDraft.maintenanceIntervalHours} onChange={(event) => setEditDraft({ ...editDraft, maintenanceIntervalHours: event.target.value })} placeholder="Interval hours" />
                     <Textarea value={editDraft.notes} onChange={(event) => setEditDraft({ ...editDraft, notes: event.target.value })} className="min-h-16" />
                   </div>
                 ) : (
@@ -749,7 +794,12 @@ export default function EquipmentPage() {
                       )}
                     </div>
                     {row.location ? <p>Location: {row.location}</p> : null}
-                    <p className="flex items-center gap-1">Last Serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}{overdue ? <AlertTriangle className="h-4 w-4 text-status-pending" /> : null}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>Maintenance:</span>
+                      <EquipmentMaintenanceBadge unit={row} />
+                    </div>
+                    <p>Hours: {Number(row.estimated_hours ?? 0).toFixed(1)}h</p>
+                    <p>Last serviced: {row.last_serviced ? new Date(row.last_serviced).toLocaleDateString() : '—'}</p>
                   </div>
                 )}
                 <div className="mt-3 flex gap-2">
@@ -762,6 +812,7 @@ export default function EquipmentPage() {
                     </>
                   ) : !isReadOnly ? (
                     <>
+                      <Button variant="outline" className="min-h-11 flex-1" onClick={() => setDetailRowId(row.id)}>Details</Button>
                       <Button variant="outline" className="min-h-11 flex-1" onClick={() => startEdit(row)}>Edit</Button>
                       <Button
                         variant="outline"
@@ -909,12 +960,24 @@ export default function EquipmentPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Last Serviced</label>
-              <Input
-                type="date"
+              <DateInput
                 value={addDraft.lastServiced}
                 onChange={(event) => setAddDraft({ ...addDraft, lastServiced: event.target.value })}
                 className="mt-1"
               />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Maintenance interval hours</label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={addDraft.maintenanceIntervalHours}
+                onChange={(event) => setAddDraft({ ...addDraft, maintenanceIntervalHours: event.target.value })}
+                className="mt-1"
+                placeholder="Optional"
+              />
+              <p className="mt-1 text-xs text-text-muted">Leave blank to disable usage-hour service tracking.</p>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Notes</label>
@@ -933,6 +996,68 @@ export default function EquipmentPage() {
               {addSaving ? 'Saving...' : 'Save Equipment'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(selectedDetailRow)} onOpenChange={(open) => { if (!open) setDetailRowId(null); }}>
+        <DialogContent aria-describedby="equipment-detail-desc" className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedDetailRow ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedDetailRow.displayName}</DialogTitle>
+                <DialogDescription id="equipment-detail-desc">
+                  QR field access and usage-hour maintenance tracking.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-surface-border bg-surface-elevated p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-text-muted">Status</p>
+                    <Badge variant="outline" className={statusBadgeClass(selectedDetailRow.normalizedStatus)}>
+                      {statusLabel(selectedDetailRow.normalizedStatus)}
+                    </Badge>
+                  </div>
+                  <div className="rounded-lg border border-surface-border bg-surface-elevated p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-text-muted">Hours</p>
+                    <p className="mt-1 text-lg font-semibold text-text-primary">{Number(selectedDetailRow.estimated_hours ?? 0).toFixed(1)}h</p>
+                  </div>
+                  <div className="rounded-lg border border-surface-border bg-surface-elevated p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-text-muted">Property</p>
+                    <p className="mt-1 text-sm font-medium text-text-primary">{selectedDetailRow.displayPropertyName}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-surface-border bg-surface-card p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-text-primary">Maintenance interval</p>
+                      <p className="mt-1 text-xs text-text-muted">{selectedDetailRow.maintenanceState.description}</p>
+                    </div>
+                    <EquipmentMaintenanceBadge unit={selectedDetailRow} />
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-text-muted sm:grid-cols-3">
+                    <p>Interval: {selectedDetailRow.maintenance_interval_hours == null ? 'Off' : `${Number(selectedDetailRow.maintenance_interval_hours).toFixed(1)}h`}</p>
+                    <p>Last service hours: {selectedDetailRow.hours_at_last_service == null ? '—' : `${Number(selectedDetailRow.hours_at_last_service).toFixed(1)}h`}</p>
+                    <p>Last serviced: {selectedDetailRow.last_serviced ? new Date(selectedDetailRow.last_serviced).toLocaleDateString() : '—'}</p>
+                  </div>
+                  {!isReadOnly ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 gap-1.5"
+                      onClick={() => void logServiceForRow(selectedDetailRow)}
+                      disabled={serviceSavingId === selectedDetailRow.id}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      {serviceSavingId === selectedDetailRow.id ? 'Logging...' : 'Log service at current hours'}
+                    </Button>
+                  ) : null}
+                </div>
+
+                <EquipmentQrCard qrToken={selectedDetailRow.qr_token} scanUrl={selectedDetailScanUrl} />
+              </div>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

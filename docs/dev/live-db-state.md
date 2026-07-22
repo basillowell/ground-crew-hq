@@ -346,8 +346,14 @@
 | longitude           | double precision | YES      |                    |
 | location_updated_at | timestamptz      | YES      |                    |
 | qr_token            | uuid             | YES      | gen_random_uuid()  |
+| maintenance_interval_hours | numeric  | YES      |                    |
+| hours_at_last_service | numeric       | YES      |                    |
 
 > qr_token has a unique index (equipment_units_qr_token_key) — used for mobile scan-to-login.
+> maintenance_interval_hours / hours_at_last_service added by equipment_maintenance_intervals
+> migration. maintenance_interval_hours null = interval tracking not enabled for that unit.
+> Due for service = (estimated_hours - hours_at_last_service) >= maintenance_interval_hours.
+> Logging a service should set hours_at_last_service = estimated_hours at that point in time.
 > property_id is nullable as of equipment_units_shared_property_nullable migration:
 > null = "shared" equipment, usable/visible across all of an org's properties.
 > Non-null = scoped to that one property, as before.
@@ -997,4 +1003,4 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 ---
 
 ## Table count: 46
-## Last synced from: Supabase project fjqeekwisnbpxgebrnpl (equipment_module_v2 migration applied — added equipment_specs, work_order_jobs, equipment_favorites; extended equipment_units and work_orders)
+## Last synced from: Supabase project fjqeekwisnbpxgebrnpl (equipment_maintenance_intervals migration applied — added maintenance_interval_hours, hours_at_last_service to equipment_units)
