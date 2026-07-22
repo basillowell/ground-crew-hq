@@ -62,7 +62,7 @@ type AuthState =
   | 'network-timeout'
   | 'profile-error'
 
-let currentPropertyIdSnapshot = ''
+let currentPropertyIdSnapshot = 'all'
 const currentPropertyIdListeners = new Set<() => void>()
 
 function subscribeToCurrentPropertyId(listener: () => void) {
@@ -75,7 +75,7 @@ function getCurrentPropertyIdSnapshot() {
 }
 
 function setSharedCurrentPropertyId(nextPropertyId: string | null) {
-  currentPropertyIdSnapshot = nextPropertyId ?? ''
+  currentPropertyIdSnapshot = nextPropertyId ?? 'all'
   currentPropertyIdListeners.forEach((listener) => listener())
 }
 
@@ -225,7 +225,7 @@ function useOrgProfileState() {
   }, [user?.id, userLoading])
 
   const signOut = useCallback(async () => {
-    setSharedCurrentPropertyId(null)
+    setSharedCurrentPropertyId('all')
     const supabase = createClient()
     await supabase.auth.signOut()
   }, [])
