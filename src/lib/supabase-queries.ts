@@ -42,6 +42,36 @@ type DbProperty = {
   created_at: string;
 };
 
+export type PropertyBoundaryGeoJson = {
+  type: 'Polygon';
+  coordinates: number[][][];
+};
+
+export type PropertyBoundary = {
+  id: string;
+  orgId: string | null;
+  name: string;
+  shortName: string;
+  color: string;
+  acreage: number;
+  calculatedAcreage: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  boundaryGeojson: PropertyBoundaryGeoJson | null;
+};
+
+type DbPropertyBoundary = {
+  id: string;
+  org_id: string | null;
+  name: string;
+  short_name: string | null;
+  color: string | null;
+  acreage: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  boundary_geojson: unknown;
+  calculated_acreage: number | null;
+};
 type DbEmployee = {
   id: string;
   org_id?: string | null;
@@ -376,6 +406,35 @@ function toProperty(row: DbProperty): Property {
   };
 }
 
+function isPropertyBoundaryGeoJson(value: unknown): value is PropertyBoundaryGeoJson {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as { type?: unknown; coordinates?: unknown };
+  if (candidate.type !== 'Polygon' || !Array.isArray(candidate.coordinates)) return false;
+  return candidate.coordinates.every((ring) =>
+    Array.isArray(ring) &&
+    ring.every((point) =>
+      Array.isArray(point) &&
+      point.length >= 2 &&
+      typeof point[0] === 'number' &&
+      typeof point[1] === 'number',
+    ),
+  );
+}
+
+function toPropertyBoundary(row: DbPropertyBoundary): PropertyBoundary {
+  return {
+    id: row.id,
+    orgId: row.org_id ?? null,
+    name: row.name,
+    shortName: row.short_name ?? row.name,
+    color: row.color ?? '#166534',
+    acreage: Number(row.acreage ?? 0),
+    calculatedAcreage: row.calculated_acreage === null ? null : Number(row.calculated_acreage),
+    latitude: row.latitude,
+    longitude: row.longitude,
+    boundaryGeojson: isPropertyBoundaryGeoJson(row.boundary_geojson) ? row.boundary_geojson : null,
+  };
+}
 function toEmployee(row: DbEmployee): Employee {
   return {
     id: row.id,
@@ -1133,6 +1192,24 @@ async function fetchProperties(orgId?: string): Promise<Property[]> {
   return (data as DbProperty[]).map(toProperty);
 }
 
+async function fetchPropertyBoundaries(orgId?: string): Promise<PropertyBoundary[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Property boundaries request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('properties')
+      .select('id, org_id, name, short_name, color, acreage, latitude, longitude, boundary_geojson, calculated_acreage')
+      .order('sort_order', { ascending: true });
+    if (orgId) query = query.eq('org_id', orgId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbPropertyBoundary[]).map(toPropertyBoundary);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
 async function fetchProgramSettings(orgId: string): Promise<ProgramSettings | null> {
   const client = ensureSupabase();
   const { data, error } = await client
@@ -1172,6 +1249,17 @@ export function useProperties(orgId?: string) {
   });
 }
 
+export function usePropertyBoundaries(orgId?: string) {
+  return useQuery({
+    queryKey: ['property-boundaries', orgId ?? 'all-orgs'],
+    queryFn: () => fetchPropertyBoundaries(orgId),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 10,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
 export function useProgramSettings(orgId?: string) {
   return useQuery({
     queryKey: ['program-settings', orgId ?? 'all-orgs'],

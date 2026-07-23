@@ -51,6 +51,7 @@ const routeTitles: Record<string, RouteTitle> = {
   '/app/workboard': { title: 'Workflow', subtitle: 'Assign tasks and manage daily operations.' },
   '/app/scheduler': { title: 'Scheduler', subtitle: 'Manage employee shifts.' },
   '/app/employees': { title: 'Team', subtitle: 'Manage your crew roster.' },
+  '/app/properties': { title: 'Properties', subtitle: 'Map boundaries and project context.' },
   '/app/equipment': { title: 'Equipment', subtitle: 'Track maintenance and availability.' },
   '/app/invoicing': { title: 'Invoicing', subtitle: 'Manage and track invoices.' },
   '/app/reports': { title: 'Reports', subtitle: 'Labor summaries and cost analysis.' },

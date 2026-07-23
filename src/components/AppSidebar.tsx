@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Clock, Users, Wrench, Shield,
+  LayoutDashboard, Clock, Users, Wrench, Shield, Map,
   BarChart3, Settings, MessageSquare, Leaf, FlaskConical, MonitorSmartphone
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
@@ -17,6 +17,7 @@ const navItems = [
   { title: 'Workboard', url: '/app/workboard', icon: LayoutDashboard },
   { title: 'Time Management', url: '/app/scheduler', icon: Clock },
   { title: 'Employee Management', url: '/app/employees', icon: Users },
+  { title: 'Properties', url: '/app/properties', icon: Map },
   { title: 'Equipment Management', url: '/app/equipment', icon: Wrench },
   { title: 'Breakroom', url: '/app/breakroom', icon: MonitorSmartphone },
   { title: 'Applications', url: '/app/applications', icon: FlaskConical },

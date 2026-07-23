@@ -67,6 +67,7 @@ function inferNav(response: string): { label: string; route: string } | null {
   const lower = response.toLowerCase();
   if (lower.includes('scheduler')) return { label: 'Open Scheduler', route: '/app/scheduler' };
   if (lower.includes('workboard') || lower.includes('workflow')) return { label: 'Open Workboard', route: '/app/workboard' };
+  if (lower.includes('property') || lower.includes('properties') || lower.includes('map')) return { label: 'Open Properties', route: '/app/properties' };
   if (lower.includes('equipment')) return { label: 'Open Equipment', route: '/app/equipment' };
   if (lower.includes('reports')) return { label: 'Open Reports', route: '/app/reports' };
   return null;

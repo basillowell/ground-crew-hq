@@ -6,6 +6,7 @@ import {
   HelpCircle,
   LayoutDashboard,
   LogOut,
+  Map,
   Receipt,
   Settings2,
   Shield,
@@ -65,6 +66,7 @@ const primaryOperations: NavItemConfig[] = [
 
 const management: NavItemConfig[] = [
   { label: 'Team', href: '/app/employees', icon: UsersRound, moduleId: 'workflow' },
+  { label: 'Properties', href: '/app/properties', icon: Map, moduleId: 'command-center' },
   { label: 'Equipment', href: '/app/equipment', icon: Wrench, moduleId: 'equipment' },
   { label: 'Invoicing', href: '/app/invoicing', icon: Receipt, moduleId: 'workflow' },
   { label: 'Reports', href: '/app/reports', icon: BarChart3, moduleId: 'reports' },

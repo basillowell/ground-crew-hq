@@ -9,6 +9,7 @@ import {
   Home,
   LayoutDashboard,
   Mail,
+  Map,
   MapPin,
   Menu,
   MessageSquare,
@@ -480,6 +481,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const mobileMoreItems = [
     { label: 'Dashboard', route: '/app/dashboard', icon: LayoutDashboard },
     { label: 'Scheduler', route: '/app/scheduler', icon: Calendar },
+    { label: 'Properties', route: '/app/properties', icon: Map },
     { label: 'Equipment', route: '/app/equipment', icon: Wrench },
     { label: 'Applications', route: '/app/applications', icon: ShieldCheck },
     { label: 'Safety', route: '/app/safety', icon: Shield },
