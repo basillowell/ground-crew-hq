@@ -1090,5 +1090,121 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 
 ---
 
-## Table count: 48
-## Last synced from: Supabase project fjqeekwisnbpxgebrnpl (enable_postgis, properties_boundary_geojson, properties_boundary_generated, properties_calculated_acreage, projects_and_timeline_tables migrations applied — added properties.boundary_geojson/boundary/calculated_acreage, new projects and project_timeline_events tables)
+## service_catalog
+| column             | type        | nullable | default           |
+|--------------------|-------------|----------|-------------------|
+| id                 | uuid        | NO       | gen_random_uuid() |
+| org_id             | uuid        | NO       |                   |
+| name               | text        | NO       |                   |
+| description        | text        | YES      |                   |
+| default_unit_price | numeric     | NO       | 0                 |
+| active             | boolean     | NO       | true              |
+| created_at         | timestamptz | NO       | now()             |
+
+> Reusable priced items that estimate/invoice line items draw from (decision O-1).
+> Minimal shape — no categories, units, or tax classes in v1.
+> RLS: org_isolation (ALL).
+
+---
+
+## estimates
+| column               | type        | nullable | default           |
+|----------------------|-------------|----------|-------------------|
+| id                   | uuid        | NO       | gen_random_uuid() |
+| org_id               | uuid        | NO       |                   |
+| client_id            | uuid        | NO       |                   |
+| property_id          | uuid        | YES      |                   |
+| estimate_number      | integer     | NO       | nextval(seq)      |
+| status               | text        | NO       | 'draft'           |
+| subtotal             | numeric     | NO       | 0                 |
+| tax_rate             | numeric     | NO       | 0                 |
+| total                | numeric     | NO       | 0                 |
+| notes                | text        | YES      |                   |
+| valid_until          | date        | YES      |                   |
+| converted_invoice_id | uuid        | YES      |                   |
+| created_at           | timestamptz | NO       | now()             |
+| sent_at              | timestamptz | YES      |                   |
+| accepted_at          | timestamptz | YES      |                   |
+
+> status CHECK: ('draft','sent','accepted','declined','expired')
+> estimate_number: global serial, UNIQUE (matches invoices/work_orders precedent).
+> converted_invoice_id: set when the estimate is accepted and becomes an invoice.
+> Non-null = already converted; the conversion function refuses to convert twice.
+> FKs: client_id -> clients.id (required), property_id -> properties.id (optional).
+> RLS: org_isolation (ALL).
+
+---
+
+## estimate_line_items
+| column      | type        | nullable | default           |
+|-------------|-------------|----------|-------------------|
+| id          | uuid        | NO       | gen_random_uuid() |
+| org_id      | uuid        | NO       |                   |
+| estimate_id | uuid        | NO       |                   |
+| catalog_id  | uuid        | YES      |                   |
+| description | text        | NO       |                   |
+| quantity    | numeric     | NO       | 1                 |
+| unit_price  | numeric     | NO       | 0                 |
+| line_total  | numeric     | NO       | 0                 |
+| sort_order  | integer     | NO       | 0                 |
+| created_at  | timestamptz | NO       | now()             |
+
+> FK: estimate_id -> estimates.id (ON DELETE CASCADE), catalog_id -> service_catalog.id.
+> org_id is carried here so org_isolation needs no join (same denormalization
+> rationale as project_timeline_events.property_id).
+> line_total is app-computed (quantity * unit_price), not generated.
+> RLS: org_isolation (ALL).
+
+---
+
+## invoice_line_items
+| column      | type        | nullable | default           |
+|-------------|-------------|----------|-------------------|
+| id          | uuid        | NO       | gen_random_uuid() |
+| org_id      | uuid        | NO       |                   |
+| invoice_id  | uuid        | NO       |                   |
+| catalog_id  | uuid        | YES      |                   |
+| description | text        | NO       |                   |
+| quantity    | numeric     | NO       | 1                 |
+| unit_price  | numeric     | NO       | 0                 |
+| line_total  | numeric     | NO       | 0                 |
+| sort_order  | integer     | NO       | 0                 |
+| created_at  | timestamptz | NO       | now()             |
+
+> FK: invoice_id -> invoices.id (ON DELETE CASCADE), catalog_id -> service_catalog.id.
+> Replaces the dropped invoices.line_items jsonb column. Same shape as
+> estimate_line_items so conversion is a straight copy.
+> RLS: org_isolation (ALL).
+
+---
+
+## DB function: convert_estimate_to_invoice(target_estimate_id uuid) -> uuid
+
+SECURITY DEFINER, search_path pinned to public. EXECUTE granted to `authenticated`
+only — explicitly revoked from `anon` and PUBLIC.
+
+Performs the whole estimate -> invoice conversion in ONE transaction: inserts the
+invoice from the estimate header, copies every estimate_line_items row into
+invoice_line_items preserving sort order, then marks the estimate accepted and
+stamps converted_invoice_id. Returns the new invoice id.
+
+WHY IT EXISTS: PostgREST has no client-side multi-statement transaction, so doing
+this from the browser could strand a half-built invoice if the sequence failed
+partway (plan risk R-1). Call it from the app via `.rpc('convert_estimate_to_invoice',
+{ target_estimate_id })` — never reimplement the steps client-side.
+
+Guards, all raising an exception: caller must have an active app_users row
+(org resolved from it, never trusted from the client), caller role must be admin or
+manager, the estimate must belong to the caller's org, must not already be converted
+(converted_invoice_id IS NULL), and must not be declined/expired. The estimate row is
+locked FOR UPDATE during conversion.
+
+---
+
+## Table count: 52
+## Last synced from: Supabase project fjqeekwisnbpxgebrnpl
+Revenue chain migrations applied 2026-07-23:
+- revenue_phase1_invoice_client_link — invoices.client_id + invoice_number, dropped invoices.line_items
+- revenue_phase2_estimates_line_items_catalog — new service_catalog, estimates, estimate_line_items, invoice_line_items
+- revenue_phase2_convert_estimate_to_invoice_fn — the transactional conversion function above
+Earlier: enable_postgis, properties_boundary_geojson, properties_boundary_generated, properties_calculated_acreage, projects_and_timeline_tables, drop_clients_public_token_read_policy, drop_legacy_department_and_group_options, pin_search_path_on_property_helpers
