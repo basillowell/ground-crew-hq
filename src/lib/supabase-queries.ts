@@ -1260,6 +1260,35 @@ export function usePropertyBoundaries(orgId?: string) {
     retryDelay: 1000,
   });
 }
+
+type SavePropertyBoundaryPayload = {
+  propertyId: string;
+  boundaryGeojson: PropertyBoundaryGeoJson | null;
+};
+
+async function savePropertyBoundary(orgId: string, payload: SavePropertyBoundaryPayload) {
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('properties')
+    .update({ boundary_geojson: payload.boundaryGeojson })
+    .eq('id', payload.propertyId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
+export function useSavePropertyBoundary(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SavePropertyBoundaryPayload) => {
+      if (!orgId) throw new Error('Organization is required to save a property boundary.');
+      return savePropertyBoundary(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
+    },
+  });
+}
 export function useProgramSettings(orgId?: string) {
   return useQuery({
     queryKey: ['program-settings', orgId ?? 'all-orgs'],

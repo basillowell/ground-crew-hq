@@ -1,13 +1,15 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { AlertTriangle, Map, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Edit3, Map, RefreshCw, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/components/ui/sonner';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { usePropertyBoundaries } from '@/lib/supabase-queries';
+import { usePropertyBoundaries, useSavePropertyBoundary, type PropertyBoundaryGeoJson } from '@/lib/supabase-queries';
 
 const PropertyMap = dynamic(
   () => import('@/components/map/PropertyMap').then((module) => module.PropertyMap),
@@ -21,15 +23,44 @@ const PropertyMap = dynamic(
   },
 );
 
+function formatAcres(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)} ac` : 'not set';
+}
+
 export default function PropertiesMapPage() {
   const { currentPropertyId, currentRole, isOrgReady, orgId, setCurrentPropertyId } = useOrgProfile();
   const boundariesQuery = usePropertyBoundaries(orgId ?? undefined);
+  const saveBoundaryMutation = useSavePropertyBoundary(orgId ?? undefined);
+  const [editMode, setEditMode] = useState(false);
+  const [pendingBoundaryGeojson, setPendingBoundaryGeojson] = useState<PropertyBoundaryGeoJson | null | undefined>(undefined);
   const properties = boundariesQuery.data ?? [];
   const mappedCount = properties.filter((property) => property.boundaryGeojson).length;
   const selectedProperty = currentPropertyId === 'all'
     ? null
     : properties.find((property) => property.id === currentPropertyId) ?? null;
   const canViewMap = currentRole === 'admin' || currentRole === 'manager';
+  const hasConcretePropertySelected = currentPropertyId !== 'all' && Boolean(selectedProperty);
+  const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
+
+  useEffect(() => {
+    setEditMode(false);
+    setPendingBoundaryGeojson(undefined);
+  }, [currentPropertyId]);
+
+  const handleSaveBoundary = async () => {
+    if (!orgId || currentPropertyId === 'all' || !hasPendingBoundaryChange) return;
+    try {
+      await saveBoundaryMutation.mutateAsync({
+        propertyId: currentPropertyId,
+        boundaryGeojson: pendingBoundaryGeojson ?? null,
+      });
+      setPendingBoundaryGeojson(undefined);
+      toast.success('Property boundary saved.');
+    } catch (error) {
+      console.error('Failed to save property boundary:', error);
+      toast.error(error instanceof Error ? error.message : 'Property boundary could not be saved.');
+    }
+  };
 
   if (!isOrgReady) {
     return (
@@ -67,10 +98,17 @@ export default function PropertiesMapPage() {
           </div>
           {selectedProperty ? (
             <div className="mt-1 text-xs text-text-muted">
-              Selected: {selectedProperty.name}
-              {selectedProperty.calculatedAcreage !== null
-                ? ` - ${selectedProperty.calculatedAcreage.toFixed(1)} calculated acres`
-                : ''}
+              Selected: {selectedProperty.name} - drawn {formatAcres(selectedProperty.calculatedAcreage)} / on file {formatAcres(selectedProperty.acreage)}
+            </div>
+          ) : null}
+          {currentPropertyId === 'all' ? (
+            <div className="mt-2 text-xs text-status-warning">
+              Select a specific property before drawing or editing a boundary.
+            </div>
+          ) : null}
+          {hasPendingBoundaryChange ? (
+            <div className="mt-2 text-xs font-medium text-brand-bright">
+              Unsaved boundary changes are ready to save.
             </div>
           ) : null}
         </div>
@@ -78,10 +116,29 @@ export default function PropertiesMapPage() {
           <PropertySelector className="sm:w-72" allowAllProperties />
           <Button
             type="button"
+            variant={editMode ? 'default' : 'outline'}
+            className="h-10 rounded-xl"
+            onClick={() => setEditMode((current) => !current)}
+            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending}
+          >
+            <Edit3 className="mr-2 h-4 w-4" />
+            {editMode ? 'Editing' : 'Edit boundary'}
+          </Button>
+          <Button
+            type="button"
+            className="h-10 rounded-xl"
+            onClick={() => void handleSaveBoundary()}
+            disabled={!hasPendingBoundaryChange || !hasConcretePropertySelected || saveBoundaryMutation.isPending}
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {saveBoundaryMutation.isPending ? 'Saving...' : 'Save boundary'}
+          </Button>
+          <Button
+            type="button"
             variant="outline"
             className="h-10 rounded-xl border-surface-border bg-surface-card/80"
             onClick={() => void boundariesQuery.refetch()}
-            disabled={boundariesQuery.isFetching}
+            disabled={boundariesQuery.isFetching || saveBoundaryMutation.isPending}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${boundariesQuery.isFetching ? 'animate-spin' : ''}`} />
             Retry
@@ -110,6 +167,9 @@ export default function PropertiesMapPage() {
         <PropertyMap
           properties={properties}
           currentPropertyId={currentPropertyId || 'all'}
+          editMode={editMode}
+          canEditBoundary={canViewMap}
+          onBoundaryChange={setPendingBoundaryGeojson}
           onSelectProperty={setCurrentPropertyId}
         />
       )}
