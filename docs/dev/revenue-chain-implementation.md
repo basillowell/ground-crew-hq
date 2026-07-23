@@ -1,8 +1,22 @@
 # Revenue Chain — Implementation Plan
 
-> Status: **PLAN / AWAITING REVIEW** — nothing implemented, no migrations applied.
-> Author: Claude Code · Date: 2026-07-23 · Grounded at commit `b6ed14d`,
-> Supabase project `fjqeekwisnbpxgebrnpl`, app v7.19.6.
+> Status: **IN PROGRESS.** Phase 1 shipped · Phase 2 schema shipped, UI in build ·
+> Phases 3–4 not started.
+> Author: Claude Code · Date: 2026-07-23 · Supabase project
+> `fjqeekwisnbpxgebrnpl`, app v7.19.6.
+>
+> **Progress log**
+> | Phase | State | Commits / migrations |
+> |---|---|---|
+> | 1 — clients + billable invoice | **Shipped** | `509321a` (schema sync), `b2dc0ed` (UI). Migration `revenue_phase1_invoice_client_link`. |
+> | 2 — estimates, line items, catalog, conversion | **Schema shipped**, UI in build | `26d577d` (schema sync). Migrations `revenue_phase2_estimates_line_items_catalog`, `revenue_phase2_convert_estimate_to_invoice_fn`. |
+> | 3 — manual payments + per-job costing | Not started | — |
+> | 4 — recurring contracts + scheduled generation | Not started | — |
+>
+> ⚠️ **Not yet exercised in a browser.** `clients`, `invoices`, and `estimates` all
+> have 0 rows. Phases 1–2 are verified at build/schema level only; the end-to-end
+> flow (create client → estimate → accept → invoice) has never been run against
+> real RLS with a real signed-in user. Do this before building Phase 3 on top.
 >
 > Read [revenue-chain-handoff.md](revenue-chain-handoff.md) first — it has the
 > verified current-state audit. The six D-A…D-F decisions from that doc are **locked**
@@ -331,14 +345,21 @@ contracts, their line items, and the run log — plus an optional manual
 
 ## 7. Risks, ranked
 
-1. **R-1 — No cross-table DB transaction over PostgREST.** The estimate→invoice conversion
-   (Phase 2) performs several inserts that must all succeed together, and supabase-js has no
-   client-side multi-statement transaction, so a mid-sequence failure leaves a half-built
-   invoice. **Mitigation: do the conversion in a `SECURITY DEFINER` DB function** (one
-   transactional call, `DB_CHANGE_REQUIRED`, Basil authors) rather than app-layer inserts.
-   *Note O-3 already removes this risk from Phase 4* — scheduled generation is a DB
-   function, hence transactional per contract by construction. Phase 2 conversion is now the
-   main place this bites; recommend the same function-based approach there.
+1. **R-1 — No cross-table DB transaction over PostgREST.** ✅ **RESOLVED 2026-07-23.**
+   The mitigation was chosen and built: `convert_estimate_to_invoice(uuid)` performs the
+   whole conversion (insert invoice → copy line items → mark estimate accepted → stamp
+   `converted_invoice_id`) in a single plpgsql transaction, so a partial write is
+   impossible. `SECURITY DEFINER`, `search_path` pinned, `EXECUTE` granted to
+   `authenticated` only and revoked from `anon`/`PUBLIC`. It resolves the caller's org from
+   `app_users` rather than trusting the client, requires admin/manager, locks the estimate
+   `FOR UPDATE`, and refuses to convert an already-converted or declined/expired estimate —
+   so a double-clicked Accept cannot double-bill, enforced in the database rather than the
+   UI. Verified: invoking it without a valid `app_users` row raises `Not authorized.` even
+   when called with elevated DB privileges.
+   **Standing rule: the app must call this via `.rpc()`. Never reimplement the conversion
+   steps client-side** — that reintroduces exactly the risk this removes.
+   Phase 4's scheduled generation is likewise a DB function, so it is transactional per
+   contract by construction (O-3).
 2. **R-2 — Per-job revenue attribution wrinkle (residual after O-2).** O-2 adds the
    `assignments.work_order_id` link, so cost-per-job is now computable. But invoices are
    many-to-many with work orders (`invoice_work_orders`), so when one invoice covers several
