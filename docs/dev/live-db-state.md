@@ -1,6 +1,6 @@
 # live-db-state.md
 > Authoritative DB schema for Ground Crew HQ — Supabase project `fjqeekwisnbpxgebrnpl`
-> Last updated: 2026-07-14 (auto-generated from information_schema)
+> Last updated: 2026-07-23 (revenue chain Phase 1 applied by hand; see invoices)
 > Rule 10: All column names in queries must come from this file, never from memory.
 
 ---
@@ -1014,23 +1014,33 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 ---
 
 ## invoices
-| column      | type        | nullable | default        |
-|-------------|-------------|----------|----------------|
-| id          | uuid        | NO       | gen_random_uuid() |
-| org_id      | uuid        | NO       |                |
-| property_id | uuid        | YES      |                |
-| employee_id | uuid        | YES      |                |
-| status      | text        | NO       | 'draft'        |
-| line_items  | jsonb       | NO       | '[]'           |
-| subtotal    | numeric     | NO       | 0              |
-| tax_rate    | numeric     | NO       | 0              |
-| total       | numeric     | NO       | 0              |
-| notes       | text        | YES      |                |
-| created_at  | timestamptz | NO       | now()          |
-| sent_at     | timestamptz | YES      |                |
-| paid_at     | timestamptz | YES      |                |
+| column         | type        | nullable | default        |
+|----------------|-------------|----------|----------------|
+| id             | uuid        | NO       | gen_random_uuid() |
+| org_id         | uuid        | NO       |                |
+| property_id    | uuid        | YES      |                |
+| employee_id    | uuid        | YES      |                |
+| status         | text        | NO       | 'draft'        |
+| subtotal       | numeric     | NO       | 0              |
+| tax_rate       | numeric     | NO       | 0              |
+| total          | numeric     | NO       | 0              |
+| notes          | text        | YES      |                |
+| created_at     | timestamptz | NO       | now()          |
+| sent_at        | timestamptz | YES      |                |
+| paid_at        | timestamptz | YES      |                |
+| client_id      | uuid        | YES      |                |
+| invoice_number | integer     | NO       | nextval(seq)   |
 
 > status CHECK: ('draft','sent','paid','void')
+
+> Revenue Chain Phase 1 (migration revenue_phase1_invoice_client_link, 2026-07-23):
+> - client_id: nullable FK -> clients.id. The client who pays. App layer requires
+>   it on create; nullable only because there was nothing to backfill.
+> - invoice_number: global serial (unique constraint invoices_invoice_number_key),
+>   matching the work_orders.wo_number precedent. Not per-org sequential (O-5).
+> - line_items (jsonb) was DROPPED — superseded by the normalized invoice_line_items
+>   table arriving in Phase 2. Do not reference invoices.line_items; it no longer exists.
+> RLS unchanged: org_isolation (ALL). Index invoices_client_id_idx on client_id.
 
 ---
 
