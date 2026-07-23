@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { SOPSettings } from '@/components/settings/SOPSettings';
 import { RecurringTasksSection } from '@/components/settings/RecurringTasksSection';
+import { ServiceCatalogSettings } from '@/components/settings/ServiceCatalogSettings';
 import { type ThemeMode, useTheme } from '@/hooks/useTheme';
 import {
   DndContext,
@@ -90,7 +91,7 @@ import { Switch } from '@/components/ui/switch';
 
 const supabase = createClient();
 
-const TABS = ['Operations', 'Tasks', 'Equipment', 'Workforce', 'SOPs', 'Account', 'Help'] as const;
+const TABS = ['Operations', 'Tasks', 'Equipment', 'Workforce', 'SOPs', 'Catalog', 'Account', 'Help'] as const;
 type Tab = (typeof TABS)[number];
 
 interface SchedulerSettings {
@@ -1088,6 +1089,7 @@ export default function SettingsPage() {
         {tab === 'Tasks' && <TasksTab key="tasks" orgId={orgId} propertyId={taskPropertyId} />}
         {tab === 'Equipment' && <EquipmentTab key="equipment" orgId={orgId} />}
         {tab === 'SOPs' && <SOPSettings key="sops" orgId={orgId} propertyId={taskPropertyId} />}
+        {tab === 'Catalog' && <ServiceCatalogSettings key="catalog" orgId={orgId} />}
       </fieldset>
       {tab === 'Account' && (
         <AccessTab

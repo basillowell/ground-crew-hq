@@ -53,6 +53,7 @@ const routeTitles: Record<string, RouteTitle> = {
   '/app/employees': { title: 'Team', subtitle: 'Manage your crew roster.' },
   '/app/properties': { title: 'Properties', subtitle: 'Map boundaries and project context.' },
   '/app/equipment': { title: 'Equipment', subtitle: 'Track maintenance and availability.' },
+  '/app/estimates': { title: 'Estimates', subtitle: 'Prepare and manage client estimates.' },
   '/app/invoicing': { title: 'Invoicing', subtitle: 'Manage and track invoices.' },
   '/app/reports': { title: 'Reports', subtitle: 'Labor summaries and cost analysis.' },
   '/app/job-costing': { title: 'Job Costing', subtitle: 'Labor cost and margin analysis.' },
@@ -65,7 +66,7 @@ const routeTitles: Record<string, RouteTitle> = {
   '/app/field': { title: 'Field', subtitle: "Mobile workspace for today's work" },
 };
 
-const settingsTabs = ['Operations', 'Tasks', 'Equipment', 'Workforce', 'SOPs', 'Account', 'Help'] as const;
+const settingsTabs = ['Operations', 'Tasks', 'Equipment', 'Workforce', 'SOPs', 'Catalog', 'Account', 'Help'] as const;
 type SettingsTab = (typeof settingsTabs)[number];
 
 function getRouteTitle(pathname: string): RouteTitle {

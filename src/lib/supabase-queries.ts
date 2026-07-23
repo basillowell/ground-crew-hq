@@ -128,6 +128,49 @@ export type RevenueInvoice = {
   paidAt: string | null;
 };
 
+export type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired';
+
+export type RevenueEstimate = {
+  id: string;
+  orgId: string;
+  clientId: string;
+  propertyId: string | null;
+  estimateNumber: number;
+  status: EstimateStatus;
+  subtotal: number;
+  taxRate: number;
+  total: number;
+  notes: string;
+  validUntil: string | null;
+  convertedInvoiceId: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  acceptedAt: string | null;
+};
+
+export type RevenueLineItem = {
+  id: string;
+  orgId: string;
+  parentId: string;
+  catalogId: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  sortOrder: number;
+  createdAt: string;
+};
+
+export type ServiceCatalogItem = {
+  id: string;
+  orgId: string;
+  name: string;
+  description: string;
+  defaultUnitPrice: number;
+  active: boolean;
+  createdAt: string;
+};
+
 type DbProject = {
   id: string;
   org_id: string;
@@ -181,6 +224,60 @@ type DbRevenueInvoice = {
   created_at: string;
   sent_at: string | null;
   paid_at: string | null;
+};
+
+type DbRevenueEstimate = {
+  id: string;
+  org_id: string;
+  client_id: string;
+  property_id: string | null;
+  estimate_number: number;
+  status: EstimateStatus;
+  subtotal: number | string | null;
+  tax_rate: number | string | null;
+  total: number | string | null;
+  notes: string | null;
+  valid_until: string | null;
+  converted_invoice_id: string | null;
+  created_at: string;
+  sent_at: string | null;
+  accepted_at: string | null;
+};
+
+type DbEstimateLineItem = {
+  id: string;
+  org_id: string;
+  estimate_id: string;
+  catalog_id: string | null;
+  description: string;
+  quantity: number | string | null;
+  unit_price: number | string | null;
+  line_total: number | string | null;
+  sort_order: number | null;
+  created_at: string;
+};
+
+type DbInvoiceLineItem = {
+  id: string;
+  org_id: string;
+  invoice_id: string;
+  catalog_id: string | null;
+  description: string;
+  quantity: number | string | null;
+  unit_price: number | string | null;
+  line_total: number | string | null;
+  sort_order: number | null;
+  created_at: string;
+};
+
+type DbServiceCatalogItem = {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  default_unit_price: number | string | null;
+  active: boolean;
+  created_at: string;
 };
 type DbEmployee = {
   id: string;
@@ -605,6 +702,68 @@ function toRevenueInvoice(row: DbRevenueInvoice): RevenueInvoice {
     createdAt: row.created_at,
     sentAt: row.sent_at,
     paidAt: row.paid_at,
+  };
+}
+
+function toRevenueEstimate(row: DbRevenueEstimate): RevenueEstimate {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    clientId: row.client_id,
+    propertyId: row.property_id,
+    estimateNumber: Number(row.estimate_number ?? 0),
+    status: row.status,
+    subtotal: Number(row.subtotal ?? 0),
+    taxRate: Number(row.tax_rate ?? 0),
+    total: Number(row.total ?? 0),
+    notes: row.notes ?? '',
+    validUntil: row.valid_until,
+    convertedInvoiceId: row.converted_invoice_id,
+    createdAt: row.created_at,
+    sentAt: row.sent_at,
+    acceptedAt: row.accepted_at,
+  };
+}
+
+function toEstimateLineItem(row: DbEstimateLineItem): RevenueLineItem {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    parentId: row.estimate_id,
+    catalogId: row.catalog_id,
+    description: row.description,
+    quantity: Number(row.quantity ?? 0),
+    unitPrice: Number(row.unit_price ?? 0),
+    lineTotal: Number(row.line_total ?? 0),
+    sortOrder: Number(row.sort_order ?? 0),
+    createdAt: row.created_at,
+  };
+}
+
+function toInvoiceLineItem(row: DbInvoiceLineItem): RevenueLineItem {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    parentId: row.invoice_id,
+    catalogId: row.catalog_id,
+    description: row.description,
+    quantity: Number(row.quantity ?? 0),
+    unitPrice: Number(row.unit_price ?? 0),
+    lineTotal: Number(row.line_total ?? 0),
+    sortOrder: Number(row.sort_order ?? 0),
+    createdAt: row.created_at,
+  };
+}
+
+function toServiceCatalogItem(row: DbServiceCatalogItem): ServiceCatalogItem {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    name: row.name,
+    description: row.description ?? '',
+    defaultUnitPrice: Number(row.default_unit_price ?? 0),
+    active: row.active,
+    createdAt: row.created_at,
   };
 }
 function toEmployee(row: DbEmployee): Employee {
@@ -1474,12 +1633,43 @@ export type ClientMutationPayload = {
 
 export type InvoiceMutationPayload = {
   id?: string;
-  propertyId: string;
+  propertyId: string | null;
   clientId: string;
   subtotal: number;
   taxRate: number;
   total: number;
   notes?: string | null;
+};
+
+export type EstimateMutationPayload = {
+  id?: string;
+  propertyId: string | null;
+  clientId: string;
+  subtotal: number;
+  taxRate: number;
+  total: number;
+  notes?: string | null;
+  validUntil?: string | null;
+  status?: EstimateStatus;
+};
+
+export type RevenueLineItemMutationPayload = {
+  id?: string;
+  parentId?: string;
+  catalogId?: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  sortOrder: number;
+};
+
+export type ServiceCatalogMutationPayload = {
+  id?: string;
+  name: string;
+  description?: string | null;
+  defaultUnitPrice: number;
+  active?: boolean;
 };
 
 export type InvoiceStatusMutationPayload = {
@@ -1488,6 +1678,10 @@ export type InvoiceStatusMutationPayload = {
 };
 
 const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at';
+const estimateSelectColumns = 'id, org_id, client_id, property_id, estimate_number, status, subtotal, tax_rate, total, notes, valid_until, converted_invoice_id, created_at, sent_at, accepted_at';
+const estimateLineItemSelectColumns = 'id, org_id, estimate_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
+const invoiceLineItemSelectColumns = 'id, org_id, invoice_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
+const serviceCatalogSelectColumns = 'id, org_id, name, description, default_unit_price, active, created_at';
 
 async function fetchClients(orgId: string): Promise<BillingClient[]> {
   const client = ensureSupabase();
@@ -1520,6 +1714,82 @@ async function fetchInvoices(orgId: string): Promise<RevenueInvoice[]> {
       .order('created_at', { ascending: false });
     if (error) throw error;
     return ((data ?? []) as DbRevenueInvoice[]).map(toRevenueInvoice);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchEstimates(orgId: string): Promise<RevenueEstimate[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Estimates request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('estimates')
+      .select(estimateSelectColumns)
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as DbRevenueEstimate[]).map(toRevenueEstimate);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchEstimateLineItems(estimateId: string | undefined, orgId: string): Promise<RevenueLineItem[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Estimate line items request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('estimate_line_items')
+      .select(estimateLineItemSelectColumns)
+      .eq('org_id', orgId)
+      .order('sort_order', { ascending: true });
+    if (estimateId) query = query.eq('estimate_id', estimateId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbEstimateLineItem[]).map(toEstimateLineItem);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchInvoiceLineItems(invoiceId: string | undefined, orgId: string): Promise<RevenueLineItem[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Invoice line items request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('invoice_line_items')
+      .select(invoiceLineItemSelectColumns)
+      .eq('org_id', orgId)
+      .order('sort_order', { ascending: true });
+    if (invoiceId) query = query.eq('invoice_id', invoiceId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbInvoiceLineItem[]).map(toInvoiceLineItem);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchServiceCatalog(orgId: string): Promise<ServiceCatalogItem[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Service catalog request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('service_catalog')
+      .select(serviceCatalogSelectColumns)
+      .eq('org_id', orgId)
+      .order('name', { ascending: true });
+    if (error) throw error;
+    return ((data ?? []) as DbServiceCatalogItem[]).map(toServiceCatalogItem);
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -1585,6 +1855,27 @@ async function createRevenueInvoice(orgId: string, payload: InvoiceMutationPaylo
   return toRevenueInvoice(data as DbRevenueInvoice);
 }
 
+async function updateRevenueInvoice(orgId: string, payload: InvoiceMutationPayload): Promise<RevenueInvoice> {
+  if (!payload.id) throw new Error('Invoice id is required.');
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('invoices')
+    .update({
+      property_id: payload.propertyId,
+      client_id: payload.clientId,
+      subtotal: payload.subtotal,
+      tax_rate: payload.taxRate,
+      total: payload.total,
+      notes: payload.notes ?? null,
+    })
+    .eq('id', payload.id)
+    .eq('org_id', orgId)
+    .select(invoiceSelectColumns)
+    .single();
+  if (error) throw error;
+  return toRevenueInvoice(data as DbRevenueInvoice);
+}
+
 async function updateRevenueInvoiceStatus(orgId: string, payload: InvoiceStatusMutationPayload): Promise<RevenueInvoice> {
   const sentAt = payload.status === 'sent' ? new Date().toISOString() : undefined;
   const paidAt = payload.status === 'paid' ? new Date().toISOString() : undefined;
@@ -1604,6 +1895,261 @@ async function updateRevenueInvoiceStatus(orgId: string, payload: InvoiceStatusM
   return toRevenueInvoice(data as DbRevenueInvoice);
 }
 
+async function createRevenueEstimate(orgId: string, payload: EstimateMutationPayload): Promise<RevenueEstimate> {
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('estimates')
+    .insert({
+      org_id: orgId,
+      property_id: payload.propertyId,
+      client_id: payload.clientId,
+      status: payload.status ?? 'draft',
+      subtotal: payload.subtotal,
+      tax_rate: payload.taxRate,
+      total: payload.total,
+      notes: payload.notes ?? null,
+      valid_until: payload.validUntil ?? null,
+    })
+    .select(estimateSelectColumns)
+    .single();
+  if (error) throw error;
+  return toRevenueEstimate(data as DbRevenueEstimate);
+}
+
+async function updateRevenueEstimate(orgId: string, payload: EstimateMutationPayload): Promise<RevenueEstimate> {
+  if (!payload.id) throw new Error('Estimate id is required.');
+  const client = ensureSupabase();
+  const sentAt = payload.status === 'sent' ? new Date().toISOString() : undefined;
+  const { data, error } = await client
+    .from('estimates')
+    .update({
+      property_id: payload.propertyId,
+      client_id: payload.clientId,
+      subtotal: payload.subtotal,
+      tax_rate: payload.taxRate,
+      total: payload.total,
+      notes: payload.notes ?? null,
+      valid_until: payload.validUntil ?? null,
+      ...(payload.status ? { status: payload.status } : {}),
+      ...(sentAt ? { sent_at: sentAt } : {}),
+    })
+    .eq('id', payload.id)
+    .eq('org_id', orgId)
+    .select(estimateSelectColumns)
+    .single();
+  if (error) throw error;
+  return toRevenueEstimate(data as DbRevenueEstimate);
+}
+
+async function deleteRevenueEstimate(orgId: string, estimateId: string): Promise<void> {
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('estimates')
+    .delete()
+    .eq('id', estimateId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
+async function createEstimateLineItems(
+  orgId: string,
+  estimateId: string,
+  items: RevenueLineItemMutationPayload[],
+): Promise<RevenueLineItem[]> {
+  if (items.length === 0) return [];
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('estimate_line_items')
+    .insert(items.map((item) => ({
+      org_id: orgId,
+      estimate_id: estimateId,
+      catalog_id: item.catalogId ?? null,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      line_total: item.lineTotal,
+      sort_order: item.sortOrder,
+    })))
+    .select(estimateLineItemSelectColumns);
+  if (error) throw error;
+  return ((data ?? []) as DbEstimateLineItem[]).map(toEstimateLineItem);
+}
+
+async function updateEstimateLineItem(
+  orgId: string,
+  payload: RevenueLineItemMutationPayload,
+): Promise<RevenueLineItem> {
+  if (!payload.id) throw new Error('Line item id is required.');
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('estimate_line_items')
+    .update({
+      catalog_id: payload.catalogId ?? null,
+      description: payload.description,
+      quantity: payload.quantity,
+      unit_price: payload.unitPrice,
+      line_total: payload.lineTotal,
+      sort_order: payload.sortOrder,
+    })
+    .eq('id', payload.id)
+    .eq('org_id', orgId)
+    .select(estimateLineItemSelectColumns)
+    .single();
+  if (error) throw error;
+  return toEstimateLineItem(data as DbEstimateLineItem);
+}
+
+async function deleteEstimateLineItem(orgId: string, lineItemId: string): Promise<void> {
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('estimate_line_items')
+    .delete()
+    .eq('id', lineItemId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
+async function replaceEstimateLineItems(
+  orgId: string,
+  estimateId: string,
+  items: RevenueLineItemMutationPayload[],
+): Promise<RevenueLineItem[]> {
+  const client = ensureSupabase();
+  const { error: deleteError } = await client
+    .from('estimate_line_items')
+    .delete()
+    .eq('estimate_id', estimateId)
+    .eq('org_id', orgId);
+  if (deleteError) throw deleteError;
+  return createEstimateLineItems(orgId, estimateId, items);
+}
+
+async function createInvoiceLineItems(
+  orgId: string,
+  invoiceId: string,
+  items: RevenueLineItemMutationPayload[],
+): Promise<RevenueLineItem[]> {
+  if (items.length === 0) return [];
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('invoice_line_items')
+    .insert(items.map((item) => ({
+      org_id: orgId,
+      invoice_id: invoiceId,
+      catalog_id: item.catalogId ?? null,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      line_total: item.lineTotal,
+      sort_order: item.sortOrder,
+    })))
+    .select(invoiceLineItemSelectColumns);
+  if (error) throw error;
+  return ((data ?? []) as DbInvoiceLineItem[]).map(toInvoiceLineItem);
+}
+
+async function updateInvoiceLineItem(
+  orgId: string,
+  payload: RevenueLineItemMutationPayload,
+): Promise<RevenueLineItem> {
+  if (!payload.id) throw new Error('Line item id is required.');
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('invoice_line_items')
+    .update({
+      catalog_id: payload.catalogId ?? null,
+      description: payload.description,
+      quantity: payload.quantity,
+      unit_price: payload.unitPrice,
+      line_total: payload.lineTotal,
+      sort_order: payload.sortOrder,
+    })
+    .eq('id', payload.id)
+    .eq('org_id', orgId)
+    .select(invoiceLineItemSelectColumns)
+    .single();
+  if (error) throw error;
+  return toInvoiceLineItem(data as DbInvoiceLineItem);
+}
+
+async function deleteInvoiceLineItem(orgId: string, lineItemId: string): Promise<void> {
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('invoice_line_items')
+    .delete()
+    .eq('id', lineItemId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
+async function replaceInvoiceLineItems(
+  orgId: string,
+  invoiceId: string,
+  items: RevenueLineItemMutationPayload[],
+): Promise<RevenueLineItem[]> {
+  const client = ensureSupabase();
+  const { error: deleteError } = await client
+    .from('invoice_line_items')
+    .delete()
+    .eq('invoice_id', invoiceId)
+    .eq('org_id', orgId);
+  if (deleteError) throw deleteError;
+  return createInvoiceLineItems(orgId, invoiceId, items);
+}
+
+async function createServiceCatalogItem(orgId: string, payload: ServiceCatalogMutationPayload): Promise<ServiceCatalogItem> {
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('service_catalog')
+    .insert({
+      org_id: orgId,
+      name: payload.name,
+      description: payload.description ?? null,
+      default_unit_price: payload.defaultUnitPrice,
+      active: payload.active ?? true,
+    })
+    .select(serviceCatalogSelectColumns)
+    .single();
+  if (error) throw error;
+  return toServiceCatalogItem(data as DbServiceCatalogItem);
+}
+
+async function updateServiceCatalogItem(orgId: string, payload: ServiceCatalogMutationPayload): Promise<ServiceCatalogItem> {
+  if (!payload.id) throw new Error('Catalog item id is required.');
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('service_catalog')
+    .update({
+      name: payload.name,
+      description: payload.description ?? null,
+      default_unit_price: payload.defaultUnitPrice,
+      active: payload.active ?? true,
+    })
+    .eq('id', payload.id)
+    .eq('org_id', orgId)
+    .select(serviceCatalogSelectColumns)
+    .single();
+  if (error) throw error;
+  return toServiceCatalogItem(data as DbServiceCatalogItem);
+}
+
+async function deleteServiceCatalogItem(orgId: string, catalogItemId: string): Promise<void> {
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('service_catalog')
+    .delete()
+    .eq('id', catalogItemId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
+async function convertEstimateToInvoice(targetEstimateId: string): Promise<string> {
+  const client = ensureSupabase();
+  const { data, error } = await client.rpc('convert_estimate_to_invoice', { target_estimate_id: targetEstimateId });
+  if (error) throw error;
+  return String(data);
+}
+
 export function useClients(orgId?: string) {
   return useQuery({
     queryKey: ['clients', orgId ?? 'all-orgs'],
@@ -1620,6 +2166,54 @@ export function useInvoices(orgId?: string) {
   return useQuery({
     queryKey: ['invoices', orgId ?? 'all-orgs'],
     queryFn: () => fetchInvoices(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useEstimates(orgId?: string) {
+  return useQuery({
+    queryKey: ['estimates', orgId ?? 'all-orgs'],
+    queryFn: () => fetchEstimates(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useEstimateLineItems(estimateId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['estimate-line-items', orgId ?? 'all-orgs', estimateId ?? 'all-estimates'],
+    queryFn: () => fetchEstimateLineItems(estimateId, orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useInvoiceLineItems(invoiceId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['invoice-line-items', orgId ?? 'all-orgs', invoiceId ?? 'all-invoices'],
+    queryFn: () => fetchInvoiceLineItems(invoiceId, orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useServiceCatalog(orgId?: string) {
+  return useQuery({
+    queryKey: ['service-catalog', orgId ?? 'all-orgs'],
+    queryFn: () => fetchServiceCatalog(orgId!),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
@@ -1667,6 +2261,19 @@ export function useCreateInvoice(orgId?: string) {
   });
 }
 
+export function useUpdateInvoice(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: InvoiceMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update an invoice.');
+      return updateRevenueInvoice(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['invoices', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
 export function useUpdateInvoiceStatus(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -1676,6 +2283,206 @@ export function useUpdateInvoiceStatus(orgId?: string) {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['invoices', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useCreateEstimate(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: EstimateMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to create an estimate.');
+      return createRevenueEstimate(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['estimates', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useUpdateEstimate(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: EstimateMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update an estimate.');
+      return updateRevenueEstimate(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['estimates', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useDeleteEstimate(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (estimateId: string) => {
+      if (!orgId) throw new Error('Organization is required to delete an estimate.');
+      return deleteRevenueEstimate(orgId, estimateId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['estimates', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['estimate-line-items', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useCreateEstimateLineItems(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ estimateId, items }: { estimateId: string; items: RevenueLineItemMutationPayload[] }) => {
+      if (!orgId) throw new Error('Organization is required to create estimate line items.');
+      return createEstimateLineItems(orgId, estimateId, items);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['estimate-line-items', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['estimate-line-items', orgId ?? 'all-orgs', variables.estimateId] });
+    },
+  });
+}
+
+export function useUpdateEstimateLineItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RevenueLineItemMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update an estimate line item.');
+      return updateEstimateLineItem(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['estimate-line-items', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useDeleteEstimateLineItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lineItemId: string) => {
+      if (!orgId) throw new Error('Organization is required to delete an estimate line item.');
+      return deleteEstimateLineItem(orgId, lineItemId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['estimate-line-items', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useReplaceEstimateLineItems(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ estimateId, items }: { estimateId: string; items: RevenueLineItemMutationPayload[] }) => {
+      if (!orgId) throw new Error('Organization is required to save estimate line items.');
+      return replaceEstimateLineItems(orgId, estimateId, items);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['estimate-line-items', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['estimate-line-items', orgId ?? 'all-orgs', variables.estimateId] });
+    },
+  });
+}
+
+export function useCreateInvoiceLineItems(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ invoiceId, items }: { invoiceId: string; items: RevenueLineItemMutationPayload[] }) => {
+      if (!orgId) throw new Error('Organization is required to create invoice line items.');
+      return createInvoiceLineItems(orgId, invoiceId, items);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['invoice-line-items', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['invoice-line-items', orgId ?? 'all-orgs', variables.invoiceId] });
+    },
+  });
+}
+
+export function useUpdateInvoiceLineItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RevenueLineItemMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update an invoice line item.');
+      return updateInvoiceLineItem(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['invoice-line-items', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useDeleteInvoiceLineItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lineItemId: string) => {
+      if (!orgId) throw new Error('Organization is required to delete an invoice line item.');
+      return deleteInvoiceLineItem(orgId, lineItemId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['invoice-line-items', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useReplaceInvoiceLineItems(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ invoiceId, items }: { invoiceId: string; items: RevenueLineItemMutationPayload[] }) => {
+      if (!orgId) throw new Error('Organization is required to save invoice line items.');
+      return replaceInvoiceLineItems(orgId, invoiceId, items);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['invoice-line-items', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['invoice-line-items', orgId ?? 'all-orgs', variables.invoiceId] });
+    },
+  });
+}
+
+export function useCreateServiceCatalogItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ServiceCatalogMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to create a catalog item.');
+      return createServiceCatalogItem(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-catalog', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useUpdateServiceCatalogItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ServiceCatalogMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update a catalog item.');
+      return updateServiceCatalogItem(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-catalog', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useDeleteServiceCatalogItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (catalogItemId: string) => {
+      if (!orgId) throw new Error('Organization is required to delete a catalog item.');
+      return deleteServiceCatalogItem(orgId, catalogItemId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-catalog', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useConvertEstimate(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (targetEstimateId: string) => convertEstimateToInvoice(targetEstimateId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['estimates', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['invoices', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['estimate-line-items', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['invoice-line-items', orgId ?? 'all-orgs'] });
     },
   });
 }
