@@ -1055,7 +1055,21 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | active        | boolean     | NO       | true              |
 | created_at    | timestamptz | NO       | now()             |
 
-> public_token_read policy: FOR SELECT USING (true) — allows public portal reads by client_token.
+> RLS: `org_isolation` (ALL) only — scopes every row to the caller's org via
+> app_users. This is the sole policy on the table.
+>
+> The former `public_token_read` policy (FOR SELECT USING (true)) was DROPPED
+> 2026-07-23 (migration drop_clients_public_token_read_policy). Because RLS
+> policies are OR'd, `USING (true)` fully negated org_isolation and made every
+> clients row — name, email, phone, address, notes — readable by any holder of
+> the anon key across every org. The table had 0 rows, so nothing was exposed.
+> Its only consumer, ClientPortalPage.tsx, was unrouted dead code and was
+> deleted in the same change.
+>
+> client_token is retained on the table for a future public portal. If that is
+> built, it MUST read through a SECURITY DEFINER RPC that takes the token and
+> returns a single row — never a blanket read policy. RLS has no clean way to
+> compare against a caller-supplied value.
 
 ---
 
