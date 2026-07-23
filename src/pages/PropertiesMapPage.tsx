@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { AlertTriangle, Edit3, Map, RefreshCw, Save } from 'lucide-react';
+import { AlertTriangle, Edit3, Map as MapIcon, RefreshCw, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -91,7 +91,7 @@ export default function PropertiesMapPage() {
       <div className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-card p-4 shadow-sm md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-            <Map className="h-3.5 w-3.5" />
+            <MapIcon className="h-3.5 w-3.5" />
             Boundaries
           </div>
           <div className="mt-2 text-sm text-text-secondary">
