@@ -544,12 +544,69 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 | created_at             | timestamptz | NO       | now()        |
 | org_id                 | uuid        | YES      |              |
 | weather_location_label | text        | YES      |              |
+| boundary_geojson       | jsonb       | YES      |              |
+| boundary               | geometry(Polygon,4326) | YES |         |
+| calculated_acreage     | numeric     | YES      |              |
 
 sort_order persists manual drag-and-drop ordering, ascending.
+
+boundary_geojson is the client-writable surface (PostgREST reads/writes plain jsonb —
+never touch `boundary` or `calculated_acreage` directly from application code).
+boundary and calculated_acreage are GENERATED ALWAYS STORED columns derived from
+boundary_geojson via ST_GeomFromGeoJSON/ST_Area; both are DB-maintained and read-only
+to the client. calculated_acreage is in acres and is a cross-check against the manual
+acreage field — it never overwrites it. GIST index on boundary
+(properties_boundary_gist_idx). NULL boundary_geojson = boundary not drawn yet.
 
 RLS:
 - INSERT uses an `org_id` membership check only because a new row has no existing property `id`.
 - SELECT/UPDATE/DELETE use `can_manage_property(id)`.
+
+---
+
+## projects
+| column          | type        | nullable | default           |
+|-----------------|-------------|----------|-------------------|
+| id              | uuid        | NO       | gen_random_uuid() |
+| org_id          | uuid        | NO       |                   |
+| property_id     | uuid        | NO       |                   |
+| name            | text        | NO       |                   |
+| status          | text        | NO       | 'active'          |
+| description     | text        | YES      |                   |
+| start_date      | date        | YES      |                   |
+| target_end_date | date        | YES      |                   |
+| color           | text        | YES      |                   |
+| created_at      | timestamptz | NO       | now()             |
+
+> FK: property_id -> properties.id. property_id is required (NOT NULL) — a project
+> always belongs to exactly one property; this is not a hierarchical scope column.
+
+RLS: SELECT via can_read_property(property_id). INSERT requires active admin/manager
+app_users row in the current org AND can_manage_property(property_id). UPDATE/DELETE
+via can_manage_property(property_id).
+
+---
+
+## project_timeline_events
+| column      | type        | nullable | default           |
+|-------------|-------------|----------|-------------------|
+| id          | uuid        | NO       | gen_random_uuid() |
+| org_id      | uuid        | NO       |                   |
+| project_id  | uuid        | NO       |                   |
+| property_id | uuid        | NO       |                   |
+| event_type  | text        | NO       |                   |
+| title       | text        | NO       |                   |
+| body        | text        | YES      |                   |
+| event_date  | date        | NO       |                   |
+| created_by  | uuid        | YES      |                   |
+| created_at  | timestamptz | NO       | now()             |
+
+> FK: project_id -> projects.id, property_id -> properties.id (denormalised for RLS
+> gating — avoids a join through projects on every row-level check).
+
+RLS: same pattern as projects — SELECT via can_read_property(property_id), INSERT
+requires active admin/manager + can_manage_property(property_id), UPDATE/DELETE via
+can_manage_property(property_id).
 
 ---
 
@@ -1002,5 +1059,5 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 
 ---
 
-## Table count: 46
-## Last synced from: Supabase project fjqeekwisnbpxgebrnpl (equipment_maintenance_intervals migration applied — added maintenance_interval_hours, hours_at_last_service to equipment_units)
+## Table count: 48
+## Last synced from: Supabase project fjqeekwisnbpxgebrnpl (enable_postgis, properties_boundary_geojson, properties_boundary_generated, properties_calculated_acreage, projects_and_timeline_tables migrations applied — added properties.boundary_geojson/boundary/calculated_acreage, new projects and project_timeline_events tables)
