@@ -1201,10 +1201,30 @@ locked FOR UPDATE during conversion.
 
 ---
 
+## Known DB-wide issue: auth_rls_initplan (81 findings, NOT yet addressed)
+
+The Supabase performance advisor flags 81 policies across the schema — including
+every `org_isolation` policy and the pre-existing `app_users`, `clients` and
+`invoices` policies — for re-evaluating `auth.uid()` per row instead of once per
+query. The recommended fix is wrapping the call as `(select auth.uid())`.
+
+This is a performance-at-scale issue, **not** a security hole: the policies are
+correct, just not optimally planned. It was deliberately NOT fixed on the Phase 2
+tables alone, because those policies intentionally copy the existing live
+precedent — fixing only the new four would leave the schema inconsistent while
+solving very little (all revenue tables are currently empty).
+
+If addressed, do it as one deliberate DB-wide pass over every policy, not
+piecemeal. Same applies to the `multiple_permissive_policies` (225) and
+`unused_index` (48, expected while tables are empty) findings.
+
+---
+
 ## Table count: 52
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl
 Revenue chain migrations applied 2026-07-23:
 - revenue_phase1_invoice_client_link — invoices.client_id + invoice_number, dropped invoices.line_items
 - revenue_phase2_estimates_line_items_catalog — new service_catalog, estimates, estimate_line_items, invoice_line_items
 - revenue_phase2_convert_estimate_to_invoice_fn — the transactional conversion function above
+- revenue_phase2_add_missing_fk_indexes — covering indexes for estimate_line_items.catalog_id, invoice_line_items.catalog_id, estimates.converted_invoice_id (advisor: unindexed_foreign_keys)
 Earlier: enable_postgis, properties_boundary_geojson, properties_boundary_generated, properties_calculated_acreage, projects_and_timeline_tables, drop_clients_public_token_read_policy, drop_legacy_department_and_group_options, pin_search_path_on_property_helpers
