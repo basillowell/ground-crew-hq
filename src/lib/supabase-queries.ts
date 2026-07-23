@@ -99,6 +99,35 @@ export type ProjectTimelineEvent = {
   createdAt: string;
 };
 
+export type BillingClient = {
+  id: string;
+  orgId: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  notes: string;
+  active: boolean;
+  createdAt: string;
+};
+
+export type RevenueInvoice = {
+  id: string;
+  orgId: string;
+  propertyId: string | null;
+  employeeId: string | null;
+  clientId: string | null;
+  invoiceNumber: number;
+  status: 'draft' | 'sent' | 'paid' | 'void';
+  subtotal: number;
+  taxRate: number;
+  total: number;
+  notes: string;
+  createdAt: string;
+  sentAt: string | null;
+  paidAt: string | null;
+};
+
 type DbProject = {
   id: string;
   org_id: string;
@@ -123,6 +152,35 @@ type DbProjectTimelineEvent = {
   event_date: string;
   created_by: string | null;
   created_at: string;
+};
+
+type DbBillingClient = {
+  id: string;
+  org_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  notes: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+type DbRevenueInvoice = {
+  id: string;
+  org_id: string;
+  property_id: string | null;
+  employee_id: string | null;
+  client_id: string | null;
+  invoice_number: number;
+  status: 'draft' | 'sent' | 'paid' | 'void';
+  subtotal: number | string | null;
+  tax_rate: number | string | null;
+  total: number | string | null;
+  notes: string | null;
+  created_at: string;
+  sent_at: string | null;
+  paid_at: string | null;
 };
 type DbEmployee = {
   id: string;
@@ -514,6 +572,39 @@ function toTimelineEvent(row: DbProjectTimelineEvent): ProjectTimelineEvent {
     eventDate: row.event_date,
     createdBy: row.created_by,
     createdAt: row.created_at,
+  };
+}
+
+function toBillingClient(row: DbBillingClient): BillingClient {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    name: row.name,
+    email: row.email ?? '',
+    phone: row.phone ?? '',
+    address: row.address ?? '',
+    notes: row.notes ?? '',
+    active: row.active,
+    createdAt: row.created_at,
+  };
+}
+
+function toRevenueInvoice(row: DbRevenueInvoice): RevenueInvoice {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    propertyId: row.property_id,
+    employeeId: row.employee_id,
+    clientId: row.client_id,
+    invoiceNumber: Number(row.invoice_number ?? 0),
+    status: row.status,
+    subtotal: Number(row.subtotal ?? 0),
+    taxRate: Number(row.tax_rate ?? 0),
+    total: Number(row.total ?? 0),
+    notes: row.notes ?? '',
+    createdAt: row.created_at,
+    sentAt: row.sent_at,
+    paidAt: row.paid_at,
   };
 }
 function toEmployee(row: DbEmployee): Employee {
@@ -1367,6 +1458,224 @@ export function useSavePropertyBoundary(orgId?: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
       await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export type ClientMutationPayload = {
+  id?: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  notes?: string | null;
+  active?: boolean;
+};
+
+export type InvoiceMutationPayload = {
+  id?: string;
+  propertyId: string;
+  clientId: string;
+  subtotal: number;
+  taxRate: number;
+  total: number;
+  notes?: string | null;
+};
+
+export type InvoiceStatusMutationPayload = {
+  id: string;
+  status: 'sent' | 'paid' | 'void';
+};
+
+const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at';
+
+async function fetchClients(orgId: string): Promise<BillingClient[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Clients request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('clients')
+      .select('id, org_id, name, email, phone, address, notes, active, created_at')
+      .eq('org_id', orgId)
+      .order('name', { ascending: true });
+    if (error) throw error;
+    return ((data ?? []) as DbBillingClient[]).map(toBillingClient);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchInvoices(orgId: string): Promise<RevenueInvoice[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Invoices request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('invoices')
+      .select(invoiceSelectColumns)
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as DbRevenueInvoice[]).map(toRevenueInvoice);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function createBillingClient(orgId: string, payload: ClientMutationPayload): Promise<BillingClient> {
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('clients')
+    .insert({
+      org_id: orgId,
+      name: payload.name,
+      email: payload.email ?? null,
+      phone: payload.phone ?? null,
+      address: payload.address ?? null,
+      notes: payload.notes ?? null,
+      active: payload.active ?? true,
+    })
+    .select('id, org_id, name, email, phone, address, notes, active, created_at')
+    .single();
+  if (error) throw error;
+  return toBillingClient(data as DbBillingClient);
+}
+
+async function updateBillingClient(orgId: string, payload: ClientMutationPayload): Promise<BillingClient> {
+  if (!payload.id) throw new Error('Client id is required.');
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('clients')
+    .update({
+      name: payload.name,
+      email: payload.email ?? null,
+      phone: payload.phone ?? null,
+      address: payload.address ?? null,
+      notes: payload.notes ?? null,
+      active: payload.active ?? true,
+    })
+    .eq('id', payload.id)
+    .eq('org_id', orgId)
+    .select('id, org_id, name, email, phone, address, notes, active, created_at')
+    .single();
+  if (error) throw error;
+  return toBillingClient(data as DbBillingClient);
+}
+
+async function createRevenueInvoice(orgId: string, payload: InvoiceMutationPayload): Promise<RevenueInvoice> {
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('invoices')
+    .insert({
+      org_id: orgId,
+      property_id: payload.propertyId,
+      client_id: payload.clientId,
+      status: 'draft',
+      subtotal: payload.subtotal,
+      tax_rate: payload.taxRate,
+      total: payload.total,
+      notes: payload.notes ?? null,
+    })
+    .select(invoiceSelectColumns)
+    .single();
+  if (error) throw error;
+  return toRevenueInvoice(data as DbRevenueInvoice);
+}
+
+async function updateRevenueInvoiceStatus(orgId: string, payload: InvoiceStatusMutationPayload): Promise<RevenueInvoice> {
+  const sentAt = payload.status === 'sent' ? new Date().toISOString() : undefined;
+  const paidAt = payload.status === 'paid' ? new Date().toISOString() : undefined;
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('invoices')
+    .update({
+      status: payload.status,
+      ...(sentAt ? { sent_at: sentAt } : {}),
+      ...(paidAt ? { paid_at: paidAt } : {}),
+    })
+    .eq('id', payload.id)
+    .eq('org_id', orgId)
+    .select(invoiceSelectColumns)
+    .single();
+  if (error) throw error;
+  return toRevenueInvoice(data as DbRevenueInvoice);
+}
+
+export function useClients(orgId?: string) {
+  return useQuery({
+    queryKey: ['clients', orgId ?? 'all-orgs'],
+    queryFn: () => fetchClients(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useInvoices(orgId?: string) {
+  return useQuery({
+    queryKey: ['invoices', orgId ?? 'all-orgs'],
+    queryFn: () => fetchInvoices(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useCreateClient(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ClientMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to create a client.');
+      return createBillingClient(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['clients', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useUpdateClient(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ClientMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update a client.');
+      return updateBillingClient(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['clients', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useCreateInvoice(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: InvoiceMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to create an invoice.');
+      return createRevenueInvoice(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['invoices', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useUpdateInvoiceStatus(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: InvoiceStatusMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update an invoice.');
+      return updateRevenueInvoiceStatus(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['invoices', orgId ?? 'all-orgs'] });
     },
   });
 }

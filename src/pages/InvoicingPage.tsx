@@ -1,35 +1,55 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@/lib/supabase';
-import { useProperties } from '@/lib/supabase-queries';
-import { PageSkeleton } from '@/components/PageSkeleton';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { DollarSign, FileText, Plus, Receipt, Send } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { PropertySelector } from '@/components/shared/PropertySelector';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
-import { Receipt, Send, DollarSign, FileText } from 'lucide-react';
-
-const supabase = createClient();
-
-// columns from invoices migration
-interface Invoice {
-  id: string;
-  org_id: string;
-  property_id: string | null;
-  employee_id: string | null;
-  status: 'draft' | 'sent' | 'paid' | 'void';
-  subtotal: number;
-  tax_rate: number;
-  total: number;
-  notes: string | null;
-  created_at: string;
-  sent_at: string | null;
-  paid_at: string | null;
-}
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import {
+  type RevenueInvoice,
+  useClients,
+  useCreateInvoice,
+  useInvoices,
+  useProperties,
+  useUpdateInvoiceStatus,
+} from '@/lib/supabase-queries';
 
 type InvoiceTab = 'Draft' | 'Sent' | 'Paid';
 const TABS: InvoiceTab[] = ['Draft', 'Sent', 'Paid'];
 
-const statusStyles: Record<Invoice['status'], string> = {
+type InvoiceFormState = {
+  clientId: string;
+  subtotal: string;
+  taxRate: string;
+  notes: string;
+};
+
+const emptyInvoiceForm: InvoiceFormState = {
+  clientId: '',
+  subtotal: '',
+  taxRate: '0',
+  notes: '',
+};
+
+const statusStyles: Record<RevenueInvoice['status'], string> = {
   draft: 'bg-status-hold/10 text-status-hold border-status-hold/20',
   sent: 'bg-status-pending/10 text-status-pending border-status-pending/20',
   paid: 'bg-status-active/10 text-status-active border-status-active/20',
@@ -44,195 +64,211 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-type AbortableSupabaseRequest<T> = {
-  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
-};
+function parseMoney(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-async function withInvoicesRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error('Invoices request timed out after 15 seconds.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-async function withInvoicesMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>): Promise<T> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      return { data: null, error: new Error('Save timed out — please try again') } as T;
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 export default function InvoicingPage() {
-  const { orgId } = useOrgProfile();
+  const { orgId, currentPropertyId } = useOrgProfile();
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
-
-  const queryClient = useQueryClient();
-  const invoicesQueryKey = useMemo(() => ['invoices', orgId ?? 'no-org'] as const, [orgId]);
-  const invoicesQuery = useQuery<Invoice[]>({
-    queryKey: invoicesQueryKey,
-    enabled: Boolean(orgId) && !propertiesLoading,
-    queryFn: async () => {
-      if (!supabase || !orgId) return [];
-      const { data, error: err } = await withInvoicesRequestTimeout(
-        supabase
-          .from('invoices')
-          .select('id, org_id, property_id, employee_id, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at')
-          .eq('org_id', orgId)
-          .order('created_at', { ascending: false }),
-      );
-      if (err) throw err;
-      return (data as Invoice[]) ?? [];
-    },
-    staleTime: 1000 * 60 * 5,
-  });
-  const invoices = invoicesQuery.data ?? [];
-  const loading = invoicesQuery.isLoading && !invoicesQuery.data;
-  const error = invoicesQuery.error instanceof Error ? invoicesQuery.error.message : null;
+  const clientsQuery = useClients(orgId ?? undefined);
+  const invoicesQuery = useInvoices(orgId ?? undefined);
+  const createInvoiceMutation = useCreateInvoice(orgId ?? undefined);
+  const updateInvoiceStatusMutation = useUpdateInvoiceStatus(orgId ?? undefined);
   const [activeTab, setActiveTab] = useState<InvoiceTab>('Draft');
-  const [updating, setUpdating] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [invoiceForm, setInvoiceForm] = useState<InvoiceFormState>(emptyInvoiceForm);
+  const [savingInvoice, setSavingInvoice] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = 'Invoicing — Ground Crew HQ';
+    document.title = 'Invoicing - Ground Crew HQ';
   }, []);
 
-  const sendInvoice = async (id: string) => {
-    setUpdating(id);
-    const sentAt = new Date().toISOString();
-    const { error: err } = await withInvoicesMutationTimeout(
-      supabase
-        .from('invoices')
-        .update({ status: 'sent', sent_at: sentAt })
-        .eq('id', id),
-    );
-    setUpdating(null);
-    if (err) { toast.error(err.message); return; }
-    queryClient.setQueryData<Invoice[]>(invoicesQueryKey, (prev) =>
-      (prev ?? []).map((inv) =>
-        inv.id === id ? { ...inv, status: 'sent', sent_at: sentAt } : inv,
-      ),
-    );
-    void queryClient.invalidateQueries({ queryKey: invoicesQueryKey });
-    toast.success('Invoice sent');
-  };
+  const invoices = invoicesQuery.data ?? [];
+  const clients = clientsQuery.data ?? [];
+  const activeClients = useMemo(() => clients.filter((client) => client.active), [clients]);
+  const clientsById = useMemo(() => new Map(clients.map((client) => [client.id, client.name])), [clients]);
+  const loading =
+    (invoicesQuery.isLoading && !invoicesQuery.data) ||
+    (clientsQuery.isLoading && !clientsQuery.data) ||
+    propertiesLoading;
+  const queryError = invoicesQuery.error ?? clientsQuery.error;
+  const error = queryError instanceof Error ? queryError.message : null;
 
-  const markPaid = async (id: string) => {
-    setUpdating(id);
-    const paidAt = new Date().toISOString();
-    const { error: err } = await withInvoicesMutationTimeout(
-      supabase
-        .from('invoices')
-        .update({ status: 'paid', paid_at: paidAt })
-        .eq('id', id),
-    );
-    setUpdating(null);
-    if (err) { toast.error(err.message); return; }
-    queryClient.setQueryData<Invoice[]>(invoicesQueryKey, (prev) =>
-      (prev ?? []).map((inv) =>
-        inv.id === id ? { ...inv, status: 'paid', paid_at: paidAt } : inv,
-      ),
-    );
-    void queryClient.invalidateQueries({ queryKey: invoicesQueryKey });
-    toast.success('Invoice marked as paid');
+  const subtotal = parseMoney(invoiceForm.subtotal);
+  const taxRate = parseMoney(invoiceForm.taxRate);
+  const invoiceTotal = useMemo(() => {
+    const safeSubtotal = Math.max(0, subtotal);
+    const safeTaxRate = Math.max(0, taxRate);
+    return safeSubtotal + safeSubtotal * (safeTaxRate / 100);
+  }, [subtotal, taxRate]);
+
+  const handleRetry = useCallback(() => {
+    void invoicesQuery.refetch();
+    void clientsQuery.refetch();
+  }, [clientsQuery, invoicesQuery]);
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setInvoiceForm(emptyInvoiceForm);
+    setSavingInvoice(false);
   };
 
   const getPropertyName = (id: string | null) =>
-    id ? (properties.find((p) => p.id === id)?.name ?? 'Unknown property') : '—';
+    id ? (properties.find((property) => property.id === id)?.name ?? 'Unknown property') : 'No property';
+
+  const getClientName = (id: string | null) =>
+    id ? (clientsById.get(id) ?? 'Unknown client') : 'No client';
+
+  const createInvoice = async () => {
+    if (savingInvoice) return;
+    if (currentPropertyId === 'all') {
+      toast.error('Select a property before creating an invoice');
+      return;
+    }
+    if (!invoiceForm.clientId) {
+      toast.error('Select a client before creating an invoice');
+      return;
+    }
+    if (subtotal <= 0) {
+      toast.error('Enter an invoice amount greater than zero');
+      return;
+    }
+    if (taxRate < 0) {
+      toast.error('Tax rate cannot be negative');
+      return;
+    }
+
+    setSavingInvoice(true);
+    try {
+      await createInvoiceMutation.mutateAsync({
+        propertyId: currentPropertyId,
+        clientId: invoiceForm.clientId,
+        subtotal,
+        taxRate,
+        total: invoiceTotal,
+        notes: invoiceForm.notes.trim() || null,
+      });
+      toast.success('Invoice created');
+      closeDialog();
+      setActiveTab('Draft');
+    } catch (createError) {
+      toast.error(createError instanceof Error ? createError.message : 'Unable to create invoice');
+      setSavingInvoice(false);
+    }
+  };
+
+  const updateInvoiceStatus = async (id: string, status: 'sent' | 'paid') => {
+    setUpdatingId(id);
+    try {
+      await updateInvoiceStatusMutation.mutateAsync({ id, status });
+      toast.success(status === 'sent' ? 'Invoice sent' : 'Invoice marked as paid');
+    } catch (updateError) {
+      toast.error(updateError instanceof Error ? updateError.message : 'Unable to update invoice');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const summary = useMemo(() => {
     const outstanding = invoices
-      .filter((inv) => inv.status === 'sent')
-      .reduce((sum, inv) => sum + inv.total, 0);
+      .filter((invoice) => invoice.status === 'sent')
+      .reduce((sum, invoice) => sum + invoice.total, 0);
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const collected = invoices
-      .filter(
-        (inv) => inv.status === 'paid' && inv.paid_at?.startsWith(thisMonth),
-      )
-      .reduce((sum, inv) => sum + inv.total, 0);
+      .filter((invoice) => invoice.status === 'paid' && invoice.paidAt?.startsWith(thisMonth))
+      .reduce((sum, invoice) => sum + invoice.total, 0);
     const overdue = invoices.filter(
-      (inv) =>
-        inv.status === 'sent' &&
-        inv.sent_at &&
-        Date.now() - new Date(inv.sent_at).getTime() > 30 * 24 * 60 * 60 * 1000,
+      (invoice) =>
+        invoice.status === 'sent' &&
+        invoice.sentAt &&
+        Date.now() - new Date(invoice.sentAt).getTime() > 30 * 24 * 60 * 60 * 1000,
     ).length;
     return { outstanding, collected, overdue };
   }, [invoices]);
 
   const tabInvoices = useMemo(
-    () => invoices.filter((inv) => inv.status === activeTab.toLowerCase()),
+    () => invoices.filter((invoice) => invoice.status === activeTab.toLowerCase()),
     [invoices, activeTab],
   );
 
-  if (!orgId || loading || propertiesLoading) return <PageSkeleton />;
+  if (!orgId || loading) return <PageSkeleton />;
   if (error) {
     return (
       <div className="p-6">
-        <ErrorRetry message={error} onRetry={() => void invoicesQuery.refetch()} />
+        <ErrorRetry message={error} onRetry={handleRetry} />
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-text-primary">Invoicing</h1>
+          <p className="mt-1 text-sm text-text-secondary">
+            Create client invoices and track draft, sent, and paid work.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <PropertySelector allowAllProperties className="sm:w-64" />
+          <Button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="bg-brand text-text-inverse hover:bg-brand/90"
+          >
+            <Plus className="h-4 w-4" />
+            New Invoice
+          </Button>
+        </div>
+      </div>
 
-      {/* Summary banner */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+        <div className="rounded-lg border border-surface-border bg-surface-card p-4">
           <div className="flex items-center gap-2">
             <Send className="h-4 w-4 text-status-pending" />
             <span className="text-xs font-medium uppercase tracking-widest text-text-muted">
               Outstanding
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">
+          <div className="mt-2 text-2xl font-bold text-text-primary">
             {fmt(summary.outstanding)}
           </div>
         </div>
-        <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+        <div className="rounded-lg border border-surface-border bg-surface-card p-4">
           <div className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-green-400" />
+            <DollarSign className="h-4 w-4 text-status-active" />
             <span className="text-xs font-medium uppercase tracking-widest text-text-muted">
               Collected This Month
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-green-400">
+          <div className="mt-2 text-2xl font-bold text-status-active">
             {fmt(summary.collected)}
           </div>
         </div>
-        <div className="rounded-xl border border-surface-border bg-surface-card p-4">
+        <div className="rounded-lg border border-surface-border bg-surface-card p-4">
           <div className="flex items-center gap-2">
-            <Receipt className="h-4 w-4 text-amber-400" />
+            <Receipt className="h-4 w-4 text-status-warning" />
             <span className="text-xs font-medium uppercase tracking-widest text-text-muted">
               Overdue (&gt;30 days)
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-amber-400">
+          <div className="mt-2 text-2xl font-bold text-status-warning">
             {summary.overdue}
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 border-b border-surface-border">
         {TABS.map((tab) => {
-          const count = invoices.filter((inv) => inv.status === tab.toLowerCase()).length;
+          const count = invoices.filter((invoice) => invoice.status === tab.toLowerCase()).length;
           return (
             <button
               key={tab}
+              type="button"
               onClick={() => setActiveTab(tab)}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
                 activeTab === tab
@@ -241,19 +277,19 @@ export default function InvoicingPage() {
               }`}
             >
               {tab}
-              {count > 0 && (
+              {count > 0 ? (
                 <span className="rounded-full bg-surface-elevated px-1.5 py-0.5 text-xs text-text-muted">
                   {count}
                 </span>
-              )}
+              ) : null}
             </button>
           );
         })}
       </div>
 
       {tabInvoices.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-surface-border bg-surface-card/60 py-16 text-center">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-surface-elevated">
             <FileText className="h-6 w-6 text-text-muted" />
           </div>
           <p className="mb-1 text-sm font-semibold text-text-primary">
@@ -261,18 +297,24 @@ export default function InvoicingPage() {
           </p>
           <p className="max-w-xs text-sm text-text-secondary">
             {activeTab === 'Draft'
-              ? 'Draft invoices will appear here once created.'
+              ? 'Create a client invoice to start billing work.'
               : activeTab === 'Sent'
-              ? 'Invoices marked as sent will appear here.'
-              : 'Paid invoices will appear here.'}
+                ? 'Invoices marked as sent will appear here.'
+                : 'Paid invoices will appear here.'}
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-surface-border">
+        <div className="overflow-hidden rounded-lg border border-surface-border bg-surface-card">
           <table className="w-full text-sm">
             <thead className="border-b border-surface-border bg-surface-elevated">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">
+                  Invoice
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">
+                  Client
+                </th>
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted md:table-cell">
                   Property
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">
@@ -281,7 +323,7 @@ export default function InvoicingPage() {
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">
                   Total
                 </th>
-                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted sm:table-cell">
+                <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted lg:table-cell">
                   Created
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">
@@ -290,44 +332,59 @@ export default function InvoicingPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-border">
-              {tabInvoices.map((inv) => (
-                <tr key={inv.id} className="transition-colors hover:bg-surface-hover">
+              {tabInvoices.map((invoice) => (
+                <tr key={invoice.id} className="transition-colors hover:bg-surface-hover">
                   <td className="px-4 py-3 font-medium text-text-primary">
-                    {getPropertyName(inv.property_id)}
+                    #{invoice.invoiceNumber}
+                  </td>
+                  <td className="px-4 py-3 text-text-primary">
+                    <div className="font-medium">{getClientName(invoice.clientId)}</div>
+                    <div className="mt-1 text-xs text-text-secondary md:hidden">
+                      {getPropertyName(invoice.propertyId)}
+                    </div>
+                  </td>
+                  <td className="hidden px-4 py-3 text-text-secondary md:table-cell">
+                    {getPropertyName(invoice.propertyId)}
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${statusStyles[inv.status]}`}
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${statusStyles[invoice.status]}`}
                     >
-                      {inv.status}
+                      {invoice.status}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-text-primary">
-                    {fmt(inv.total)}
+                    {fmt(invoice.total)}
                   </td>
-                  <td className="hidden px-4 py-3 text-text-secondary sm:table-cell">
-                    {fmtDate(inv.created_at)}
+                  <td className="hidden px-4 py-3 text-text-secondary lg:table-cell">
+                    {fmtDate(invoice.createdAt)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {inv.status === 'draft' && (
-                        <button
-                          onClick={() => void sendInvoice(inv.id)}
-                          disabled={updating === inv.id}
-                          className="rounded-lg border border-status-pending/40 px-3 py-1.5 text-xs font-medium text-status-pending transition-colors hover:bg-status-pending/10 disabled:opacity-50"
+                      {invoice.status === 'draft' ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void updateInvoiceStatus(invoice.id, 'sent')}
+                          disabled={updatingId === invoice.id}
+                          className="border-status-pending/40 text-status-pending hover:bg-status-pending/10"
                         >
-                          {updating === inv.id ? '…' : 'Send'}
-                        </button>
-                      )}
-                      {inv.status === 'sent' && (
-                        <button
-                          onClick={() => void markPaid(inv.id)}
-                          disabled={updating === inv.id}
-                          className="rounded-lg border border-status-active/40 px-3 py-1.5 text-xs font-medium text-status-active transition-colors hover:bg-status-active/10 disabled:opacity-50"
+                          {updatingId === invoice.id ? 'Saving' : 'Send'}
+                        </Button>
+                      ) : null}
+                      {invoice.status === 'sent' ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void updateInvoiceStatus(invoice.id, 'paid')}
+                          disabled={updatingId === invoice.id}
+                          className="border-status-active/40 text-status-active hover:bg-status-active/10"
                         >
-                          {updating === inv.id ? '…' : 'Mark Paid'}
-                        </button>
-                      )}
+                          {updatingId === invoice.id ? 'Saving' : 'Mark Paid'}
+                        </Button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -336,8 +393,93 @@ export default function InvoicingPage() {
           </table>
         </div>
       )}
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeDialog())}>
+        <DialogContent className="border-surface-border bg-surface-card text-text-primary sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Invoice</DialogTitle>
+            <DialogDescription>
+              Create a draft invoice for the selected property and client.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-surface-border bg-surface-elevated/60 p-3 text-sm text-text-secondary">
+              Property: <span className="font-medium text-text-primary">{currentPropertyId === 'all' ? 'Select property' : getPropertyName(currentPropertyId)}</span>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">
+                Client
+              </label>
+              <Select
+                value={invoiceForm.clientId || undefined}
+                onValueChange={(value) => setInvoiceForm((current) => ({ ...current, clientId: value }))}
+              >
+                <SelectTrigger className="border-surface-border bg-surface-elevated text-text-primary">
+                  <SelectValue placeholder="Select client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeClients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">
+                  Subtotal
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={invoiceForm.subtotal}
+                  onChange={(event) => setInvoiceForm((current) => ({ ...current, subtotal: event.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">
+                  Tax Rate
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  value={invoiceForm.taxRate}
+                  onChange={(event) => setInvoiceForm((current) => ({ ...current, taxRate: event.target.value }))}
+                />
+              </div>
+            </div>
+            <Textarea
+              rows={3}
+              placeholder="Notes"
+              value={invoiceForm.notes}
+              onChange={(event) => setInvoiceForm((current) => ({ ...current, notes: event.target.value }))}
+            />
+            <div className="flex items-center justify-between rounded-lg border border-surface-border bg-surface-elevated/60 px-3 py-2 text-sm">
+              <span className="text-text-secondary">Total</span>
+              <span className="font-semibold text-text-primary">{fmt(invoiceTotal)}</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeDialog} disabled={savingInvoice}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void createInvoice()}
+              disabled={savingInvoice || !invoiceForm.clientId || subtotal <= 0}
+              className="bg-brand text-text-inverse hover:bg-brand/90"
+            >
+              {savingInvoice ? 'Saving' : 'Create Invoice'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-
