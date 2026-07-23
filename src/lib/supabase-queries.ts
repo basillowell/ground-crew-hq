@@ -72,6 +72,58 @@ type DbPropertyBoundary = {
   boundary_geojson: unknown;
   calculated_acreage: number | null;
 };
+
+export type PropertyProject = {
+  id: string;
+  orgId: string;
+  propertyId: string;
+  name: string;
+  status: string;
+  description: string;
+  startDate: string | null;
+  targetEndDate: string | null;
+  color: string | null;
+  createdAt: string;
+};
+
+export type ProjectTimelineEvent = {
+  id: string;
+  orgId: string;
+  projectId: string;
+  propertyId: string;
+  eventType: string;
+  title: string;
+  body: string;
+  eventDate: string;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+type DbProject = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  name: string;
+  status: string;
+  description: string | null;
+  start_date: string | null;
+  target_end_date: string | null;
+  color: string | null;
+  created_at: string;
+};
+
+type DbProjectTimelineEvent = {
+  id: string;
+  org_id: string;
+  project_id: string;
+  property_id: string;
+  event_type: string;
+  title: string;
+  body: string | null;
+  event_date: string;
+  created_by: string | null;
+  created_at: string;
+};
 type DbEmployee = {
   id: string;
   org_id?: string | null;
@@ -433,6 +485,35 @@ function toPropertyBoundary(row: DbPropertyBoundary): PropertyBoundary {
     latitude: row.latitude,
     longitude: row.longitude,
     boundaryGeojson: isPropertyBoundaryGeoJson(row.boundary_geojson) ? row.boundary_geojson : null,
+  };
+}
+function toProject(row: DbProject): PropertyProject {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    propertyId: row.property_id,
+    name: row.name,
+    status: row.status,
+    description: row.description ?? '',
+    startDate: row.start_date,
+    targetEndDate: row.target_end_date,
+    color: row.color,
+    createdAt: row.created_at,
+  };
+}
+
+function toTimelineEvent(row: DbProjectTimelineEvent): ProjectTimelineEvent {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    projectId: row.project_id,
+    propertyId: row.property_id,
+    eventType: row.event_type,
+    title: row.title,
+    body: row.body ?? '',
+    eventDate: row.event_date,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
   };
 }
 function toEmployee(row: DbEmployee): Employee {
@@ -1286,6 +1367,277 @@ export function useSavePropertyBoundary(orgId?: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
       await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+type ProjectMutationPayload = {
+  id?: string;
+  propertyId: string;
+  name: string;
+  status: string;
+  description?: string | null;
+  startDate?: string | null;
+  targetEndDate?: string | null;
+  color?: string | null;
+};
+
+type TimelineEventMutationPayload = {
+  id?: string;
+  projectId: string;
+  propertyId: string;
+  eventType: string;
+  title: string;
+  body?: string | null;
+  eventDate: string;
+  createdBy?: string | null;
+};
+
+async function fetchProjects(propertyId: string, orgId?: string): Promise<PropertyProject[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Projects request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('projects')
+      .select('id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at')
+      .eq('property_id', propertyId)
+      .order('created_at', { ascending: false });
+    if (orgId) query = query.eq('org_id', orgId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbProject[]).map(toProject);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchTimelineEvents(projectId: string, orgId?: string): Promise<ProjectTimelineEvent[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Timeline events request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('project_timeline_events')
+      .select('id, org_id, project_id, property_id, event_type, title, body, event_date, created_by, created_at')
+      .eq('project_id', projectId)
+      .order('event_date', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (orgId) query = query.eq('org_id', orgId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbProjectTimelineEvent[]).map(toTimelineEvent);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function createProject(orgId: string, payload: ProjectMutationPayload): Promise<PropertyProject> {
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('projects')
+    .insert({
+      org_id: orgId,
+      property_id: payload.propertyId,
+      name: payload.name,
+      status: payload.status,
+      description: payload.description ?? null,
+      start_date: payload.startDate ?? null,
+      target_end_date: payload.targetEndDate ?? null,
+      color: payload.color ?? null,
+    })
+    .select('id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at')
+    .single();
+  if (error) throw error;
+  return toProject(data as DbProject);
+}
+
+async function updateProject(orgId: string, payload: ProjectMutationPayload): Promise<PropertyProject> {
+  if (!payload.id) throw new Error('Project id is required.');
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('projects')
+    .update({
+      name: payload.name,
+      status: payload.status,
+      description: payload.description ?? null,
+      start_date: payload.startDate ?? null,
+      target_end_date: payload.targetEndDate ?? null,
+      color: payload.color ?? null,
+    })
+    .eq('id', payload.id)
+    .eq('property_id', payload.propertyId)
+    .eq('org_id', orgId)
+    .select('id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at')
+    .single();
+  if (error) throw error;
+  return toProject(data as DbProject);
+}
+
+async function deleteProject(orgId: string, propertyId: string, projectId: string) {
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('projects')
+    .delete()
+    .eq('id', projectId)
+    .eq('property_id', propertyId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
+async function createTimelineEvent(orgId: string, payload: TimelineEventMutationPayload): Promise<ProjectTimelineEvent> {
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('project_timeline_events')
+    .insert({
+      org_id: orgId,
+      project_id: payload.projectId,
+      property_id: payload.propertyId,
+      event_type: payload.eventType,
+      title: payload.title,
+      body: payload.body ?? null,
+      event_date: payload.eventDate,
+      created_by: payload.createdBy ?? null,
+    })
+    .select('id, org_id, project_id, property_id, event_type, title, body, event_date, created_by, created_at')
+    .single();
+  if (error) throw error;
+  return toTimelineEvent(data as DbProjectTimelineEvent);
+}
+
+async function updateTimelineEvent(orgId: string, payload: TimelineEventMutationPayload): Promise<ProjectTimelineEvent> {
+  if (!payload.id) throw new Error('Timeline event id is required.');
+  const client = ensureSupabase();
+  const { data, error } = await client
+    .from('project_timeline_events')
+    .update({
+      event_type: payload.eventType,
+      title: payload.title,
+      body: payload.body ?? null,
+      event_date: payload.eventDate,
+    })
+    .eq('id', payload.id)
+    .eq('project_id', payload.projectId)
+    .eq('property_id', payload.propertyId)
+    .eq('org_id', orgId)
+    .select('id, org_id, project_id, property_id, event_type, title, body, event_date, created_by, created_at')
+    .single();
+  if (error) throw error;
+  return toTimelineEvent(data as DbProjectTimelineEvent);
+}
+
+async function deleteTimelineEvent(orgId: string, propertyId: string, projectId: string, eventId: string) {
+  const client = ensureSupabase();
+  const { error } = await client
+    .from('project_timeline_events')
+    .delete()
+    .eq('id', eventId)
+    .eq('project_id', projectId)
+    .eq('property_id', propertyId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
+export function useProjects(propertyId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['projects', propertyId ?? 'no-property', orgId ?? 'all-orgs'],
+    queryFn: () => fetchProjects(propertyId!, orgId),
+    enabled: Boolean(propertyId && propertyId !== 'all' && orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useTimelineEvents(projectId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['project-timeline-events', projectId ?? 'no-project', orgId ?? 'all-orgs'],
+    queryFn: () => fetchTimelineEvents(projectId!, orgId),
+    enabled: Boolean(projectId && orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useCreateProject(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ProjectMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to create a project.');
+      return createProject(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useUpdateProject(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ProjectMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update a project.');
+      return updateProject(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useDeleteProject(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ propertyId, projectId }: { propertyId: string; projectId: string }) => {
+      if (!orgId) throw new Error('Organization is required to delete a project.');
+      return deleteProject(orgId, propertyId, projectId);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['project-timeline-events'] });
+    },
+  });
+}
+
+export function useCreateTimelineEvent(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: TimelineEventMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to create a timeline event.');
+      return createTimelineEvent(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['project-timeline-events', variables.projectId, orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useUpdateTimelineEvent(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: TimelineEventMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update a timeline event.');
+      return updateTimelineEvent(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['project-timeline-events', variables.projectId, orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useDeleteTimelineEvent(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ propertyId, projectId, eventId }: { propertyId: string; projectId: string; eventId: string }) => {
+      if (!orgId) throw new Error('Organization is required to delete a timeline event.');
+      return deleteTimelineEvent(orgId, propertyId, projectId, eventId);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['project-timeline-events', variables.projectId, orgId ?? 'all-orgs'] });
     },
   });
 }

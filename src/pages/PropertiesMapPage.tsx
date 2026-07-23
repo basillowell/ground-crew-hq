@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
+import { PropertyDetailPanel } from '@/components/map/PropertyDetailPanel';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePropertyBoundaries, useSavePropertyBoundary, type PropertyBoundaryGeoJson } from '@/lib/supabase-queries';
@@ -28,7 +29,7 @@ function formatAcres(value: number | null | undefined) {
 }
 
 export default function PropertiesMapPage() {
-  const { currentPropertyId, currentRole, isOrgReady, orgId, setCurrentPropertyId } = useOrgProfile();
+  const { currentPropertyId, currentRole, currentUser, isOrgReady, orgId, setCurrentPropertyId } = useOrgProfile();
   const boundariesQuery = usePropertyBoundaries(orgId ?? undefined);
   const saveBoundaryMutation = useSavePropertyBoundary(orgId ?? undefined);
   const [editMode, setEditMode] = useState(false);
@@ -86,7 +87,7 @@ export default function PropertiesMapPage() {
   }
 
   return (
-    <section className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+    <section className={`flex flex-1 flex-col gap-4 p-4 md:p-6 ${hasConcretePropertySelected ? 'xl:pr-[38rem]' : ''}`}>
       <div className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-card p-4 shadow-sm md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
@@ -173,6 +174,15 @@ export default function PropertiesMapPage() {
           onSelectProperty={setCurrentPropertyId}
         />
       )}
+      {hasConcretePropertySelected && selectedProperty ? (
+        <PropertyDetailPanel
+          property={selectedProperty}
+          orgId={orgId}
+          canManage={canViewMap}
+          createdBy={currentUser?.employeeId ?? null}
+          onClose={() => setCurrentPropertyId('all')}
+        />
+      ) : null}
     </section>
   );
 }
