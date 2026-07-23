@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { History, Loader2, Scissors } from 'lucide-react';
+import { History as HistoryIcon, Loader2, Scissors } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -226,7 +226,7 @@ export function TurfPanel({ orgId, propertyId, currentEmployeeId, employees = []
                 className="h-8 gap-1.5 text-xs"
                 onClick={() => setHistoryAreaId((openId) => (openId === area.id ? null : area.id))}
               >
-                <History className="h-3.5 w-3.5" />
+                <HistoryIcon className="h-3.5 w-3.5" />
                 History
               </Button>
             </div>

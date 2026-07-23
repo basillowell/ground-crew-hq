@@ -11,7 +11,7 @@ import {
   Mail,
   Map as MapIcon,
   MapPin,
-  Menu,
+  Menu as MenuIcon,
   MessageSquare,
   Settings,
   Shield,
@@ -730,7 +730,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                     onClick={() => setMobileMoreOpen(true)}
                     className="flex min-h-11 flex-col items-center justify-center gap-0.5 text-xs text-text-muted transition-colors hover:text-text-primary"
                   >
-                    <Menu className="h-5 w-5" />
+                    <MenuIcon className="h-5 w-5" />
                     <span>More</span>
                   </button>
                 </div>

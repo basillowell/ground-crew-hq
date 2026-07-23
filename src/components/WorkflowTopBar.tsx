@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { Bell, CalendarClock, CalendarDays, ClipboardList, Menu, Wrench } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, ClipboardList, Menu as MenuIcon, Wrench } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -132,7 +132,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
     <header className={`sticky top-0 z-20 shrink-0 border-b border-surface-border bg-surface-base/80 px-3 py-3 backdrop-blur-md ${isSettingsRoute ? 'md:h-[104px]' : 'md:h-[85px]'}`}>
       <div className="flex h-full items-center gap-3">
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-text-muted hover:bg-surface-hover hover:text-text-primary md:hidden" onClick={onOpenMobileSidebar} aria-label="Open menu">
-          <Menu className="h-5 w-5" />
+          <MenuIcon className="h-5 w-5" />
         </Button>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center md:gap-4">
