@@ -227,11 +227,12 @@
 
 ---
 
-## department_options
-| column | type | nullable |
-|--------|------|----------|
-| id     | text | NO       |
-| name   | text | NO       |
+## department_options — DROPPED 2026-07-23
+
+Removed (migration drop_legacy_department_and_group_options). Abandoned legacy
+option table with text ids (dep1, dep2, ...); fully superseded by `departments`
+(same names, real UUIDs). No FKs, no app queries, was deny-all RLS. Row snapshot
+preserved in the migration comment for restoration.
 
 ---
 
@@ -408,12 +409,12 @@
 
 ---
 
-## group_options
-| column | type | nullable |
-|--------|------|----------|
-| id     | text | NO       |
-| name   | text | NO       |
-| color  | text | NO       |
+## group_options — DROPPED 2026-07-23
+
+Removed (migration drop_legacy_department_and_group_options). Abandoned legacy
+option table with text ids (grp1, grp2, ...); fully superseded by
+`employee_groups` (same names, real UUIDs). No FKs, no app queries, was deny-all
+RLS. Row snapshot (including color) preserved in the migration comment.
 
 ---
 
@@ -438,6 +439,12 @@
 | rainfall_amount | numeric | NO       | 0       |
 | entered_by      | text    | NO       |         |
 | notes           | text    | YES      |         |
+
+> RLS enabled, no policy = deny-all: the app cannot read or write this table, yet
+> it holds 20 rows of real data. Kept deliberately (unlike the dropped
+> department_options/group_options legacy tables) because it has no live
+> equivalent. If manual rainfall entry is a wanted feature, it needs an
+> org_isolation policy and a UI; if abandoned, it needs an explicit drop decision.
 
 ---
 
