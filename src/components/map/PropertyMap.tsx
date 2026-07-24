@@ -84,6 +84,7 @@ export function PropertyMap({
         <TileLayer
           attribution="USGS The National Map"
           maxZoom={19}
+          maxNativeZoom={16}
           url={USGS_IMAGERY_TILE_URL}
         />
         <FitBounds properties={mappedProperties} selectedPropertyId={currentPropertyId} />
@@ -106,12 +107,12 @@ export function PropertyMap({
           </Polygon>
         ))}
       </MapContainer>
-      {mappedProperties.length === 0 ? (
-        <div className="absolute inset-0 z-[500] flex items-center justify-center bg-surface-base/70 p-6 text-center backdrop-blur-sm">
-          <div className="max-w-sm rounded-xl border border-surface-border bg-surface-card p-5 shadow-lg">
+      {mappedProperties.length === 0 && !editMode ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-[500] flex justify-center px-6 text-center">
+          <div className="max-w-sm rounded-xl border border-surface-border bg-surface-card/95 p-5 shadow-lg">
             <div className="text-sm font-semibold text-text-primary">No property boundaries yet</div>
             <p className="mt-2 text-sm text-text-secondary">
-              Drawn boundaries will appear here once they are saved to each property.
+              Select a property, then choose Edit boundary to draw its outline.
             </p>
           </div>
         </div>

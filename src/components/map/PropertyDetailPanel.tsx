@@ -198,7 +198,7 @@ export function PropertyDetailPanel({ property, orgId, canManage, createdBy, onC
   };
 
   return (
-    <aside className="fixed bottom-0 right-0 top-[85px] z-10 flex w-full max-w-xl flex-col border-l border-surface-border bg-surface-elevated shadow-xl md:bottom-auto md:h-[calc(100vh-85px)]">
+    <aside className="flex w-full flex-col rounded-xl border border-surface-border bg-surface-elevated shadow-xl xl:fixed xl:bottom-0 xl:right-0 xl:top-[85px] xl:z-10 xl:h-[calc(100vh-85px)] xl:max-w-xl xl:rounded-none xl:border-0 xl:border-l">
       <div className="border-b border-surface-border bg-surface-card p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
