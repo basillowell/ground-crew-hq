@@ -2,9 +2,9 @@
 
 import { useMemo } from 'react';
 import { MapContainer, Polygon, TileLayer, Tooltip } from 'react-leaflet';
-import type { PathOptions } from 'leaflet';
+import type { Layer, LeafletEvent, PathOptions } from 'leaflet';
 import { FitBounds } from '@/components/map/FitBounds';
-import { GeomanControl } from '@/components/map/GeomanControl';
+import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
 import type { PropertyBoundary, PropertyBoundaryGeoJson } from '@/lib/supabase-queries';
 
 type LatLngTuple = [number, number];
@@ -22,6 +22,10 @@ const USGS_IMAGERY_TILE_URL =
   'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}';
 
 type GeomanPathOptions = PathOptions & { pmIgnore: boolean };
+
+type GeoJsonEditLayer = Layer & {
+  toGeoJSON?: () => { type?: string; geometry?: unknown; coordinates?: unknown };
+};
 
 function propertyToPolygonPositions(property: PropertyBoundary): LatLngTuple[][] {
   return (property.boundaryGeojson?.coordinates ?? []).map((ring) =>
@@ -96,6 +100,17 @@ export function PropertyMap({
             pathOptions={polygonOptionsById.get(property.id)}
             eventHandlers={{
               click: () => onSelectProperty(property.id),
+              // Geoman fires edit events on the LAYER, not the map, so these must be
+              // bound per-polygon. Binding them on the map (as GeomanControl does for
+              // pm:create) silently never fires and leaves Save disabled after an edit.
+              'pm:update': (event: LeafletEvent) => {
+                const geometry = layerToBoundaryGeoJson(event.target as GeoJsonEditLayer);
+                if (geometry) onBoundaryChange(geometry);
+              },
+              'pm:dragend': (event: LeafletEvent) => {
+                const geometry = layerToBoundaryGeoJson(event.target as GeoJsonEditLayer);
+                if (geometry) onBoundaryChange(geometry);
+              },
             }}
           >
             <Tooltip sticky>

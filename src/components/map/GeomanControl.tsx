@@ -62,7 +62,7 @@ function isPropertyBoundaryGeoJson(value: unknown): value is PropertyBoundaryGeo
   );
 }
 
-function layerToBoundaryGeoJson(layer?: GeoJsonLayer): PropertyBoundaryGeoJson | null {
+export function layerToBoundaryGeoJson(layer?: GeoJsonLayer): PropertyBoundaryGeoJson | null {
   const layerGeoJson = layer?.toGeoJSON?.();
   const geometry = layerGeoJson && 'geometry' in layerGeoJson ? layerGeoJson.geometry : layerGeoJson;
   return isPropertyBoundaryGeoJson(geometry) ? geometry : null;
