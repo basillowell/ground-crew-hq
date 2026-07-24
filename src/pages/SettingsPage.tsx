@@ -1049,7 +1049,7 @@ function SortableTaskCategoryCard({
 }
 
 export default function SettingsPage() {
-  const { orgId, user, userRole, currentUser, currentPropertyId, signOut } = useOrgProfile();
+  const { orgId, user, userRole, currentUser, currentPropertyId, setCurrentPropertyId, signOut } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get('tab');
@@ -1613,6 +1613,9 @@ function WorkspaceTab({
       }
       await queryClient.invalidateQueries({ queryKey: ['properties'] });
       await queryClient.invalidateQueries({ queryKey: ['properties', storeOrgId] });
+      // The map reads ['property-boundaries'] (10 minute staleTime), so without
+      // this a new property never appears and a rename never updates there.
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries'] });
       await queryClient.refetchQueries({ queryKey: ['properties'] });
       toast.success(editingPropertyId ? 'Property updated successfully' : 'Property added successfully');
       resetPropertyForm();
@@ -1709,7 +1712,13 @@ function WorkspaceTab({
       toast.error(`Failed to delete property: ${deleteError.message}`);
       return;
     }
+    // Both keys must be invalidated: the selector reads ['properties'] but the
+    // map reads ['property-boundaries'], which has a 10 minute staleTime and so
+    // would keep rendering a deleted property's polygon until it expired.
     await queryClient.invalidateQueries({ queryKey: ['properties'] });
+    await queryClient.invalidateQueries({ queryKey: ['property-boundaries'] });
+    // The shared selector may still point at the row that was just removed.
+    if (currentPropertyId === propertyId) setCurrentPropertyId('all');
     setPropertyPendingDelete(null);
     if (editingPropertyId === propertyId) resetPropertyForm();
     toast.success('Property deleted');
