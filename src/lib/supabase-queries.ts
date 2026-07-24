@@ -47,6 +47,11 @@ export type PropertyBoundaryGeoJson = {
   coordinates: number[][][];
 };
 
+export type ProjectLocationGeoJson = {
+  type: 'Point';
+  coordinates: [number, number];
+};
+
 export type PropertyBoundary = {
   id: string;
   orgId: string | null;
@@ -58,6 +63,7 @@ export type PropertyBoundary = {
   latitude: number | null;
   longitude: number | null;
   boundaryGeojson: PropertyBoundaryGeoJson | null;
+  projects: PropertyProject[];
 };
 
 type DbPropertyBoundary = {
@@ -84,6 +90,7 @@ export type PropertyProject = {
   targetEndDate: string | null;
   color: string | null;
   createdAt: string;
+  locationGeojson: ProjectLocationGeoJson | null;
 };
 
 export type ProjectTimelineEvent = {
@@ -97,6 +104,22 @@ export type ProjectTimelineEvent = {
   eventDate: string;
   createdBy: string | null;
   createdAt: string;
+};
+
+export type ProjectPhoto = {
+  id: string;
+  orgId: string;
+  propertyId: string;
+  projectId: string;
+  timelineEventId: string;
+  storagePath: string;
+  caption: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  uploadedBy: string | null;
+  sortOrder: number;
+  createdAt: string;
+  signedUrl: string;
 };
 
 export type BillingClient = {
@@ -182,6 +205,7 @@ type DbProject = {
   target_end_date: string | null;
   color: string | null;
   created_at: string;
+  location_geojson: unknown;
 };
 
 type DbProjectTimelineEvent = {
@@ -194,6 +218,21 @@ type DbProjectTimelineEvent = {
   body: string | null;
   event_date: string;
   created_by: string | null;
+  created_at: string;
+};
+
+type DbProjectPhoto = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  project_id: string;
+  timeline_event_id: string;
+  storage_path: string;
+  caption: string | null;
+  content_type: string | null;
+  size_bytes: number | string | null;
+  uploaded_by: string | null;
+  sort_order: number | null;
   created_at: string;
 };
 
@@ -628,7 +667,18 @@ function isPropertyBoundaryGeoJson(value: unknown): value is PropertyBoundaryGeo
   );
 }
 
-function toPropertyBoundary(row: DbPropertyBoundary): PropertyBoundary {
+function isProjectLocationGeoJson(value: unknown): value is ProjectLocationGeoJson {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as { type?: unknown; coordinates?: unknown };
+  if (candidate.type !== 'Point' || !Array.isArray(candidate.coordinates)) return false;
+  const [longitude, latitude] = candidate.coordinates;
+  return typeof longitude === 'number' &&
+    typeof latitude === 'number' &&
+    Number.isFinite(longitude) &&
+    Number.isFinite(latitude);
+}
+
+function toPropertyBoundary(row: DbPropertyBoundary, projects: PropertyProject[] = []): PropertyBoundary {
   return {
     id: row.id,
     orgId: row.org_id ?? null,
@@ -640,6 +690,7 @@ function toPropertyBoundary(row: DbPropertyBoundary): PropertyBoundary {
     latitude: row.latitude,
     longitude: row.longitude,
     boundaryGeojson: isPropertyBoundaryGeoJson(row.boundary_geojson) ? row.boundary_geojson : null,
+    projects,
   };
 }
 function toProject(row: DbProject): PropertyProject {
@@ -654,6 +705,7 @@ function toProject(row: DbProject): PropertyProject {
     targetEndDate: row.target_end_date,
     color: row.color,
     createdAt: row.created_at,
+    locationGeojson: isProjectLocationGeoJson(row.location_geojson) ? row.location_geojson : null,
   };
 }
 
@@ -669,6 +721,24 @@ function toTimelineEvent(row: DbProjectTimelineEvent): ProjectTimelineEvent {
     eventDate: row.event_date,
     createdBy: row.created_by,
     createdAt: row.created_at,
+  };
+}
+
+function toProjectPhoto(row: DbProjectPhoto, signedUrl: string): ProjectPhoto {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    propertyId: row.property_id,
+    projectId: row.project_id,
+    timelineEventId: row.timeline_event_id,
+    storagePath: row.storage_path,
+    caption: row.caption ?? '',
+    contentType: row.content_type,
+    sizeBytes: row.size_bytes === null ? null : Number(row.size_bytes),
+    uploadedBy: row.uploaded_by,
+    sortOrder: row.sort_order ?? 0,
+    createdAt: row.created_at,
+    signedUrl,
   };
 }
 
@@ -1529,14 +1599,38 @@ async function fetchPropertyBoundaries(orgId?: string): Promise<PropertyBoundary
     window.setTimeout(() => reject(new Error('Property boundaries request timed out.')), 15_000);
   });
   const fetchPromise = (async () => {
-    let query = client
+    let propertiesQuery = client
       .from('properties')
       .select('id, org_id, name, short_name, color, acreage, latitude, longitude, boundary_geojson, calculated_acreage')
       .order('sort_order', { ascending: true });
-    if (orgId) query = query.eq('org_id', orgId);
-    const { data, error } = await query;
-    if (error) throw error;
-    return ((data ?? []) as DbPropertyBoundary[]).map(toPropertyBoundary);
+    if (orgId) propertiesQuery = propertiesQuery.eq('org_id', orgId);
+    const { data: propertyData, error: propertyError } = await propertiesQuery;
+    if (propertyError) throw propertyError;
+
+    const propertyRows = (propertyData ?? []) as DbPropertyBoundary[];
+    const propertyIds = propertyRows.map((property) => property.id);
+    let projectRows: DbProject[] = [];
+
+    if (orgId && propertyIds.length > 0) {
+      const { data: projectData, error: projectError } = await client
+        .from('projects')
+        .select('id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson')
+        .eq('org_id', orgId)
+        .in('property_id', propertyIds)
+        .not('location_geojson', 'is', null)
+        .order('created_at', { ascending: false });
+      if (projectError) throw projectError;
+      projectRows = (projectData ?? []) as DbProject[];
+    }
+
+    const projectsByProperty = new Map<string, PropertyProject[]>();
+    projectRows.map(toProject).forEach((project) => {
+      const existing = projectsByProperty.get(project.propertyId) ?? [];
+      existing.push(project);
+      projectsByProperty.set(project.propertyId, existing);
+    });
+
+    return propertyRows.map((property) => toPropertyBoundary(property, projectsByProperty.get(property.id) ?? []));
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -2508,6 +2602,37 @@ type TimelineEventMutationPayload = {
   createdBy?: string | null;
 };
 
+export const PROJECT_PHOTO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const;
+export const PROJECT_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+const PROJECT_PHOTOS_BUCKET = 'project-photos';
+const PROJECT_SELECT_COLUMNS = 'id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson';
+const PROJECT_PHOTO_SELECT_COLUMNS = 'id, org_id, property_id, project_id, timeline_event_id, storage_path, caption, content_type, size_bytes, uploaded_by, sort_order, created_at';
+
+export type ProjectPhotosScope = {
+  timelineEventId?: string;
+  projectId?: string;
+};
+
+export type UploadProjectPhotoPayload = {
+  file: File;
+  propertyId: string;
+  projectId: string;
+  timelineEventId: string;
+  uploadedBy?: string | null;
+  caption?: string | null;
+};
+
+export type DeleteProjectPhotoPayload = {
+  photo: ProjectPhoto;
+};
+
+export type SetProjectLocationPayload = {
+  propertyId: string;
+  projectId: string;
+  latitude: number;
+  longitude: number;
+};
+
 async function fetchProjects(propertyId: string, orgId?: string): Promise<PropertyProject[]> {
   const client = ensureSupabase();
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -2516,7 +2641,7 @@ async function fetchProjects(propertyId: string, orgId?: string): Promise<Proper
   const fetchPromise = (async () => {
     let query = client
       .from('projects')
-      .select('id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at')
+      .select(PROJECT_SELECT_COLUMNS)
       .eq('property_id', propertyId)
       .order('created_at', { ascending: false });
     if (orgId) query = query.eq('org_id', orgId);
@@ -2563,7 +2688,7 @@ async function createProject(orgId: string, payload: ProjectMutationPayload): Pr
       target_end_date: payload.targetEndDate ?? null,
       color: payload.color ?? null,
     })
-    .select('id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at')
+    .select(PROJECT_SELECT_COLUMNS)
     .single();
   if (error) throw error;
   return toProject(data as DbProject);
@@ -2585,7 +2710,7 @@ async function updateProject(orgId: string, payload: ProjectMutationPayload): Pr
     .eq('id', payload.id)
     .eq('property_id', payload.propertyId)
     .eq('org_id', orgId)
-    .select('id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at')
+    .select(PROJECT_SELECT_COLUMNS)
     .single();
   if (error) throw error;
   return toProject(data as DbProject);
@@ -2600,6 +2725,171 @@ async function deleteProject(orgId: string, propertyId: string, projectId: strin
     .eq('property_id', propertyId)
     .eq('org_id', orgId);
   if (error) throw error;
+}
+
+async function fetchProjectPhotos(scope: ProjectPhotosScope, orgId: string): Promise<ProjectPhoto[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Photos request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('project_photos')
+      .select(PROJECT_PHOTO_SELECT_COLUMNS)
+      .eq('org_id', orgId)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (scope.timelineEventId) {
+      query = query.eq('timeline_event_id', scope.timelineEventId);
+    } else if (scope.projectId) {
+      query = query.eq('project_id', scope.projectId);
+    } else {
+      return [];
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = (data ?? []) as DbProjectPhoto[];
+    const signedPhotos = await Promise.all(
+      rows.map(async (row) => {
+        const { data: signedData, error: signedError } = await client
+          .storage
+          .from(PROJECT_PHOTOS_BUCKET)
+          .createSignedUrl(row.storage_path, 60 * 10);
+        if (signedError) throw signedError;
+        return toProjectPhoto(row, signedData.signedUrl);
+      }),
+    );
+    return signedPhotos;
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+function getPhotoExtension(file: File) {
+  const fromName = file.name.split('.').pop()?.toLowerCase();
+  if (fromName && ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'].includes(fromName)) return fromName;
+  if (file.type === 'image/jpeg') return 'jpg';
+  if (file.type === 'image/png') return 'png';
+  if (file.type === 'image/webp') return 'webp';
+  if (file.type === 'image/heic') return 'heic';
+  if (file.type === 'image/heif') return 'heif';
+  return 'jpg';
+}
+
+async function uploadProjectPhoto(orgId: string, payload: UploadProjectPhotoPayload): Promise<ProjectPhoto> {
+  if (!PROJECT_PHOTO_ALLOWED_TYPES.includes(payload.file.type as typeof PROJECT_PHOTO_ALLOWED_TYPES[number])) {
+    throw new Error('Choose a JPEG, PNG, WebP, HEIC, or HEIF image.');
+  }
+  if (payload.file.size > PROJECT_PHOTO_MAX_BYTES) {
+    throw new Error('Photos must be 10 MB or smaller.');
+  }
+  if (!payload.propertyId || payload.propertyId === 'all') throw new Error('Select a property before adding a photo.');
+  if (!payload.projectId || payload.projectId === 'all' || !payload.timelineEventId || payload.timelineEventId === 'all') {
+    throw new Error('Choose a timeline event before adding a photo.');
+  }
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Photo upload timed out.')), 15_000);
+  });
+  const uploadPromise = (async () => {
+    const storagePath = `${orgId}/${payload.projectId}/${crypto.randomUUID()}.${getPhotoExtension(payload.file)}`;
+    const { error: uploadError } = await client
+      .storage
+      .from(PROJECT_PHOTOS_BUCKET)
+      .upload(storagePath, payload.file, {
+        contentType: payload.file.type,
+        upsert: false,
+      });
+    if (uploadError) throw uploadError;
+
+    const { data, error: insertError } = await client
+      .from('project_photos')
+      .insert({
+        org_id: orgId,
+        property_id: payload.propertyId,
+        project_id: payload.projectId,
+        timeline_event_id: payload.timelineEventId,
+        storage_path: storagePath,
+        caption: payload.caption?.trim() || null,
+        content_type: payload.file.type,
+        size_bytes: payload.file.size,
+        uploaded_by: payload.uploadedBy ?? null,
+      })
+      .select(PROJECT_PHOTO_SELECT_COLUMNS)
+      .single();
+
+    if (insertError) {
+      await client.storage.from(PROJECT_PHOTOS_BUCKET).remove([storagePath]);
+      throw insertError;
+    }
+
+    const { data: signedData, error: signedError } = await client
+      .storage
+      .from(PROJECT_PHOTOS_BUCKET)
+      .createSignedUrl(storagePath, 60 * 10);
+    if (signedError) throw signedError;
+    return toProjectPhoto(data as DbProjectPhoto, signedData.signedUrl);
+  })();
+
+  return Promise.race([uploadPromise, timeoutPromise]);
+}
+
+async function deleteProjectPhoto(orgId: string, payload: DeleteProjectPhotoPayload) {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Photo delete timed out.')), 15_000);
+  });
+  const deletePromise = (async () => {
+    const { error: removeError } = await client
+      .storage
+      .from(PROJECT_PHOTOS_BUCKET)
+      .remove([payload.photo.storagePath]);
+    if (removeError) throw removeError;
+
+    const { error: rowError } = await client
+      .from('project_photos')
+      .delete()
+      .eq('id', payload.photo.id)
+      .eq('org_id', orgId)
+      .eq('property_id', payload.photo.propertyId)
+      .eq('project_id', payload.photo.projectId)
+      .eq('timeline_event_id', payload.photo.timelineEventId);
+    if (rowError) throw rowError;
+  })();
+
+  return Promise.race([deletePromise, timeoutPromise]);
+}
+
+async function setProjectLocation(orgId: string, payload: SetProjectLocationPayload): Promise<PropertyProject> {
+  if (!payload.propertyId || payload.propertyId === 'all') throw new Error('Select a property before placing a pin.');
+  if (!payload.projectId || payload.projectId === 'all') throw new Error('Choose a project before placing a pin.');
+  if (!Number.isFinite(payload.latitude) || !Number.isFinite(payload.longitude)) throw new Error('Choose a valid map location.');
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Project pin request timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const locationGeojson: ProjectLocationGeoJson = {
+      type: 'Point',
+      coordinates: [payload.longitude, payload.latitude],
+    };
+    const { data, error } = await client
+      .from('projects')
+      .update({ location_geojson: locationGeojson })
+      .eq('id', payload.projectId)
+      .eq('property_id', payload.propertyId)
+      .eq('org_id', orgId)
+      .select(PROJECT_SELECT_COLUMNS)
+      .single();
+    if (error) throw error;
+    return toProject(data as DbProject);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
 }
 
 async function createTimelineEvent(orgId: string, payload: TimelineEventMutationPayload): Promise<ProjectTimelineEvent> {
@@ -2688,6 +2978,8 @@ export function useCreateProject(orgId?: string) {
     },
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
     },
   });
 }
@@ -2701,6 +2993,8 @@ export function useUpdateProject(orgId?: string) {
     },
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
     },
   });
 }
@@ -2715,6 +3009,71 @@ export function useDeleteProject(orgId?: string) {
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
       await queryClient.invalidateQueries({ queryKey: ['project-timeline-events'] });
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useProjectPhotos(scope: ProjectPhotosScope | string | undefined, orgId?: string) {
+  const rawTimelineEventId = typeof scope === 'string' ? scope : scope?.timelineEventId;
+  const rawProjectId = typeof scope === 'string' ? undefined : scope?.projectId;
+  const timelineEventId = rawTimelineEventId && rawTimelineEventId !== 'all' ? rawTimelineEventId : undefined;
+  const projectId = rawProjectId && rawProjectId !== 'all' ? rawProjectId : undefined;
+  return useQuery({
+    queryKey: ['project-photos', orgId ?? 'all-orgs', timelineEventId ?? 'no-event', projectId ?? 'no-project'],
+    queryFn: () => fetchProjectPhotos({ timelineEventId, projectId }, orgId!),
+    enabled: Boolean(orgId && (timelineEventId || projectId)),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useUploadProjectPhoto(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UploadProjectPhotoPayload) => {
+      if (!orgId) throw new Error('Organization is required to add a photo.');
+      return uploadProjectPhoto(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['project-photos', orgId ?? 'all-orgs', variables.timelineEventId, variables.projectId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ['project-photos'] });
+    },
+  });
+}
+
+export function useDeleteProjectPhoto(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: DeleteProjectPhotoPayload) => {
+      if (!orgId) throw new Error('Organization is required to remove a photo.');
+      return deleteProjectPhoto(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['project-photos', orgId ?? 'all-orgs', variables.photo.timelineEventId, variables.photo.projectId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ['project-photos'] });
+    },
+  });
+}
+
+export function useSetProjectLocation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SetProjectLocationPayload) => {
+      if (!orgId) throw new Error('Organization is required to place a project pin.');
+      return setProjectLocation(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
     },
   });
 }

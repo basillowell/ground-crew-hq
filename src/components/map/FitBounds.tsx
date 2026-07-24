@@ -13,11 +13,21 @@ type FitBoundsProps = {
 
 function coordinatesToLatLngs(property: PropertyBoundary): LatLngTuple[] {
   const rings = property.boundaryGeojson?.coordinates ?? [];
-  return rings.flatMap((ring) =>
+  const boundaryPoints = rings.flatMap((ring) =>
     ring
       .filter((point) => point.length >= 2 && Number.isFinite(point[0]) && Number.isFinite(point[1]))
       .map(([longitude, latitude]) => [latitude, longitude] as LatLngTuple),
   );
+  const projectPoints = property.projects
+    .map((project) => project.locationGeojson?.coordinates)
+    .filter((point): point is [number, number] =>
+      Boolean(point) &&
+      Number.isFinite(point[0]) &&
+      Number.isFinite(point[1]),
+    )
+    .map(([longitude, latitude]) => [latitude, longitude] as LatLngTuple);
+
+  return [...boundaryPoints, ...projectPoints];
 }
 
 export function getPropertyBounds(properties: PropertyBoundary[]): [LatLngTuple, LatLngTuple] | null {

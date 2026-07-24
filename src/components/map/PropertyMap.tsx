@@ -1,11 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
-import { MapContainer, Polygon, TileLayer, Tooltip } from 'react-leaflet';
+import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, Tooltip, useMapEvents } from 'react-leaflet';
 import type { Layer, LeafletEvent, PathOptions } from 'leaflet';
+import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
-import type { PropertyBoundary, PropertyBoundaryGeoJson } from '@/lib/supabase-queries';
+import type { PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
 
 type LatLngTuple = [number, number];
 
@@ -14,8 +15,13 @@ type PropertyMapProps = {
   currentPropertyId: string;
   editMode: boolean;
   canEditBoundary: boolean;
+  pinPlacementProject: { projectId: string; projectName: string } | null;
+  pinPlacementDisabled: boolean;
   onBoundaryChange: (geojson: PropertyBoundaryGeoJson | null) => void;
   onSelectProperty: (propertyId: string) => void;
+  onSelectProject: (propertyId: string, projectId: string) => void;
+  onPlaceProjectPin: (latitude: number, longitude: number) => void;
+  onCancelPinPlacement: () => void;
 };
 
 const USGS_IMAGERY_TILE_URL =
@@ -36,6 +42,15 @@ function propertyToPolygonPositions(property: PropertyBoundary): LatLngTuple[][]
 }
 
 function getInitialCenter(properties: PropertyBoundary[]): LatLngTuple {
+  const projectPoint = properties
+    .flatMap((property) => property.projects)
+    .find((project) => {
+      const point = project.locationGeojson?.coordinates;
+      return point && Number.isFinite(point[0]) && Number.isFinite(point[1]);
+    })?.locationGeojson?.coordinates;
+  if (projectPoint) {
+    return [projectPoint[1], projectPoint[0]];
+  }
   const propertyPoint = properties.find(
     (property) => typeof property.latitude === 'number' && typeof property.longitude === 'number',
   );
@@ -45,20 +60,66 @@ function getInitialCenter(properties: PropertyBoundary[]): LatLngTuple {
   return [27.3364, -82.5307];
 }
 
+type ProjectPin = PropertyProject & {
+  propertyName: string;
+  markerColor: string;
+};
+
+function ProjectPinClickHandler({
+  active,
+  disabled,
+  onPlaceProjectPin,
+}: {
+  active: boolean;
+  disabled: boolean;
+  onPlaceProjectPin: (latitude: number, longitude: number) => void;
+}) {
+  useMapEvents({
+    click: (event) => {
+      if (!active || disabled) return;
+      onPlaceProjectPin(event.latlng.lat, event.latlng.lng);
+    },
+  });
+
+  return null;
+}
+
 export function PropertyMap({
   properties,
   currentPropertyId,
   editMode,
   canEditBoundary,
+  pinPlacementProject,
+  pinPlacementDisabled,
   onBoundaryChange,
   onSelectProperty,
+  onSelectProject,
+  onPlaceProjectPin,
+  onCancelPinPlacement,
 }: PropertyMapProps) {
   const mappedProperties = properties.filter((property) => property.boundaryGeojson);
+  const visibleProperties = currentPropertyId === 'all'
+    ? properties
+    : properties.filter((property) => property.id === currentPropertyId);
+  const projectPins = useMemo(
+    () =>
+      visibleProperties.flatMap((property) =>
+        property.projects
+          .filter((project) => project.locationGeojson)
+          .map((project) => ({
+            ...project,
+            propertyName: property.name,
+            markerColor: project.color ?? property.color,
+          })),
+      ),
+    [visibleProperties],
+  );
   const selectedProperty = currentPropertyId === 'all'
     ? null
     : properties.find((property) => property.id === currentPropertyId) ?? null;
   const initialCenter = getInitialCenter(properties);
-  const canEditSelectedBoundary = editMode && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
+  const isPlacingProjectPin = Boolean(pinPlacementProject);
+  const canEditSelectedBoundary = editMode && !isPlacingProjectPin && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
 
   const polygonOptionsById = useMemo(() => {
     const options = new Map<string, GeomanPathOptions>();
@@ -91,7 +152,12 @@ export function PropertyMap({
           maxNativeZoom={16}
           url={USGS_IMAGERY_TILE_URL}
         />
-        <FitBounds properties={mappedProperties} selectedPropertyId={currentPropertyId} />
+        <FitBounds properties={visibleProperties} selectedPropertyId={currentPropertyId} />
+        <ProjectPinClickHandler
+          active={isPlacingProjectPin}
+          disabled={pinPlacementDisabled}
+          onPlaceProjectPin={onPlaceProjectPin}
+        />
         {canEditSelectedBoundary ? <GeomanControl onBoundaryChange={onBoundaryChange} /> : null}
         {mappedProperties.map((property) => (
           <Polygon
@@ -99,7 +165,9 @@ export function PropertyMap({
             positions={propertyToPolygonPositions(property)}
             pathOptions={polygonOptionsById.get(property.id)}
             eventHandlers={{
-              click: () => onSelectProperty(property.id),
+              click: () => {
+                if (!isPlacingProjectPin) onSelectProperty(property.id);
+              },
               // Geoman fires edit events on the LAYER, not the map, so these must be
               // bound per-polygon. Binding them on the map (as GeomanControl does for
               // pm:create) silently never fires and leaves Save disabled after an edit.
@@ -121,7 +189,63 @@ export function PropertyMap({
             </Tooltip>
           </Polygon>
         ))}
+        {projectPins.map((project: ProjectPin) => {
+          const coordinates = project.locationGeojson?.coordinates;
+          if (!coordinates) return null;
+          const markerCenter: LatLngTuple = [coordinates[1], coordinates[0]];
+          return (
+            <CircleMarker
+              key={project.id}
+              center={markerCenter}
+              radius={9}
+              pathOptions={{
+                color: 'rgb(var(--text-inverse))',
+                fillColor: project.markerColor,
+                fillOpacity: 0.95,
+                opacity: 1,
+                weight: 2,
+              }}
+              eventHandlers={{
+                click: (event) => {
+                  event.originalEvent.stopPropagation();
+                  if (!isPlacingProjectPin) onSelectProject(project.propertyId, project.id);
+                },
+              }}
+            >
+              <Tooltip sticky>
+                <div className="space-y-1">
+                  <div className="font-semibold">{project.name}</div>
+                  <div>{project.status}</div>
+                </div>
+              </Tooltip>
+              <Popup>
+                <div className="space-y-1">
+                  <div className="font-semibold">{project.name}</div>
+                  <div>{project.status}</div>
+                  <div>{project.propertyName}</div>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
       </MapContainer>
+      {pinPlacementProject ? (
+        <div className="absolute left-4 top-4 z-[500] max-w-sm rounded-lg border border-surface-border bg-surface-card px-3 py-3 text-sm text-text-secondary shadow-md">
+          <div className="font-semibold text-text-primary">
+            {pinPlacementDisabled ? 'Saving project pin...' : `Click the map to place ${pinPlacementProject.projectName}.`}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={onCancelPinPlacement}
+            disabled={pinPlacementDisabled}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : null}
       {mappedProperties.length === 0 && !editMode ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-6 z-[500] flex justify-center px-6 text-center">
           <div className="max-w-sm rounded-xl border border-surface-border bg-surface-card/95 p-5 shadow-lg">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertTriangle, Edit3, Map as MapIcon, RefreshCw, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,13 @@ import { toast } from '@/components/ui/sonner';
 import { PropertyDetailPanel } from '@/components/map/PropertyDetailPanel';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { usePropertyBoundaries, useSavePropertyBoundary, type PropertyBoundaryGeoJson } from '@/lib/supabase-queries';
+import {
+  usePropertyBoundaries,
+  useSavePropertyBoundary,
+  useSetProjectLocation,
+  type PropertyBoundaryGeoJson,
+  type PropertyProject,
+} from '@/lib/supabase-queries';
 
 const PropertyMap = dynamic(
   () => import('@/components/map/PropertyMap').then((module) => module.PropertyMap),
@@ -32,8 +38,13 @@ export default function PropertiesMapPage() {
   const { currentPropertyId, currentRole, currentUser, isOrgReady, orgId, setCurrentPropertyId } = useOrgProfile();
   const boundariesQuery = usePropertyBoundaries(orgId ?? undefined);
   const saveBoundaryMutation = useSavePropertyBoundary(orgId ?? undefined);
+  const setProjectLocationMutation = useSetProjectLocation(orgId ?? undefined);
+  const pinSaveInFlightRef = useRef(false);
   const [editMode, setEditMode] = useState(false);
   const [pendingBoundaryGeojson, setPendingBoundaryGeojson] = useState<PropertyBoundaryGeoJson | null | undefined>(undefined);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [pinPlacementProject, setPinPlacementProject] = useState<{ propertyId: string; projectId: string; projectName: string } | null>(null);
+  const [pinSavingProjectId, setPinSavingProjectId] = useState<string | null>(null);
   const properties = boundariesQuery.data ?? [];
   const mappedCount = properties.filter((property) => property.boundaryGeojson).length;
   const selectedProperty = currentPropertyId === 'all'
@@ -46,6 +57,7 @@ export default function PropertiesMapPage() {
   useEffect(() => {
     setEditMode(false);
     setPendingBoundaryGeojson(undefined);
+    setPinPlacementProject(null);
   }, [currentPropertyId]);
 
   const handleSaveBoundary = async () => {
@@ -60,6 +72,53 @@ export default function PropertiesMapPage() {
     } catch (error) {
       console.error('Failed to save property boundary:', error);
       toast.error(error instanceof Error ? error.message : 'Property boundary could not be saved.');
+    }
+  };
+
+  const handleStartPlacePin = (project: PropertyProject) => {
+    if (!canViewMap || pinSaveInFlightRef.current) return;
+    if (!project.propertyId || project.propertyId === 'all') {
+      toast.error('Select a property before placing a pin.');
+      return;
+    }
+    setEditMode(false);
+    setSelectedProjectId(project.id);
+    setCurrentPropertyId(project.propertyId);
+    setPinPlacementProject({ propertyId: project.propertyId, projectId: project.id, projectName: project.name });
+  };
+
+  const handleSelectProject = (propertyId: string, projectId: string) => {
+    setEditMode(false);
+    setPinPlacementProject(null);
+    setSelectedProjectId(projectId);
+    if (propertyId && propertyId !== currentPropertyId) setCurrentPropertyId(propertyId);
+  };
+
+  const handleCancelPinPlacement = () => {
+    if (pinSaveInFlightRef.current) return;
+    setPinPlacementProject(null);
+  };
+
+  const handlePlaceProjectPin = async (latitude: number, longitude: number) => {
+    if (!pinPlacementProject || !orgId || pinSaveInFlightRef.current) return;
+    pinSaveInFlightRef.current = true;
+    setPinSavingProjectId(pinPlacementProject.projectId);
+    try {
+      await setProjectLocationMutation.mutateAsync({
+        propertyId: pinPlacementProject.propertyId,
+        projectId: pinPlacementProject.projectId,
+        latitude,
+        longitude,
+      });
+      setSelectedProjectId(pinPlacementProject.projectId);
+      setPinPlacementProject(null);
+      toast.success('Project pin saved.');
+    } catch (error) {
+      console.error('Project pin save failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Project pin could not be saved.');
+    } finally {
+      pinSaveInFlightRef.current = false;
+      setPinSavingProjectId(null);
     }
   };
 
@@ -119,8 +178,11 @@ export default function PropertiesMapPage() {
             type="button"
             variant={editMode ? 'default' : 'outline'}
             className="h-10 rounded-xl"
-            onClick={() => setEditMode((current) => !current)}
-            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending}
+            onClick={() => {
+              setPinPlacementProject(null);
+              setEditMode((current) => !current);
+            }}
+            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinSavingProjectId)}
           >
             <Edit3 className="mr-2 h-4 w-4" />
             {editMode ? 'Editing' : 'Edit boundary'}
@@ -170,8 +232,13 @@ export default function PropertiesMapPage() {
           currentPropertyId={currentPropertyId || 'all'}
           editMode={editMode}
           canEditBoundary={canViewMap}
+          pinPlacementProject={pinPlacementProject}
+          pinPlacementDisabled={Boolean(pinSavingProjectId)}
           onBoundaryChange={setPendingBoundaryGeojson}
           onSelectProperty={setCurrentPropertyId}
+          onSelectProject={handleSelectProject}
+          onPlaceProjectPin={handlePlaceProjectPin}
+          onCancelPinPlacement={handleCancelPinPlacement}
         />
       )}
       {hasConcretePropertySelected && selectedProperty ? (
@@ -180,7 +247,16 @@ export default function PropertiesMapPage() {
           orgId={orgId}
           canManage={canViewMap}
           createdBy={currentUser?.employeeId ?? null}
-          onClose={() => setCurrentPropertyId('all')}
+          selectedProjectId={selectedProjectId}
+          pinPlacementProjectId={pinPlacementProject?.projectId ?? null}
+          pinPlacementSaving={Boolean(pinSavingProjectId)}
+          onStartPlacePin={handleStartPlacePin}
+          onCancelPlacePin={handleCancelPinPlacement}
+          onClose={() => {
+            setSelectedProjectId(null);
+            setPinPlacementProject(null);
+            setCurrentPropertyId('all');
+          }}
         />
       ) : null}
     </section>

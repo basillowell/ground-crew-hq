@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Edit3, FolderKanban, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { CalendarDays, Edit3, FolderKanban, MapPin, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
+import { ProjectPhotoStrip } from '@/components/map/ProjectPhotoStrip';
 import { ProjectFormDialog } from '@/components/map/ProjectFormDialog';
 import { TimelineEventForm } from '@/components/map/TimelineEventForm';
 import {
@@ -24,6 +25,11 @@ type PropertyDetailPanelProps = {
   orgId?: string | null;
   canManage: boolean;
   createdBy?: string | null;
+  selectedProjectId?: string | null;
+  pinPlacementProjectId?: string | null;
+  pinPlacementSaving: boolean;
+  onStartPlacePin: (project: PropertyProject) => void;
+  onCancelPlacePin: () => void;
   onClose: () => void;
 };
 
@@ -141,6 +147,14 @@ function ProjectTimeline({
                     </div>
                   ) : null}
                 </div>
+                <ProjectPhotoStrip
+                  orgId={orgId}
+                  propertyId={propertyId}
+                  projectId={project.id}
+                  timelineEventId={event.id}
+                  canManage={canManage}
+                  uploadedBy={createdBy ?? null}
+                />
               </div>
             ))}
           </div>
@@ -150,7 +164,18 @@ function ProjectTimeline({
   );
 }
 
-export function PropertyDetailPanel({ property, orgId, canManage, createdBy, onClose }: PropertyDetailPanelProps) {
+export function PropertyDetailPanel({
+  property,
+  orgId,
+  canManage,
+  createdBy,
+  selectedProjectId,
+  pinPlacementProjectId,
+  pinPlacementSaving,
+  onStartPlacePin,
+  onCancelPlacePin,
+  onClose,
+}: PropertyDetailPanelProps) {
   const projectsQuery = useProjects(property.id, orgId ?? undefined);
   const deleteProjectMutation = useDeleteProject(orgId ?? undefined);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
@@ -172,6 +197,12 @@ export function PropertyDetailPanel({ property, orgId, canManage, createdBy, onC
   useEffect(() => {
     if (!expandedProjectId && projects[0]) setExpandedProjectId(projects[0].id);
   }, [expandedProjectId, projects]);
+
+  useEffect(() => {
+    if (selectedProjectId && projects.some((project) => project.id === selectedProjectId)) {
+      setExpandedProjectId(selectedProjectId);
+    }
+  }, [projects, selectedProjectId]);
 
   const openCreateProject = () => {
     setEditingProject(null);
@@ -247,6 +278,8 @@ export function PropertyDetailPanel({ property, orgId, canManage, createdBy, onC
           <div className="space-y-3">
             {projects.map((project) => {
               const isExpanded = expandedProject?.id === project.id;
+              const isPlacingThisPin = pinPlacementProjectId === project.id;
+              const hasProjectPin = Boolean(project.locationGeojson);
               return (
                 <Card key={project.id} className={`border-surface-border bg-surface-card p-4 ${isExpanded ? 'ring-1 ring-brand-dim' : ''}`}>
                   <button type="button" className="w-full text-left" onClick={() => setExpandedProjectId(isExpanded ? null : project.id)}>
@@ -269,6 +302,18 @@ export function PropertyDetailPanel({ property, orgId, canManage, createdBy, onC
                       <Edit3 className="mr-2 h-3.5 w-3.5" />
                       Edit
                     </Button>
+                    {canManage ? (
+                      <Button
+                        type="button"
+                        variant={isPlacingThisPin ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => (isPlacingThisPin ? onCancelPlacePin() : onStartPlacePin(project))}
+                        disabled={pinPlacementSaving}
+                      >
+                        <MapPin className="mr-2 h-3.5 w-3.5" />
+                        {isPlacingThisPin ? 'Cancel pin' : hasProjectPin ? 'Move pin' : 'Place pin'}
+                      </Button>
+                    ) : null}
                     <Button type="button" variant="outline" size="sm" className="text-status-warning" onClick={() => void handleDeleteProject(project)} disabled={!canManage || deleteProjectMutation.isPending}>
                       <Trash2 className="mr-2 h-3.5 w-3.5" />
                       Delete
