@@ -584,13 +584,89 @@ RLS:
 | target_end_date | date        | YES      |                   |
 | color           | text        | YES      |                   |
 | created_at      | timestamptz | NO       | now()             |
+| location_geojson| jsonb       | YES      |                   |
+| area_geojson    | jsonb       | YES      |                   |
+| location        | geometry(Point,4326)   | YES |            |
+| area            | geometry(Polygon,4326) | YES |            |
+| calculated_area_acres | numeric | YES     |                   |
 
 > FK: property_id -> properties.id. property_id is required (NOT NULL) — a project
 > always belongs to exactly one property; this is not a hierarchical scope column.
 
+> Map placement (migration project_map_pins_and_area, 2026-07-24). Same hybrid
+> pattern as properties.boundary_geojson:
+> - location_geojson / area_geojson are the ONLY columns application code writes.
+>   Plain PostgREST jsonb. location_geojson is a GeoJSON Point (the map pin);
+>   area_geojson is an optional GeoJSON Polygon for a per-project sub-area.
+> - location, area and calculated_area_acres are GENERATED ALWAYS STORED and are
+>   read-only to the client — writes will be rejected. GIST indexes on both
+>   geometry columns.
+> - Decision: pins ship first, per-project areas are a later phase. Both columns
+>   exist now so that phase needs no migration.
+
 RLS: SELECT via can_read_property(property_id). INSERT requires active admin/manager
 app_users row in the current org AND can_manage_property(property_id). UPDATE/DELETE
 via can_manage_property(property_id).
+
+---
+
+## project_photos
+| column            | type        | nullable | default           |
+|-------------------|-------------|----------|-------------------|
+| id                | uuid        | NO       | gen_random_uuid() |
+| org_id            | uuid        | NO       |                   |
+| property_id       | uuid        | NO       |                   |
+| project_id        | uuid        | NO       |                   |
+| timeline_event_id | uuid        | NO       |                   |
+| storage_path      | text        | NO       |                   |
+| caption           | text        | YES      |                   |
+| content_type      | text        | YES      |                   |
+| size_bytes        | bigint      | YES      |                   |
+| uploaded_by       | uuid        | YES      |                   |
+| sort_order        | integer     | NO       | 0                 |
+| created_at        | timestamptz | NO       | now()             |
+
+> Progress photos attach to a TIMELINE EVENT, not to the project directly, so each
+> dated entry carries its own images and the panel reads as a before/during/after
+> record. FKs: project_id -> projects.id CASCADE, timeline_event_id ->
+> project_timeline_events.id CASCADE, uploaded_by -> employees.id.
+> org_id and property_id are denormalised so RLS needs no join (same rationale as
+> project_timeline_events). storage_path is UNIQUE.
+>
+> storage_path holds the object key inside the `project-photos` bucket and MUST
+> follow `{org_id}/{project_id}/{uuid}.{ext}` — the storage policies match on the
+> first path segment, so any other shape is rejected on upload.
+
+RLS: SELECT via can_read_property(property_id). INSERT requires
+can_manage_property(property_id) AND an active admin/manager app_users row in the
+same org. UPDATE/DELETE via can_manage_property(property_id).
+
+---
+
+## Storage bucket: project-photos
+
+The project's first and currently only storage bucket.
+
+| setting | value |
+|---|---|
+| public | **false** |
+| file_size_limit | 10 MB |
+| allowed_mime_types | image/jpeg, image/png, image/webp, image/heic, image/heif |
+
+**Private by design.** These are customer site photos; a public bucket would make
+every image readable by anyone holding a URL — the same failure class as the
+`clients` `USING (true)` policy dropped in cc3fd91. Never flip `public` to true.
+Serve images with `createSignedUrl`, not `getPublicUrl`.
+
+Four policies on `storage.objects`, all filtered to `bucket_id = 'project-photos'`
+and matching `(storage.foldername(name))[1] = public.current_org_id()::text`:
+- SELECT: any active member of the owning org
+- INSERT / UPDATE / DELETE: additionally requires `current_user_role()` in
+  (admin, manager)
+
+Note the read scope is org-wide rather than per-property, because a storage policy
+can only see the object path. The `project_photos` table remains the authoritative,
+property-gated index of which photos belong where.
 
 ---
 
