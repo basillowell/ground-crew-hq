@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Clock, Users, UserRound as UserRoundIcon, Wrench, Shield, Map as MapIcon,
   BarChart3, Settings, MessageSquare, Leaf, FlaskConical, MonitorSmartphone,
-  FileText as FileTextIcon, Receipt
+  FileText as FileTextIcon, Receipt, Repeat
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { usePathname } from 'next/navigation';
@@ -23,6 +23,7 @@ const navItems = [
   { title: 'Clients', url: '/app/clients', icon: UserRoundIcon },
   { title: 'Estimates', url: '/app/estimates', icon: FileTextIcon },
   { title: 'Invoicing', url: '/app/invoicing', icon: Receipt },
+  { title: 'Contracts', url: '/app/contracts', icon: Repeat },
   { title: 'Breakroom', url: '/app/breakroom', icon: MonitorSmartphone },
   { title: 'Applications', url: '/app/applications', icon: FlaskConical },
   { title: 'Safety Management', url: '/app/safety', icon: Shield },

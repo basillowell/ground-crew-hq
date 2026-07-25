@@ -55,6 +55,7 @@ const routeTitles: Record<string, RouteTitle> = {
   '/app/equipment': { title: 'Equipment', subtitle: 'Track maintenance and availability.' },
   '/app/estimates': { title: 'Estimates', subtitle: 'Prepare and manage client estimates.' },
   '/app/invoicing': { title: 'Invoicing', subtitle: 'Manage and track invoices.' },
+  '/app/contracts': { title: 'Contracts', subtitle: 'Manage recurring service plans.' },
   '/app/reports': { title: 'Reports', subtitle: 'Labor summaries and cost analysis.' },
   '/app/job-costing': { title: 'Job Costing', subtitle: 'Labor cost and margin analysis.' },
   '/app/applications': { title: 'Applications', subtitle: 'Chemical logging with tank mix and site condition detail.' },

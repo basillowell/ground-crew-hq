@@ -9,6 +9,7 @@ import {
   LogOut,
   Map as MapIcon,
   Receipt,
+  Repeat,
   Settings2,
   Shield,
   ShieldAlert,
@@ -73,6 +74,7 @@ const management: NavItemConfig[] = [
   { label: 'Clients', href: '/app/clients', icon: UserRoundIcon, moduleId: 'workflow' },
   { label: 'Estimates', href: '/app/estimates', icon: FileTextIcon, moduleId: 'workflow' },
   { label: 'Invoicing', href: '/app/invoicing', icon: Receipt, moduleId: 'workflow' },
+  { label: 'Contracts', href: '/app/contracts', icon: Repeat, moduleId: 'workflow' },
   { label: 'Reports', href: '/app/reports', icon: BarChart3, moduleId: 'reports' },
   { label: 'Job Costing', href: '/app/job-costing', icon: TrendingUp, moduleId: 'reports' },
 ];

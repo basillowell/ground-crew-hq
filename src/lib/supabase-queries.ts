@@ -140,6 +140,9 @@ export type RevenueInvoice = {
   propertyId: string | null;
   employeeId: string | null;
   clientId: string | null;
+  contractId: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
   invoiceNumber: number;
   status: 'draft' | 'sent' | 'paid' | 'void';
   subtotal: number;
@@ -233,6 +236,37 @@ export type ServiceCatalogItem = {
   createdAt: string;
 };
 
+export type ServiceContractStatus = 'active' | 'paused' | 'ended';
+export type ServiceContractFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'seasonal';
+
+export type ServiceContract = {
+  id: string;
+  orgId: string;
+  clientId: string;
+  propertyId: string | null;
+  name: string;
+  status: ServiceContractStatus;
+  frequency: ServiceContractFrequency;
+  startDate: string;
+  endDate: string | null;
+  pauseFrom: string | null;
+  pauseUntil: string | null;
+  taxRate: number;
+  notes: string;
+  createdAt: string;
+};
+
+export type ContractInvoiceRun = {
+  id: string;
+  orgId: string;
+  runAt: string;
+  asOf: string;
+  triggeredBy: string | null;
+  contractsProcessed: number;
+  invoicesCreated: number;
+  error: string | null;
+};
+
 type DbProject = {
   id: string;
   org_id: string;
@@ -293,6 +327,9 @@ type DbRevenueInvoice = {
   property_id: string | null;
   employee_id: string | null;
   client_id: string | null;
+  contract_id: string | null;
+  period_start: string | null;
+  period_end: string | null;
   invoice_number: number;
   status: 'draft' | 'sent' | 'paid' | 'void';
   subtotal: number | string | null;
@@ -393,6 +430,47 @@ type DbServiceCatalogItem = {
   default_unit_price: number | string | null;
   active: boolean;
   created_at: string;
+};
+
+type DbServiceContract = {
+  id: string;
+  org_id: string;
+  client_id: string;
+  property_id: string | null;
+  name: string;
+  status: ServiceContractStatus;
+  frequency: ServiceContractFrequency;
+  start_date: string;
+  end_date: string | null;
+  pause_from: string | null;
+  pause_until: string | null;
+  tax_rate: number | string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type DbServiceContractLineItem = {
+  id: string;
+  org_id: string;
+  contract_id: string;
+  catalog_id: string | null;
+  description: string;
+  quantity: number | string | null;
+  unit_price: number | string | null;
+  line_total: number | string | null;
+  sort_order: number | null;
+  created_at: string;
+};
+
+type DbContractInvoiceRun = {
+  id: string;
+  org_id: string;
+  run_at: string;
+  as_of: string;
+  triggered_by: string | null;
+  contracts_processed: number | string | null;
+  invoices_created: number | string | null;
+  error: string | null;
 };
 type DbEmployee = {
   id: string;
@@ -840,6 +918,9 @@ function toRevenueInvoice(row: DbRevenueInvoice): RevenueInvoice {
     propertyId: row.property_id,
     employeeId: row.employee_id,
     clientId: row.client_id,
+    contractId: row.contract_id,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
     invoiceNumber: Number(row.invoice_number ?? 0),
     status: row.status,
     subtotal: Number(row.subtotal ?? 0),
@@ -954,6 +1035,53 @@ function toServiceCatalogItem(row: DbServiceCatalogItem): ServiceCatalogItem {
     defaultUnitPrice: Number(row.default_unit_price ?? 0),
     active: row.active,
     createdAt: row.created_at,
+  };
+}
+
+function toServiceContract(row: DbServiceContract): ServiceContract {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    clientId: row.client_id,
+    propertyId: row.property_id,
+    name: row.name,
+    status: row.status,
+    frequency: row.frequency,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    pauseFrom: row.pause_from,
+    pauseUntil: row.pause_until,
+    taxRate: Number(row.tax_rate ?? 0),
+    notes: row.notes ?? '',
+    createdAt: row.created_at,
+  };
+}
+
+function toServiceContractLineItem(row: DbServiceContractLineItem): RevenueLineItem {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    parentId: row.contract_id,
+    catalogId: row.catalog_id,
+    description: row.description,
+    quantity: Number(row.quantity ?? 0),
+    unitPrice: Number(row.unit_price ?? 0),
+    lineTotal: Number(row.line_total ?? 0),
+    sortOrder: Number(row.sort_order ?? 0),
+    createdAt: row.created_at,
+  };
+}
+
+function toContractInvoiceRun(row: DbContractInvoiceRun): ContractInvoiceRun {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    runAt: row.run_at,
+    asOf: row.as_of,
+    triggeredBy: row.triggered_by,
+    contractsProcessed: Number(row.contracts_processed ?? 0),
+    invoicesCreated: Number(row.invoices_created ?? 0),
+    error: row.error,
   };
 }
 function toEmployee(row: DbEmployee): Employee {
@@ -1888,6 +2016,26 @@ export type ServiceCatalogMutationPayload = {
   active?: boolean;
 };
 
+export type ServiceContractMutationPayload = {
+  id?: string;
+  clientId: string;
+  propertyId: string | null;
+  name: string;
+  status?: ServiceContractStatus;
+  frequency: ServiceContractFrequency;
+  startDate: string;
+  endDate?: string | null;
+  pauseFrom?: string | null;
+  pauseUntil?: string | null;
+  taxRate: number;
+  notes?: string | null;
+};
+
+export type ServiceContractStatusMutationPayload = {
+  id: string;
+  status: ServiceContractStatus;
+};
+
 export type InvoiceStatusMutationPayload = {
   id: string;
   status: 'sent' | 'paid' | 'void';
@@ -1904,11 +2052,14 @@ export type RecordPaymentPayload = {
   notes?: string | null;
 };
 
-const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at';
+const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, contract_id, period_start, period_end, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at';
 const estimateSelectColumns = 'id, org_id, client_id, property_id, estimate_number, status, subtotal, tax_rate, total, notes, valid_until, converted_invoice_id, created_at, sent_at, accepted_at';
 const estimateLineItemSelectColumns = 'id, org_id, estimate_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
 const invoiceLineItemSelectColumns = 'id, org_id, invoice_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
 const serviceCatalogSelectColumns = 'id, org_id, name, description, default_unit_price, active, created_at';
+const serviceContractSelectColumns = 'id, org_id, client_id, property_id, name, status, frequency, start_date, end_date, pause_from, pause_until, tax_rate, notes, created_at';
+const serviceContractLineItemSelectColumns = 'id, org_id, contract_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
+const contractInvoiceRunSelectColumns = 'id, org_id, run_at, as_of, triggered_by, contracts_processed, invoices_created, error';
 const paymentSelectColumns = 'id, org_id, invoice_id, amount, method, reference, paid_at, recorded_by, notes, created_at';
 const revenueWorkOrderSelectColumns = 'id, org_id, property_id, title, status, priority, cost, created_at, completed_at, wo_number';
 const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
@@ -2080,6 +2231,63 @@ async function fetchServiceCatalog(orgId: string): Promise<ServiceCatalogItem[]>
       .order('name', { ascending: true });
     if (error) throw error;
     return ((data ?? []) as DbServiceCatalogItem[]).map(toServiceCatalogItem);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchServiceContracts(orgId: string): Promise<ServiceContract[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contracts request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('service_contracts')
+      .select(serviceContractSelectColumns)
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as DbServiceContract[]).map(toServiceContract);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchServiceContractLineItems(contractId: string | undefined, orgId: string): Promise<RevenueLineItem[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract line items request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('service_contract_line_items')
+      .select(serviceContractLineItemSelectColumns)
+      .eq('org_id', orgId)
+      .order('sort_order', { ascending: true });
+    if (contractId) query = query.eq('contract_id', contractId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbServiceContractLineItem[]).map(toServiceContractLineItem);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchContractInvoiceRuns(orgId: string): Promise<ContractInvoiceRun[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract run history request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('contract_invoice_runs')
+      .select(contractInvoiceRunSelectColumns)
+      .eq('org_id', orgId)
+      .order('run_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    return ((data ?? []) as DbContractInvoiceRun[]).map(toContractInvoiceRun);
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -2484,11 +2692,233 @@ async function deleteServiceCatalogItem(orgId: string, catalogItemId: string): P
   if (error) throw error;
 }
 
+async function createServiceContract(orgId: string, payload: ServiceContractMutationPayload): Promise<ServiceContract> {
+  if (!payload.clientId || payload.clientId === 'all') throw new Error('Client is required.');
+  if (!payload.name.trim()) throw new Error('Contract name is required.');
+  const propertyId = payload.propertyId && payload.propertyId !== 'all' ? payload.propertyId : null;
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('service_contracts')
+      .insert({
+        org_id: orgId,
+        client_id: payload.clientId,
+        property_id: propertyId,
+        name: payload.name.trim(),
+        status: payload.status ?? 'active',
+        frequency: payload.frequency,
+        start_date: payload.startDate,
+        end_date: payload.endDate || null,
+        pause_from: payload.pauseFrom || null,
+        pause_until: payload.pauseUntil || null,
+        tax_rate: payload.taxRate,
+        notes: payload.notes?.trim() || null,
+      })
+      .select(serviceContractSelectColumns)
+      .single();
+    if (error) throw error;
+    return toServiceContract(data as DbServiceContract);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+async function updateServiceContract(orgId: string, payload: ServiceContractMutationPayload): Promise<ServiceContract> {
+  if (!payload.id) throw new Error('Contract id is required.');
+  if (!payload.clientId || payload.clientId === 'all') throw new Error('Client is required.');
+  if (!payload.name.trim()) throw new Error('Contract name is required.');
+  const propertyId = payload.propertyId && payload.propertyId !== 'all' ? payload.propertyId : null;
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('service_contracts')
+      .update({
+        client_id: payload.clientId,
+        property_id: propertyId,
+        name: payload.name.trim(),
+        ...(payload.status ? { status: payload.status } : {}),
+        frequency: payload.frequency,
+        start_date: payload.startDate,
+        end_date: payload.endDate || null,
+        pause_from: payload.pauseFrom || null,
+        pause_until: payload.pauseUntil || null,
+        tax_rate: payload.taxRate,
+        notes: payload.notes?.trim() || null,
+      })
+      .eq('id', payload.id)
+      .eq('org_id', orgId)
+      .select(serviceContractSelectColumns)
+      .single();
+    if (error) throw error;
+    return toServiceContract(data as DbServiceContract);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+async function updateServiceContractStatus(orgId: string, payload: ServiceContractStatusMutationPayload): Promise<ServiceContract> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract status save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('service_contracts')
+      .update({ status: payload.status })
+      .eq('id', payload.id)
+      .eq('org_id', orgId)
+      .select(serviceContractSelectColumns)
+      .single();
+    if (error) throw error;
+    return toServiceContract(data as DbServiceContract);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+async function deleteServiceContract(orgId: string, contractId: string): Promise<void> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract delete timed out.')), 15_000);
+  });
+  const deletePromise = (async () => {
+    const { error } = await client
+      .from('service_contracts')
+      .delete()
+      .eq('id', contractId)
+      .eq('org_id', orgId);
+    if (error) throw error;
+  })();
+
+  return Promise.race([deletePromise, timeoutPromise]);
+}
+
+async function createServiceContractLineItems(
+  orgId: string,
+  contractId: string,
+  items: RevenueLineItemMutationPayload[],
+): Promise<RevenueLineItem[]> {
+  if (items.length === 0) return [];
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract line items save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('service_contract_line_items')
+      .insert(items.map((item) => ({
+        org_id: orgId,
+        contract_id: contractId,
+        catalog_id: item.catalogId ?? null,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        line_total: item.lineTotal,
+        sort_order: item.sortOrder,
+      })))
+      .select(serviceContractLineItemSelectColumns);
+    if (error) throw error;
+    return ((data ?? []) as DbServiceContractLineItem[]).map(toServiceContractLineItem);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+async function updateServiceContractLineItem(
+  orgId: string,
+  payload: RevenueLineItemMutationPayload,
+): Promise<RevenueLineItem> {
+  if (!payload.id) throw new Error('Line item id is required.');
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract line item save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('service_contract_line_items')
+      .update({
+        catalog_id: payload.catalogId ?? null,
+        description: payload.description,
+        quantity: payload.quantity,
+        unit_price: payload.unitPrice,
+        line_total: payload.lineTotal,
+        sort_order: payload.sortOrder,
+      })
+      .eq('id', payload.id)
+      .eq('org_id', orgId)
+      .select(serviceContractLineItemSelectColumns)
+      .single();
+    if (error) throw error;
+    return toServiceContractLineItem(data as DbServiceContractLineItem);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+async function deleteServiceContractLineItem(orgId: string, lineItemId: string): Promise<void> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract line item delete timed out.')), 15_000);
+  });
+  const deletePromise = (async () => {
+    const { error } = await client
+      .from('service_contract_line_items')
+      .delete()
+      .eq('id', lineItemId)
+      .eq('org_id', orgId);
+    if (error) throw error;
+  })();
+
+  return Promise.race([deletePromise, timeoutPromise]);
+}
+
+async function replaceServiceContractLineItems(
+  orgId: string,
+  contractId: string,
+  items: RevenueLineItemMutationPayload[],
+): Promise<RevenueLineItem[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Contract line items save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { error: deleteError } = await client
+      .from('service_contract_line_items')
+      .delete()
+      .eq('contract_id', contractId)
+      .eq('org_id', orgId);
+    if (deleteError) throw deleteError;
+    return createServiceContractLineItems(orgId, contractId, items);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
 async function convertEstimateToInvoice(targetEstimateId: string): Promise<string> {
   const client = ensureSupabase();
   const { data, error } = await client.rpc('convert_estimate_to_invoice', { target_estimate_id: targetEstimateId });
   if (error) throw error;
   return String(data);
+}
+
+async function generateContractInvoices(asOf: string): Promise<number> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Invoice generation timed out.')), 15_000);
+  });
+  const generatePromise = (async () => {
+    const { data, error } = await client.rpc('generate_contract_invoices', { as_of: asOf });
+    if (error) throw error;
+    return Number(data ?? 0);
+  })();
+
+  return Promise.race([generatePromise, timeoutPromise]);
 }
 
 export function useClients(orgId?: string) {
@@ -2591,6 +3021,42 @@ export function useServiceCatalog(orgId?: string) {
   return useQuery({
     queryKey: ['service-catalog', orgId ?? 'all-orgs'],
     queryFn: () => fetchServiceCatalog(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useServiceContracts(orgId?: string) {
+  return useQuery({
+    queryKey: ['service-contracts', orgId ?? 'all-orgs'],
+    queryFn: () => fetchServiceContracts(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useServiceContractLineItems(contractId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['service-contract-line-items', orgId ?? 'all-orgs', contractId ?? 'all-contracts'],
+    queryFn: () => fetchServiceContractLineItems(contractId, orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useContractInvoiceRuns(orgId?: string) {
+  return useQuery({
+    queryKey: ['contract-invoice-runs', orgId ?? 'all-orgs'],
+    queryFn: () => fetchContractInvoiceRuns(orgId!),
     enabled: Boolean(orgId),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
@@ -2862,6 +3328,129 @@ export function useDeleteServiceCatalogItem(orgId?: string) {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['service-catalog', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useCreateServiceContract(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ServiceContractMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to create a contract.');
+      return createServiceContract(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contracts', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useUpdateServiceContract(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ServiceContractMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update a contract.');
+      return updateServiceContract(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contracts', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useUpdateServiceContractStatus(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ServiceContractStatusMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update a contract.');
+      return updateServiceContractStatus(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contracts', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useDeleteServiceContract(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (contractId: string) => {
+      if (!orgId) throw new Error('Organization is required to delete a contract.');
+      return deleteServiceContract(orgId, contractId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contracts', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['service-contract-line-items', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useCreateServiceContractLineItems(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contractId, items }: { contractId: string; items: RevenueLineItemMutationPayload[] }) => {
+      if (!orgId) throw new Error('Organization is required to create contract line items.');
+      return createServiceContractLineItems(orgId, contractId, items);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contract-line-items', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['service-contract-line-items', orgId ?? 'all-orgs', variables.contractId] });
+    },
+  });
+}
+
+export function useUpdateServiceContractLineItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RevenueLineItemMutationPayload) => {
+      if (!orgId) throw new Error('Organization is required to update a contract line item.');
+      return updateServiceContractLineItem(orgId, payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contract-line-items', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useDeleteServiceContractLineItem(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lineItemId: string) => {
+      if (!orgId) throw new Error('Organization is required to delete a contract line item.');
+      return deleteServiceContractLineItem(orgId, lineItemId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contract-line-items', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useReplaceServiceContractLineItems(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contractId, items }: { contractId: string; items: RevenueLineItemMutationPayload[] }) => {
+      if (!orgId) throw new Error('Organization is required to save contract line items.');
+      return replaceServiceContractLineItems(orgId, contractId, items);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contract-line-items', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['service-contract-line-items', orgId ?? 'all-orgs', variables.contractId] });
+    },
+  });
+}
+
+export function useGenerateContractInvoices(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (asOf: string) => {
+      if (!orgId) throw new Error('Organization is required to generate invoices.');
+      return generateContractInvoices(asOf);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['service-contracts', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['contract-invoice-runs', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['invoices', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['invoice-line-items', orgId ?? 'all-orgs'] });
     },
   });
 }
