@@ -625,7 +625,7 @@ via can_manage_property(property_id).
 | org_id            | uuid        | NO       |                   |
 | property_id       | uuid        | NO       |                   |
 | project_id        | uuid        | NO       |                   |
-| timeline_event_id | uuid        | NO       |                   |
+| timeline_event_id | uuid        | YES      |                   |
 | storage_path      | text        | NO       |                   |
 | caption           | text        | YES      |                   |
 | content_type      | text        | YES      |                   |
@@ -634,20 +634,27 @@ via can_manage_property(property_id).
 | sort_order        | integer     | NO       | 0                 |
 | created_at        | timestamptz | NO       | now()             |
 
-> Progress photos attach to a TIMELINE EVENT, not to the project directly, so each
-> dated entry carries its own images and the panel reads as a before/during/after
-> record. FKs: project_id -> projects.id CASCADE, timeline_event_id ->
-> project_timeline_events.id CASCADE, uploaded_by -> employees.id.
-> org_id and property_id are denormalised so RLS needs no join (same rationale as
-> project_timeline_events). storage_path is UNIQUE.
+> Progress photos. A photo may attach to a TIMELINE EVENT (desktop: each dated
+> entry carries its own before/during/after images) OR, as of Phase C-1
+> (2026-07-25), directly to a PROJECT with timeline_event_id NULL (mobile field
+> capture, where a crew photographs progress without a pre-made event).
+> FKs: project_id -> projects.id CASCADE, timeline_event_id ->
+> project_timeline_events.id CASCADE (nullable), uploaded_by -> employees.id.
+> org_id and property_id are denormalised so RLS needs no join. storage_path UNIQUE.
 >
 > storage_path holds the object key inside the `project-photos` bucket and MUST
 > follow `{org_id}/{project_id}/{uuid}.{ext}` — the storage policies match on the
 > first path segment, so any other shape is rejected on upload.
 
-RLS: SELECT via can_read_property(property_id). INSERT requires
-can_manage_property(property_id) AND an active admin/manager app_users row in the
-same org. UPDATE/DELETE via can_manage_property(property_id).
+RLS (relaxed for field capture, migration phase_c_field_photo_capture 2026-07-25):
+- SELECT: can_read_property(property_id) — unchanged.
+- INSERT: can_read_property(property_id) AND an active app_users row in the same
+  org (ANY role). This lets a crew member upload for the property they are
+  assigned to, not just admin/manager. The table is the property-fine gate.
+- UPDATE/DELETE: can_manage_property(property_id) — still manager-only.
+> Note: there are currently no employee-role app_users in the org, so the crew
+> path is validated by policy logic only, not a live employee login (which does
+> not exist yet). The admin path is validated end-to-end (rolled back).
 
 ---
 
@@ -667,10 +674,17 @@ every image readable by anyone holding a URL — the same failure class as the
 Serve images with `createSignedUrl`, not `getPublicUrl`.
 
 Four policies on `storage.objects`, all filtered to `bucket_id = 'project-photos'`
-and matching `(storage.foldername(name))[1] = public.current_org_id()::text`:
+and matching `(storage.foldername(name))[1] = public.current_org_id()::text`
+(relaxed for field capture, migration phase_c_field_photo_capture 2026-07-25):
 - SELECT: any active member of the owning org
-- INSERT / UPDATE / DELETE: additionally requires `current_user_role()` in
-  (admin, manager)
+- INSERT: any active member of the owning org (the admin/manager restriction was
+  dropped so crews can upload; the project_photos TABLE policy is the real
+  property-level gate — storage can only see the {org_id}/... path)
+- UPDATE: still `current_user_role()` in (admin, manager)
+- DELETE: `current_user_role()` in (admin, manager) OR `owner = auth.uid()` — a
+  crew member can remove an object THEY uploaded, which keeps the upload-rollback
+  path (delete the orphan if the table insert fails) working without granting
+  them a general delete capability
 
 Note the read scope is org-wide rather than per-property, because a storage policy
 can only see the object path. The `project_photos` table remains the authoritative,
