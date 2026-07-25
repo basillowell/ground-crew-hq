@@ -106,6 +106,14 @@
 | is_published        | boolean     | NO       | false      |
 | published_at        | timestamptz | YES      |            |
 | published_by        | uuid        | YES      |            |
+| work_order_id       | uuid        | YES      |            |
+
+> work_order_id (migration revenue_phase3_payments_and_job_link, 2026-07-24):
+> nullable FK -> work_orders.id (decision O-2). Links the labor unit (an
+> assignment's actual_hours) to the billed unit (a work order) so Job Costing can
+> compute revenue-vs-cost per job. Nullable with no backfill: historical
+> assignments stay NULL and simply don't roll up per-job until edited. Index
+> assignments_work_order_id_idx.
 
 ---
 
@@ -1117,6 +1125,37 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 > - line_items (jsonb) was DROPPED — superseded by the normalized invoice_line_items
 >   table arriving in Phase 2. Do not reference invoices.line_items; it no longer exists.
 > RLS unchanged: org_isolation (ALL). Index invoices_client_id_idx on client_id.
+
+> Revenue Chain Phase 3 note (2026-07-24): invoices.status/paid_at are now DERIVED
+> from the payments table in the app layer — an invoice is fully paid when
+> SUM(payments.amount) >= invoices.total. The columns still exist and are settable,
+> but payment state is computed from payments, not hand-set.
+
+---
+
+## payments
+| column      | type        | nullable | default           |
+|-------------|-------------|----------|-------------------|
+| id          | uuid        | NO       | gen_random_uuid() |
+| org_id      | uuid        | NO       |                   |
+| invoice_id  | uuid        | NO       |                   |
+| amount      | numeric     | NO       |                   |
+| method      | text        | NO       |                   |
+| reference   | text        | YES      |                   |
+| paid_at     | timestamptz | NO       | now()             |
+| recorded_by | uuid        | YES      |                   |
+| notes       | text        | YES      |                   |
+| created_at  | timestamptz | NO       | now()             |
+
+> Manual payment recording (migration revenue_phase3_payments_and_job_link,
+> 2026-07-24, decision D-A). NO payment processor and NO card data — `method` is a
+> label only: CHECK ('cash','check','card','ach','other'). A separate table rather
+> than columns on invoices so an invoice can carry PARTIAL and MULTIPLE payments;
+> invoice paid-state is derived from SUM(amount) vs invoices.total.
+> FKs: invoice_id -> invoices.id (ON DELETE CASCADE), recorded_by -> employees.id.
+> RLS: org_isolation (ALL), matching the parent invoices table. Indexes on
+> org_id and invoice_id.
+> Do NOT store PAN / card numbers / processor tokens here.
 
 ---
 
