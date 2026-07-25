@@ -112,6 +112,7 @@ export interface Assignment {
   propertyId?: string;
   taskId: string;
   equipmentId?: string;
+  workOrderId?: string;
   date: string;
   startTime: string;
   duration: number;

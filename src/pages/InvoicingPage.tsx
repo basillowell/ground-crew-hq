@@ -3,6 +3,7 @@ import { DollarSign, Edit3, FileText, Plus, Receipt, Send } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { LineItemEditor, calculateLineItemTotals, createEmptyLineItem, normalizeLineItemDrafts, type LineItemDraft } from '@/components/revenue/LineItemEditor';
+import { RecordPaymentDialog } from '@/components/revenue/RecordPaymentDialog';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,6 +27,7 @@ import { useOrgProfile } from '@/hooks/useOrgProfile';
 import {
   type RevenueInvoice,
   type RevenueLineItem,
+  usePayments,
   useClients,
   useCreateInvoice,
   useInvoiceLineItems,
@@ -90,6 +92,7 @@ export default function InvoicingPage() {
   const clientsQuery = useClients(orgId ?? undefined);
   const invoicesQuery = useInvoices(orgId ?? undefined);
   const invoiceLineItemsQuery = useInvoiceLineItems(undefined, orgId ?? undefined);
+  const paymentsQuery = usePayments(undefined, orgId ?? undefined);
   const serviceCatalogQuery = useServiceCatalog(orgId ?? undefined);
   const createInvoiceMutation = useCreateInvoice(orgId ?? undefined);
   const updateInvoiceMutation = useUpdateInvoice(orgId ?? undefined);
@@ -101,6 +104,7 @@ export default function InvoicingPage() {
   const [invoiceForm, setInvoiceForm] = useState<InvoiceFormState>(() => emptyInvoiceForm());
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [paymentInvoice, setPaymentInvoice] = useState<RevenueInvoice | null>(null);
 
   useEffect(() => {
     document.title = 'Invoicing - Ground Crew HQ';
@@ -108,6 +112,7 @@ export default function InvoicingPage() {
 
   const invoices = invoicesQuery.data ?? [];
   const lineItems = invoiceLineItemsQuery.data ?? [];
+  const payments = paymentsQuery.data ?? [];
   const clients = clientsQuery.data ?? [];
   const activeClients = useMemo(() => clients.filter((client) => client.active), [clients]);
   const clientsById = useMemo(() => new Map(clients.map((client) => [client.id, client.name])), [clients]);
@@ -120,22 +125,53 @@ export default function InvoicingPage() {
     });
     return grouped;
   }, [lineItems]);
+  const paymentsByInvoiceId = useMemo(() => {
+    const grouped = new Map<string, typeof payments>();
+    payments.forEach((payment) => {
+      const current = grouped.get(payment.invoiceId) ?? [];
+      current.push(payment);
+      grouped.set(payment.invoiceId, current);
+    });
+    return grouped;
+  }, [payments]);
+  const invoicePaymentTotals = useMemo(() => {
+    const totalsByInvoice = new Map<string, number>();
+    payments.forEach((payment) => {
+      totalsByInvoice.set(payment.invoiceId, (totalsByInvoice.get(payment.invoiceId) ?? 0) + payment.amount);
+    });
+    return totalsByInvoice;
+  }, [payments]);
+  const getInvoicePaymentState = useCallback(
+    (invoice: RevenueInvoice) => {
+      const paidAmount = invoicePaymentTotals.get(invoice.id) ?? 0;
+      const balanceDue = Math.max(invoice.total - paidAmount, 0);
+      const isFullyPaid = paidAmount >= invoice.total && invoice.total > 0;
+      return {
+        paidAmount,
+        balanceDue,
+        displayStatus: isFullyPaid ? 'paid' : invoice.status,
+      };
+    },
+    [invoicePaymentTotals],
+  );
   const loading =
     (invoicesQuery.isLoading && !invoicesQuery.data) ||
     (invoiceLineItemsQuery.isLoading && !invoiceLineItemsQuery.data) ||
+    (paymentsQuery.isLoading && !paymentsQuery.data) ||
     (clientsQuery.isLoading && !clientsQuery.data) ||
     (serviceCatalogQuery.isLoading && !serviceCatalogQuery.data) ||
     propertiesLoading;
-  const queryError = invoicesQuery.error ?? invoiceLineItemsQuery.error ?? clientsQuery.error ?? serviceCatalogQuery.error;
+  const queryError = invoicesQuery.error ?? invoiceLineItemsQuery.error ?? paymentsQuery.error ?? clientsQuery.error ?? serviceCatalogQuery.error;
   const error = queryError instanceof Error ? queryError.message : null;
   const totals = calculateLineItemTotals(invoiceForm.items, invoiceForm.taxRate);
 
   const handleRetry = useCallback(() => {
     void invoicesQuery.refetch();
     void invoiceLineItemsQuery.refetch();
+    void paymentsQuery.refetch();
     void clientsQuery.refetch();
     void serviceCatalogQuery.refetch();
-  }, [clientsQuery, invoiceLineItemsQuery, invoicesQuery, serviceCatalogQuery]);
+  }, [clientsQuery, invoiceLineItemsQuery, invoicesQuery, paymentsQuery, serviceCatalogQuery]);
 
   const closeDialog = () => {
     setDialogOpen(false);
@@ -231,25 +267,25 @@ export default function InvoicingPage() {
 
   const summary = useMemo(() => {
     const outstanding = invoices
-      .filter((invoice) => invoice.status === 'sent')
-      .reduce((sum, invoice) => sum + invoice.total, 0);
+      .filter((invoice) => getInvoicePaymentState(invoice).displayStatus === 'sent')
+      .reduce((sum, invoice) => sum + getInvoicePaymentState(invoice).balanceDue, 0);
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const collected = invoices
-      .filter((invoice) => invoice.status === 'paid' && invoice.paidAt?.startsWith(thisMonth))
-      .reduce((sum, invoice) => sum + invoice.total, 0);
+    const collected = payments
+      .filter((payment) => payment.paidAt.startsWith(thisMonth))
+      .reduce((sum, payment) => sum + payment.amount, 0);
     const overdue = invoices.filter(
       (invoice) =>
-        invoice.status === 'sent' &&
+        getInvoicePaymentState(invoice).displayStatus === 'sent' &&
         invoice.sentAt &&
         Date.now() - new Date(invoice.sentAt).getTime() > 30 * 24 * 60 * 60 * 1000,
     ).length;
     return { outstanding, collected, overdue };
-  }, [invoices]);
+  }, [getInvoicePaymentState, invoices, payments]);
 
   const tabInvoices = useMemo(
-    () => invoices.filter((invoice) => invoice.status === activeTab.toLowerCase()),
-    [invoices, activeTab],
+    () => invoices.filter((invoice) => getInvoicePaymentState(invoice).displayStatus === activeTab.toLowerCase()),
+    [activeTab, getInvoicePaymentState, invoices],
   );
 
   if (!orgId || loading) return <PageSkeleton />;
@@ -305,7 +341,7 @@ export default function InvoicingPage() {
 
       <div className="flex gap-1 border-b border-surface-border">
         {TABS.map((tab) => {
-          const count = invoices.filter((invoice) => invoice.status === tab.toLowerCase()).length;
+          const count = invoices.filter((invoice) => getInvoicePaymentState(invoice).displayStatus === tab.toLowerCase()).length;
           return (
             <button
               key={tab}
@@ -342,6 +378,8 @@ export default function InvoicingPage() {
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted md:table-cell">Property</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Status</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Total</th>
+                <th className="hidden px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted lg:table-cell">Paid</th>
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Balance</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted lg:table-cell">Created</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Actions</th>
               </tr>
@@ -349,6 +387,8 @@ export default function InvoicingPage() {
             <tbody className="divide-y divide-surface-border">
               {tabInvoices.map((invoice) => {
                 const invoiceItems = lineItemsByInvoiceId.get(invoice.id) ?? [];
+                const invoicePayments = paymentsByInvoiceId.get(invoice.id) ?? [];
+                const paymentState = getInvoicePaymentState(invoice);
                 return (
                   <tr key={invoice.id} className="transition-colors hover:bg-surface-hover">
                     <td className="px-4 py-3">
@@ -364,6 +404,16 @@ export default function InvoicingPage() {
                           ))
                         )}
                         {invoiceItems.length > 2 ? <div>{invoiceItems.length - 2} more</div> : null}
+                        <div className="pt-1 text-text-muted">
+                          {invoicePayments.length === 0
+                            ? 'No payments recorded'
+                            : invoicePayments.slice(0, 2).map((payment) => (
+                                <div key={payment.id}>
+                                  {fmt(payment.amount)} {payment.method} on {fmtDate(payment.paidAt)}
+                                </div>
+                              ))}
+                          {invoicePayments.length > 2 ? <div>{invoicePayments.length - 2} more payments</div> : null}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-text-primary">
@@ -372,11 +422,16 @@ export default function InvoicingPage() {
                     </td>
                     <td className="hidden px-4 py-3 text-text-secondary md:table-cell">{getPropertyName(invoice.propertyId)}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${statusStyles[invoice.status]}`}>
-                        {invoice.status}
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${statusStyles[paymentState.displayStatus]}`}>
+                        {paymentState.displayStatus}
                       </span>
+                      {paymentState.paidAmount > 0 && paymentState.displayStatus !== 'paid' ? (
+                        <div className="mt-1 text-xs text-text-secondary">Partial payment</div>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-text-primary">{fmt(invoice.total)}</td>
+                    <td className="hidden px-4 py-3 text-right font-medium text-status-active lg:table-cell">{fmt(paymentState.paidAmount)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-text-primary">{fmt(paymentState.balanceDue)}</td>
                     <td className="hidden px-4 py-3 text-text-secondary lg:table-cell">{fmtDate(invoice.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -396,16 +451,16 @@ export default function InvoicingPage() {
                             {updatingId === invoice.id ? 'Saving' : 'Send'}
                           </Button>
                         ) : null}
-                        {invoice.status === 'sent' ? (
+                        {invoice.status !== 'void' ? (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => void updateInvoiceStatus(invoice.id, 'paid')}
+                            onClick={() => setPaymentInvoice(invoice)}
                             disabled={updatingId === invoice.id}
                             className="border-status-active/40 text-status-active hover:bg-status-active/10"
                           >
-                            {updatingId === invoice.id ? 'Saving' : 'Mark Paid'}
+                            Record Payment
                           </Button>
                         ) : null}
                       </div>
@@ -469,6 +524,14 @@ export default function InvoicingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <RecordPaymentDialog
+        open={Boolean(paymentInvoice)}
+        invoice={paymentInvoice}
+        balanceDue={paymentInvoice ? getInvoicePaymentState(paymentInvoice).balanceDue : 0}
+        onOpenChange={(open) => {
+          if (!open) setPaymentInvoice(null);
+        }}
+      />
     </div>
   );
 }

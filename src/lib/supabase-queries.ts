@@ -151,6 +151,45 @@ export type RevenueInvoice = {
   paidAt: string | null;
 };
 
+export type PaymentMethod = 'cash' | 'check' | 'card' | 'ach' | 'other';
+
+export type RevenuePayment = {
+  id: string;
+  orgId: string;
+  invoiceId: string;
+  amount: number;
+  method: PaymentMethod;
+  reference: string;
+  paidAt: string;
+  recordedBy: string | null;
+  notes: string;
+  createdAt: string;
+};
+
+export type RevenueWorkOrder = {
+  id: string;
+  orgId: string;
+  propertyId: string;
+  title: string;
+  status: string;
+  priority: string;
+  woNumber: number;
+  cost: number;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+export type JobCostingAssignment = {
+  id: string;
+  employeeId: string;
+  propertyId: string;
+  taskId: string | null;
+  workOrderId: string | null;
+  actualHours: number;
+  estimatedHours: number;
+  date: string;
+};
+
 export type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired';
 
 export type RevenueEstimate = {
@@ -263,6 +302,43 @@ type DbRevenueInvoice = {
   created_at: string;
   sent_at: string | null;
   paid_at: string | null;
+};
+
+type DbRevenuePayment = {
+  id: string;
+  org_id: string;
+  invoice_id: string;
+  amount: number | string | null;
+  method: PaymentMethod;
+  reference: string | null;
+  paid_at: string;
+  recorded_by: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type DbRevenueWorkOrder = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  title: string;
+  status: string;
+  priority: string;
+  wo_number: number | string | null;
+  cost: number | string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+type DbJobCostingAssignment = {
+  id: string;
+  employee_id: string;
+  property_id: string;
+  task_id: string | null;
+  work_order_id: string | null;
+  actual_hours: number | string | null;
+  estimated_hours: number | string | null;
+  date: string;
 };
 
 type DbRevenueEstimate = {
@@ -396,6 +472,7 @@ type DbAssignment = {
   start_time?: string | null;
   title?: string | null;
   equipment_unit_id?: string | null;
+  work_order_id?: string | null;
   created_at: string;
 };
 
@@ -775,6 +852,49 @@ function toRevenueInvoice(row: DbRevenueInvoice): RevenueInvoice {
   };
 }
 
+function toRevenuePayment(row: DbRevenuePayment): RevenuePayment {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    invoiceId: row.invoice_id,
+    amount: Number(row.amount ?? 0),
+    method: row.method,
+    reference: row.reference ?? '',
+    paidAt: row.paid_at,
+    recordedBy: row.recorded_by,
+    notes: row.notes ?? '',
+    createdAt: row.created_at,
+  };
+}
+
+function toRevenueWorkOrder(row: DbRevenueWorkOrder): RevenueWorkOrder {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    propertyId: row.property_id,
+    title: row.title,
+    status: row.status,
+    priority: row.priority,
+    woNumber: Number(row.wo_number ?? 0),
+    cost: Number(row.cost ?? 0),
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  };
+}
+
+function toJobCostingAssignment(row: DbJobCostingAssignment): JobCostingAssignment {
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    propertyId: row.property_id,
+    taskId: row.task_id,
+    workOrderId: row.work_order_id,
+    actualHours: Number(row.actual_hours ?? 0),
+    estimatedHours: Number(row.estimated_hours ?? 0),
+    date: row.date,
+  };
+}
+
 function toRevenueEstimate(row: DbRevenueEstimate): RevenueEstimate {
   return {
     id: row.id,
@@ -919,6 +1039,7 @@ function toAssignment(row: DbAssignment): Assignment {
     notes: row.notes ?? undefined,
     area: row.location ?? 'Unassigned area',
     equipmentId: row.equipment_unit_id ?? undefined,
+    workOrderId: row.work_order_id ?? undefined,
     order: row.order_index ?? undefined,
     actualStartAt: row.actual_start_at ?? null,
     actualCompletedAt: row.actual_completed_at ?? null,
@@ -946,6 +1067,7 @@ const ASSIGNMENTS_SELECT_COLUMNS =
   title,
   notes,
   equipment_unit_id,
+  work_order_id,
   created_at,
   org_id,
   completed_at,
@@ -1771,11 +1893,25 @@ export type InvoiceStatusMutationPayload = {
   status: 'sent' | 'paid' | 'void';
 };
 
+export type RecordPaymentPayload = {
+  invoiceId: string;
+  invoiceTotal: number;
+  amount: number;
+  method: PaymentMethod;
+  reference?: string | null;
+  paidAt: string;
+  recordedBy?: string | null;
+  notes?: string | null;
+};
+
 const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at';
 const estimateSelectColumns = 'id, org_id, client_id, property_id, estimate_number, status, subtotal, tax_rate, total, notes, valid_until, converted_invoice_id, created_at, sent_at, accepted_at';
 const estimateLineItemSelectColumns = 'id, org_id, estimate_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
 const invoiceLineItemSelectColumns = 'id, org_id, invoice_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
 const serviceCatalogSelectColumns = 'id, org_id, name, description, default_unit_price, active, created_at';
+const paymentSelectColumns = 'id, org_id, invoice_id, amount, method, reference, paid_at, recorded_by, notes, created_at';
+const revenueWorkOrderSelectColumns = 'id, org_id, property_id, title, status, priority, cost, created_at, completed_at, wo_number';
+const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
 
 async function fetchClients(orgId: string): Promise<BillingClient[]> {
   const client = ensureSupabase();
@@ -1808,6 +1944,66 @@ async function fetchInvoices(orgId: string): Promise<RevenueInvoice[]> {
       .order('created_at', { ascending: false });
     if (error) throw error;
     return ((data ?? []) as DbRevenueInvoice[]).map(toRevenueInvoice);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchPayments(invoiceId: string | undefined, orgId: string): Promise<RevenuePayment[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Payments request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('payments')
+      .select(paymentSelectColumns)
+      .eq('org_id', orgId)
+      .order('paid_at', { ascending: false });
+    if (invoiceId) query = query.eq('invoice_id', invoiceId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbRevenuePayment[]).map(toRevenuePayment);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchRevenueWorkOrders(propertyId: string | undefined, orgId: string): Promise<RevenueWorkOrder[]> {
+  const client = ensureSupabase();
+  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Work orders request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('work_orders')
+      .select(revenueWorkOrderSelectColumns)
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false });
+    if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbRevenueWorkOrder[]).map(toRevenueWorkOrder);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchJobCostingAssignments(orgId: string): Promise<JobCostingAssignment[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Job costing assignments request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('assignments')
+      .select(jobCostingAssignmentSelectColumns)
+      .eq('org_id', orgId)
+      .eq('status', 'completed')
+      .order('date', { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as DbJobCostingAssignment[]).map(toJobCostingAssignment);
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -1987,6 +2183,57 @@ async function updateRevenueInvoiceStatus(orgId: string, payload: InvoiceStatusM
     .single();
   if (error) throw error;
   return toRevenueInvoice(data as DbRevenueInvoice);
+}
+
+async function recordRevenuePayment(orgId: string, payload: RecordPaymentPayload): Promise<RevenuePayment> {
+  if (!payload.invoiceId || payload.invoiceId === 'all') throw new Error('Invoice is required.');
+  if (!Number.isFinite(payload.amount) || payload.amount <= 0) throw new Error('Payment amount must be greater than zero.');
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Payment save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('payments')
+      .insert({
+        org_id: orgId,
+        invoice_id: payload.invoiceId,
+        amount: payload.amount,
+        method: payload.method,
+        reference: payload.reference?.trim() || null,
+        paid_at: payload.paidAt,
+        recorded_by: payload.recordedBy || null,
+        notes: payload.notes?.trim() || null,
+      })
+      .select(paymentSelectColumns)
+      .single();
+    if (error) throw error;
+
+    const { data: paymentRows, error: paymentTotalError } = await client
+      .from('payments')
+      .select('amount')
+      .eq('org_id', orgId)
+      .eq('invoice_id', payload.invoiceId);
+    if (paymentTotalError) throw paymentTotalError;
+
+    const paidTotal = ((paymentRows ?? []) as Array<{ amount: number | string | null }>).reduce(
+      (sum, row) => sum + Number(row.amount ?? 0),
+      0,
+    );
+    if (paidTotal >= payload.invoiceTotal) {
+      const paidAt = payload.paidAt || new Date().toISOString();
+      const { error: invoiceError } = await client
+        .from('invoices')
+        .update({ status: 'paid', paid_at: paidAt })
+        .eq('id', payload.invoiceId)
+        .eq('org_id', orgId);
+      if (invoiceError) throw invoiceError;
+    }
+
+    return toRevenuePayment(data as DbRevenuePayment);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
 }
 
 async function createRevenueEstimate(orgId: string, payload: EstimateMutationPayload): Promise<RevenueEstimate> {
@@ -2268,6 +2515,42 @@ export function useInvoices(orgId?: string) {
   });
 }
 
+export function usePayments(invoiceId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['payments', orgId ?? 'all-orgs', invoiceId ?? 'all-invoices'],
+    queryFn: () => fetchPayments(invoiceId, orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useRevenueWorkOrders(propertyId?: string, orgId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['revenue-work-orders', orgId ?? 'all-orgs', propertyId ?? 'all-properties'],
+    queryFn: () => fetchRevenueWorkOrders(propertyId, orgId!),
+    enabled: Boolean(orgId) && enabled,
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useJobCostingAssignments(orgId?: string) {
+  return useQuery({
+    queryKey: ['job-costing-assignments', orgId ?? 'all-orgs'],
+    queryFn: () => fetchJobCostingAssignments(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
 export function useEstimates(orgId?: string) {
   return useQuery({
     queryKey: ['estimates', orgId ?? 'all-orgs'],
@@ -2376,6 +2659,21 @@ export function useUpdateInvoiceStatus(orgId?: string) {
       return updateRevenueInvoiceStatus(orgId, payload);
     },
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['invoices', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useRecordPayment(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RecordPaymentPayload) => {
+      if (!orgId) throw new Error('Organization is required to record a payment.');
+      return recordRevenuePayment(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['payments', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['payments', orgId ?? 'all-orgs', variables.invoiceId] });
       await queryClient.invalidateQueries({ queryKey: ['invoices', orgId ?? 'all-orgs'] });
     },
   });

@@ -892,7 +892,7 @@ export default function SchedulerPage() {
       const { data: sourceAssignments, error: sourceAssignmentsError } = await withSchedulerMutationTimeout(
         supabase
           .from('assignments')
-          .select('employee_id, property_id, task_id, date, title, location, status, notes, order_index, estimated_hours, actual_hours, start_time')
+          .select('employee_id, property_id, task_id, work_order_id, date, title, location, status, notes, order_index, estimated_hours, actual_hours, start_time')
           .eq('org_id', currentUser.orgId)
           .gte('date', weekStartDate)
           .lte('date', weekEndDate),
@@ -932,6 +932,7 @@ export default function SchedulerPage() {
           employee_id: assignment.employee_id,
           property_id: assignment.property_id,
           task_id: assignment.task_id,
+          work_order_id: assignment.work_order_id ?? null,
           date: targetDate,
           title: assignment.title,
           location: assignment.location,

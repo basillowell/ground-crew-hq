@@ -53,7 +53,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProperties, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProperties, useRevenueWorkOrders, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import {
   getOperationalTimezone,
   getNowHHMMInTimezone,
@@ -307,6 +307,7 @@ type TaskRowDraft = {
   propertyId: string;
   taskId: string;
   equipmentId: string;
+  workOrderId: string;
   startTime: string;
   status: 'planned' | 'in_progress' | 'done';
   hoursOverride: string;
@@ -346,6 +347,7 @@ function makeEmptyTaskRow(startTime = '05:30', propertyId = ''): TaskRowDraft {
     propertyId,
     taskId: '',
     equipmentId: '',
+    workOrderId: '',
     startTime,
     status: 'planned',
     hoursOverride: '',
@@ -861,6 +863,7 @@ export default function WorkboardContent() {
     propertyId: '',
     taskId: '',
     equipmentId: '',
+    workOrderId: '',
     startTime: '05:30',
     estimatedHours: '',
     status: 'planned' as Assignment['status'],
@@ -902,6 +905,7 @@ export default function WorkboardContent() {
     effectivePropertyId === 'all' ? undefined : effectivePropertyId,
     orgId,
   );
+  const assignmentWorkOrdersQuery = useRevenueWorkOrders(effectivePropertyId, orgId, assignmentDialogOpen);
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, orgId);
   const assignmentPublishStateQueryKey = useMemo(
     () => ['assignments', 'publish-state', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'] as const,
@@ -1221,6 +1225,17 @@ export default function WorkboardContent() {
   const pendingTaskRequests = pendingTaskRequestsQuery.data ?? [];
   const workLocations = workLocationsQuery.data ?? [];
   const workOrders = workOrdersQuery.data ?? [];
+  const assignmentWorkOrders = assignmentWorkOrdersQuery.data ?? [];
+  const assignmentWorkOrderOptions = useMemo(
+    () =>
+      assignmentWorkOrders
+        .map((workOrder) => ({
+          id: workOrder.id,
+          propertyId: workOrder.propertyId,
+          label: `#${workOrder.woNumber} ${workOrder.title}`,
+        })),
+    [assignmentWorkOrders],
+  );
   const defaultWorkOrderPropertyId = useMemo(
     () => (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id ?? ''),
     [effectivePropertyId, properties],
@@ -2870,7 +2885,7 @@ export default function WorkboardContent() {
 
     const { data, error } = await withWorkboardMutationTimeout(supabase
       .from('assignments')
-      .select('id, employee_id, task_id, title, estimated_hours, status, property_id')
+      .select('id, employee_id, task_id, work_order_id, title, estimated_hours, status, property_id')
       .eq('org_id', currentUser.orgId)
       .eq('date', previousDateKey)
       .in('status', ['planned', 'in_progress', 'done']));
@@ -2890,6 +2905,7 @@ export default function WorkboardContent() {
       estimatedHours: Number(row.estimated_hours ?? 0),
       status: String(row.status ?? 'planned'),
       propertyId: row.property_id ? String(row.property_id) : null,
+      workOrderId: row.work_order_id ? String(row.work_order_id) : null,
     })).filter((item) => item.employeeId);
 
     if (suggestions.length === 0) {
@@ -2952,6 +2968,7 @@ export default function WorkboardContent() {
           properties[0]?.id ??
           null,
         task_id: item.taskId,
+        work_order_id: item.workOrderId,
         title: item.title,
         date: boardDate,
         status: 'planned',
@@ -3729,6 +3746,7 @@ export default function WorkboardContent() {
       propertyId: targetPropertyId,
       taskId: '',
       equipmentId: '',
+      workOrderId: '',
       startTime: defaultStartTime,
       estimatedHours: '',
       status: 'planned',
@@ -3755,6 +3773,7 @@ export default function WorkboardContent() {
       propertyId: assignment.propertyId ?? '',
       taskId: assignment.taskId,
       equipmentId: assignment.equipmentId ?? '',
+      workOrderId: assignment.workOrderId ?? '',
       startTime: assignment.startTime,
       estimatedHours: currentEstimatedHours > 0 ? String(Number(currentEstimatedHours.toFixed(2))) : '',
       status: assignment.status,
@@ -3786,6 +3805,7 @@ export default function WorkboardContent() {
       propertyId: (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : properties[0]?.id) ?? '',
       taskId: targetTaskId,
       equipmentId: '',
+      workOrderId: '',
       startTime: defaultStartTime,
       estimatedHours: '',
       status: 'planned',
@@ -3951,6 +3971,7 @@ export default function WorkboardContent() {
           estimated_hours: estimatedHours,
           order_index: nextOrder,
           equipment_unit_id: taskRow.equipmentId || null,
+          work_order_id: taskRow.workOrderId || null,
           start_time: taskRow.startTime || null,
           notes: assignmentDraft.notes.trim() || null,
         };
@@ -3975,6 +3996,7 @@ export default function WorkboardContent() {
           employeeId: employee.id,
           taskId: selectedTaskId,
           equipmentId: taskRow.equipmentId || undefined,
+          workOrderId: taskRow.workOrderId || undefined,
           date: boardDate,
           startTime: taskRow.startTime || '06:00',
           estimatedHours: Number((estimatedMinutes / 60).toFixed(2)),
@@ -4042,6 +4064,7 @@ export default function WorkboardContent() {
             employeeId: String(row.employee_id ?? ''),
             taskId: String(row.task_id ?? ''),
             equipmentId: row.equipment_unit_id ? String(row.equipment_unit_id) : undefined,
+            workOrderId: row.work_order_id ? String(row.work_order_id) : undefined,
             date: String(row.date ?? boardDate),
             startTime: String(row.start_time ?? '06:00'),
             estimatedHours: Number(row.estimated_hours ?? 0),
@@ -4108,6 +4131,7 @@ export default function WorkboardContent() {
         estimated_hours: estimatedHours,
         order_index: existingEmployeeAssignments.length,
         equipment_unit_id: assignmentDraft.equipmentId || null,
+        work_order_id: assignmentDraft.workOrderId || null,
       };
       if (assignmentDraft.startTime) basePayload.start_time = assignmentDraft.startTime;
       if (assignmentDraft.notes.trim()) basePayload.notes = assignmentDraft.notes.trim();
@@ -4141,6 +4165,7 @@ export default function WorkboardContent() {
         employeeId: String(data?.employee_id ?? assignmentDraft.employeeId),
         taskId: String(data?.task_id ?? selectedTaskId),
         equipmentId: data?.equipment_unit_id ? String(data.equipment_unit_id) : assignmentDraft.equipmentId || undefined,
+        workOrderId: data?.work_order_id ? String(data.work_order_id) : assignmentDraft.workOrderId || undefined,
         date: String(data?.date ?? boardDate),
         startTime: String(data?.start_time ?? (assignmentDraft.startTime || '06:00')),
         estimatedHours: Number(data?.estimated_hours ?? estimatedHours),
@@ -6207,6 +6232,28 @@ export default function WorkboardContent() {
               />
             </div>
 
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Work order</label>
+              <select
+                value={assignmentDraft.workOrderId}
+                onChange={(e) => {
+                  setIsAssignmentModalDirty(true);
+                  setAssignmentDraft({ ...assignmentDraft, workOrderId: e.target.value });
+                }}
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                data-testid="select-assignment-work-order"
+              >
+                <option value="">No work order</option>
+                {assignmentWorkOrderOptions
+                  .filter((option) => !assignmentDraft.propertyId || option.propertyId === assignmentDraft.propertyId)
+                  .map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
             {singleAssignmentShiftCoverageWarning ? (
               <div className="col-span-2">
                 {renderShiftCoverageWarning(singleAssignmentShiftCoverageWarning)}
@@ -6322,6 +6369,37 @@ export default function WorkboardContent() {
                   ) : null}
                 </div>
                 <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground">Work order</label>
+                  <select
+                    value={taskRows[0]?.workOrderId ?? assignmentDraft.workOrderId}
+                    disabled={quickAssignmentSaving}
+                    onChange={(e) => {
+                      setIsAssignmentModalDirty(true);
+                      setAssignmentDraft({ ...assignmentDraft, workOrderId: e.target.value });
+                      setTaskRows((current) => {
+                        const baseRows = current.length > 0
+                          ? current
+                          : [makeEmptyTaskRow(taskRows[0]?.startTime ?? assignmentDraft.startTime, effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')];
+                        return baseRows.map((item, itemIndex) => (itemIndex === 0 ? { ...item, workOrderId: e.target.value } : item));
+                      });
+                    }}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="select-assignment-work-order"
+                  >
+                    <option value="">No work order</option>
+                    {assignmentWorkOrderOptions
+                      .filter((option) => {
+                        const rowPropertyId = taskRows[0]?.propertyId || assignmentDraft.propertyId;
+                        return !rowPropertyId || option.propertyId === rowPropertyId;
+                      })
+                      .map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="col-span-2">
                   <label className="text-xs text-muted-foreground">Start time</label>
                   <TimeSelect
                     value={taskRows[0]?.startTime ?? assignmentDraft.startTime}
@@ -6400,7 +6478,7 @@ export default function WorkboardContent() {
                           value={row.propertyId}
                           onChange={(e) => {
                             setIsAssignmentModalDirty(true);
-                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, propertyId: e.target.value } : item)));
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, propertyId: e.target.value, workOrderId: '' } : item)));
                           }}
                           className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                           data-testid="select-assignment-row-property"
@@ -6411,6 +6489,27 @@ export default function WorkboardContent() {
                               {property.name}
                             </option>
                           ))}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs text-muted-foreground">Work order</label>
+                        <select
+                          value={row.workOrderId}
+                          onChange={(e) => {
+                            setIsAssignmentModalDirty(true);
+                            setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, workOrderId: e.target.value } : item)));
+                          }}
+                          className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          data-testid="select-assignment-work-order"
+                        >
+                          <option value="">No work order</option>
+                          {assignmentWorkOrderOptions
+                            .filter((option) => !row.propertyId || option.propertyId === row.propertyId)
+                            .map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
                         </select>
                       </div>
                       <div>
