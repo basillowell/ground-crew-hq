@@ -1114,6 +1114,9 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | paid_at        | timestamptz | YES      |                |
 | client_id      | uuid        | YES      |                |
 | invoice_number | integer     | NO       | nextval(seq)   |
+| contract_id    | uuid        | YES      |                |
+| period_start   | date        | YES      |                |
+| period_end     | date        | YES      |                |
 
 > status CHECK: ('draft','sent','paid','void')
 
@@ -1130,6 +1133,103 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 > from the payments table in the app layer — an invoice is fully paid when
 > SUM(payments.amount) >= invoices.total. The columns still exist and are settable,
 > but payment state is computed from payments, not hand-set.
+
+> Revenue Chain Phase 4 (migration revenue_phase4_service_contracts, 2026-07-24):
+> contract_id / period_start / period_end link an invoice to the service contract
+> and billing period that generated it. UNIQUE partial index
+> invoices_contract_period_key on (contract_id, period_start) WHERE contract_id IS
+> NOT NULL — the idempotency guard that stops a generation re-run double-billing a
+> period. All three are NULL for hand-created invoices.
+
+---
+
+## service_contracts
+| column      | type        | nullable | default           |
+|-------------|-------------|----------|-------------------|
+| id          | uuid        | NO       | gen_random_uuid() |
+| org_id      | uuid        | NO       |                   |
+| client_id   | uuid        | NO       |                   |
+| property_id | uuid        | YES      |                   |
+| name        | text        | NO       |                   |
+| status      | text        | NO       | 'active'          |
+| frequency   | text        | NO       |                   |
+| start_date  | date        | NO       |                   |
+| end_date    | date        | YES      |                   |
+| pause_from  | date        | YES      |                   |
+| pause_until | date        | YES      |                   |
+| tax_rate    | numeric     | NO       | 0                 |
+| notes       | text        | YES      |                   |
+| created_at  | timestamptz | NO       | now()             |
+
+> Recurring billing plan (decision D-E). status CHECK ('active','paused','ended');
+> frequency CHECK ('weekly','biweekly','monthly','quarterly','seasonal').
+> FKs: client_id -> clients.id (required), property_id -> properties.id (optional).
+> tax_rate is a percentage (e.g. 10 = 10%), same convention as estimates/invoices.
+> RLS: org_isolation (ALL).
+
+---
+
+## service_contract_line_items
+| column      | type        | nullable | default           |
+|-------------|-------------|----------|-------------------|
+| id          | uuid        | NO       | gen_random_uuid() |
+| org_id      | uuid        | NO       |                   |
+| contract_id | uuid        | NO       |                   |
+| catalog_id  | uuid        | YES      |                   |
+| description | text        | NO       |                   |
+| quantity    | numeric     | NO       | 1                 |
+| unit_price  | numeric     | NO       | 0                 |
+| line_total  | numeric     | NO       | 0                 |
+| sort_order  | integer     | NO       | 0                 |
+| created_at  | timestamptz | NO       | now()             |
+
+> Template line items each generated invoice is built from. Same shape as
+> invoice_line_items / estimate_line_items so generation is a straight copy.
+> FK: contract_id -> service_contracts.id (ON DELETE CASCADE),
+> catalog_id -> service_catalog.id. RLS: org_isolation (ALL).
+
+---
+
+## contract_invoice_runs
+| column              | type        | nullable | default           |
+|---------------------|-------------|----------|-------------------|
+| id                  | uuid        | NO       | gen_random_uuid() |
+| org_id              | uuid        | NO       |                   |
+| run_at              | timestamptz | NO       | now()             |
+| as_of               | date        | NO       |                   |
+| triggered_by        | uuid        | YES      |                   |
+| contracts_processed | integer     | NO       | 0                 |
+| invoices_created    | integer     | NO       | 0                 |
+| error               | text        | YES      |                   |
+
+> Audit log of contract-invoice generation runs — one row per generation attempt,
+> because unattended (scheduled) billing needs a paper trail. triggered_by ->
+> employees.id (NULL for a future scheduled/headless run). RLS: org_isolation (ALL).
+
+---
+
+## DB function: generate_contract_invoices(as_of date default current_date) -> integer
+
+SECURITY DEFINER, search_path pinned to public. EXECUTE granted to `authenticated`
+only — revoked from `anon` and PUBLIC. Returns the number of invoices created.
+
+The MANUAL "generate now" path. For each active service_contract in the caller's
+org whose start_date <= as_of, computes the current billing period (anchored to
+start_date, stepped by frequency), skips ended contracts and periods inside a
+pause window, and — if no invoice already exists for that (contract_id,
+period_start) — inserts a draft invoice stamped with the contract + period and
+copies the template line items into invoice_line_items. Writes one
+contract_invoice_runs row per call. Idempotent: a re-run for the same period is a
+no-op (existence check + the UNIQUE partial index).
+
+Guards: caller must have an active app_users row (org resolved from it, never from
+the client) and role admin or manager, else raises 'Not authorized.'
+
+> NOT YET SCHEDULED. Per plan decision O-3 the automatic pg_cron / Edge Function
+> schedule is enabled by the owner ONLY after this manual path is proven against
+> real contracts. Until then, generation happens only when an admin triggers it.
+> A scheduled/headless variant would run without auth.uid() and must be a separate
+> function EXECUTEd by the cron role, not this one.
 
 ---
 
