@@ -111,7 +111,7 @@ export type ProjectPhoto = {
   orgId: string;
   propertyId: string;
   projectId: string;
-  timelineEventId: string;
+  timelineEventId: string | null;
   storagePath: string;
   caption: string;
   contentType: string | null;
@@ -299,7 +299,7 @@ type DbProjectPhoto = {
   org_id: string;
   property_id: string;
   project_id: string;
-  timeline_event_id: string;
+  timeline_event_id: string | null;
   storage_path: string;
   caption: string | null;
   content_type: string | null;
@@ -3504,7 +3504,7 @@ export type UploadProjectPhotoPayload = {
   file: File;
   propertyId: string;
   projectId: string;
-  timelineEventId: string;
+  timelineEventId?: string | null;
   uploadedBy?: string | null;
   caption?: string | null;
 };
@@ -3673,8 +3673,11 @@ async function uploadProjectPhoto(orgId: string, payload: UploadProjectPhotoPayl
     throw new Error('Photos must be 10 MB or smaller.');
   }
   if (!payload.propertyId || payload.propertyId === 'all') throw new Error('Select a property before adding a photo.');
-  if (!payload.projectId || payload.projectId === 'all' || !payload.timelineEventId || payload.timelineEventId === 'all') {
-    throw new Error('Choose a timeline event before adding a photo.');
+  if (!payload.projectId || payload.projectId === 'all') {
+    throw new Error('Choose a project before adding a photo.');
+  }
+  if (payload.timelineEventId === 'all') {
+    throw new Error('Choose a project before adding a photo.');
   }
 
   const client = ensureSupabase();
@@ -3698,7 +3701,7 @@ async function uploadProjectPhoto(orgId: string, payload: UploadProjectPhotoPayl
         org_id: orgId,
         property_id: payload.propertyId,
         project_id: payload.projectId,
-        timeline_event_id: payload.timelineEventId,
+        timeline_event_id: payload.timelineEventId ?? null,
         storage_path: storagePath,
         caption: payload.caption?.trim() || null,
         content_type: payload.file.type,
@@ -3736,14 +3739,17 @@ async function deleteProjectPhoto(orgId: string, payload: DeleteProjectPhotoPayl
       .remove([payload.photo.storagePath]);
     if (removeError) throw removeError;
 
-    const { error: rowError } = await client
+    let rowDeleteQuery = client
       .from('project_photos')
       .delete()
       .eq('id', payload.photo.id)
       .eq('org_id', orgId)
       .eq('property_id', payload.photo.propertyId)
-      .eq('project_id', payload.photo.projectId)
-      .eq('timeline_event_id', payload.photo.timelineEventId);
+      .eq('project_id', payload.photo.projectId);
+    rowDeleteQuery = payload.photo.timelineEventId
+      ? rowDeleteQuery.eq('timeline_event_id', payload.photo.timelineEventId)
+      : rowDeleteQuery.is('timeline_event_id', null);
+    const { error: rowError } = await rowDeleteQuery;
     if (rowError) throw rowError;
   })();
 
@@ -3918,6 +3924,10 @@ export function useProjectPhotos(scope: ProjectPhotosScope | string | undefined,
   });
 }
 
+export function useProjectPhotosByProject(projectId?: string | null, orgId?: string) {
+  return useProjectPhotos(projectId && projectId !== 'all' ? { projectId } : undefined, orgId);
+}
+
 export function useUploadProjectPhoto(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -3927,7 +3937,7 @@ export function useUploadProjectPhoto(orgId?: string) {
     },
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: ['project-photos', orgId ?? 'all-orgs', variables.timelineEventId, variables.projectId],
+        queryKey: ['project-photos', orgId ?? 'all-orgs', variables.timelineEventId ?? 'no-event', variables.projectId],
       });
       await queryClient.invalidateQueries({ queryKey: ['project-photos'] });
     },
@@ -3943,7 +3953,7 @@ export function useDeleteProjectPhoto(orgId?: string) {
     },
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: ['project-photos', orgId ?? 'all-orgs', variables.photo.timelineEventId, variables.photo.projectId],
+        queryKey: ['project-photos', orgId ?? 'all-orgs', variables.photo.timelineEventId ?? 'no-event', variables.photo.projectId],
       });
       await queryClient.invalidateQueries({ queryKey: ['project-photos'] });
     },

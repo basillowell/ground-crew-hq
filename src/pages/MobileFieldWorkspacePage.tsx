@@ -16,6 +16,7 @@ import { createEvents, type EventAttributes } from 'ics';
 import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin, MoreHorizontal, Users, WifiOff } from 'lucide-react';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { PageHeader } from '@/components/shared';
+import { FieldPhotoCapture } from '@/components/field/FieldPhotoCapture';
 
 const supabase = createClient();
 
@@ -1592,6 +1593,13 @@ export default function MobileFieldWorkspacePage() {
             clockInLabel={t.clockIn}
             clockOutLabel={t.clockOut}
             breakLabel={t.break}
+          />
+
+          <FieldPhotoCapture
+            orgId={orgId}
+            propertyId={currentUser?.propertyId ?? null}
+            propertyName={propertyName}
+            uploadedBy={employeeId}
           />
 
           {pullDistance > 0 ? (
