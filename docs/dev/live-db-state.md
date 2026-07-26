@@ -1449,8 +1449,40 @@ piecemeal. Same applies to the `multiple_permissive_policies` (225) and
 
 ---
 
-## Table count: 52
+## signatures
+| column         | type        | nullable | default           |
+|----------------|-------------|----------|-------------------|
+| id             | uuid        | NO       | gen_random_uuid() |
+| org_id         | uuid        | NO       |                   |
+| property_id    | uuid        | NO       |                   |
+| assignment_id  | uuid        | NO       |                   |
+| signer_name    | text        | NO       |                   |
+| signature_data | text        | NO       |                   |
+| signed_at      | timestamptz | NO       | now()             |
+| captured_by    | uuid        | YES      |                   |
+| created_at     | timestamptz | NO       | now()             |
+
+> On-site customer sign-off (Phase C-2, migration phase_c_signatures 2026-07-26),
+> attached to an ASSIGNMENT — the unit of scheduled crew work — as proof of
+> completion / billable evidence. FKs: assignment_id -> assignments.id CASCADE,
+> property_id -> properties.id, captured_by -> employees.id.
+> signature_data holds the signature image as a base64 data URL (a signature PNG
+> is a few KB) — kept in-row rather than a second storage bucket. Could move to
+> storage later if volume warrants.
+>
+> RLS: SELECT can_read_property(property_id); INSERT can_read_property AND an
+> active app_users row in the org (crews capture in the field, same reach as field
+> photos); DELETE can_manage_property (manager-only, to remove a mistaken
+> capture). There is deliberately **NO UPDATE policy** — signatures are immutable
+> evidence; an UPDATE matches zero rows (validated).
+
+---
+
+## Table count: 53
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl
+Phase C migrations applied 2026-07-25/26:
+- phase_c_field_photo_capture — project_photos.timeline_event_id nullable; INSERT relaxed to any active member who can_read_property; storage INSERT org-scoped, DELETE manager-or-owner
+- phase_c_signatures — new signatures table (immutable, attaches to an assignment)
 Revenue chain migrations applied 2026-07-23:
 - revenue_phase1_invoice_client_link — invoices.client_id + invoice_number, dropped invoices.line_items
 - revenue_phase2_estimates_line_items_catalog — new service_catalog, estimates, estimate_line_items, invoice_line_items
