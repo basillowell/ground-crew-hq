@@ -134,21 +134,37 @@ type DeferredInstallPromptEvent = Event & {
 
 type FieldSyncQueueItem =
   | {
+      // queueId is a stable client id for this outbox entry, used to remove it
+      // from the queue as it drains (see syncQueue). Stamped at enqueue time.
+      queueId?: string;
       type: 'assignment_status';
       assignmentId: string;
       payload: Record<string, unknown>;
     }
   | {
+      queueId?: string;
       type: 'clock_event';
       payload: {
+        // id + timestamp are captured at TAP time so a queued clock event
+        // records when the crew actually clocked, not when it later synced, and
+        // so a replay upserts on the same id instead of duplicating. Both
+        // columns are client-settable on clock_events.
+        id: string;
         employee_id: string;
         property_id: string;
         org_id: string;
         event_type: 'clock_in' | 'clock_out' | 'break';
+        timestamp: string;
         location_lat: number | null;
         location_lng: number | null;
       };
     };
+
+function makeQueueId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `q-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -449,7 +465,12 @@ export default function MobileFieldWorkspacePage() {
       const raw = window.localStorage.getItem(syncQueueKey);
       if (!raw) return [];
       const parsed = JSON.parse(raw) as unknown;
-      return Array.isArray(parsed) ? (parsed as FieldSyncQueueItem[]) : [];
+      if (!Array.isArray(parsed)) return [];
+      // Backfill queueId on any item stored before it existed, so removal by
+      // queueId during a drain can never leave a legacy item stuck.
+      return (parsed as FieldSyncQueueItem[]).map((item) =>
+        item.queueId ? item : { ...item, queueId: makeQueueId() },
+      );
     } catch {
       return [];
     }
@@ -462,41 +483,45 @@ export default function MobileFieldWorkspacePage() {
 
   const enqueueSyncAction = useCallback((item: FieldSyncQueueItem) => {
     const queue = loadSyncQueue();
-    queue.push(item);
+    queue.push({ ...item, queueId: item.queueId ?? makeQueueId() });
     saveSyncQueue(queue);
   }, [loadSyncQueue, saveSyncQueue]);
 
   const syncQueue = useCallback(async () => {
     if (!supabase || !navigator.onLine || !orgId) return;
-    const queue = loadSyncQueue();
-    if (queue.length === 0) return;
+    const items = loadSyncQueue();
+    if (items.length === 0) return;
 
-    const remaining: FieldSyncQueueItem[] = [];
+    let persisted = items;
     let synced = 0;
 
-    for (const item of queue) {
+    for (const item of items) {
+      let ok = false;
       if (item.type === 'assignment_status') {
         const { error } = await supabase
           .from('assignments')
           .update(item.payload)
           .eq('id', item.assignmentId)
           .eq('org_id', orgId);
-        if (error) {
-          remaining.push(item);
-        } else {
-          synced += 1;
-        }
+        ok = !error;
       } else if (item.type === 'clock_event') {
-        const { error } = await supabase.from('clock_events').insert(item.payload);
-        if (error) {
-          remaining.push(item);
-        } else {
-          synced += 1;
-        }
+        // Idempotent: replaying the same client id upserts to the one row
+        // instead of inserting a duplicate clock event.
+        const { error } = await supabase
+          .from('clock_events')
+          .upsert(item.payload, { onConflict: 'id', ignoreDuplicates: true });
+        ok = !error;
+      }
+
+      if (ok) {
+        synced += 1;
+        // Persist the shrunken queue immediately, so an app kill mid-drain can
+        // never replay an item that already committed.
+        persisted = persisted.filter((entry) => entry.queueId !== item.queueId);
+        saveSyncQueue(persisted);
       }
     }
 
-    saveSyncQueue(remaining);
     if (synced > 0) {
       window.dispatchEvent(new CustomEvent('ground-crew-sync-complete', { detail: { synced } }));
       await queryClient.invalidateQueries({
@@ -1104,6 +1129,13 @@ export default function MobileFieldWorkspacePage() {
       const liveEmployee = employees.find((entry) => entry.id === employeeId);
       const resolvedEmployeeId = liveEmployee?.id ?? employee?.id ?? employeeId;
 
+      // Capture the id and time at TAP, before the GPS wait, so the recorded
+      // clock time is when the crew tapped - not when GPS resolved, and not when
+      // a queued offline event later synced. The client id makes a replayed
+      // sync idempotent (upsert on id) instead of creating a duplicate.
+      const eventId = crypto.randomUUID();
+      const eventTimestamp = new Date().toISOString();
+
       let position: GeolocationPosition | null = null;
       try {
         position = await getCurrentPosition();
@@ -1120,9 +1152,9 @@ export default function MobileFieldWorkspacePage() {
 
       setClockActionSaving(true);
       const optimisticEvent: ClockEventRecord = {
-        id: `optimistic-${Date.now()}`,
+        id: `optimistic-${eventId}`,
         eventType,
-        timestamp: new Date().toISOString(),
+        timestamp: eventTimestamp,
       };
       setClockEvents((current) => [optimisticEvent, ...current]);
 
@@ -1130,10 +1162,12 @@ export default function MobileFieldWorkspacePage() {
         enqueueSyncAction({
           type: 'clock_event',
           payload: {
+            id: eventId,
             employee_id: resolvedEmployeeId,
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
+            timestamp: eventTimestamp,
             location_lat: locationLat,
             location_lng: locationLng,
           },
@@ -1159,10 +1193,12 @@ export default function MobileFieldWorkspacePage() {
       const { data, error: insertError } = await supabase
         .from('clock_events')
         .insert({
+          id: eventId,
           employee_id: resolvedEmployeeId,
           property_id: propertyId,
           org_id: orgId,
           event_type: eventType,
+          timestamp: eventTimestamp,
           location_lat: locationLat,
           location_lng: locationLng,
         })
@@ -1175,10 +1211,12 @@ export default function MobileFieldWorkspacePage() {
         enqueueSyncAction({
           type: 'clock_event',
           payload: {
+            id: eventId,
             employee_id: resolvedEmployeeId,
             property_id: propertyId,
             org_id: orgId,
             event_type: eventType,
+            timestamp: eventTimestamp,
             location_lat: locationLat,
             location_lng: locationLng,
           },
