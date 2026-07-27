@@ -17,6 +17,7 @@ import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin, MoreHorizontal, Users, 
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
 import { PageHeader } from '@/components/shared';
 import { FieldPhotoCapture } from '@/components/field/FieldPhotoCapture';
+import { AssignmentSignature } from '@/components/field/AssignmentSignature';
 
 const supabase = createClient();
 
@@ -40,6 +41,7 @@ type FieldTab = 'today' | 'team' | 'more';
 type FieldAssignment = {
   id: string;
   taskId: string | null;
+  propertyId?: string | null;
   sopId?: string | null;
   title: string;
   location: string | null;
@@ -578,7 +580,7 @@ export default function MobileFieldWorkspacePage() {
         .limit(1),
       supabase
         .from('assignments')
-        .select('id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at, actual_start_at, actual_completed_at')
+        .select('id, property_id, employee_id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at, actual_start_at, actual_completed_at')
         .eq('org_id', orgId)
         .eq('employee_id', employeeId)
         .eq('date', boardDate)
@@ -647,6 +649,7 @@ export default function MobileFieldWorkspacePage() {
       const taskId = row.task_id ? String(row.task_id) : null;
       return {
         id: String(row.id),
+        propertyId: row.property_id ? String(row.property_id) : null,
         employeeId: row.employee_id ? String(row.employee_id) : employeeId,
         taskId,
         sopId: taskId ? taskSopById.get(taskId) ?? null : null,
@@ -1685,6 +1688,14 @@ export default function MobileFieldWorkspacePage() {
                         <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(assignment.status)}`}>{statusBadgeLabel(assignment.status)}</span>
                       </div>
                       {renderSopChecklist(assignment)}
+                      {displayStatus(assignment.status) === 'done' || activeDonePromptId === assignment.id ? (
+                        <AssignmentSignature
+                          orgId={orgId}
+                          propertyId={assignment.propertyId ?? null}
+                          assignmentId={assignment.id}
+                          capturedBy={employeeId}
+                        />
+                      ) : null}
                       <div className="mt-2">
                         {displayStatus(assignment.status) === 'done' ? (
                           <button type="button" disabled className="w-full min-h-[44px] rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-text-muted">

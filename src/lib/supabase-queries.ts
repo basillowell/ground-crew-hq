@@ -122,6 +122,18 @@ export type ProjectPhoto = {
   signedUrl: string;
 };
 
+export type AssignmentSignature = {
+  id: string;
+  orgId: string;
+  propertyId: string;
+  assignmentId: string;
+  signerName: string;
+  signatureData: string;
+  signedAt: string;
+  capturedBy: string | null;
+  createdAt: string;
+};
+
 export type BillingClient = {
   id: string;
   orgId: string;
@@ -306,6 +318,18 @@ type DbProjectPhoto = {
   size_bytes: number | string | null;
   uploaded_by: string | null;
   sort_order: number | null;
+  created_at: string;
+};
+
+type DbSignature = {
+  id: string;
+  org_id: string;
+  property_id: string;
+  assignment_id: string;
+  signer_name: string;
+  signature_data: string;
+  signed_at: string;
+  captured_by: string | null;
   created_at: string;
 };
 
@@ -894,6 +918,20 @@ function toProjectPhoto(row: DbProjectPhoto, signedUrl: string): ProjectPhoto {
     sortOrder: row.sort_order ?? 0,
     createdAt: row.created_at,
     signedUrl,
+  };
+}
+
+function toAssignmentSignature(row: DbSignature): AssignmentSignature {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    propertyId: row.property_id,
+    assignmentId: row.assignment_id,
+    signerName: row.signer_name,
+    signatureData: row.signature_data,
+    signedAt: row.signed_at,
+    capturedBy: row.captured_by,
+    createdAt: row.created_at,
   };
 }
 
@@ -3494,6 +3532,7 @@ export const PROJECT_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const PROJECT_PHOTOS_BUCKET = 'project-photos';
 const PROJECT_SELECT_COLUMNS = 'id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson';
 const PROJECT_PHOTO_SELECT_COLUMNS = 'id, org_id, property_id, project_id, timeline_event_id, storage_path, caption, content_type, size_bytes, uploaded_by, sort_order, created_at';
+const SIGNATURE_SELECT_COLUMNS = 'id, org_id, property_id, assignment_id, signer_name, signature_data, signed_at, captured_by, created_at';
 
 export type ProjectPhotosScope = {
   timelineEventId?: string;
@@ -3511,6 +3550,14 @@ export type UploadProjectPhotoPayload = {
 
 export type DeleteProjectPhotoPayload = {
   photo: ProjectPhoto;
+};
+
+export type CaptureSignaturePayload = {
+  propertyId: string;
+  assignmentId: string;
+  signerName: string;
+  signatureData: string;
+  capturedBy?: string | null;
 };
 
 export type SetProjectLocationPayload = {
@@ -3652,6 +3699,59 @@ async function fetchProjectPhotos(scope: ProjectPhotosScope, orgId: string): Pro
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchAssignmentSignatures(assignmentId: string, orgId: string): Promise<AssignmentSignature[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Signature request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('signatures')
+      .select(SIGNATURE_SELECT_COLUMNS)
+      .eq('org_id', orgId)
+      .eq('assignment_id', assignmentId)
+      .order('signed_at', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as DbSignature[]).map(toAssignmentSignature);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function captureSignature(orgId: string, payload: CaptureSignaturePayload): Promise<AssignmentSignature> {
+  if (!payload.propertyId || payload.propertyId === 'all') throw new Error('Property is required for signature.');
+  if (!payload.assignmentId || payload.assignmentId === 'all') throw new Error('Assignment is required for signature.');
+  const signerName = payload.signerName.trim();
+  if (!signerName) throw new Error('Signer name is required.');
+  if (!payload.signatureData || !payload.signatureData.startsWith('data:image/png')) {
+    throw new Error('Signature is required.');
+  }
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Signature save timed out.')), 15_000);
+  });
+  const insertPromise = (async () => {
+    const { data, error } = await client
+      .from('signatures')
+      .insert({
+        org_id: orgId,
+        property_id: payload.propertyId,
+        assignment_id: payload.assignmentId,
+        signer_name: signerName,
+        signature_data: payload.signatureData,
+        captured_by: payload.capturedBy ?? null,
+      })
+      .select(SIGNATURE_SELECT_COLUMNS)
+      .single();
+    if (error) throw error;
+    return toAssignmentSignature(data as DbSignature);
+  })();
+
+  return Promise.race([insertPromise, timeoutPromise]);
 }
 
 function getPhotoExtension(file: File) {
@@ -3928,6 +4028,19 @@ export function useProjectPhotosByProject(projectId?: string | null, orgId?: str
   return useProjectPhotos(projectId && projectId !== 'all' ? { projectId } : undefined, orgId);
 }
 
+export function useAssignmentSignature(assignmentId?: string | null, orgId?: string | null) {
+  const validAssignmentId = assignmentId && assignmentId !== 'all' ? assignmentId : undefined;
+  return useQuery({
+    queryKey: ['assignment-signature', orgId ?? 'all-orgs', validAssignmentId ?? 'no-assignment'],
+    queryFn: () => fetchAssignmentSignatures(validAssignmentId!, orgId!),
+    enabled: Boolean(orgId && validAssignmentId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
 export function useUploadProjectPhoto(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -3940,6 +4053,22 @@ export function useUploadProjectPhoto(orgId?: string) {
         queryKey: ['project-photos', orgId ?? 'all-orgs', variables.timelineEventId ?? 'no-event', variables.projectId],
       });
       await queryClient.invalidateQueries({ queryKey: ['project-photos'] });
+    },
+  });
+}
+
+export function useCaptureSignature(orgId?: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CaptureSignaturePayload) => {
+      if (!orgId) throw new Error('Organization is required for signature.');
+      return captureSignature(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['assignment-signature', orgId ?? 'all-orgs', variables.assignmentId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ['assignment-signature'] });
     },
   });
 }
