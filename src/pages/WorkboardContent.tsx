@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TimeSelect } from '@/components/TimeSelect';
+import { DayCloseOut, type DayCloseOutLane, type DayCloseOutSaveOptions, getChainedAssignmentStartTime } from '@/components/workboard/DayCloseOut';
 import { TaskGroupedBoard } from '@/components/workboard/TaskGroupedBoard';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
 import { toast } from '@/components/ui/sonner';
@@ -706,6 +707,7 @@ export default function WorkboardContent() {
   const queryClient = useQueryClient();
   const { currentPropertyId, setCurrentPropertyId, currentUser, orgId: authOrgId, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
+  const canCloseOutDay = ['admin', 'manager'].includes(String(userRole ?? '').toLowerCase());
   const getLocalDateKey = useCallback(() => new Date().toLocaleDateString('en-CA'), []);
   const [boardDate, setBoardDate] = useState(() => new Date().toLocaleDateString('en-CA'));
   const [department, setDepartment] = useState('All Departments');
@@ -719,6 +721,7 @@ export default function WorkboardContent() {
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [turfPanelOpen, setTurfPanelOpen] = useState(false);
+  const [dayCloseOutOpen, setDayCloseOutOpen] = useState(false);
   const [noteScope, setNoteScope] = useState<NoteScope>('org');
   const [noteTypeFilter, setNoteTypeFilter] = useState<'all' | 'daily' | 'general' | 'geo' | 'alert'>('all');
   const [selectedNotePropertyId, setSelectedNotePropertyId] = useState('');
@@ -2223,6 +2226,46 @@ export default function WorkboardContent() {
     [getAssignmentTimelineMeta],
   );
 
+  const getTimelineAssignmentSnapshot = useCallback(
+    (assignment: Assignment) => {
+      const { canonicalStartAt, canonicalCompletedAt, timelineMeta } = getCanonicalActualTimes(assignment);
+      const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+      const actualHours =
+        typeof timelineMeta.actualHours === 'number'
+          ? Number(timelineMeta.actualHours)
+          : typeof assignmentRecord.actual_hours === 'number'
+            ? Number(assignmentRecord.actual_hours)
+            : typeof assignment.actualHours === 'number'
+              ? Number(assignment.actualHours)
+              : null;
+      return {
+        ...assignment,
+        actualStartAt: canonicalStartAt,
+        actual_start_at: canonicalStartAt,
+        actualCompletedAt: canonicalCompletedAt,
+        actual_completed_at: canonicalCompletedAt,
+        actualHours: actualHours ?? undefined,
+        actual_hours: actualHours,
+      };
+    },
+    [getCanonicalActualTimes],
+  );
+
+  const getChainedStartTimeForAssignment = useCallback(
+    (assignment: Assignment, employeeAssignments: Assignment[], nowHHMM: string) => {
+      const ordered = orderEmployeeAssignments(employeeAssignments).map(getTimelineAssignmentSnapshot);
+      const snapshot = getTimelineAssignmentSnapshot(assignment);
+      return getChainedAssignmentStartTime({
+        assignment: snapshot,
+        assignments: ordered,
+        shiftStart: getDefaultStartTimeForEmployee(scheduleList, snapshot.employeeId, boardDate, operationalTimezone),
+        nowTime: nowHHMM,
+        timezone: operationalTimezone,
+      });
+    },
+    [boardDate, getTimelineAssignmentSnapshot, operationalTimezone, orderEmployeeAssignments, scheduleList],
+  );
+
   const startAssignmentTimeline = useCallback(
     async (assignment: Assignment) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
@@ -2304,27 +2347,33 @@ export default function WorkboardContent() {
         return;
       }
       const timelineMeta = getAssignmentTimelineMeta(assignment);
+      const existingStartHHMM = timelineMeta.actualStartAt
+        ? storedIsoToWallClock(timelineMeta.actualStartAt, operationalTimezone)
+        : '';
+      const startHHMM = existingStartHHMM || getChainedStartTimeForAssignment(assignment, employeeAssignments, nowHHMM);
+      const derivedStartIso = !timelineMeta.actualStartAt && startHHMM
+        ? wallClockToStoredIso(boardDate, startHHMM, operationalTimezone)
+        : null;
       let calculatedHours: number | undefined;
-      if (timelineMeta.actualStartAt) {
-        const startHHMM = storedIsoToWallClock(timelineMeta.actualStartAt, operationalTimezone);
-        if (startHHMM) {
-          const nowMinutes = timeToMinutes(nowHHMM);
-          const startMinutes = timeToMinutes(startHHMM);
-          if (nowMinutes >= startMinutes) {
-            calculatedHours = Math.max(0, (nowMinutes - startMinutes) / 60);
-          }
-        }
+      if (startHHMM) {
+        const nowMinutes = timeToMinutes(nowHHMM);
+        const startMinutes = timeToMinutes(startHHMM);
+        calculatedHours = Math.max(0, (nowMinutes - startMinutes) / 60);
       }
 
       const updatePayload: Record<string, unknown> = {
         status: 'completed',
         actual_completed_at: nowIso,
       };
+      if (derivedStartIso) {
+        updatePayload.actual_start_at = derivedStartIso;
+      }
       if (typeof calculatedHours === 'number' && Number.isFinite(calculatedHours)) {
         updatePayload.actual_hours = Number(calculatedHours.toFixed(2));
       }
 
       const previousStatus = normalizeAssignmentStatus(assignment.status);
+      const previousStartAt = timelineMeta.actualStartAt;
       const previousCompletedAt = timelineMeta.actualCompletedAt;
       const previousActualHours =
         typeof (assignment as Assignment & Record<string, unknown>).actual_hours === 'number'
@@ -2334,6 +2383,7 @@ export default function WorkboardContent() {
             : undefined;
       syncTimelineCaches(assignment.id, {
         status: 'completed',
+        actualStartAt: derivedStartIso ?? undefined,
         actualCompletedAt: nowIso,
         actualHours: typeof updatePayload.actual_hours === 'number' ? Number(updatePayload.actual_hours) : undefined,
       });
@@ -2346,6 +2396,7 @@ export default function WorkboardContent() {
       if (error) {
         syncTimelineCaches(assignment.id, {
           status: previousStatus,
+          actualStartAt: previousStartAt,
           actualCompletedAt: previousCompletedAt,
           actualHours: previousActualHours,
         });
@@ -2374,6 +2425,7 @@ export default function WorkboardContent() {
         if (clockError) {
           syncTimelineCaches(assignment.id, {
             status: previousStatus,
+            actualStartAt: previousStartAt,
             actualCompletedAt: previousCompletedAt,
             actualHours: previousActualHours,
           });
@@ -2381,6 +2433,7 @@ export default function WorkboardContent() {
             .from('assignments')
             .update({
               status: previousStatus,
+              actual_start_at: previousStartAt,
               actual_completed_at: previousCompletedAt,
               actual_hours: previousActualHours,
             })
@@ -2419,11 +2472,17 @@ export default function WorkboardContent() {
       }
 
     },
-    [currentUser?.orgId, effectivePropertyId, getCanonicalActualTimes, operationalTimezone, orderEmployeeAssignments, syncTimelineCaches, triggerAssignmentFlash],
+    [boardDate, currentUser?.orgId, effectivePropertyId, getCanonicalActualTimes, getChainedStartTimeForAssignment, operationalTimezone, orderEmployeeAssignments, syncTimelineCaches, triggerAssignmentFlash],
   );
 
   const saveAssignmentTimelineTimes = useCallback(
-    async (assignment: Assignment, employeeAssignments: Assignment[], startInput: string, endInput: string) => {
+    async (
+      assignment: Assignment,
+      employeeAssignments: Assignment[],
+      startInput: string,
+      endInput: string,
+      options?: DayCloseOutSaveOptions,
+    ) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return false;
       if (process.env.NODE_ENV === 'development') {
         const now = Date.now();
@@ -2443,12 +2502,6 @@ export default function WorkboardContent() {
       const startTs = startInput ? wallClockToStoredIso(dateStr, startInput, operationalTimezone) : null;
       const endTs = endInput ? wallClockToStoredIso(dateStr, endInput, operationalTimezone) : null;
       const normalizedStatus = normalizeAssignmentStatus(assignment.status);
-      if (startInput && endInput) {
-        if (endInput < startInput) {
-          toast.error('Completed time cannot be before start time.');
-          return false;
-        }
-      }
       if (!startInput && !endInput) {
         toast.error('Enter a start or complete time before saving.');
         return false;
@@ -2457,15 +2510,15 @@ export default function WorkboardContent() {
       const payload: Record<string, unknown> = {};
       if (startInput) payload.actual_start_at = startTs;
       if (endInput) payload.actual_completed_at = endTs;
+      if (options?.markComplete && endInput) payload.status = 'completed';
       if (startInput && endInput) {
         const startMinutes = timeToMinutes(startInput);
         const endMinutes = timeToMinutes(endInput);
-        if (endMinutes >= startMinutes) {
-          payload.actual_hours = Number(((endMinutes - startMinutes) / 60).toFixed(2));
-        }
+        payload.actual_hours = Number((Math.max(0, endMinutes - startMinutes) / 60).toFixed(2));
       }
       const previousTimes = getCanonicalActualTimes(assignment);
       const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+      const previousStatus = normalizeAssignmentStatus(assignment.status);
       const previousActualHours =
         typeof assignmentRecord.actual_hours === 'number'
           ? Number(assignmentRecord.actual_hours)
@@ -2481,6 +2534,7 @@ export default function WorkboardContent() {
         actualStartAt: startInput ? returnedStartAt : undefined,
         actualCompletedAt: endInput ? returnedCompletedAt : undefined,
         actualHours: derivedHours,
+        status: typeof payload.status === 'string' ? String(payload.status) : undefined,
       });
       const { error } = await withWorkboardMutationTimeout(supabase
         .from('assignments')
@@ -2492,6 +2546,7 @@ export default function WorkboardContent() {
           actualStartAt: previousTimes.canonicalStartAt,
           actualCompletedAt: previousTimes.canonicalCompletedAt,
           actualHours: previousActualHours,
+          status: previousStatus,
         });
         toast.error(`Failed to save times: ${error.message}`);
         setSavingTimelineAssignmentId(null);
@@ -2685,6 +2740,16 @@ export default function WorkboardContent() {
       return 0;
     });
   }, [dispatchBoard, laneOrder]);
+
+  const dayCloseOutLanes = useMemo<DayCloseOutLane[]>(
+    () =>
+      orderedDispatchBoard.map((lane) => ({
+        employee: lane.employee,
+        assignments: orderEmployeeAssignments(lane.employeeAssignments).map(getTimelineAssignmentSnapshot),
+        shiftStart: getDefaultStartTimeForEmployee(scheduleList, lane.employee.id, boardDate, operationalTimezone),
+      })),
+    [boardDate, getTimelineAssignmentSnapshot, operationalTimezone, orderEmployeeAssignments, orderedDispatchBoard, scheduleList],
+  );
 
   useEffect(() => {
     if (orderedDispatchBoard.length === 0) {
@@ -4807,6 +4872,18 @@ export default function WorkboardContent() {
                 ) : null}
               </Button>
             ) : null}
+            {canCloseOutDay ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0 gap-1.5"
+                onClick={() => setDayCloseOutOpen(true)}
+                data-testid="button-close-out-day"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Close out day
+              </Button>
+            ) : null}
             {!isReadOnly ? (
               <Button
                 size="sm"
@@ -5584,8 +5661,11 @@ export default function WorkboardContent() {
                                       setTimelineEditAssignmentId(assignment.id ?? null);
                                       const startInputValue =
                                         toTimeInputValue(canonicalStartAt, operationalTimezone) ||
-                                        toTimeInputValue(String(assignment.startTime ?? ''), operationalTimezone) ||
-                                        getDefaultStartTimeForEmployee(scheduleList, assignment.employeeId, boardDate, operationalTimezone);
+                                        getChainedStartTimeForAssignment(
+                                          assignment,
+                                          laneOrderedAssignments,
+                                          getNowHHMMInTimezone(operationalTimezone),
+                                        );
                                       const endInputValue =
                                         toTimeInputValue(canonicalCompletedAt, operationalTimezone) ||
                                         getNowHHMMInTimezone(operationalTimezone);
@@ -5863,6 +5943,29 @@ export default function WorkboardContent() {
 
         </div>
       </div>
+
+      <DayCloseOut
+        open={dayCloseOutOpen}
+        onOpenChange={setDayCloseOutOpen}
+        lanes={dayCloseOutLanes}
+        tasks={taskList}
+        boardDate={boardDate}
+        operationalTimezone={operationalTimezone}
+        nowTime={getNowHHMMInTimezone(operationalTimezone)}
+        isLoading={isLoadingBoard}
+        errorMessage={boardErrorMessage}
+        onRetry={() => {
+          void assignmentsQuery.refetch();
+          void scheduleQuery.refetch();
+          void refetchTasks();
+          void equipmentQuery.refetch();
+          void notesQuery.refetch();
+          void taskRequestsQuery.refetch();
+          void pendingTaskRequestsQuery.refetch();
+          void workLocationsQuery.refetch();
+        }}
+        onSaveAssignmentTimes={saveAssignmentTimelineTimes}
+      />
 
       {/* ─── ASSIGNMENT DIALOG ─── */}
       <Dialog open={workOrderDialogOpen} onOpenChange={(open) => (open ? setWorkOrderDialogOpen(true) : closeSubmitWorkOrderDialog())}>
