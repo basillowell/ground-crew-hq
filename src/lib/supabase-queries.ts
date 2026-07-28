@@ -164,6 +164,7 @@ export type RevenueInvoice = {
   createdAt: string;
   sentAt: string | null;
   paidAt: string | null;
+  shareToken: string;
 };
 
 export type PaymentMethod = 'cash' | 'check' | 'card' | 'ach' | 'other';
@@ -223,6 +224,7 @@ export type RevenueEstimate = {
   createdAt: string;
   sentAt: string | null;
   acceptedAt: string | null;
+  shareToken: string;
 };
 
 export type RevenueLineItem = {
@@ -363,6 +365,7 @@ type DbRevenueInvoice = {
   created_at: string;
   sent_at: string | null;
   paid_at: string | null;
+  share_token: string;
 };
 
 type DbRevenuePayment = {
@@ -418,6 +421,7 @@ type DbRevenueEstimate = {
   created_at: string;
   sent_at: string | null;
   accepted_at: string | null;
+  share_token: string;
 };
 
 type DbEstimateLineItem = {
@@ -968,6 +972,7 @@ function toRevenueInvoice(row: DbRevenueInvoice): RevenueInvoice {
     createdAt: row.created_at,
     sentAt: row.sent_at,
     paidAt: row.paid_at,
+    shareToken: row.share_token,
   };
 }
 
@@ -1031,6 +1036,7 @@ function toRevenueEstimate(row: DbRevenueEstimate): RevenueEstimate {
     createdAt: row.created_at,
     sentAt: row.sent_at,
     acceptedAt: row.accepted_at,
+    shareToken: row.share_token,
   };
 }
 
@@ -2090,8 +2096,8 @@ export type RecordPaymentPayload = {
   notes?: string | null;
 };
 
-const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, contract_id, period_start, period_end, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at';
-const estimateSelectColumns = 'id, org_id, client_id, property_id, estimate_number, status, subtotal, tax_rate, total, notes, valid_until, converted_invoice_id, created_at, sent_at, accepted_at';
+const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, contract_id, period_start, period_end, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at, share_token';
+const estimateSelectColumns = 'id, org_id, client_id, property_id, estimate_number, status, subtotal, tax_rate, total, notes, valid_until, converted_invoice_id, created_at, sent_at, accepted_at, share_token';
 const estimateLineItemSelectColumns = 'id, org_id, estimate_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
 const invoiceLineItemSelectColumns = 'id, org_id, invoice_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
 const serviceCatalogSelectColumns = 'id, org_id, name, description, default_unit_price, active, created_at';

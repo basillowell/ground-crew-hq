@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { DollarSign, Edit3, FileText, Plus, Receipt, Send } from 'lucide-react';
+import { Copy, DollarSign, Edit3, FileText, Plus, Receipt, Send } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { LineItemEditor, calculateLineItemTotals, createEmptyLineItem, normalizeLineItemDrafts, type LineItemDraft } from '@/components/revenue/LineItemEditor';
@@ -265,6 +265,19 @@ export default function InvoicingPage() {
     }
   };
 
+  const copyInvoiceLink = async (invoice: RevenueInvoice) => {
+    if (!invoice.shareToken) {
+      toast.error('Share link unavailable');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/view/invoice/${invoice.shareToken}`);
+      toast.success('Link copied');
+    } catch {
+      toast.error('Unable to copy link');
+    }
+  };
+
   const summary = useMemo(() => {
     const outstanding = invoices
       .filter((invoice) => getInvoicePaymentState(invoice).displayStatus === 'sent')
@@ -438,6 +451,10 @@ export default function InvoicingPage() {
                         <Button type="button" variant="outline" size="sm" onClick={() => openEditDialog(invoice)} disabled={updatingId === invoice.id}>
                           <Edit3 className="h-4 w-4" />
                           <span className="hidden sm:inline">Edit</span>
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => void copyInvoiceLink(invoice)}>
+                          <Copy className="h-4 w-4" />
+                          <span className="hidden sm:inline">Copy link</span>
                         </Button>
                         {invoice.status === 'draft' ? (
                           <Button

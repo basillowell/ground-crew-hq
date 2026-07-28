@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Edit3, FileText, Plus, Send, XCircle } from 'lucide-react';
+import { CheckCircle2, Copy, Edit3, FileText, Plus, Send, XCircle } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { LineItemEditor, calculateLineItemTotals, createEmptyLineItem, normalizeLineItemDrafts, type LineItemDraft } from '@/components/revenue/LineItemEditor';
@@ -264,6 +264,19 @@ export default function EstimatesPage() {
     }
   };
 
+  const copyEstimateLink = async (estimate: RevenueEstimate) => {
+    if (!estimate.shareToken) {
+      toast.error('Share link unavailable');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/view/estimate/${estimate.shareToken}`);
+      toast.success('Link copied');
+    } catch {
+      toast.error('Unable to copy link');
+    }
+  };
+
   const tabEstimates = useMemo(
     () => estimates.filter((estimate) => estimate.status === activeTab.toLowerCase()),
     [activeTab, estimates],
@@ -398,6 +411,10 @@ export default function EstimatesPage() {
                       <Button type="button" variant="outline" size="sm" onClick={() => openEditDialog(estimate)} disabled={acceptingId === estimate.id}>
                         <Edit3 className="h-4 w-4" />
                         <span className="hidden sm:inline">Edit</span>
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => void copyEstimateLink(estimate)}>
+                        <Copy className="h-4 w-4" />
+                        <span className="hidden sm:inline">Copy link</span>
                       </Button>
                       {estimate.status === 'draft' ? (
                         <Button
