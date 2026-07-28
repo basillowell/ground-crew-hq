@@ -1131,8 +1131,11 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | contract_id    | uuid        | YES      |                |
 | period_start   | date        | YES      |                |
 | period_end     | date        | YES      |                |
+| share_token    | uuid        | NO       | gen_random_uuid() |
 
 > status CHECK: ('draft','sent','paid','void')
+> share_token (Phase D-2): unguessable UNIQUE token for the public hosted invoice
+> view. Read ONLY through get_shared_invoice(token); never expose the table to anon.
 
 > Revenue Chain Phase 1 (migration revenue_phase1_invoice_client_link, 2026-07-23):
 > - client_id: nullable FK -> clients.id. The client who pays. App layer requires
@@ -1354,13 +1357,18 @@ the client) and role admin or manager, else raises 'Not authorized.'
 | created_at           | timestamptz | NO       | now()             |
 | sent_at              | timestamptz | YES      |                   |
 | accepted_at          | timestamptz | YES      |                   |
+| share_token          | uuid        | NO       | gen_random_uuid() |
+| accepted_by_name     | text        | YES      |                   |
 
 > status CHECK: ('draft','sent','accepted','declined','expired')
 > estimate_number: global serial, UNIQUE (matches invoices/work_orders precedent).
 > converted_invoice_id: set when the estimate is accepted and becomes an invoice.
 > Non-null = already converted; the conversion function refuses to convert twice.
 > FKs: client_id -> clients.id (required), property_id -> properties.id (optional).
-> RLS: org_isolation (ALL).
+> share_token (Phase D-2): unguessable UNIQUE token for the public hosted view.
+> Read ONLY through get_shared_estimate(token); never expose the table to anon.
+> accepted_by_name: who accepted via the public link (set by accept_shared_estimate).
+> RLS: org_isolation (ALL). No public/anon policy — the RPCs are the public path.
 
 ---
 
@@ -1446,6 +1454,38 @@ solving very little (all revenue tables are currently empty).
 If addressed, do it as one deliberate DB-wide pass over every policy, not
 piecemeal. Same applies to the `multiple_permissive_policies` (225) and
 `unused_index` (48, expected while tables are empty) findings.
+
+---
+
+## DB functions: hosted sharing (Phase D-2, 2026-07-27)
+
+The public customer-facing pages read/act ONLY through these token-keyed
+SECURITY DEFINER functions — there is deliberately NO anon read policy on
+estimates/invoices (the cc3fd91 lesson). EXECUTE granted to `anon` (the
+unauthenticated web role) AND `authenticated`; revoked from PUBLIC. search_path
+pinned. Each is keyed by an unguessable share_token; a non-matching token returns
+NULL / raises, and there is no enumeration (122-bit uuid).
+
+- **get_shared_estimate(p_token uuid) -> jsonb** — returns one estimate's public
+  fields (business name, number, dates, totals, notes, client name, line items,
+  and whether it converted + the resulting invoice's token) or NULL. STABLE.
+- **get_shared_invoice(p_token uuid) -> jsonb** — one invoice's public fields
+  including amount_paid (SUM of payments). No online-pay data — payments are
+  manual (Phase A). STABLE.
+- **accept_shared_estimate(p_token uuid, p_signer text default null) -> jsonb** —
+  a customer accepts from the public link: converts the estimate to an invoice in
+  one transaction (same shape as convert_estimate_to_invoice but token-gated, not
+  auth-gated), records accepted_by_name, returns the new invoice's share_token.
+  Idempotent: a second accept returns {already_accepted, invoice_token} without
+  re-converting. Refuses declined/expired.
+
+Validated as the anon role (rolled back): valid token returns data, bad token
+returns NULL, a DIRECT select on estimates as anon returns 0 rows (RLS blocks it,
+so the RPC is the only path), accept converts + returns the invoice token, a
+second accept is idempotent.
+
+The app calls these via the ANON supabase client from the public /view routes
+(no auth). Internal pages only surface the share link.
 
 ---
 
