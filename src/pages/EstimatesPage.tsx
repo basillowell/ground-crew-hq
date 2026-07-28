@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Copy, Edit3, FileText, Plus, Send, XCircle } from 'lucide-react';
+import { CheckCircle2, Copy, Edit3, FileText, Mail, Plus, Send, XCircle } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { LineItemEditor, calculateLineItemTotals, createEmptyLineItem, normalizeLineItemDrafts, type LineItemDraft } from '@/components/revenue/LineItemEditor';
@@ -108,6 +108,7 @@ export default function EstimatesPage() {
   const [saving, setSaving] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [emailingId, setEmailingId] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = 'Estimates - Ground Crew HQ';
@@ -277,6 +278,25 @@ export default function EstimatesPage() {
     }
   };
 
+  const emailEstimate = async (estimate: RevenueEstimate) => {
+    if (emailingId) return;
+    setEmailingId(estimate.id);
+    try {
+      const response = await fetch('/api/send-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'estimate', id: estimate.id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'The estimate could not be emailed.');
+      toast.success(`Estimate emailed to ${result.sentTo ?? 'the client'}`);
+    } catch (sendError) {
+      toast.error(sendError instanceof Error ? sendError.message : 'The estimate could not be emailed.');
+    } finally {
+      setEmailingId(null);
+    }
+  };
+
   const tabEstimates = useMemo(
     () => estimates.filter((estimate) => estimate.status === activeTab.toLowerCase()),
     [activeTab, estimates],
@@ -415,6 +435,10 @@ export default function EstimatesPage() {
                       <Button type="button" variant="outline" size="sm" onClick={() => void copyEstimateLink(estimate)}>
                         <Copy className="h-4 w-4" />
                         <span className="hidden sm:inline">Copy link</span>
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => void emailEstimate(estimate)} disabled={emailingId === estimate.id}>
+                        <Mail className="h-4 w-4" />
+                        <span className="hidden sm:inline">{emailingId === estimate.id ? 'Sending...' : 'Email'}</span>
                       </Button>
                       {estimate.status === 'draft' ? (
                         <Button

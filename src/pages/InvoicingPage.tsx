@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, DollarSign, Edit3, FileText, Plus, Receipt, Send } from 'lucide-react';
+import { Copy, DollarSign, Edit3, FileText, Mail, Plus, Receipt, Send } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { LineItemEditor, calculateLineItemTotals, createEmptyLineItem, normalizeLineItemDrafts, type LineItemDraft } from '@/components/revenue/LineItemEditor';
@@ -104,6 +104,7 @@ export default function InvoicingPage() {
   const [invoiceForm, setInvoiceForm] = useState<InvoiceFormState>(() => emptyInvoiceForm());
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [emailingId, setEmailingId] = useState<string | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<RevenueInvoice | null>(null);
 
   useEffect(() => {
@@ -275,6 +276,25 @@ export default function InvoicingPage() {
       toast.success('Link copied');
     } catch {
       toast.error('Unable to copy link');
+    }
+  };
+
+  const emailInvoice = async (invoice: RevenueInvoice) => {
+    if (emailingId) return;
+    setEmailingId(invoice.id);
+    try {
+      const response = await fetch('/api/send-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'invoice', id: invoice.id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'The invoice could not be emailed.');
+      toast.success(`Invoice emailed to ${result.sentTo ?? 'the client'}`);
+    } catch (sendError) {
+      toast.error(sendError instanceof Error ? sendError.message : 'The invoice could not be emailed.');
+    } finally {
+      setEmailingId(null);
     }
   };
 
@@ -451,6 +471,10 @@ export default function InvoicingPage() {
                         <Button type="button" variant="outline" size="sm" onClick={() => openEditDialog(invoice)} disabled={updatingId === invoice.id}>
                           <Edit3 className="h-4 w-4" />
                           <span className="hidden sm:inline">Edit</span>
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => void emailInvoice(invoice)} disabled={emailingId === invoice.id}>
+                          <Mail className="h-4 w-4" />
+                          <span className="hidden sm:inline">{emailingId === invoice.id ? 'Sending...' : 'Email'}</span>
                         </Button>
                         <Button type="button" variant="outline" size="sm" onClick={() => void copyInvoiceLink(invoice)}>
                           <Copy className="h-4 w-4" />
