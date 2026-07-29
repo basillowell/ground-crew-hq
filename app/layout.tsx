@@ -32,7 +32,7 @@ var d=document.documentElement;
 var m=localStorage.getItem('gchq-theme')||'dark';
 var dark=m==='dark'||(m==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);
 d.classList.toggle('light',!dark);
-var v=localStorage.getItem('gchq-theme-vars');
+var v=localStorage.getItem('gchq-theme-vars-oklch');
 if(v){var p=JSON.parse(v);if(p&&p.vars&&p.mode===(dark?'dark':'light')){d.style.cssText=p.vars;}}
 }catch(e){}})();`
 

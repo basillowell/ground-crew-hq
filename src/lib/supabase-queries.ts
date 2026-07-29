@@ -1253,7 +1253,7 @@ function toTask(row: DbTask): Task {
     name: row.name,
     category: row.category,
     duration: Number(row.estimated_hours ?? 1) * 60,
-    color: row.color ?? 'hsl(var(--primary))',
+    color: row.color ?? 'oklch(var(--primary))',
     icon: row.icon ?? 'list-checks',
     status: row.status as Task['status'],
     priority: row.priority,
@@ -1581,10 +1581,10 @@ async function fetchGroupOptions(orgId?: string): Promise<GroupOption[]> {
   query = query.eq('active', true);
   const next = await query;
   if (!next.error) {
-    return ((next.data as DbGroupOption[]) ?? []).map((row) => ({ id: row.id, name: row.name, color: 'hsl(var(--primary))' }));
+    return ((next.data as DbGroupOption[]) ?? []).map((row) => ({ id: row.id, name: row.name, color: 'oklch(var(--primary))' }));
   }
   const rows = await fetchOptionalRows<DbGroupOption>('group_options', 'name');
-  return rows.map((row) => ({ id: row.id, name: row.name, color: row.color ?? 'hsl(var(--primary))' }));
+  return rows.map((row) => ({ id: row.id, name: row.name, color: row.color ?? 'oklch(var(--primary))' }));
 }
 
 async function fetchRoleOptions(orgId?: string): Promise<RoleOption[]> {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { createClient } from '@/lib/supabase';
 import { useAssignments, useEmployees, useNotes, useProperties, useTasks } from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -48,14 +49,15 @@ function fmtDate(iso: string) {
 }
 
 export default function BreakroomPage() {
-  const { orgId, currentPropertyId, currentUser } = useOrgProfile();
+  const { orgId, currentUser } = useOrgProfile();
   const authUserId = currentUser?.authUser?.id;
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
   const todayKey = new Date().toLocaleDateString('en-CA');
-  const selectedPropertyId =
-    currentPropertyId && currentPropertyId !== 'all'
-      ? currentPropertyId
-      : currentUser?.propertyId || properties[0]?.id || '';
+  const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
+    allowAllProperties: false,
+    currentUser,
+    properties,
+  });
   const { data: employees = [], isLoading: employeesLoading } = useEmployees(
     selectedPropertyId || undefined,
     orgId ?? undefined,
@@ -272,7 +274,13 @@ export default function BreakroomPage() {
       {/* Message area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="border-b border-surface-border px-4 py-3">
-          <PropertySelector allowAllProperties={false} className="w-full max-w-xs" />
+          <PropertySelector
+            allowAllProperties={false}
+            className="w-full max-w-xs"
+            orgId={orgId}
+            value={selectedPropertyId}
+            onChange={setSelectedPropertyId}
+          />
         </div>
         <div className="grid gap-3 border-b border-surface-border bg-surface-base p-4 lg:grid-cols-2">
           <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-2">
@@ -414,6 +422,3 @@ export default function BreakroomPage() {
     </div>
   );
 }
-
-
-

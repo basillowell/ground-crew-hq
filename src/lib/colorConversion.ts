@@ -2,9 +2,9 @@
  * OKLCH theme engine.
  *
  * Takes two colours + a contrast scalar and derives every themed token.
- * Replaces the previous HSL implementation, whose lightness channel is an RGB
- * math artifact rather than a perceptual measurement — holding HSL `l` fixed
- * while changing hue/saturation does NOT hold perceived lightness fixed, which
+ * Replaces the previous hue-based implementation, whose lightness channel was an RGB
+ * math artifact rather than a perceptual measurement - holding the old lightness value fixed
+ * while changing hue/chroma does NOT hold perceived lightness fixed, which
  * is why the old code needed per-token saturation caps and per-mode tint
  * amounts, and why surfaces drifted in apparent brightness depending on which
  * hue the user picked.
@@ -15,8 +15,7 @@
  *   2. Chroma is gamut-mapped (reduced until the colour is representable in
  *      sRGB at that lightness) instead of capped by hand per token.
  *
- * The ladders below are the design system's elevation steps, measured out of
- * app/globals.css so contrast=50 reproduces the shipped look. They are the
+ * The ladders below are the design system's elevation steps. They are the
  * design, not tuning constants: nothing here is per-hue.
  */
 
@@ -92,30 +91,11 @@ function gamutMap(c: Oklch): Rgb {
 
 const hexToOklch = (hex: string): Oklch => rgbToOklch(hexToRgb(hex));
 
-/** `"17 20 18"` — the format Tailwind's `rgb(var(--x) / <alpha-value>)` needs. */
-function toTriplet(c: Oklch): string {
-  return gamutMap(c)
-    .map((v) => Math.round(clamp(v, 0, 1) * 255))
-    .join(' ');
-}
-
-/** `"150 12% 7%"` — the format shadcn's `hsl(var(--x))` tokens need. */
-function toHslString(c: Oklch): string {
-  const [r, g, b] = gamutMap(c).map((v) => clamp(v, 0, 1));
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  let h = 0;
-  let s = 0;
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
-    else if (max === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    h *= 60;
-  }
-  return `${h.toFixed(1)} ${(s * 100).toFixed(1)}% ${(l * 100).toFixed(1)}%`;
+/** `"18.754% 0.00512 173.77"` - the payload for `oklch(var(--x) / alpha)`. */
+function toOklchToken(c: Oklch): string {
+  const rgb = gamutMap(c).map((v) => Math.round(clamp(v, 0, 1) * 255) / 255) as Rgb;
+  const mapped = rgbToOklch(rgb);
+  return `${(mapped.L * 100).toFixed(3)}% ${mapped.C.toFixed(5)} ${mapped.H.toFixed(2)}`;
 }
 
 /* ── WCAG contrast ───────────────────────────────────────────────────────── */
@@ -131,7 +111,7 @@ function contrastRatio(a: Rgb, b: Rgb): number {
   return la > lb ? (la + 0.05) / (lb + 0.05) : (lb + 0.05) / (la + 0.05);
 }
 
-/* ── The ladders (measured from app/globals.css at contrast=50) ──────────── */
+/* The ladders */
 
 type SurfaceRole = 'base' | 'card' | 'hover' | 'elevated' | 'border' | 'sidebar' | 'sidebarAccent';
 
@@ -256,13 +236,9 @@ export type ThemeInput = {
  * the active mode's ladder. Callers must re-run this when the mode changes
  * (AppLayout keys its effect on `resolvedTheme`).
  *
- * Token formats are deliberate and follow ownership, not one global rule:
- *   - GCHQ design tokens (--surface-*, --text-*, --brand-*) are RGB triplets,
- *     because Tailwind consumes them as `rgb(var(--x) / <alpha-value>)`.
- *   - shadcn tokens (--primary, --accent, --sidebar-*) are HSL strings,
- *     because Tailwind consumes them as `hsl(var(--x))`.
- * Mixing the two would break the alpha-value pattern or shadcn's conventions.
- */
+  * Every themed colour variable is an OKLCH channel payload. Tailwind and
+ * shadcn wrap those payloads as `oklch(var(--x) / <alpha-value>)`, so the
+ * generated lightness ladder stays perceptually uniform all the way to CSS. */
 export function applyThemeSurfaces(
   root: HTMLElement,
   { base, accent }: ThemeInput,
@@ -273,25 +249,25 @@ export function applyThemeSurfaces(
 
   if (base) {
     const s = surfaceRamp(base, isLightMode, contrast);
-    root.style.setProperty('--surface-base', toTriplet(s.base));
-    root.style.setProperty('--surface-card', toTriplet(s.card));
-    root.style.setProperty('--surface-hover', toTriplet(s.hover));
-    root.style.setProperty('--surface-elevated', toTriplet(s.elevated));
-    root.style.setProperty('--surface-border', toTriplet(s.border));
+    root.style.setProperty('--surface-base', toOklchToken(s.base));
+    root.style.setProperty('--surface-card', toOklchToken(s.card));
+    root.style.setProperty('--surface-hover', toOklchToken(s.hover));
+    root.style.setProperty('--surface-elevated', toOklchToken(s.elevated));
+    root.style.setProperty('--surface-border', toOklchToken(s.border));
 
-    // Sidebar rail + its hover/selected shade (shadcn family -> HSL strings).
-    root.style.setProperty('--sidebar-background', toHslString(s.sidebar));
-    root.style.setProperty('--sidebar-accent', toHslString(s.sidebarAccent));
+
+    root.style.setProperty('--sidebar-background', toOklchToken(s.sidebar));
+    root.style.setProperty('--sidebar-accent', toOklchToken(s.sidebarAccent));
 
     // shadcn's --accent is a muted hover SURFACE, not the brand colour. The old
     // code assigned the brand accent here, breaking its pairing with
     // --accent-foreground; and html.light never overrode it, so light mode
     // inherited a near-black accent surface. Deriving it fixes both.
-    root.style.setProperty('--accent', toHslString(s.hover));
-    root.style.setProperty('--background', toHslString(s.base));
-    root.style.setProperty('--card', toHslString(s.card));
-    root.style.setProperty('--border', toHslString(s.border));
-    root.style.setProperty('--input', toHslString(s.border));
+    root.style.setProperty('--accent', toOklchToken(s.hover));
+    root.style.setProperty('--background', toOklchToken(s.base));
+    root.style.setProperty('--card', toOklchToken(s.card));
+    root.style.setProperty('--border', toOklchToken(s.border));
+    root.style.setProperty('--input', toOklchToken(s.border));
 
     // Text is solved against the actual surface, so it tracks base and contrast.
     const bg = gamutMap(s.base);
@@ -301,16 +277,16 @@ export function applyThemeSurfaces(
     const primary = solveTextL(bg, t, isLightMode, H, chroma);
     const secondary = solveTextL(bg, Math.max(AA, t * TEXT_HIERARCHY.secondary), isLightMode, H, chroma);
     const muted = solveTextL(bg, Math.max(AA, t * TEXT_HIERARCHY.muted), isLightMode, H, chroma);
-    root.style.setProperty('--text-primary', toTriplet(primary));
-    root.style.setProperty('--text-secondary', toTriplet(secondary));
-    root.style.setProperty('--text-muted', toTriplet(muted));
-    root.style.setProperty('--text-inverse', toTriplet(s.base));
-    root.style.setProperty('--foreground', toHslString(primary));
-    root.style.setProperty('--muted-foreground', toHslString(muted));
-    root.style.setProperty('--accent-foreground', toHslString(primary));
-    root.style.setProperty('--card-foreground', toHslString(primary));
-    root.style.setProperty('--sidebar-foreground', toHslString(muted));
-    root.style.setProperty('--sidebar-accent-foreground', toHslString(primary));
+    root.style.setProperty('--text-primary', toOklchToken(primary));
+    root.style.setProperty('--text-secondary', toOklchToken(secondary));
+    root.style.setProperty('--text-muted', toOklchToken(muted));
+    root.style.setProperty('--text-inverse', toOklchToken(s.base));
+    root.style.setProperty('--foreground', toOklchToken(primary));
+    root.style.setProperty('--muted-foreground', toOklchToken(muted));
+    root.style.setProperty('--accent-foreground', toOklchToken(primary));
+    root.style.setProperty('--card-foreground', toOklchToken(primary));
+    root.style.setProperty('--sidebar-foreground', toOklchToken(muted));
+    root.style.setProperty('--sidebar-accent-foreground', toOklchToken(primary));
   }
 
   if (accent) {
@@ -318,22 +294,22 @@ export function applyThemeSurfaces(
     const bright: Oklch = { L: clamp(a.L + BRAND_LADDER.bright.dL, 0, 1), C: a.C * BRAND_LADDER.bright.cScale, H: a.H };
     const dim: Oklch = { L: clamp(a.L + BRAND_LADDER.dim.dL, 0, 1), C: a.C * BRAND_LADDER.dim.cScale, H: a.H };
 
-    root.style.setProperty('--brand-default', toTriplet(a));
-    root.style.setProperty('--brand-bright', toTriplet(bright));
-    root.style.setProperty('--brand-dim', toTriplet(dim));
+    root.style.setProperty('--brand-default', toOklchToken(a));
+    root.style.setProperty('--brand-bright', toOklchToken(bright));
+    root.style.setProperty('--brand-dim', toOklchToken(dim));
 
     // --brand-ghost is a SURFACE wearing the accent's hue, not a brand shade:
     // it sits on the elevated rung so it stays subtle no matter how light or
     // dark the accent is. (Deriving it from the accent's own lightness is what
     // made pale accents wash the ghost out.)
     const ghostL = LADDER[mode].elevated;
-    root.style.setProperty('--brand-ghost', toTriplet({ L: ghostL, C: Math.min(a.C, GHOST_CHROMA_CEILING), H: a.H }));
+    root.style.setProperty('--brand-ghost', toOklchToken({ L: ghostL, C: Math.min(a.C, GHOST_CHROMA_CEILING), H: a.H }));
 
-    root.style.setProperty('--primary', toHslString(a));
-    root.style.setProperty('--ring', toHslString(a));
-    root.style.setProperty('--sidebar-primary', toHslString(bright));
-    root.style.setProperty('--sidebar-ring', toHslString(bright));
-    root.style.setProperty('--primary-foreground', toHslString(foregroundFor(a)));
-    root.style.setProperty('--sidebar-primary-foreground', toHslString(foregroundFor(bright)));
+    root.style.setProperty('--primary', toOklchToken(a));
+    root.style.setProperty('--ring', toOklchToken(a));
+    root.style.setProperty('--sidebar-primary', toOklchToken(bright));
+    root.style.setProperty('--sidebar-ring', toOklchToken(bright));
+    root.style.setProperty('--primary-foreground', toOklchToken(foregroundFor(a)));
+    root.style.setProperty('--sidebar-primary-foreground', toOklchToken(foregroundFor(bright)));
   }
 }

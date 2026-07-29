@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { useProgramSettings, useProperties } from '@/lib/supabase-queries';
+import { useProgramSettings } from '@/lib/supabase-queries';
 
 interface PageHeaderProps {
   title: string;
@@ -19,14 +19,9 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, badge, action, children, compact = false }: PageHeaderProps) {
-  const { currentPropertyId, orgId } = useOrgProfile();
+  const { orgId } = useOrgProfile();
   const { data: programSettings } = useProgramSettings(orgId ?? undefined);
-  const { data: properties = [] } = useProperties(orgId ?? undefined);
   const programSetting = programSettings ?? undefined;
-  const selectedPropertyName =
-    currentPropertyId && currentPropertyId !== 'all'
-      ? properties.find((property) => property.id === currentPropertyId)?.name ?? null
-      : null;
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-3">
@@ -65,13 +60,6 @@ export function PageHeader({ title, subtitle, badge, action, children, compact =
               {badge}
             </div>
           )}
-          {selectedPropertyName ? (
-            <div className="mt-1">
-              <Badge variant="outline" className="rounded-full text-[11px]">
-                {selectedPropertyName}
-              </Badge>
-            </div>
-          ) : null}
           {!compact && subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
       </div>
@@ -87,4 +75,3 @@ export function PageHeader({ title, subtitle, badge, action, children, compact =
     </div>
   );
 }
-

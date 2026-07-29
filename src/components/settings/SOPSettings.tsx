@@ -553,7 +553,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                 <div className="flex items-center gap-1.5">
                   <span
                     className="inline-block h-4 w-4 rounded-full border border-text-primary/10"
-                    style={{ backgroundColor: sop.color ?? 'rgb(var(--text-muted))' }}
+                    style={{ backgroundColor: sop.color ?? 'oklch(var(--text-muted))' }}
                   />
                 </div>
                 <div className="flex items-center justify-end gap-1">

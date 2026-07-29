@@ -1,3 +1,12 @@
+export type OklchPalette = {
+  primary: `oklch(${string})`;
+  accent: `oklch(${string})`;
+  background: `oklch(${string})`;
+  surface: `oklch(${string})`;
+  border: `oklch(${string})`;
+  muted: `oklch(${string})`;
+};
+
 export type ColorTheme = {
   id: string;
   label: string;
@@ -11,6 +20,8 @@ export type ColorTheme = {
    *  50 reproduces the shipped design. Stored in the DB as `theme_darkness`
    *  pending the rename decision in Phase 4. */
   contrast?: number;
+  /** Optional named OKLCH palette notes for preset design review and previews. */
+  palette?: OklchPalette;
   fontThemePreset: string;
 };
 
@@ -43,11 +54,24 @@ export const COLOR_THEMES: ColorTheme[] = [
   // club heritage). Gold is light enough that on-accent button text resolves to
   // black (verified 10:1); text and surfaces stay neutral/green as usual.
   { id: 'clubhouse', label: 'Clubhouse', base: '#14432c', accent: '#d4af37', fontThemePreset: 'modern-sans' },
-  // Warm sunset-over-the-field scheme: deep umber/brick surfaces with a
-  // coral-orange accent. Pairs with classic-club (serif headings) to match
-  // Clubhouse's heritage feel while reading distinctly warmer/dusk rather
-  // than daytime green.
-  { id: 'sunset-polo', label: 'Sunset Polo', base: '#2e1810', accent: '#ff8a4c', fontThemePreset: 'classic-club' },
+  // Warm terracotta and estate gold for a dusk polo-club brand. The runtime
+  // still derives readable surfaces from base/accent; the palette records the
+  // 6 OKLCH design tokens requested for this preset.
+  {
+    id: 'sunset-polo',
+    label: 'Sunset Polo',
+    base: '#2e1810',
+    accent: '#d6a33f',
+    fontThemePreset: 'classic-club',
+    palette: {
+      primary: 'oklch(61% 0.145 43)',
+      accent: 'oklch(78% 0.130 82)',
+      background: 'oklch(18% 0.030 47)',
+      surface: 'oklch(24% 0.035 47)',
+      border: 'oklch(33% 0.045 53)',
+      muted: 'oklch(72% 0.050 76)',
+    },
+  },
 ];
 
 export function getColorTheme(id: string) {
@@ -60,7 +84,7 @@ export function getColorTheme(id: string) {
  * before hydration. If you change this string, change it there too — the script
  * is a raw string and cannot import.
  */
-export const THEME_VARS_STORAGE_KEY = 'gchq-theme-vars';
+export const THEME_VARS_STORAGE_KEY = 'gchq-theme-vars-oklch';
 
 /** Shared so AppLayout and SettingsPage cannot drift. AppLayout previously
  *  hardcoded Segoe UI here and ignored the preset entirely, so fonts changed

@@ -199,7 +199,7 @@ export function PropertyMap({
               center={markerCenter}
               radius={9}
               pathOptions={{
-                color: 'rgb(var(--text-inverse))',
+                color: 'oklch(var(--text-inverse))',
                 fillColor: project.markerColor,
                 fillOpacity: 0.95,
                 opacity: 1,

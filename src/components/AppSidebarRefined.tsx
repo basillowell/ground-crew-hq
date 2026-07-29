@@ -161,7 +161,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const pathname = usePathname() ?? '/';
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { currentRole, currentPropertyId, orgId, signOut, currentUser } = useOrgProfile();
+  const { currentRole, orgId, signOut, currentUser } = useOrgProfile();
   const { data: programSetting } = useProgramSettings(orgId);
   const navigationTitle = programSetting?.navigationTitle || programSetting?.appName || 'Ground Crew HQ';
   const navigationSubtitle = programSetting?.navigationSubtitle || programSetting?.organizationName || 'Operations';
@@ -169,7 +169,8 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const logoUrl = programSetting?.logoUrl;
   const { data: properties = [] } = useProperties(orgId);
   const propertyClasses = usePropertyClassOptions().data ?? [];
-  const currentProperty = properties.find((property) => property.id === currentPropertyId);
+  const sidebarPropertyId = currentUser?.role === 'employee' || currentUser?.role === 'viewer' ? currentUser?.propertyId : null;
+  const currentProperty = properties.find((property) => property.id === sidebarPropertyId);
   const currentPropertyClassId = currentProperty?.propertyClassId;
   const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentPropertyClassId);
   const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];
@@ -245,7 +246,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
           </div>
           {!collapsed ? (
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-bold text-brand-bright [-webkit-text-stroke:0.5px_rgb(var(--text-inverse))]">{navigationTitle}</h1>
+              <h1 className="truncate text-sm font-bold text-brand-bright [-webkit-text-stroke:0.5px_oklch(var(--text-inverse))]">{navigationTitle}</h1>
               <p className="truncate text-xs uppercase text-text-muted">{navigationSubtitle}</p>
             </div>
           ) : null}
@@ -317,4 +318,3 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
     </Sidebar>
   );
 });
-

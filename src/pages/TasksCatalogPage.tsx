@@ -7,7 +7,8 @@ import { PropertySelector } from '@/components/shared/PropertySelector';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { useTasks } from '@/lib/supabase-queries';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
+import { useProperties, useTasks } from '@/lib/supabase-queries';
 
 type TaskListItem = {
   id: string;
@@ -30,13 +31,18 @@ function groupedByCategory(tasks: TaskListItem[]) {
 
 export default function TasksCatalogPage() {
   const router = useRouter();
-  const { currentUser, currentPropertyId } = useOrgProfile();
+  const { currentUser } = useOrgProfile();
+  const { data: properties = [] } = useProperties(currentUser?.orgId);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties,
+  });
   const {
     data: taskRows = [],
     isLoading: loading,
     error,
     refetch,
-  } = useTasks(currentPropertyId || undefined, currentUser?.orgId);
+  } = useTasks(selectedPagePropertyId || undefined, currentUser?.orgId);
   const tasks = useMemo<TaskListItem[]>(
     () =>
       taskRows.map((task) => ({
@@ -66,7 +72,12 @@ export default function TasksCatalogPage() {
   return (
     <div className="animate-fade-up mx-auto max-w-6xl space-y-4 p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <PropertySelector className="w-full md:w-64" />
+        <PropertySelector
+          className="w-full md:w-64"
+          orgId={currentUser?.orgId}
+          value={selectedPagePropertyId}
+          onChange={setSelectedPagePropertyId}
+        />
         <Badge variant="secondary">{tasks.length} tasks</Badge>
       </div>
 
@@ -124,5 +135,3 @@ export default function TasksCatalogPage() {
     </div>
   );
 }
-
-

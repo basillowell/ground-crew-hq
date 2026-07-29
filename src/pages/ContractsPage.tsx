@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
   type RevenueLineItem,
   type ServiceContract,
@@ -155,13 +156,17 @@ function draftsFromLineItems(items: RevenueLineItem[]): LineItemDraft[] {
 }
 
 export default function ContractsPage() {
-  const { orgId, currentPropertyId, currentRole } = useOrgProfile();
+  const { orgId, currentRole, currentUser } = useOrgProfile();
   const contractsQuery = useServiceContracts(orgId ?? undefined);
   const contractLineItemsQuery = useServiceContractLineItems(undefined, orgId ?? undefined);
   const clientsQuery = useClients(orgId ?? undefined);
   const serviceCatalogQuery = useServiceCatalog(orgId ?? undefined);
   const runsQuery = useContractInvoiceRuns(orgId ?? undefined);
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
+  const [selectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties,
+  });
   const createContractMutation = useCreateServiceContract(orgId ?? undefined);
   const updateContractMutation = useUpdateServiceContract(orgId ?? undefined);
   const updateContractStatusMutation = useUpdateServiceContractStatus(orgId ?? undefined);
@@ -229,7 +234,7 @@ export default function ContractsPage() {
     setEditingContract(null);
     setForm({
       ...emptyContractForm(),
-      propertyId: currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null,
+      propertyId: selectedPagePropertyId && selectedPagePropertyId !== 'all' ? selectedPagePropertyId : null,
     });
     setDialogOpen(true);
   };

@@ -4,6 +4,7 @@ import { Loader2, MoreHorizontal, Plus, UserCog, Users } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { createClient } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -246,13 +247,21 @@ function EmployeePagination({
 
 export default function EmployeesPage() {
   const searchParams = useSearchParams();
-  const { orgId, userRole, currentPropertyId } = useOrgProfile();
+  const { orgId, userRole, currentUser } = useOrgProfile();
   const queryClient = useQueryClient();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const isAdmin = userRole === 'admin';
   const [statusFilter, setStatusFilter] = useState<EmployeeStatusFilter>('active');
-  const employeesQuery = useEmployees(currentPropertyId || undefined, orgId ?? undefined, statusFilter);
   const propertiesQuery = useProperties(orgId ?? undefined);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties: propertiesQuery.data ?? [],
+  });
+  const employeesQuery = useEmployees(
+    selectedPagePropertyId === 'all' ? undefined : selectedPagePropertyId,
+    orgId ?? undefined,
+    statusFilter,
+  );
   const departmentsQuery = useDepartmentOptions(orgId ?? undefined);
   const employees = useMemo<EmployeeRow[]>(
     () =>
@@ -1089,7 +1098,12 @@ export default function EmployeesPage() {
   return (
     <div className="animate-fade-up mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <PropertySelector className="w-full md:w-64" />
+        <PropertySelector
+          className="w-full md:w-64"
+          orgId={orgId}
+          value={selectedPagePropertyId}
+          onChange={setSelectedPagePropertyId}
+        />
         {!isReadOnly ? (
           <Button size="sm" className="h-9 gap-1.5" onClick={openAddModal}>
             <Plus className="mr-1.5 h-4 w-4" />
@@ -1971,7 +1985,3 @@ export default function EmployeesPage() {
     </div>
   );
 }
-
-
-
-

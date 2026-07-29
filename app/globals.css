@@ -6,24 +6,24 @@
 @tailwind utilities;
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+Theme tokens use OKLCH payloads.
 */
 
-/* ── Design token CSS variables (dark defaults; overridden by html.light) ── */
+/* Design token CSS variables (dark defaults; overridden by html.light). */
 :root {
-  --surface-base: 17 20 18;       /* #111413 - lifted near-black, no green tint */
-  --surface-card: 24 30 26;       /* #181e1a */
-  --surface-elevated: 32 40 35;   /* #202823 */
-  --surface-border: 44 54 47;     /* #2c362f */
-  --surface-hover: 30 38 33;      /* #1e2621 */
-  --brand-default: 74 184 110;    /* #4ab86e - emerald/moss, calmer than chartreuse */
-  --brand-bright: 110 211 145;    /* #6ed391 - bright variant for CTAs */
-  --brand-dim: 45 122 76;         /* #2d7a4c */
-  --brand-ghost: 18 44 30;        /* #122c1e */
-  --text-primary: 241 245 241;    /* #f1f5f1 - near-white, slight warm */
-  --text-secondary: 148 163 184;  /* #94a3b8 - pure slate-400, no green tint */
-  --text-muted: 71 85 105;        /* #475569 - slate-600 */
-  --text-inverse: 17 20 18;       /* #111413 */
+  --surface-base: 18.754% 0.00512 173.77;       /* #111413 - lifted near-black, no green tint */
+  --surface-card: 22.736% 0.01172 156.17;       /* #181e1a */
+  --surface-elevated: 26.721% 0.01460 157.83;   /* #202823 */
+  --surface-border: 32.112% 0.01828 154.74;     /* #2c362f */
+  --surface-hover: 25.893% 0.01470 157.78;      /* #1e2621 */
+  --brand-default: 70.057% 0.14772 151.40;    /* #4ab86e - emerald/moss, calmer than chartreuse */
+  --brand-bright: 78.845% 0.13453 153.44;    /* #6ed391 - bright variant for CTAs */
+  --brand-dim: 51.928% 0.10516 154.03;         /* #2d7a4c */
+  --brand-ghost: 26.751% 0.04185 158.26;        /* #122c1e */
+  --text-primary: 96.601% 0.00677 145.52;    /* #f1f5f1 - near-white, slight warm */
+  --text-secondary: 71.067% 0.03511 256.79;  /* #94a3b8 - pure slate-400, no green tint */
+  --text-muted: 44.553% 0.03745 257.28;        /* #475569 - slate-600 */
+  --text-inverse: 18.754% 0.00512 173.77;       /* #111413 */
 
   /* Elevation shadows (dark). Black drop shadows read weakly on dark surfaces,
      so md+ pair a low-alpha top-edge inset highlight (light catching the top)
@@ -36,30 +36,30 @@ All colors MUST be HSL.
 }
 
 html.light {
-  --surface-base: 214 222 214;     /* #d6ded6 - clearly visible warm gray-sage */
-  --surface-card: 255 255 255;     /* #ffffff */
-  --surface-elevated: 236 241 236; /* #ecf1ec - between base and card */
-  --surface-border: 168 184 168;   /* #a8b8a8 - visible border definition */
-  --surface-hover: 226 234 226;    /* #e2eae2 */
-  --text-primary: 10 15 12;       /* #0a0f0c */
-  --text-secondary: 61 92 61;     /* #3d5c3d */
-  --text-muted: 107 140 107;      /* #6b8c6b */
-  --text-inverse: 240 244 240;    /* #f0f4f0 */
-  --brand-ghost: 220 245 232;     /* #dcf5e8 - light emerald tint */
+  --surface-base: 89.222% 0.01379 145.46;     /* #d6ded6 - clearly visible warm gray-sage */
+  --surface-card: 100.000% 0.00000 89.88;     /* #ffffff */
+  --surface-elevated: 95.296% 0.00848 145.51; /* #ecf1ec - between base and card */
+  --surface-border: 76.561% 0.02860 145.29;   /* #a8b8a8 - visible border definition */
+  --surface-hover: 92.875% 0.01366 145.46;    /* #e2eae2 */
+  --text-primary: 16.172% 0.01014 158.69;       /* #0a0f0c */
+  --text-secondary: 44.136% 0.06198 144.44;     /* #3d5c3d */
+  --text-muted: 60.558% 0.06175 144.77;      /* #6b8c6b */
+  --text-inverse: 96.301% 0.00677 145.52;    /* #f0f4f0 */
+  --brand-ghost: 94.833% 0.03139 163.24;     /* #dcf5e8 - light emerald tint */
   /* shadcn/ui overrides for light mode */
-  --background: 120 15% 87%;
-  --foreground: 147 27% 8%;
-  --card: 0 0% 100%;
-  --card-foreground: 147 27% 8%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 147 27% 8%;
-  --muted: 120 10% 85%;
-  --muted-foreground: 147 20% 35%;
-  --border: 120 20% 83%;
-  --input: 120 20% 83%;
-  --sidebar-background: 120 15% 90%;
-  --sidebar-foreground: 147 20% 35%;
-  --sidebar-border: 120 20% 83%;
+  --background: 90.495% 0.01708 145.43;
+  --foreground: 20.443% 0.02002 159.90;
+  --card: 100.000% 0.00000 89.88;
+  --card-foreground: 20.443% 0.02002 159.90;
+  --popover: 100.000% 0.00000 89.88;
+  --popover-foreground: 20.443% 0.02002 159.90;
+  --muted: 88.822% 0.01321 145.46;
+  --muted-foreground: 49.486% 0.05180 159.69;
+  --border: 87.760% 0.02997 145.31;
+  --input: 87.760% 0.02997 145.31;
+  --sidebar-background: 92.706% 0.01307 145.47;
+  --sidebar-foreground: 49.486% 0.05180 159.69;
+  --sidebar-border: 87.760% 0.02997 145.31;
 
   /* Elevation shadows (light). Drop shadows read on their own here — no inset
      highlight needed; tinted slightly cool (16 24 40) rather than pure black. */
@@ -72,76 +72,76 @@ html.light {
 
 @layer base {
   :root {
-    --hq-green-900: #0d2a1a;
-    --hq-green-800: #183d28;
-    --hq-green-700: #225838;
-    --hq-green-600: #2d7a4c;
-    --hq-green-500: #4ab86e;
-    --hq-green-100: #d1f5e2;
-    --hq-ink: #111827;
-    --hq-slate: #334155;
-    --hq-muted: #64748B;
-    --hq-border: #E2E8F0;
-    --hq-bg: #F6F8F6;
-    --hq-card: #FFFFFF;
-    --status-safe: #22c55e;
-    --status-warning: #F59E0B;
-    --status-danger: #ef4444;
-    --status-info: #3b82f6;
-    --status-muted: #94a3b8;
+    --hq-green-900: 25.739% 0.04647 156.66;
+    --hq-green-800: 32.608% 0.05701 156.32;
+    --hq-green-700: 41.458% 0.07880 154.76;
+    --hq-green-600: 51.928% 0.10516 154.03;
+    --hq-green-500: 70.057% 0.14772 151.40;
+    --hq-green-100: 93.923% 0.04523 162.44;
+    --hq-ink: 21.008% 0.03176 264.66;
+    --hq-slate: 37.170% 0.03916 257.29;
+    --hq-muted: 55.439% 0.04072 257.42;
+    --hq-border: 92.876% 0.01262 255.51;
+    --hq-bg: 97.705% 0.00337 145.55;
+    --hq-card: 100.000% 0.00000 89.88;
+    --status-safe: 72.275% 0.19201 149.58;
+    --status-warning: 76.859% 0.16466 70.08;
+    --status-danger: 63.683% 0.20785 25.33;
+    --status-info: 62.308% 0.18801 259.81;
+    --status-muted: 71.067% 0.03511 256.79;
 
-    --background: 150 8% 7.3%;
-    --foreground: 120 15.385% 94.902%;
+    --background: 18.783% 0.00555 164.35;
+    --foreground: 96.301% 0.00677 145.52;
 
-    --card: 150 11% 10.6%;
-    --card-foreground: 120 15.385% 94.902%;
+    --card: 22.782% 0.01048 163.88;
+    --card-foreground: 96.301% 0.00677 145.52;
 
-    --popover: 150 12% 12.5%;
-    --popover-foreground: 120 15.385% 94.902%;
+    --popover: 25.008% 0.01313 163.68;
+    --popover-foreground: 96.301% 0.00677 145.52;
 
-    --primary: 145 48% 56%;
-    --primary-foreground: 144 20% 4.902%;
+    --primary: 74.257% 0.13582 155.40;
+    --primary-foreground: 16.172% 0.01014 158.69;
 
-    --secondary: 150 12% 12.5%;
-    --secondary-foreground: 120 15.385% 94.902%;
+    --secondary: 25.008% 0.01313 163.68;
+    --secondary-foreground: 96.301% 0.00677 145.52;
 
-    --muted: 150 12% 12.5%;
-    --muted-foreground: 120 13.131% 61.176%;
+    --muted: 25.008% 0.01313 163.68;
+    --muted-foreground: 70.755% 0.04718 145.06;
 
-    --accent: 150 13% 14%;
-    --accent-foreground: 120 15.385% 94.902%;
+    --accent: 26.760% 0.01561 163.51;
+    --accent-foreground: 96.301% 0.00677 145.52;
 
-    --destructive: 0 84.236% 60.196%;
-    --destructive-foreground: 120 15.385% 94.902%;
+    --destructive: 63.683% 0.20785 25.33;
+    --destructive-foreground: 96.301% 0.00677 145.52;
 
-    --border: 150 10% 19%;
-    --input: 150 10% 19%;
-    --ring: 145 48% 56%;
+    --border: 31.935% 0.01567 163.79;
+    --input: 31.935% 0.01567 163.79;
+    --ring: 74.257% 0.13582 155.40;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 150 12% 7%;
-    --sidebar-foreground: 215 20% 65%;
-    --sidebar-primary: 145 50% 63%;
-    --sidebar-primary-foreground: 0 0% 0%;
-    --sidebar-accent: 150 13% 16%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 0 0% 100% / 0.06;
-    --sidebar-ring: 145 50% 63%;
-    --sidebar-muted: 215 20% 65%;
+    --sidebar-background: 18.571% 0.00796 163.97;
+    --sidebar-foreground: 70.997% 0.03483 256.79;
+    --sidebar-primary: 78.400% 0.12064 156.57;
+    --sidebar-primary-foreground: 0.000% 0.00000 0.00;
+    --sidebar-accent: 28.971% 0.01747 163.45;
+    --sidebar-accent-foreground: 98.383% 0.00348 247.86;
+    --sidebar-border: 100.000% 0.00000 89.88;
+    --sidebar-ring: 78.400% 0.12064 156.57;
+    --sidebar-muted: 70.997% 0.03483 256.79;
 
-    --success: 152 55% 38%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --info: 210 80% 52%;
-    --info-foreground: 0 0% 100%;
+    --success: 60.107% 0.12262 158.53;
+    --success-foreground: 100.000% 0.00000 89.88;
+    --warning: 76.973% 0.16452 70.61;
+    --warning-foreground: 100.000% 0.00000 89.88;
+    --info: 61.213% 0.17136 252.99;
+    --info-foreground: 100.000% 0.00000 89.88;
 
-    --chart-green: 152 55% 38%;
-    --chart-blue: 210 80% 52%;
-    --chart-orange: 25 90% 55%;
-    --chart-red: 0 72% 55%;
-    --chart-purple: 270 60% 55%;
+    --chart-green: 60.107% 0.12262 158.53;
+    --chart-blue: 61.213% 0.17136 252.99;
+    --chart-orange: 70.964% 0.17304 50.31;
+    --chart-red: 59.880% 0.20208 25.78;
+    --chart-purple: 55.239% 0.20382 303.26;
 
     --brand-body-font: "Inter", "Segoe UI", sans-serif;
     --brand-heading-font: "Inter", "Segoe UI", sans-serif;
@@ -174,9 +174,9 @@ html.light {
     right: 0;
     text-align: center;
     font-size: 12px;
-    color: #4b5563;
+    color: oklch(44.553% 0.03745 257.28);
     padding: 8px 0;
-    background: #ffffff;
+    background: oklch(100.000% 0.00000 89.88);
   }
 }
 
@@ -282,20 +282,20 @@ html.light {
   .settings-theme [style*="border: 1px solid rgb(209, 213, 219)"],
   .settings-theme [style*="border-bottom: 1px solid rgb(229, 231, 235)"],
   .settings-theme [style*="border-bottom: 1px solid rgb(241, 245, 249)"] {
-    border-color: rgb(var(--surface-border)) !important;
+    border-color: oklch(var(--surface-border)) !important;
   }
 
   .settings-theme [style*="background: rgb(255, 255, 255)"] {
-    background: rgb(var(--surface-card)) !important;
+    background: oklch(var(--surface-card)) !important;
   }
 
   .settings-theme [style*="color: rgb(17, 24, 39)"] {
-    color: rgb(var(--text-primary)) !important;
+    color: oklch(var(--text-primary)) !important;
   }
 
   .settings-theme [style*="color: rgb(55, 65, 81)"],
   .settings-theme [style*="color: rgb(107, 114, 128)"] {
-    color: rgb(var(--text-muted)) !important;
+    color: oklch(var(--text-muted)) !important;
   }
 }
 
@@ -308,9 +308,9 @@ html.light {
 input[type="date"],
 input[type="time"] {
   color-scheme: dark;
-  color: rgb(var(--text-primary));
-  background-color: rgb(var(--surface-base));
-  border-color: rgb(var(--surface-border));
+  color: oklch(var(--text-primary));
+  background-color: oklch(var(--surface-base));
+  border-color: oklch(var(--surface-border));
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator {
@@ -328,18 +328,18 @@ select {
 }
 
 select:not([class*="sr-only"]) {
-  color: rgb(var(--text-primary));
-  background-color: rgb(var(--surface-base));
+  color: oklch(var(--text-primary));
+  background-color: oklch(var(--surface-base));
 }
 
 select option {
-  color: rgb(var(--text-primary));
-  background-color: rgb(var(--surface-base));
+  color: oklch(var(--text-primary));
+  background-color: oklch(var(--surface-base));
 }
 
 input[type="color"] {
   color-scheme: dark;
-  border-color: rgb(var(--surface-border));
+  border-color: oklch(var(--surface-border));
   border-radius: 0.375rem;
 }
 
@@ -388,6 +388,6 @@ input[type="color"] {
     font-size: 1.5rem;
     font-weight: 700;
     letter-spacing: -0.025em;
-    color: rgb(var(--text-primary));
+    color: oklch(var(--text-primary));
   }
 }

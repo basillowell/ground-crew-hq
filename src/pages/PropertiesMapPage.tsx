@@ -10,6 +10,7 @@ import { toast } from '@/components/ui/sonner';
 import { PropertyDetailPanel } from '@/components/map/PropertyDetailPanel';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
   usePropertyBoundaries,
   useSavePropertyBoundary,
@@ -35,7 +36,7 @@ function formatAcres(value: number | null | undefined) {
 }
 
 export default function PropertiesMapPage() {
-  const { currentPropertyId, currentRole, currentUser, isOrgReady, orgId, setCurrentPropertyId } = useOrgProfile();
+  const { currentRole, currentUser, isOrgReady, orgId } = useOrgProfile();
   const boundariesQuery = usePropertyBoundaries(orgId ?? undefined);
   const saveBoundaryMutation = useSavePropertyBoundary(orgId ?? undefined);
   const setProjectLocationMutation = useSetProjectLocation(orgId ?? undefined);
@@ -46,25 +47,29 @@ export default function PropertiesMapPage() {
   const [pinPlacementProject, setPinPlacementProject] = useState<{ propertyId: string; projectId: string; projectName: string } | null>(null);
   const [pinSavingProjectId, setPinSavingProjectId] = useState<string | null>(null);
   const properties = boundariesQuery.data ?? [];
+  const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
+    currentUser,
+    properties,
+  });
   const mappedCount = properties.filter((property) => property.boundaryGeojson).length;
-  const selectedProperty = currentPropertyId === 'all'
+  const selectedProperty = selectedPropertyId === 'all'
     ? null
-    : properties.find((property) => property.id === currentPropertyId) ?? null;
+    : properties.find((property) => property.id === selectedPropertyId) ?? null;
   const canViewMap = currentRole === 'admin' || currentRole === 'manager';
-  const hasConcretePropertySelected = currentPropertyId !== 'all' && Boolean(selectedProperty);
+  const hasConcretePropertySelected = selectedPropertyId !== 'all' && Boolean(selectedProperty);
   const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
 
   useEffect(() => {
     setEditMode(false);
     setPendingBoundaryGeojson(undefined);
     setPinPlacementProject(null);
-  }, [currentPropertyId]);
+  }, [selectedPropertyId]);
 
   const handleSaveBoundary = async () => {
-    if (!orgId || currentPropertyId === 'all' || !hasPendingBoundaryChange) return;
+    if (!orgId || selectedPropertyId === 'all' || !hasPendingBoundaryChange) return;
     try {
       await saveBoundaryMutation.mutateAsync({
-        propertyId: currentPropertyId,
+        propertyId: selectedPropertyId,
         boundaryGeojson: pendingBoundaryGeojson ?? null,
       });
       setPendingBoundaryGeojson(undefined);
@@ -83,7 +88,7 @@ export default function PropertiesMapPage() {
     }
     setEditMode(false);
     setSelectedProjectId(project.id);
-    setCurrentPropertyId(project.propertyId);
+    setSelectedPropertyId(project.propertyId);
     setPinPlacementProject({ propertyId: project.propertyId, projectId: project.id, projectName: project.name });
   };
 
@@ -91,7 +96,7 @@ export default function PropertiesMapPage() {
     setEditMode(false);
     setPinPlacementProject(null);
     setSelectedProjectId(projectId);
-    if (propertyId && propertyId !== currentPropertyId) setCurrentPropertyId(propertyId);
+    if (propertyId && propertyId !== selectedPropertyId) setSelectedPropertyId(propertyId);
   };
 
   const handleCancelPinPlacement = () => {
@@ -161,7 +166,7 @@ export default function PropertiesMapPage() {
               Selected: {selectedProperty.name} - drawn {formatAcres(selectedProperty.calculatedAcreage)} / on file {formatAcres(selectedProperty.acreage)}
             </div>
           ) : null}
-          {currentPropertyId === 'all' ? (
+          {selectedPropertyId === 'all' ? (
             <div className="mt-2 text-xs text-status-warning">
               Select a specific property before drawing or editing a boundary.
             </div>
@@ -173,7 +178,13 @@ export default function PropertiesMapPage() {
           ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-          <PropertySelector className="sm:w-72" allowAllProperties />
+          <PropertySelector
+            className="sm:w-72"
+            allowAllProperties
+            orgId={orgId}
+            value={selectedPropertyId}
+            onChange={setSelectedPropertyId}
+          />
           <Button
             type="button"
             variant={editMode ? 'default' : 'outline'}
@@ -229,13 +240,13 @@ export default function PropertiesMapPage() {
       ) : (
         <PropertyMap
           properties={properties}
-          currentPropertyId={currentPropertyId || 'all'}
+          currentPropertyId={selectedPropertyId || 'all'}
           editMode={editMode}
           canEditBoundary={canViewMap}
           pinPlacementProject={pinPlacementProject}
           pinPlacementDisabled={Boolean(pinSavingProjectId)}
           onBoundaryChange={setPendingBoundaryGeojson}
-          onSelectProperty={setCurrentPropertyId}
+          onSelectProperty={setSelectedPropertyId}
           onSelectProject={handleSelectProject}
           onPlaceProjectPin={handlePlaceProjectPin}
           onCancelPinPlacement={handleCancelPinPlacement}
@@ -255,7 +266,7 @@ export default function PropertiesMapPage() {
           onClose={() => {
             setSelectedProjectId(null);
             setPinPlacementProject(null);
-            setCurrentPropertyId('all');
+            setSelectedPropertyId('all');
           }}
         />
       ) : null}

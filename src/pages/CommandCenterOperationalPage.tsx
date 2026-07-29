@@ -12,6 +12,7 @@ import {
   MapPin, Shield, TrendingUp, Users, Wrench, Zap,
 } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
   useAssignments, useEmployees, useEquipmentUnits,
   useNotes, useProperties, useScheduleEntries,
@@ -21,17 +22,21 @@ import {
 export default function CommandCenterOperationalPage() {
   const router = useRouter();
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const { currentPropertyId, orgId } = useOrgProfile();
+  const { currentUser, orgId } = useOrgProfile();
   const todayKey = new Date().toISOString().slice(0, 10);
 
   const { data: properties = [], isLoading: propsLoading } = useProperties(orgId ?? undefined);
-  const { data: employees = [] } = useEmployees(currentPropertyId ?? undefined, orgId ?? undefined);
-  const { data: assignments = [] } = useAssignments(todayKey, currentPropertyId ?? undefined, orgId ?? undefined);
-  const { data: scheduleEntries = [] } = useScheduleEntries(todayKey, currentPropertyId ?? undefined, orgId ?? undefined);
-  const { data: tasks = [] } = useTasks(currentPropertyId ?? undefined, orgId ?? undefined);
-  const { data: notes = [] } = useNotes(currentPropertyId ?? undefined, orgId ?? undefined);
+  const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
+    currentUser,
+    properties,
+  });
+  const { data: employees = [] } = useEmployees(selectedPropertyId || undefined, orgId ?? undefined);
+  const { data: assignments = [] } = useAssignments(todayKey, selectedPropertyId || undefined, orgId ?? undefined);
+  const { data: scheduleEntries = [] } = useScheduleEntries(todayKey, selectedPropertyId || undefined, orgId ?? undefined);
+  const { data: tasks = [] } = useTasks(selectedPropertyId || undefined, orgId ?? undefined);
+  const { data: notes = [] } = useNotes(selectedPropertyId || undefined, orgId ?? undefined);
   const { data: workLocations = [] } = useWorkLocations(undefined, orgId ?? undefined);
-  const { data: equipmentUnits = [] } = useEquipmentUnits(currentPropertyId ?? undefined, orgId ?? undefined);
+  const { data: equipmentUnits = [] } = useEquipmentUnits(selectedPropertyId || undefined, orgId ?? undefined);
 
   const propertyStats = useMemo(() => {
     return properties.map((property) => {
@@ -98,17 +103,22 @@ export default function CommandCenterOperationalPage() {
 
   const metrics = [
     { icon: Users, label: 'Total Crew', value: totals.crew, subtext: 'active today' },
-    { icon: CheckCircle, label: 'Tasks Done', value: totals.tasks, subtext: `of ${totals.tasksTotal}`, color: 'hsl(var(--success))' },
-    { icon: Wrench, label: 'Equipment', value: totals.equipment, subtext: `${totals.equipmentDown} down`, color: 'hsl(var(--warning))' },
-    { icon: AlertTriangle, label: 'Issues', value: totals.workOrders, subtext: 'open alerts', color: 'hsl(var(--destructive))' },
-    { icon: Shield, label: 'Compliance', value: `${propertyStats.length ? Math.round(propertyStats.reduce((s, p) => s + p.complianceScore, 0) / propertyStats.length) : 0}%`, color: 'hsl(var(--info))' },
+    { icon: CheckCircle, label: 'Tasks Done', value: totals.tasks, subtext: `of ${totals.tasksTotal}`, color: 'oklch(var(--success))' },
+    { icon: Wrench, label: 'Equipment', value: totals.equipment, subtext: `${totals.equipmentDown} down`, color: 'oklch(var(--warning))' },
+    { icon: AlertTriangle, label: 'Issues', value: totals.workOrders, subtext: 'open alerts', color: 'oklch(var(--destructive))' },
+    { icon: Shield, label: 'Compliance', value: `${propertyStats.length ? Math.round(propertyStats.reduce((s, p) => s + p.complianceScore, 0) / propertyStats.length) : 0}%`, color: 'oklch(var(--info))' },
     { icon: Building2, label: 'Properties', value: properties.length, subtext: `${totals.alerts} alerts` },
   ];
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <PropertySelector className="w-full md:w-64" />
+        <PropertySelector
+          className="w-full md:w-64"
+          orgId={orgId}
+          value={selectedPropertyId}
+          onChange={setSelectedPropertyId}
+        />
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="px-3 py-1.5 text-xs">
             <MapPin className="mr-1.5 h-3 w-3" />
@@ -124,7 +134,7 @@ export default function CommandCenterOperationalPage() {
         {metrics.map(m => (
           <Card key={m.label} className="flex items-center gap-3 border p-4 hover:border-primary/20 transition-colors">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent">
-              <m.icon className="h-5 w-5" style={{ color: m.color || 'hsl(var(--primary))' }} />
+              <m.icon className="h-5 w-5" style={{ color: m.color || 'oklch(var(--primary))' }} />
             </div>
             <div>
               <div className="text-2xl font-bold">{m.value}</div>
@@ -276,5 +286,3 @@ export default function CommandCenterOperationalPage() {
     </div>
   );
 }
-
-

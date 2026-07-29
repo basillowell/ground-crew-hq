@@ -64,13 +64,13 @@ export function ReportsCharts({
           </div>
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={dailyOperations}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
               <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
               <Tooltip />
-              <Bar yAxisId="left" dataKey="applications" fill="hsl(var(--warning))" radius={[6, 6, 0, 0]} />
-              <Area yAxisId="right" type="monotone" dataKey="et" fill="hsl(var(--chart-green) / 0.18)" stroke="hsl(var(--chart-green))" />
+              <Bar yAxisId="left" dataKey="applications" fill="oklch(var(--warning))" radius={[6, 6, 0, 0]} />
+              <Area yAxisId="right" type="monotone" dataKey="et" fill="oklch(var(--chart-green) / 0.18)" stroke="oklch(var(--chart-green))" />
             </ComposedChart>
           </ResponsiveContainer>
         </Card>
@@ -109,13 +109,13 @@ export function ReportsCharts({
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={dailyLabor}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--border))" />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
               <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
               <Tooltip />
-              <Bar yAxisId="left" dataKey="assignments" fill="hsl(var(--chart-green))" radius={[6, 6, 0, 0]} />
-              <Line yAxisId="right" type="monotone" dataKey="laborHours" stroke="hsl(var(--chart-blue))" strokeWidth={3} dot={{ r: 3 }} />
+              <Bar yAxisId="left" dataKey="assignments" fill="oklch(var(--chart-green))" radius={[6, 6, 0, 0]} />
+              <Line yAxisId="right" type="monotone" dataKey="laborHours" stroke="oklch(var(--chart-blue))" strokeWidth={3} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </Card>

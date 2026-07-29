@@ -19,6 +19,7 @@ import { TimeInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { useAssignments, useEmployees, useProperties, useTasks } from '@/lib/supabase-queries';
 import { createClient } from '@/lib/supabase';
 
@@ -48,16 +49,20 @@ async function withDispatchAbortControllerTimeout<T extends { error: unknown }>(
 export default function DispatchBoardPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { currentPropertyId, orgId } = useOrgProfile();
+  const { currentUser, orgId } = useOrgProfile();
   const todayKey = new Date().toISOString().slice(0, 10);
 
-  const { data: assignments = [], isLoading: assignmentsLoading } =
-    useAssignments(todayKey, currentPropertyId ?? undefined, orgId ?? undefined);
-  const { data: employees = [], isLoading: employeesLoading } =
-    useEmployees(currentPropertyId ?? undefined, orgId ?? undefined);
-  const { data: tasks = [] } =
-    useTasks(currentPropertyId ?? undefined, orgId ?? undefined);
   const { data: properties = [] } = useProperties(orgId ?? undefined);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties,
+  });
+  const { data: assignments = [], isLoading: assignmentsLoading } =
+    useAssignments(todayKey, selectedPagePropertyId || undefined, orgId ?? undefined);
+  const { data: employees = [], isLoading: employeesLoading } =
+    useEmployees(selectedPagePropertyId || undefined, orgId ?? undefined);
+  const { data: tasks = [] } =
+    useTasks(selectedPagePropertyId || undefined, orgId ?? undefined);
   const propertiesById = useMemo(
     () => new Map(properties.map((property) => [property.id, property])),
     [properties],
@@ -109,7 +114,7 @@ export default function DispatchBoardPage() {
       return;
     }
 
-    if (!selectedPropertyId) {
+    if (!selectedPropertyId || selectedPropertyId === 'all') {
       toast.error('Select a property before creating an assignment');
       return;
     }
@@ -166,7 +171,12 @@ export default function DispatchBoardPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <PropertySelector className="w-full md:w-64" />
+        <PropertySelector
+          className="w-full md:w-64"
+          orgId={orgId}
+          value={selectedPagePropertyId}
+          onChange={setSelectedPagePropertyId}
+        />
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setIsCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -344,6 +354,3 @@ export default function DispatchBoardPage() {
     </div>
   );
 }
-
-
-

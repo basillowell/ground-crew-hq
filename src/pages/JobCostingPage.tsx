@@ -345,20 +345,20 @@ export default function JobCostingPage() {
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={monthlyTrend} margin={{ top: 4, right: 4, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--surface-border))" />
-              <XAxis dataKey="month" tick={{ fill: 'hsl(var(--text-muted))', fontSize: 11 }} />
-              <YAxis tick={{ fill: 'hsl(var(--text-muted))', fontSize: 11 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="oklch(var(--surface-border))" />
+              <XAxis dataKey="month" tick={{ fill: 'oklch(var(--text-muted))', fontSize: 11 }} />
+              <YAxis tick={{ fill: 'oklch(var(--text-muted))', fontSize: 11 }} />
               <Tooltip
                 formatter={(value) => fmt(Number(value))}
                 contentStyle={{
-                  background: 'hsl(var(--surface-card))',
-                  border: '1px solid hsl(var(--surface-border))',
+                  background: 'oklch(var(--surface-card))',
+                  border: '1px solid oklch(var(--surface-border))',
                   borderRadius: 8,
                 }}
-                labelStyle={{ color: 'hsl(var(--text-primary))' }}
+                labelStyle={{ color: 'oklch(var(--text-primary))' }}
               />
-              <Bar dataKey="billedRevenue" name="Billed" fill="hsl(var(--brand))" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="laborCost" name="Labor Cost" fill="hsl(var(--status-warning))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="billedRevenue" name="Billed" fill="oklch(var(--brand-default))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="laborCost" name="Labor Cost" fill="oklch(var(--status-warning))" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

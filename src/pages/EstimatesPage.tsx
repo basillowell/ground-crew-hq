@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
   type EstimateStatus,
   type RevenueEstimate,
@@ -91,12 +92,16 @@ function draftsFromLineItems(items: RevenueLineItem[]): LineItemDraft[] {
 }
 
 export default function EstimatesPage() {
-  const { orgId, currentPropertyId } = useOrgProfile();
+  const { orgId, currentUser } = useOrgProfile();
   const estimatesQuery = useEstimates(orgId ?? undefined);
   const estimateLineItemsQuery = useEstimateLineItems(undefined, orgId ?? undefined);
   const clientsQuery = useClients(orgId ?? undefined);
   const serviceCatalogQuery = useServiceCatalog(orgId ?? undefined);
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties,
+  });
   const createEstimateMutation = useCreateEstimate(orgId ?? undefined);
   const updateEstimateMutation = useUpdateEstimate(orgId ?? undefined);
   const replaceLineItemsMutation = useReplaceEstimateLineItems(orgId ?? undefined);
@@ -178,7 +183,7 @@ export default function EstimatesPage() {
 
   const saveEstimate = async () => {
     if (saving) return;
-    if (currentPropertyId === 'all' && !editingEstimate) {
+    if (selectedPagePropertyId === 'all' && !editingEstimate) {
       toast.error('Select a property before creating an estimate');
       return;
     }
@@ -210,7 +215,7 @@ export default function EstimatesPage() {
             validUntil: form.validUntil || null,
           })
         : await createEstimateMutation.mutateAsync({
-            propertyId: currentPropertyId,
+            propertyId: selectedPagePropertyId,
             clientId: form.clientId,
             subtotal: totals.subtotal,
             taxRate: form.taxRate,
@@ -321,7 +326,13 @@ export default function EstimatesPage() {
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <PropertySelector allowAllProperties className="sm:w-64" />
+          <PropertySelector
+            allowAllProperties
+            className="sm:w-64"
+            orgId={orgId}
+            value={selectedPagePropertyId}
+            onChange={setSelectedPagePropertyId}
+          />
           <Button type="button" onClick={openCreateDialog} className="bg-brand text-text-inverse hover:bg-brand/90">
             <Plus className="h-4 w-4" />
             New Estimate
@@ -495,7 +506,7 @@ export default function EstimatesPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-lg border border-surface-border bg-surface-elevated/60 p-3 text-sm text-text-secondary">
-              Property: <span className="font-medium text-text-primary">{editingEstimate ? getPropertyName(editingEstimate.propertyId) : currentPropertyId === 'all' ? 'Select property' : getPropertyName(currentPropertyId)}</span>
+              Property: <span className="font-medium text-text-primary">{editingEstimate ? getPropertyName(editingEstimate.propertyId) : selectedPagePropertyId === 'all' ? 'Select property' : getPropertyName(selectedPagePropertyId)}</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>

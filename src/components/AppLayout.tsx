@@ -124,7 +124,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
-  const { currentUser, currentPropertyId, currentRole, setCurrentPropertyId, orgId, signOut, isPlanActive, isOrgReady } = useOrgProfile();
+  const { currentUser, currentRole, orgId, signOut, isPlanActive, isOrgReady } = useOrgProfile();
   const { resolvedTheme } = useTheme();
   const [showDemoBanner, setShowDemoBanner] = useState(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gchq-demo-banner-dismissed') !== 'true' : true));
   const [orgReadyTimeout, setOrgReadyTimeout] = useState(false);
@@ -138,10 +138,13 @@ export function AppLayout({ children }: AppLayoutProps) {
   const isReadOnlyDemo = String(currentUser?.role ?? '') === 'viewer';
   const deptQuery = useDepartmentOptions(orgId);
   const todayKey = currentDate.toISOString().slice(0, 10);
-  const scheduleQuery = useScheduleEntries(todayKey, currentPropertyId, orgId);
-  const assignmentsQuery = useAssignments(todayKey, currentPropertyId, orgId);
-  const equipmentQuery = useEquipmentUnits(currentPropertyId, orgId);
-  const employeesQuery = useEmployees(currentPropertyId, orgId);
+  const layoutPropertyId = currentUser?.role === 'employee' || currentUser?.role === 'viewer'
+    ? currentUser?.propertyId ?? 'all'
+    : 'all';
+  const scheduleQuery = useScheduleEntries(todayKey, layoutPropertyId, orgId);
+  const assignmentsQuery = useAssignments(todayKey, layoutPropertyId, orgId);
+  const equipmentQuery = useEquipmentUnits(layoutPropertyId, orgId);
+  const employeesQuery = useEmployees(layoutPropertyId, orgId);
   const propertiesQuery = useProperties(orgId);
   const programSettingQuery = useProgramSettings(orgId);
   const programSetting = programSettingQuery.data ?? null;
@@ -198,20 +201,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   });
   const isEmployeeClockedIn = latestClockEventQuery.data === 'clock_in';
 
-  useEffect(() => {
-    if (!properties.length) return;
-    if (properties.length === 1 && currentPropertyId !== properties[0].id) {
-      setCurrentPropertyId(properties[0].id);
-      return;
-    }
-    if (!currentPropertyId) {
-      if (currentUser?.role === 'admin' || currentUser?.role === 'manager') {
-        setCurrentPropertyId('all');
-      } else {
-        setCurrentPropertyId(properties[0].id);
-      }
-    }
-  }, [currentPropertyId, currentUser?.role, properties, setCurrentPropertyId]);
 
   useEffect(() => {
     applyBranding(
@@ -421,9 +410,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     };
   }, [queryClient]);
 
-  const handleSelectProperty = (propertyId: string) => {
-    setCurrentPropertyId(propertyId);
-  };
+  const handleSelectProperty = () => undefined;
 
   const handleSignOut = async () => {
     queryClient.clear();
@@ -630,7 +617,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             currentDate={currentDate}
             setCurrentDate={setCurrentDate}
             properties={propertiesQuery.data ?? []}
-            currentPropertyId={currentPropertyId}
+            currentPropertyId={layoutPropertyId}
             onSelectProperty={handleSelectProperty}
             allowAllProperties={currentUser?.role === 'admin' || currentUser?.role === 'manager'}
             notifications={notificationsForDisplay}
@@ -664,7 +651,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               open={commandBarOpen}
               onOpenChange={setCommandBarOpen}
               currentDate={currentDate}
-              currentPropertyId={currentPropertyId}
+              currentPropertyId={layoutPropertyId}
             />
             <nav
               className="fixed inset-x-0 bottom-0 z-50 border-t border-surface-border bg-surface-base/95 backdrop-blur-md md:hidden"
@@ -773,5 +760,3 @@ export function AppLayout({ children }: AppLayoutProps) {
     </SidebarProvider>
   );
 }
-
-

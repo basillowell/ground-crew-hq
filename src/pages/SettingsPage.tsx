@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { createClient } from '@/lib/supabase';
 import {
   useDepartmentOptions,
@@ -1049,13 +1050,18 @@ function SortableTaskCategoryCard({
 }
 
 export default function SettingsPage() {
-  const { orgId, user, userRole, currentUser, currentPropertyId, setCurrentPropertyId, signOut } = useOrgProfile();
+  const { orgId, user, userRole, currentUser, signOut } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get('tab');
   const tab: Tab = TABS.includes(requestedTab as Tab) ? (requestedTab as Tab) : 'Operations';
+  const settingsPropertiesQuery = useProperties(orgId ?? undefined);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties: settingsPropertiesQuery.data ?? [],
+  });
   const taskPropertyId =
-    (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null) ??
+    (selectedPagePropertyId && selectedPagePropertyId !== 'all' ? selectedPagePropertyId : null) ??
     currentUser?.propertyId ??
     null;
 
@@ -1067,7 +1073,12 @@ export default function SettingsPage() {
   return (
     <div className="settings-theme mx-auto max-w-6xl space-y-4 bg-surface-base p-4 text-text-primary md:p-6">
       <div className="flex justify-start">
-        <PropertySelector className="w-full md:w-64" />
+        <PropertySelector
+          className="w-full md:w-64"
+          orgId={orgId}
+          value={selectedPagePropertyId}
+          onChange={setSelectedPagePropertyId}
+        />
       </div>
 
       {isReadOnly ? (
@@ -1082,7 +1093,8 @@ export default function SettingsPage() {
             key="operations"
             orgId={orgId}
             userRole={userRole}
-            currentPropertyId={currentPropertyId}
+            currentPropertyId={selectedPagePropertyId}
+            onClearPropertySelection={(propertyId) => { if (selectedPagePropertyId === propertyId) setSelectedPagePropertyId('all'); }}
           />
         )}
         {tab === 'Workforce' && <WorkforceTab key="workforce" orgId={orgId} />}
@@ -1114,14 +1126,16 @@ function OperationsTab({
   orgId,
   userRole,
   currentPropertyId,
+  onClearPropertySelection,
 }: {
   orgId: string | null;
   userRole: string | null;
   currentPropertyId: string;
+  onClearPropertySelection: (propertyId: string) => void;
 }) {
   return (
     <div className="space-y-8">
-      <WorkspaceTab orgId={orgId} userRole={userRole} currentPropertyId={currentPropertyId} />
+      <WorkspaceTab orgId={orgId} userRole={userRole} currentPropertyId={currentPropertyId} onClearPropertySelection={onClearPropertySelection} />
       <div className="border-t border-dashed border-surface-border pt-6">
         <SchedulerTab orgId={orgId} />
       </div>
@@ -1264,10 +1278,12 @@ function WorkspaceTab({
   orgId,
   userRole,
   currentPropertyId,
+  onClearPropertySelection,
 }: {
   orgId: string | null;
   userRole: string | null;
   currentPropertyId: string;
+  onClearPropertySelection: (propertyId: string) => void;
 }) {
   const { theme, setTheme } = useTheme();
   const sopCategoryOptions = ['Mowing', 'Irrigation', 'Chemical Application', 'Bunker', 'Equipment', 'General', 'Other'];
@@ -1717,8 +1733,8 @@ function WorkspaceTab({
     // would keep rendering a deleted property's polygon until it expired.
     await queryClient.invalidateQueries({ queryKey: ['properties'] });
     await queryClient.invalidateQueries({ queryKey: ['property-boundaries'] });
-    // The shared selector may still point at the row that was just removed.
-    if (currentPropertyId === propertyId) setCurrentPropertyId('all');
+    // The page-local selector may still point at the row that was just removed.
+    onClearPropertySelection(propertyId);
     setPropertyPendingDelete(null);
     if (editingPropertyId === propertyId) resetPropertyForm();
     toast.success('Property deleted');
@@ -4905,6 +4921,3 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
     </div>
   );
 }
-
-
-

@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProperties, useRevenueWorkOrders, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import {
   getOperationalTimezone,
@@ -190,7 +191,7 @@ function getCoverageFillIndicator(coverageRounded: number) {
     return {
       trackClass: 'border-status-warning/70 bg-status-warning/10 text-status-warning ring-1 ring-status-warning/40',
       fillClass: 'bg-status-warning',
-      markerClass: 'bg-text-inverse shadow-[0_0_0_1px_rgb(var(--status-warning))]',
+      markerClass: 'bg-text-inverse shadow-[0_0_0_1px_oklch(var(--status-warning))]',
     };
   }
   if (coverageRounded > 80) {
@@ -705,7 +706,7 @@ export default function WorkboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { currentPropertyId, setCurrentPropertyId, currentUser, orgId: authOrgId, userRole } = useOrgProfile();
+  const { currentUser, orgId: authOrgId, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const canCloseOutDay = ['admin', 'manager'].includes(String(userRole ?? '').toLowerCase());
   const getLocalDateKey = useCallback(() => new Date().toLocaleDateString('en-CA'), []);
@@ -760,7 +761,7 @@ export default function WorkboardContent() {
   const [selectedTemplateEmployeeIds, setSelectedTemplateEmployeeIds] = useState<string[]>([]);
   const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
   const [applyingTaskTemplate, setApplyingTaskTemplate] = useState(false);
-  const [publishingDay, setPublishingDay] = useState(false);
+  const [publishingScope, setPublishingScope] = useState<'day' | 'week' | null>(null);
   const [expandedMobileCrewIds, setExpandedMobileCrewIds] = useState<string[]>([]);
   const [expandedDesktopCrewIds, setExpandedDesktopCrewIds] = useState<string[]>([]);
   const [selectedAssignmentIds, setSelectedAssignmentIds] = useState<Set<string>>(() => new Set());
@@ -883,7 +884,14 @@ export default function WorkboardContent() {
   const [savingNote, setSavingNote] = useState(false);
   const workflowParams = useMemo(() => new URLSearchParams(searchParams?.toString() ?? ''), [searchParams]);
   const focusedPropertyId = workflowParams.get('property') || '';
-  const effectivePropertyId = currentPropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
+  const orgId = authOrgId ?? currentUser?.orgId;
+  const safeOrgId = authOrgId ?? currentUser?.orgId ?? '';
+  const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties: storeProperties,
+  });
+  const effectivePropertyId = selectedPagePropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
 
   const openNoteDialog = () => {
     setSelectedNotePropertyId((current) =>
@@ -900,10 +908,7 @@ export default function WorkboardContent() {
     );
   }, []);
 
-  const orgId = authOrgId ?? currentUser?.orgId;
-  const safeOrgId = authOrgId ?? currentUser?.orgId ?? '';
   const employeeEquipmentHistoryQuery = useEmployeeEquipmentHistory(assignmentDraft.employeeId, orgId);
-  const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
   const { data: storeEmployees = [], isLoading: employeesLoading } = useEmployees(
     effectivePropertyId === 'all' ? undefined : effectivePropertyId,
     orgId,
@@ -935,6 +940,35 @@ export default function WorkboardContent() {
         publishedAt: row.published_at ? String(row.published_at) : null,
         publishedBy: row.published_by ? String(row.published_by) : null,
       }));
+    },
+    staleTime: 1000 * 30,
+  });
+  const publishWeekRange = useMemo(() => getWeekDateRange(boardDate), [boardDate]);
+  const weeklyDraftAssignmentsQuery = useQuery({
+    queryKey: [
+      'assignments',
+      'publish-week-draft-count',
+      publishWeekRange.startDate,
+      publishWeekRange.endDate,
+      effectivePropertyId ?? 'all',
+      orgId ?? 'all-orgs',
+    ] as const,
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      if (!supabase || !orgId) return 0;
+      let query = supabase
+        .from('assignments')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('is_published', false)
+        .gte('date', publishWeekRange.startDate)
+        .lte('date', publishWeekRange.endDate);
+      if (effectivePropertyId && effectivePropertyId !== 'all') {
+        query = query.eq('property_id', effectivePropertyId);
+      }
+      const { count, error } = await withWorkboardRequestTimeout(query);
+      if (error) throw error;
+      return count ?? 0;
     },
     staleTime: 1000 * 30,
   });
@@ -1215,6 +1249,10 @@ export default function WorkboardContent() {
     () => dayAssignments.filter((assignment) => !isAssignmentPublished(assignment)).length,
     [dayAssignments],
   );
+  const weekDraftAssignmentCount = weeklyDraftAssignmentsQuery.data ?? 0;
+  const isPublishingDay = publishingScope === 'day';
+  const isPublishingWeek = publishingScope === 'week';
+  const isPublishingAssignments = publishingScope !== null;
   const plannedCount = useMemo(
     () => dayAssignments.filter((assignment) => assignment.status === 'planned').length,
     [dayAssignments],
@@ -1638,10 +1676,10 @@ export default function WorkboardContent() {
   );
 
   useEffect(() => {
-    if (focusedPropertyId && focusedPropertyId !== currentPropertyId) {
-      setCurrentPropertyId(focusedPropertyId);
+    if (focusedPropertyId && focusedPropertyId !== selectedPagePropertyId) {
+      setSelectedPagePropertyId(focusedPropertyId);
     }
-  }, [currentPropertyId, focusedPropertyId, setCurrentPropertyId]);
+  }, [focusedPropertyId, selectedPagePropertyId, setSelectedPagePropertyId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -3114,7 +3152,8 @@ export default function WorkboardContent() {
     selectedQuickPlanIds,
   ]);
 
-  const publishDayAssignments = useCallback(async () => {
+  const publishAssignments = useCallback(async (scope: 'day' | 'week') => {
+    if (publishingScope) return;
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
       return;
@@ -3125,43 +3164,68 @@ export default function WorkboardContent() {
       toast.error('Session is reconnecting - please try again in a moment.');
       return;
     }
-    const currentEmployeeId = currentUser?.employeeId;
-    if (!currentEmployeeId) {
-      toast.error('Session is reconnecting - please try again in a moment.');
-      return;
+
+    setPublishingScope(scope);
+    try {
+      const publisherResult = await withWorkboardRequestTimeout(supabase.rpc('current_employee_id'));
+      if (publisherResult.error) throw publisherResult.error;
+      const authenticatedPublisherId = publisherResult.data ? String(publisherResult.data) : '';
+      if (!authenticatedPublisherId) {
+        toast.error('Session is reconnecting - please try again in a moment.');
+        return;
+      }
+
+      const rangeStart = scope === 'week' ? publishWeekRange.startDate : boardDate;
+      const rangeEnd = scope === 'week' ? publishWeekRange.endDate : boardDate;
+      let query = supabase
+        .from('assignments')
+        .update({
+          is_published: true,
+          published_at: new Date().toISOString(),
+          published_by: authenticatedPublisherId,
+        })
+        .eq('org_id', resolvedOrgId)
+        .eq('is_published', false)
+        .gte('date', rangeStart)
+        .lte('date', rangeEnd);
+      if (effectivePropertyId && effectivePropertyId !== 'all') {
+        query = query.eq('property_id', effectivePropertyId);
+      }
+
+      const { error } = await withWorkboardMutationTimeout(query);
+      if (error) {
+        toast.error(`Could not publish the ${scope}: ${error.message}`);
+        return;
+      }
+
+      const expectedCount = scope === 'week' ? weekDraftAssignmentCount : draftAssignmentCount;
+      toast.success(expectedCount > 0
+        ? `Published ${expectedCount} draft task${expectedCount === 1 ? '' : 's'} for this ${scope}.`
+        : `Workflow ${scope} is already published.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+        queryClient.invalidateQueries({ queryKey: assignmentPublishStateQueryKey, exact: true }),
+        queryClient.invalidateQueries({ queryKey: ['assignments', 'publish-week-draft-count'] }),
+      ]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Could not publish the ${scope}.`);
+    } finally {
+      setPublishingScope(null);
     }
-
-    setPublishingDay(true);
-    let query = supabase
-      .from('assignments')
-      .update({
-        is_published: true,
-        published_at: new Date().toISOString(),
-        published_by: currentEmployeeId,
-      })
-      .eq('date', boardDate)
-      .eq('org_id', resolvedOrgId)
-      .eq('is_published', false);
-    if (effectivePropertyId && effectivePropertyId !== 'all') {
-      query = query.eq('property_id', effectivePropertyId);
-    }
-
-    const { error } = await withWorkboardMutationTimeout(query);
-    setPublishingDay(false);
-
-    if (error) {
-      toast.error(`Could not publish the day: ${error.message}`);
-      return;
-    }
-
-    toast.success(draftAssignmentCount > 0
-      ? `Published ${draftAssignmentCount} draft task${draftAssignmentCount === 1 ? '' : 's'}.`
-      : 'Workflow is already published.');
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['assignments'] }),
-      queryClient.invalidateQueries({ queryKey: assignmentPublishStateQueryKey, exact: true }),
-    ]);
-  }, [assignmentPublishStateQueryKey, authOrgId, boardDate, currentUser?.employeeId, currentUser?.orgId, draftAssignmentCount, effectivePropertyId, isReadOnly, queryClient]);
+  }, [
+    assignmentPublishStateQueryKey,
+    authOrgId,
+    boardDate,
+    currentUser?.orgId,
+    draftAssignmentCount,
+    effectivePropertyId,
+    isReadOnly,
+    publishWeekRange.endDate,
+    publishWeekRange.startDate,
+    publishingScope,
+    queryClient,
+    weekDraftAssignmentCount,
+  ]);
   const applyDailyTaskTemplate = useCallback(async () => {
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
@@ -4747,7 +4811,12 @@ export default function WorkboardContent() {
         <div className="border-b border-surface-border bg-surface-card px-3 py-3 md:px-5">
           <div className="flex items-center gap-3 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
             <div className="flex min-w-max items-center gap-3">
-          <PropertySelector className="w-64" />
+          <PropertySelector
+            className="w-64"
+            orgId={orgId}
+            value={selectedPagePropertyId}
+            onChange={setSelectedPagePropertyId}
+          />
 
           <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-elevated px-3 py-1.5">
             <span className="text-[10px] uppercase tracking-wider text-text-muted">Board Date</span>
@@ -4856,21 +4925,38 @@ export default function WorkboardContent() {
               </div>
             ) : null}
             {!isReadOnly ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 shrink-0 gap-1.5 border-status-pending/30 bg-status-pending/10 text-status-pending hover:bg-status-pending/15"
-                onClick={() => void publishDayAssignments()}
-                disabled={publishingDay || assignmentPublishStateQuery.isLoading || draftAssignmentCount === 0}
-                data-testid="button-publish-workboard-day"
-                title={draftAssignmentCount === 0 ? 'No draft tasks to publish' : 'Publish draft tasks for this day'}
-              >
-                <Radio className="h-3.5 w-3.5" />
-                {publishingDay ? 'Publishing...' : 'Publish Day'}
-                {draftAssignmentCount > 0 ? (
-                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{draftAssignmentCount}</Badge>
-                ) : null}
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-1.5 border-status-pending/40 bg-status-pending/10 px-3 text-status-pending hover:bg-status-pending/15"
+                  onClick={() => void publishAssignments('day')}
+                  disabled={isPublishingAssignments || assignmentPublishStateQuery.isLoading || draftAssignmentCount === 0}
+                  data-testid="button-publish-workboard-day"
+                  title={draftAssignmentCount === 0 ? 'No draft tasks to publish today' : 'Publish draft tasks for this day'}
+                >
+                  <Radio className="h-3.5 w-3.5" />
+                  {isPublishingDay ? 'Publishing...' : 'Publish Day'}
+                  {draftAssignmentCount > 0 ? (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{draftAssignmentCount}</Badge>
+                  ) : null}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-1.5 border-status-complete/30 bg-status-complete/10 px-3 text-status-complete hover:bg-status-complete/15"
+                  onClick={() => void publishAssignments('week')}
+                  disabled={isPublishingAssignments || weeklyDraftAssignmentsQuery.isLoading || weekDraftAssignmentCount === 0}
+                  data-testid="button-publish-workboard-week"
+                  title={weekDraftAssignmentCount === 0 ? 'No draft tasks to publish this week' : `Publish draft tasks from ${publishWeekRange.startDate} to ${publishWeekRange.endDate}`}
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  {isPublishingWeek ? 'Publishing...' : 'Publish Week'}
+                  {weekDraftAssignmentCount > 0 ? (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{weekDraftAssignmentCount}</Badge>
+                  ) : null}
+                </Button>
+              </div>
             ) : null}
             {canCloseOutDay ? (
               <Button
@@ -5243,13 +5329,15 @@ export default function WorkboardContent() {
                             return (
                               <div
                                 key={a.id}
-                                className={isDraft ? 'flex items-center justify-between rounded-lg border border-dashed border-status-pending/40 bg-status-pending/10 px-3 py-2' : 'flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2'}
+                                className={isDraft ? 'flex items-center justify-between rounded-lg border border-dashed border-status-pending/60 bg-status-pending/10 px-3 py-2 shadow-[inset_3px_0_0_oklch(var(--status-pending))]' : 'flex items-center justify-between rounded-lg border border-status-active/20 bg-status-active/5 px-3 py-2 shadow-[inset_3px_0_0_oklch(var(--status-active))]'}
                               >
                                 <span className="flex min-w-0 items-center gap-2 text-sm">
                                   <span className="truncate">{a.title}</span>
                                   {isDraft ? (
-                                    <Badge variant="outline" className="shrink-0 border-status-pending/40 bg-status-pending/10 text-[10px] text-status-pending">Draft</Badge>
-                                  ) : null}
+                                    <Badge variant="outline" className="shrink-0 border-status-pending/50 bg-status-pending/15 text-[10px] font-semibold uppercase tracking-wide text-status-pending">Draft</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="shrink-0 border-status-active/30 bg-status-active/10 text-[10px] font-semibold uppercase tracking-wide text-status-active">Published</Badge>
+                                  )}
                                 </span>
                                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                                   ns === 'done'
@@ -5591,15 +5679,17 @@ export default function WorkboardContent() {
                               return (
                                 <div
                                   key={`mobile-assignment-${assignment.id}`}
-                                  className={isDraft ? 'relative overflow-visible rounded-xl border border-dashed border-status-pending/50 bg-status-pending/10 p-2.5' : 'relative overflow-visible rounded-xl border bg-muted/20 p-2.5'}
+                                  className={isDraft ? 'relative overflow-visible rounded-xl border border-dashed border-status-pending/60 bg-status-pending/10 p-2.5 shadow-[inset_3px_0_0_oklch(var(--status-pending))]' : 'relative overflow-visible rounded-xl border border-status-active/20 bg-status-active/5 p-2.5 shadow-[inset_3px_0_0_oklch(var(--status-active))]'}
                                 >
                                   <div className="flex items-start justify-between gap-2">
                                     <div>
                                       <div className="flex flex-wrap items-center gap-2">
                                         <p className="text-sm font-medium">{assignment.title || task?.name || 'Untitled task'}</p>
                                         {isDraft ? (
-                                          <Badge variant="outline" className="border-status-pending/40 bg-status-pending/10 text-[10px] text-status-pending">Draft</Badge>
-                                        ) : null}
+                                          <Badge variant="outline" className="border-status-pending/50 bg-status-pending/15 text-[10px] font-semibold uppercase tracking-wide text-status-pending">Draft</Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="border-status-active/30 bg-status-active/10 text-[10px] font-semibold uppercase tracking-wide text-status-active">Published</Badge>
+                                        )}
                                       </div>
                                       <p className="text-xs text-muted-foreground">
                                         {formatMinutesAsHoursAndMinutes(assignment.duration)} · {assignment.status}
@@ -7218,4 +7308,3 @@ export default function WorkboardContent() {
     </>
   );
 }
-

@@ -13,9 +13,9 @@ import { useEquipmentUnits } from '@/lib/supabase-queries';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 
 const columns: { key: WorkOrder['status']; label: string; icon: any; color: string }[] = [
-  { key: 'open', label: 'Reported', icon: AlertTriangle, color: 'hsl(var(--warning))' },
-  { key: 'in-progress', label: 'In Progress', icon: Wrench, color: 'hsl(var(--info))' },
-  { key: 'completed', label: 'Completed', icon: CheckCircle2, color: 'hsl(var(--success))' },
+  { key: 'open', label: 'Reported', icon: AlertTriangle, color: 'oklch(var(--warning))' },
+  { key: 'in-progress', label: 'In Progress', icon: Wrench, color: 'oklch(var(--info))' },
+  { key: 'completed', label: 'Completed', icon: CheckCircle2, color: 'oklch(var(--success))' },
 ];
 
 const priorityColors = { low: 'secondary', medium: 'outline', high: 'destructive' } as const;
@@ -59,9 +59,11 @@ function WorkOrderCard({ wo, units, onMoveForward }: { wo: WorkOrder; units: Equ
 }
 
 export function WorkOrderKanban() {
-  const { currentPropertyId, currentUser } = useOrgProfile();
+  const { currentUser } = useOrgProfile();
   const [orders, setOrders] = useState<WorkOrder[]>(seedWorkOrders);
-  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
+  const propertyScope = currentUser?.role === 'employee' || currentUser?.role === 'viewer'
+    ? currentUser?.propertyId ?? 'all'
+    : 'all';
   const units = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState({ title: '', description: '', unitId: '', priority: 'medium' as WorkOrder['priority'] });
@@ -170,4 +172,3 @@ export function WorkOrderKanban() {
     </div>
   );
 }
-

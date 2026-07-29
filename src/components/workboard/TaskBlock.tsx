@@ -73,9 +73,9 @@ export function TaskBlock({
   onDragEnter,
   onDrop,
 }: TaskBlockProps) {
-  const { currentPropertyId, currentUser } = useOrgProfile();
+  const { currentUser } = useOrgProfile();
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
+  const propertyScope = assignment.propertyId || (currentUser?.role === 'employee' || currentUser?.role === 'viewer' ? currentUser?.propertyId : undefined) || 'all';
   const equipmentUnits = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
   const equipment = assignment.equipmentId ? equipmentUnits.find((unit) => unit.id === assignment.equipmentId) : null;
   const isEquipmentOverdue = useMemo(() => {
@@ -96,6 +96,12 @@ export function TaskBlock({
   const canSelect = Boolean(assignment.id && onToggleSelect);
   const status = normalizeStatus(assignment.status);
   const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+  const publishValue = assignmentRecord.isPublished ?? assignmentRecord.is_published;
+  const isPublished = typeof publishValue === 'boolean'
+    ? publishValue
+    : typeof publishValue === 'string'
+      ? publishValue.toLowerCase() === 'true'
+      : true;
 
   const propertyLabel = properties.find((property) => property.id === assignment.propertyId)?.name ?? 'No property';
   const estimatedHours = useMemo(() => {
@@ -166,7 +172,7 @@ export function TaskBlock({
 
   return (
     <div
-      className={`grid min-h-[58px] grid-cols-[auto_1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)} ${isSelected ? 'ring-1 ring-primary/40 bg-primary/5' : ''}`}
+      className={`grid min-h-[58px] grid-cols-[auto_1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)} ${isPublished ? 'border-status-active/20 shadow-[inset_3px_0_0_oklch(var(--status-active))]' : 'border-dashed border-status-pending/60 bg-status-pending/10 shadow-[inset_3px_0_0_oklch(var(--status-pending))]'} ${isSelected ? 'ring-1 ring-primary/40 bg-primary/5' : ''}`}
       draggable={Boolean(draggable)}
       onDragStart={draggable ? onDragStart : undefined}
       onDragEnter={draggable ? onDragEnter : undefined}
@@ -202,6 +208,14 @@ export function TaskBlock({
             }
           >
             {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned'}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={isPublished
+              ? 'shrink-0 border-status-active/30 bg-status-active/10 text-[10px] font-semibold uppercase tracking-wide text-status-active'
+              : 'shrink-0 border-status-pending/50 bg-status-pending/15 text-[10px] font-semibold uppercase tracking-wide text-status-pending'}
+          >
+            {isPublished ? 'Published' : 'Draft'}
           </Badge>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">

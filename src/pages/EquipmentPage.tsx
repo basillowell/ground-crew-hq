@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Pencil, Plus, QrCode, Trash2, Wrench } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { toConcretePropertyId, usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { createClient } from '@/lib/supabase';
 import { Badge } from '@/components/ui/badge';
 import { PropertySelector } from '@/components/shared/PropertySelector';
@@ -16,6 +17,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/ui/sonner';
 import Link from 'next/link';
 import { EquipmentMaintenanceBadge, getEquipmentMaintenanceState } from '@/components/equipment/EquipmentMaintenanceBadge';
+import { useProperties } from '@/lib/supabase-queries';
 import { EquipmentQrCard } from '@/components/equipment/EquipmentQrCard';
 
 const supabase = createClient();
@@ -176,16 +178,23 @@ async function withEquipmentMutationTimeout<T extends { error: unknown }>(reques
   }
 }
 export default function EquipmentPage() {
-  const { currentUser, currentPropertyId, userRole } = useOrgProfile();
+  const { currentUser, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const orgId = currentUser?.orgId ?? '';
-  const propertyId = currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : null;
-
   const queryClient = useQueryClient();
+  const { data: selectorProperties = [] } = useProperties(orgId || undefined);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties: selectorProperties,
+  });
+  const propertyId = toConcretePropertyId(selectedPagePropertyId) ?? null;
   const equipmentQueryKey = useMemo(
     () => ['equipment-page-data', orgId || 'no-org', propertyId ?? 'all-properties'] as const,
     [orgId, propertyId],
   );
+  const invalidateEquipmentData = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['equipment-page-data', orgId || 'no-org'] });
+  }, [orgId, queryClient]);
   const equipmentQuery = useQuery<EquipmentPageData>({
     queryKey: equipmentQueryKey,
     enabled: Boolean(orgId),
@@ -390,9 +399,9 @@ export default function EquipmentPage() {
 
     cancelAdd();
     setError(null);
-    await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
+    await invalidateEquipmentData();
     toast.success(`Added equipment: ${addDraft.name.trim()}`);
-  }, [addDraft, cancelAdd, equipmentQueryKey, isReadOnly, orgId, queryClient, typeNameById]);
+  }, [addDraft, cancelAdd, invalidateEquipmentData, isReadOnly, orgId, typeNameById]);
 
   const startEdit = useCallback((row: EquipmentUnitRow & { displayName: string; displayType: string; normalizedStatus: EquipmentStatus }) => {
     setEditingId(row.id);
@@ -456,9 +465,9 @@ export default function EquipmentPage() {
     }
     cancelEdit();
     setError(null);
-    await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
+    await invalidateEquipmentData();
     toast.success(`Updated equipment: ${editDraft.name.trim()}`);
-  }, [cancelEdit, editDraft, equipmentQueryKey, isReadOnly, orgId, queryClient, typeNameById]);
+  }, [cancelEdit, editDraft, invalidateEquipmentData, isReadOnly, orgId, typeNameById]);
 
   const logServiceForRow = useCallback(async (row: EquipmentUnitRow & { displayName: string }) => {
     if (isReadOnly) return;
@@ -480,9 +489,9 @@ export default function EquipmentPage() {
       return;
     }
     setError(null);
-    await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
+    await invalidateEquipmentData();
     toast.success(`Service logged for ${row.displayName}`);
-  }, [equipmentQueryKey, isReadOnly, orgId, queryClient]);
+  }, [invalidateEquipmentData, isReadOnly, orgId]);
 
   const removeRow = useCallback(async (id: string) => {
     if (isReadOnly) return;
@@ -498,9 +507,9 @@ export default function EquipmentPage() {
       return;
     }
     setError(null);
-    await queryClient.invalidateQueries({ queryKey: equipmentQueryKey });
+    await invalidateEquipmentData();
     toast.success('Equipment deleted');
-  }, [equipmentQueryKey, isReadOnly, orgId, queryClient]);
+  }, [invalidateEquipmentData, isReadOnly, orgId]);
 
   if (!orgId || loading) {
     return (
@@ -514,7 +523,12 @@ export default function EquipmentPage() {
   return (
     <div className="animate-fade-up space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <PropertySelector className="w-full md:w-64" />
+        <PropertySelector
+          className="w-full md:w-64"
+          orgId={orgId}
+          value={selectedPagePropertyId}
+          onChange={setSelectedPagePropertyId}
+        />
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-surface-border bg-surface-card p-0.5">
             <Button
@@ -1063,6 +1077,3 @@ export default function EquipmentPage() {
     </div>
   );
 }
-
-
-

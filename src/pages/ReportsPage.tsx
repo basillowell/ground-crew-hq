@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { createClient } from '@/lib/supabase';
 import { useSearchParams } from 'next/navigation';
 import { toast } from '@/components/ui/sonner';
@@ -207,11 +208,20 @@ export default function ReportsPage() {
   const queryStartDate = searchParams.get('start');
   const queryEndDate = searchParams.get('end');
   const queryPropertyId = searchParams.get('property');
-  const { orgId, currentPropertyId, currentUser } = useOrgProfile();
+  const { orgId, currentUser } = useOrgProfile();
   const [startDate, setStartDate] = useState<string>(() => queryStartDate || toIsoDate(startOfWeek(new Date())));
   const [endDate, setEndDate] = useState<string>(() => queryEndDate || toIsoDate(endOfWeek(new Date())));
-  const selectedPropertyId = queryPropertyId || (currentPropertyId && currentPropertyId !== 'all' ? currentPropertyId : 'all');
   const propertiesQuery = useProperties(orgId ?? undefined);
+  const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
+    currentUser,
+    properties: propertiesQuery.data ?? [],
+  });
+
+  useEffect(() => {
+    if (queryPropertyId && queryPropertyId !== selectedPropertyId) {
+      setSelectedPropertyId(queryPropertyId);
+    }
+  }, [queryPropertyId, selectedPropertyId, setSelectedPropertyId]);
   const employeesQuery = useEmployees(
     selectedPropertyId === 'all' ? undefined : selectedPropertyId,
     orgId ?? undefined,
@@ -1115,7 +1125,12 @@ export default function ReportsPage() {
             <label className="text-xs text-text-muted">End Date</label>
             <DateInput className="h-10 rounded-md border border-surface-border bg-surface-elevated px-3 text-sm text-text-primary" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </div>
-          <PropertySelector className="w-full" />
+          <PropertySelector
+            className="w-full"
+            orgId={orgId}
+            value={selectedPropertyId}
+            onChange={setSelectedPropertyId}
+          />
         </div>
       </div>
 
@@ -1710,7 +1725,3 @@ export default function ReportsPage() {
     </div>
   );
 }
-
-
-
-

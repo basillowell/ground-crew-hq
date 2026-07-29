@@ -14,6 +14,7 @@ import { TimeInput } from '@/components/ui/date-input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { createClient } from '@/lib/supabase';
 import { exportScheduleEntriesAsICS } from '@/lib/integrations';
 import { formatTime } from '@/utils/formatTime';
@@ -143,7 +144,7 @@ async function withSchedulerMutationTimeout<T extends { error: unknown }>(reques
 export default function SchedulerPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { currentPropertyId, currentUser, userRole } = useOrgProfile();
+  const { currentUser, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -165,13 +166,17 @@ export default function SchedulerPage() {
   const today = useMemo(() => toDateKey(new Date()), []);
   const thisWeekStart = useMemo(() => getWeekStart(new Date()), []);
 
-  const propertyScope = currentPropertyId === 'all' ? 'all' : currentPropertyId || undefined;
   const orgId = currentUser?.orgId;
+  const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties: storeProperties,
+  });
+  const propertyScope = selectedPagePropertyId === 'all' ? 'all' : selectedPagePropertyId || undefined;
   const { data: storeEmployees = [], isLoading: employeesLoading } = useEmployees(
     propertyScope === 'all' ? undefined : propertyScope,
     orgId,
   );
-  const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
   const [schedulerDefaults, setSchedulerDefaults] = useState({ start: '07:30', end: '16:00' });
   const [schedulerDefaultsLoading, setSchedulerDefaultsLoading] = useState(true);
   const [shiftTemplates, setShiftTemplates] = useState<Array<{ id: string; name: string; start: string; end: string; days: string[]; active: boolean }>>([]);
@@ -1122,7 +1127,12 @@ export default function SchedulerPage() {
             </Button>
           ) : null}
         </div>
-        <PropertySelector className="w-full md:w-64" />
+        <PropertySelector
+        className="w-full md:w-64"
+        orgId={orgId}
+        value={selectedPagePropertyId}
+        onChange={setSelectedPagePropertyId}
+      />
 
         {/* Search */}
         <div className="relative w-full md:w-auto">
@@ -1851,9 +1861,3 @@ export default function SchedulerPage() {
     </div>
   );
 }
-
-
-
-
-
-

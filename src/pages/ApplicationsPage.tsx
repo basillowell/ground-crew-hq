@@ -38,6 +38,7 @@ import {
 } from '@/lib/supabase-queries';
 import { formatTime } from '@/utils/formatTime';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { toConcretePropertyId, usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase';
 import ChemicalSettings from '@/pages/settings/ChemicalSettings';
@@ -288,10 +289,15 @@ function buildRestrictedEntry(
 }
 
 export default function ApplicationsPage() {
-  const { currentUser, currentPropertyId } = useOrgProfile();
+  const { currentUser } = useOrgProfile();
   const queryClient = useQueryClient();
-  const propertyScope = currentPropertyId === 'all' ? undefined : currentPropertyId;
   const orgScope = currentUser?.orgId;
+  const propertiesQuery = useProperties(orgScope);
+  const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
+    currentUser,
+    properties: propertiesQuery.data ?? [],
+  });
+  const propertyScope = toConcretePropertyId(selectedPagePropertyId);
 
   const employeesQuery = useEmployees(propertyScope, orgScope);
   const employeeApplicatorLicensesQuery = useQuery({
@@ -312,7 +318,6 @@ export default function ApplicationsPage() {
       return (data ?? []) as EmployeeApplicatorLicenseRow[];
     },
   });
-  const propertiesQuery = useProperties(orgScope);
   const equipmentUnitsQuery = useEquipmentUnits(propertyScope, orgScope);
   const logsQuery = useChemicalLogs(orgScope, propertyScope);
   const productsQuery = useChemicalProducts();
@@ -1582,7 +1587,12 @@ export default function ApplicationsPage() {
     <div className="mx-auto max-w-7xl space-y-4 p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
-          <PropertySelector className="w-full sm:w-64" />
+          <PropertySelector
+            className="w-full sm:w-64"
+            orgId={orgScope}
+            value={selectedPagePropertyId}
+            onChange={setSelectedPagePropertyId}
+          />
           <div className="flex items-center gap-2">
           <Badge variant="secondary">{applicationMode === 'chemical' ? totalApplications : totalFertilizerApplications} logs</Badge>
           <Badge className="bg-status-active/10 text-status-active border-status-active/20">
@@ -2080,13 +2090,3 @@ export default function ApplicationsPage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-

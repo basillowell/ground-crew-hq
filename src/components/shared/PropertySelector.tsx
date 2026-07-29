@@ -8,7 +8,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useProperties } from '@/lib/supabase-queries';
 import { cn } from '@/lib/utils';
 
@@ -16,17 +15,22 @@ type PropertySelectorProps = {
   allowAllProperties?: boolean;
   className?: string;
   label?: string;
+  onChange: (propertyId: string) => void;
+  orgId?: string | null;
+  value: string;
 };
 
 export function PropertySelector({
   allowAllProperties = true,
   className,
   label = 'Property',
+  onChange,
+  orgId,
+  value,
 }: PropertySelectorProps) {
-  const { currentPropertyId, setCurrentPropertyId, orgId } = useOrgProfile();
   const { data: properties = [] } = useProperties(orgId ?? undefined);
-  const selectedProperty = properties.find((property) => property.id === currentPropertyId);
-  const selectedPropertyName = currentPropertyId === 'all'
+  const selectedProperty = properties.find((property) => property.id === value);
+  const selectedPropertyName = value === 'all'
     ? 'All Properties'
     : selectedProperty?.name ?? 'Select property';
   const canSwitchProperties = allowAllProperties || properties.length > 1;
@@ -53,8 +57,8 @@ export function PropertySelector({
             <DropdownMenuSeparator />
             {allowAllProperties ? (
               <DropdownMenuItem
-                onClick={() => setCurrentPropertyId('all')}
-                className={currentPropertyId === 'all' ? 'bg-surface-hover font-medium text-brand' : undefined}
+                onClick={() => onChange('all')}
+                className={value === 'all' ? 'bg-surface-hover font-medium text-brand' : undefined}
               >
                 All Properties
               </DropdownMenuItem>
@@ -62,8 +66,8 @@ export function PropertySelector({
             {properties.map((property) => (
               <DropdownMenuItem
                 key={property.id}
-                onClick={() => setCurrentPropertyId(property.id)}
-                className={currentPropertyId === property.id ? 'bg-surface-hover font-medium text-brand' : undefined}
+                onClick={() => onChange(property.id)}
+                className={value === property.id ? 'bg-surface-hover font-medium text-brand' : undefined}
               >
                 {property.name}
               </DropdownMenuItem>
