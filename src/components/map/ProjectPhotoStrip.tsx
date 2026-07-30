@@ -19,9 +19,11 @@ type ProjectPhotoStripProps = {
   orgId?: string | null;
   propertyId: string;
   projectId: string;
-  timelineEventId: string;
+  /** Omit for project-level "progress" photos (not tied to any timeline event). */
+  timelineEventId?: string;
   canManage: boolean;
   uploadedBy?: string | null;
+  title?: string;
 };
 
 function formatPhotoSize(sizeBytes: number | null) {
@@ -47,9 +49,13 @@ export function ProjectPhotoStrip({
   timelineEventId,
   canManage,
   uploadedBy,
+  title = 'Photos',
 }: ProjectPhotoStripProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const photosQuery = useProjectPhotos({ timelineEventId }, orgId ?? undefined);
+  const photosQuery = useProjectPhotos(
+    timelineEventId ? { timelineEventId } : { projectId, projectLevelOnly: true },
+    orgId ?? undefined,
+  );
   const uploadPhotoMutation = useUploadProjectPhoto(orgId ?? undefined);
   const deletePhotoMutation = useDeleteProjectPhoto(orgId ?? undefined);
   const photos = photosQuery.data ?? [];
@@ -73,7 +79,7 @@ export function ProjectPhotoStrip({
         file,
         propertyId,
         projectId,
-        timelineEventId,
+        timelineEventId: timelineEventId ?? null,
         uploadedBy: uploadedBy ?? null,
       });
       toast.success('Photo added.');
@@ -101,7 +107,7 @@ export function ProjectPhotoStrip({
   return (
     <div className="mt-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Photos</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">{title}</div>
         {photosQuery.isError ? (
           <Button type="button" variant="ghost" size="sm" onClick={handleRetryPhotos} disabled={photosQuery.isFetching}>
             <RefreshCw className={`mr-2 h-3.5 w-3.5 ${photosQuery.isFetching ? 'animate-spin' : ''}`} />

@@ -3564,6 +3564,8 @@ const SIGNATURE_SELECT_COLUMNS = 'id, org_id, property_id, assignment_id, signer
 export type ProjectPhotosScope = {
   timelineEventId?: string;
   projectId?: string;
+  /** Fetch only the project's general "progress" photos — those not attached to any timeline event. */
+  projectLevelOnly?: boolean;
 };
 
 export type UploadProjectPhotoPayload = {
@@ -3711,6 +3713,10 @@ async function fetchProjectPhotos(scope: ProjectPhotosScope, orgId: string): Pro
       query = query.eq('timeline_event_id', scope.timelineEventId);
     } else if (scope.projectId) {
       query = query.eq('project_id', scope.projectId);
+      // Project-level "progress" photos are the ones not tied to any timeline event.
+      if (scope.projectLevelOnly) {
+        query = query.is('timeline_event_id', null);
+      }
     } else {
       return [];
     }
@@ -4069,11 +4075,12 @@ export function useDeleteProject(orgId?: string) {
 export function useProjectPhotos(scope: ProjectPhotosScope | string | undefined, orgId?: string) {
   const rawTimelineEventId = typeof scope === 'string' ? scope : scope?.timelineEventId;
   const rawProjectId = typeof scope === 'string' ? undefined : scope?.projectId;
+  const projectLevelOnly = typeof scope === 'string' ? false : Boolean(scope?.projectLevelOnly);
   const timelineEventId = rawTimelineEventId && rawTimelineEventId !== 'all' ? rawTimelineEventId : undefined;
   const projectId = rawProjectId && rawProjectId !== 'all' ? rawProjectId : undefined;
   return useQuery({
-    queryKey: ['project-photos', orgId ?? 'all-orgs', timelineEventId ?? 'no-event', projectId ?? 'no-project'],
-    queryFn: () => fetchProjectPhotos({ timelineEventId, projectId }, orgId!),
+    queryKey: ['project-photos', orgId ?? 'all-orgs', timelineEventId ?? 'no-event', projectId ?? 'no-project', projectLevelOnly ? 'project-level' : 'all'],
+    queryFn: () => fetchProjectPhotos({ timelineEventId, projectId, projectLevelOnly }, orgId!),
     enabled: Boolean(orgId && (timelineEventId || projectId)),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,

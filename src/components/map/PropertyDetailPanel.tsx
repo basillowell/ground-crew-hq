@@ -97,6 +97,14 @@ function ProjectTimeline({
         </div>
       </div>
       {project.description ? <p className="text-sm text-text-secondary">{project.description}</p> : null}
+      <ProjectPhotoStrip
+        orgId={orgId}
+        propertyId={propertyId}
+        projectId={project.id}
+        canManage={canManage}
+        uploadedBy={createdBy}
+        title="Progress photos"
+      />
       <TimelineEventForm
         orgId={orgId}
         propertyId={propertyId}
