@@ -145,11 +145,11 @@ function emptyAddDraft(): AddDraft {
   };
 }
 
-type AbortableSupabaseRequest<T> = {
-  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
+  abortSignal: (signal: AbortSignal) => T;
 };
 
-async function withEquipmentRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+async function withEquipmentRequestTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -163,14 +163,16 @@ async function withEquipmentRequestTimeout<T>(request: AbortableSupabaseRequest<
     clearTimeout(timeoutId);
   }
 }
-async function withEquipmentMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>): Promise<T> {
+type SupabaseTimeoutResult = { data: null; error: Error };
+
+async function withEquipmentMutationTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T> | SupabaseTimeoutResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
     return await request.abortSignal(controller.signal);
   } catch (error) {
     if (controller.signal.aborted) {
-      return { data: null, error: new Error('Save timed out — please try again') } as T;
+      return { data: null, error: new Error('Save timed out — please try again') };
     }
     throw error;
   } finally {

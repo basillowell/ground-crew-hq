@@ -115,7 +115,7 @@ export default function PricingPage() {
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <div className="text-base font-semibold tracking-tight text-text-primary">Ground Crew HQ</div>
           <Link
-            to="/"
+            href="/"
             className="text-sm font-medium text-brand transition-colors hover:text-brand-bright"
           >
             ← Back to Home
@@ -207,7 +207,7 @@ export default function PricingPage() {
                   </a>
                 ) : (
                   <Link
-                    to={tier.ctaHref}
+                    href={tier.ctaHref}
                     className={`block w-full rounded-full py-2.5 text-center text-sm font-semibold transition-all duration-200 ${
                       tier.highlighted
                         ? 'bg-brand-bright text-text-inverse hover:brightness-110'

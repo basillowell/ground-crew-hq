@@ -486,7 +486,7 @@ function BackgroundDarknessSlider({
 }) {
   const normalizedValue = normalizeThemeDarkness(value);
   const [draft, setDraft] = useState(normalizedValue);
-  const commitTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const commitTimerRef = useRef<number | null>(null);
   const lastRequestedValueRef = useRef(normalizedValue);
 
   const clearCommitTimer = useCallback(() => {
@@ -1145,11 +1145,11 @@ function OperationsTab({
 
 type SettingsEquipmentType = { id: string; name: string; category: string | null };
 
-type AbortableSupabaseRequest<T> = {
-  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
+  abortSignal: (signal: AbortSignal) => T;
 };
 
-async function withSettingsAbortControllerTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+async function withSettingsAbortControllerTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {

@@ -21,11 +21,11 @@ import { AssignmentSignature } from '@/components/field/AssignmentSignature';
 
 const supabase = createClient();
 
-type AbortableSupabaseRequest<T> = {
-  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
+  abortSignal: (signal: AbortSignal) => T;
 };
 
-async function withFieldRequestTimeout<T>(request: AbortableSupabaseRequest<T>): Promise<T> {
+async function withFieldRequestTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), 15_000);
   try {

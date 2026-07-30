@@ -43,7 +43,7 @@ type GeoJsonLayer = Layer & {
   remove?: () => void;
 };
 
-type GeomanLayerEvent = L.LeafletEvent & {
+export type GeomanLayerEvent = {
   layer?: GeoJsonLayer;
 };
 

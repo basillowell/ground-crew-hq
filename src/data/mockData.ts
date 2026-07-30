@@ -3,12 +3,14 @@
 export interface Employee {
   id: string;
   clubId?: string;
+  orgId?: string;
   firstName: string;
   lastName: string;
   propertyId?: string;
   group: string;
   role: string;
   wage: number;
+  hourlyRate?: number;
   phone: string;
   email: string;
   photo: string;
@@ -38,9 +40,12 @@ export interface Employee {
 export interface Task {
   id: string;
   clubId?: string;
+  propertyId?: string;
   name: string;
   category: string;
   duration: number; // minutes
+  estimatedHours?: number;
+  estimated_hours?: number;
   color: string;
   icon: string;
   status?: 'active' | 'inactive' | 'archived';
@@ -48,6 +53,8 @@ export interface Task {
   skillTags?: string[];
   equipmentTags?: string[];
   notes?: string;
+  description?: string;
+  safetySensitive?: boolean;
 }
 
 export interface EquipmentType {
@@ -62,14 +69,24 @@ export interface EquipmentType {
 export interface EquipmentUnit {
   id: string;
   clubId?: string;
+  propertyId?: string;
+  name?: string;
   typeId: string;
+  type?: string;
   unitNumber: string;
+  unit_name?: string;
   status: 'available' | 'in-use' | 'maintenance' | 'out-of-service';
   assignedTo?: string;
   location: string;
   hours: number;
   lastService: string;
+  lastServiced?: string;
+  last_serviced?: string;
   nextService: string;
+  qrToken?: string;
+  estimatedHours?: number;
+  maintenanceIntervalHours?: number | null;
+  hoursAtLastService?: number | null;
 }
 
 export interface WorkOrder {
@@ -87,6 +104,7 @@ export interface WorkOrder {
 export interface ScheduleEntry {
   id: string;
   clubId?: string;
+  propertyId?: string;
   employeeId: string;
   date: string;
   shiftStart: string;
@@ -97,11 +115,14 @@ export interface ScheduleEntry {
 export interface Note {
   id: string;
   clubId?: string;
+  propertyId?: string;
   type: 'daily' | 'general' | 'geo' | 'alert';
   title: string;
   content: string;
   author: string;
+  createdBy?: string;
   date: string;
+  createdAt?: string;
   location?: string;
 }
 
@@ -114,6 +135,7 @@ export interface Assignment {
   equipmentId?: string;
   workOrderId?: string;
   date: string;
+  location?: string;
   startTime: string;
   duration: number;
   estimatedHours?: number;
@@ -129,7 +151,18 @@ export interface Assignment {
   actual_completed_at?: string | null;
   completed_at?: string | null;
   actual_hours?: number | null;
-  status?: 'planned' | 'in-progress' | 'completed';
+  status?: 'planned' | 'in-progress' | 'completed' | 'done';
+}
+
+export interface ClockEvent {
+  id: string;
+  clubId?: string;
+  employeeId: string;
+  propertyId: string;
+  eventType: 'in' | 'out' | 'break';
+  timestamp: string;
+  locationLat?: number;
+  locationLng?: number;
 }
 
 
@@ -271,6 +304,7 @@ export interface WorkLocation {
 export interface Property {
   id: string;
   clubId?: string;
+  orgId?: string;
   name: string;
   shortName: string;
   type: string;
@@ -302,7 +336,7 @@ export interface TaskRequest {
   title: string;
   taskId?: string;
   requestedBy: string;
-  requestedByType: 'client' | 'user' | 'admin';
+  requestedByType: 'client' | 'user' | 'admin' | 'manager' | 'crew';
   priority: 'low' | 'medium' | 'high';
   status: 'new' | 'planned' | 'assigned' | 'closed';
   preferredLocation?: string;

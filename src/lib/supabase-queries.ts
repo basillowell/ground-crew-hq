@@ -769,15 +769,25 @@ type DbChemicalApplicationLog = {
   applicatorId?: string | null;
   applicator_id?: string | null;
   applicatorLicenseNumber?: string | null;
+  applicator_license_number?: string | null;
   supervisorName?: string | null;
+  supervisor_name?: string | null;
   supervisorLicenseNumber?: string | null;
+  supervisor_license_number?: string | null;
   equipmentUsedId?: string | null;
+  equipment_used_id?: string | null;
   windDirection?: string | null;
+  wind_direction?: string | null;
   windSpeedAtApplication?: number | null;
+  wind_speed_at_application?: number | null;
   temperatureAtApplication?: number | null;
+  temperature_at_application?: number | null;
   humidityAtApplication?: number | null;
+  humidity_at_application?: number | null;
   restrictedEntryUntil?: string | null;
+  restricted_entry_until?: string | null;
   siteConditions?: string | null;
+  site_conditions?: string | null;
   notes?: string | null;
 };
 type DbChemicalApplicationTankMixItem = {
@@ -1185,6 +1195,7 @@ function toAppUser(row: DbAppUser, clientLabel: string): AppUser {
 function toScheduleEntry(row: DbScheduleEntry): ScheduleEntry {
   return {
     id: row.id,
+    propertyId: row.property_id,
     employeeId: row.employee_id,
     date: row.date,
     shiftStart: row.shift_start.slice(0, 5),
@@ -1250,9 +1261,12 @@ const SCHEDULE_ENTRIES_SELECT_COLUMNS =
 function toTask(row: DbTask): Task {
   return {
     id: row.id,
+    propertyId: row.property_id ?? undefined,
     name: row.name,
     category: row.category,
     duration: Number(row.estimated_hours ?? 1) * 60,
+    estimatedHours: Number(row.estimated_hours ?? 1),
+    estimated_hours: Number(row.estimated_hours ?? 1),
     color: row.color ?? 'oklch(var(--primary))',
     icon: row.icon ?? 'list-checks',
     status: row.status as Task['status'],
@@ -1266,6 +1280,7 @@ function toTask(row: DbTask): Task {
 function toEquipmentUnit(row: DbEquipmentUnit): EquipmentUnit {
   return {
     id: row.id,
+    name: row.name,
     typeId: row.type,
     unitNumber: row.name,
     status: row.status as EquipmentUnit['status'],
@@ -1284,6 +1299,7 @@ function toEquipmentUnit(row: DbEquipmentUnit): EquipmentUnit {
 function toNote(row: DbNote): Note {
   return {
     id: row.id,
+    propertyId: row.property_id ?? row.propertyId ?? undefined,
     type: row.type as Note['type'],
     title: row.title,
     content: row.content,
@@ -1312,6 +1328,8 @@ function toProgramSettings(row: DbProgramSettings): ProgramSettings {
     timeZone: 'America/New_York',
     fiscalYearStart: '01-01',
     enableMobileApp: true,
+    overtimeTracking: true,
+    equipmentQrCodes: true,
   };
 }
 

@@ -328,6 +328,7 @@ export function EmployeeRow({
                           propertyId: assignment.propertyId ?? '',
                           name: assignment.title || 'Untitled task',
                           category: 'General',
+                          duration: Math.max(0, Number(assignment.estimatedHours ?? 0)) * 60,
                           estimatedHours: Math.max(0, Number(assignment.estimatedHours ?? 0)),
                           status: 'active',
                           priority: 3,

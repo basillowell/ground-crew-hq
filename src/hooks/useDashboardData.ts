@@ -48,6 +48,8 @@ function normalizeProperty(row: any): Property {
     orgId: row.org_id ?? '',
     name: String(row.name ?? ''),
     shortName: String(row.short_name ?? row.name ?? ''),
+    type: 'Property',
+    address: String(row.address ?? ''),
     logoInitials: String(row.logo_initials ?? 'HQ'),
     color: String(row.color ?? '#2FA866'),
     city: String(row.city ?? ''),
@@ -69,8 +71,14 @@ function normalizeEmployee(row: any): Employee {
     role: String(row.role ?? ''),
     department: String(row.department ?? ''),
     status: String(row.status ?? 'active') as Employee['status'],
+    group: String(row.group_name ?? row.department ?? 'General'),
+    wage: Number(row.hourly_rate ?? 0),
     phone: row.phone ?? undefined,
     email: row.email ?? undefined,
+    photo: '',
+    language: String(row.language ?? 'English'),
+    workerType: String(row.worker_type ?? 'full-time') as Employee['workerType'],
+    hireDate: String(row.created_at ?? new Date().toISOString()).slice(0, 10),
     hourlyRate: typeof row.hourly_rate === 'number' ? row.hourly_rate : row.hourly_rate ? Number(row.hourly_rate) : undefined,
   };
 }
@@ -108,10 +116,15 @@ function normalizeEquipmentUnit(row: any): EquipmentUnit {
     id: String(row.id),
     propertyId: String(row.property_id ?? ''),
     name: String(row.name ?? row.unit_name ?? ''),
+    typeId: String(row.equipment_type_id ?? row.type ?? ''),
+    unitNumber: String(row.unit_name ?? row.name ?? ''),
     type: String(row.type ?? ''),
     status: String(row.status ?? 'active') as EquipmentUnit['status'],
     location: row.location ?? undefined,
+    hours: Number(row.estimated_hours ?? 0),
+    lastService: String(row.last_serviced ?? ''),
     lastServiced: row.last_serviced ?? undefined,
+    nextService: String(row.last_serviced ?? ''),
   };
 }
 
@@ -164,14 +177,23 @@ function normalizeClockEvent(row: any): ClockEvent {
 function normalizeProgramSettings(row: any): ProgramSettings {
   return {
     id: String(row.id),
+    organizationName: String(row.organization_name ?? row.client_label ?? row.app_name ?? 'Ground Crew HQ'),
     appName: String(row.app_name ?? 'Ground Crew HQ'),
+    navigationTitle: String(row.navigation_title ?? row.app_name ?? 'Ground Crew HQ'),
+    navigationSubtitle: String(row.navigation_subtitle ?? row.client_label ?? 'Operations'),
     clientLabel: String(row.client_label ?? ''),
+    logoInitials: String(row.logo_initials ?? row.client_label ?? row.app_name ?? 'HQ').slice(0, 2).toUpperCase(),
     primaryColor: String(row.primary_color ?? '#2FA866'),
     accentColor: String(row.accent_color ?? '#16a34a'),
     sidebarColor: String(row.sidebar_color ?? '#0f172a'),
     fontThemePreset: String(row.font_theme_preset ?? 'modern'),
     logoUrl: row.logo_url ?? undefined,
     defaultDepartment: String(row.default_department ?? 'Operations'),
+    timeZone: String(row.time_zone ?? 'America/New_York'),
+    fiscalYearStart: String(row.fiscal_year_start ?? '01-01'),
+    enableMobileApp: Boolean(row.enable_mobile_app ?? true),
+    overtimeTracking: Boolean(row.overtime_tracking ?? true),
+    equipmentQrCodes: Boolean(row.equipment_qr_codes ?? true),
   };
 }
 

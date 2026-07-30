@@ -110,7 +110,7 @@ function normalizeEstimate(payload: unknown): SharedEstimate {
   };
 }
 
-function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+function withTimeout<T extends PromiseLike<unknown>>(promise: T, message: string): Promise<Awaited<T>> {
   let timeoutId = 0;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = window.setTimeout(() => reject(new Error(message)), 12_000);

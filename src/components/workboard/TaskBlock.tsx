@@ -245,14 +245,12 @@ export function TaskBlock({
               <AlertTriangle
                 className="h-3.5 w-3.5 shrink-0 text-status-pending"
                 aria-label="Equipment overdue for service"
-                title="Equipment overdue for service"
               />
             ) : null}
             {isEquipmentDoubleBooked ? (
               <CircleAlert
                 className="h-3.5 w-3.5 shrink-0 text-status-warning"
                 aria-label="Equipment time-window conflict"
-                title="Equipment time-window conflict"
               />
             ) : null}
           </span>

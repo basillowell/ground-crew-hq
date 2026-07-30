@@ -85,11 +85,11 @@ function SafeSection({ children, fallback = null }: { children: ReactNode; fallb
   }
 }
 
-type AbortableSupabaseRequest<T> = {
-  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
+  abortSignal: (signal: AbortSignal) => T;
 };
 
-async function withWorkboardRequestTimeout<T>(request: AbortableSupabaseRequest<T>) {
+async function withWorkboardRequestTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -104,14 +104,16 @@ async function withWorkboardRequestTimeout<T>(request: AbortableSupabaseRequest<
   }
 }
 
-async function withWorkboardMutationTimeout<T extends { error: unknown }>(request: AbortableSupabaseRequest<T>) {
+type SupabaseTimeoutResult = { data: null; error: Error };
+
+async function withWorkboardMutationTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T> | SupabaseTimeoutResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
     return await request.abortSignal(controller.signal);
   } catch (error) {
     if (controller.signal.aborted) {
-      return { data: null, error: new Error('Save timed out — please try again') } as T;
+      return { data: null, error: new Error('Save timed out — please try again') };
     }
     throw error;
   } finally {
@@ -150,6 +152,18 @@ function addDaysToDateKey(dateKey: string, days: number) {
   const date = new Date(Date.UTC(year, month - 1, day));
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function getWeekDateRange(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  if (![year, month, day].every(Number.isFinite)) {
+    return { start: dateKey, end: dateKey };
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = date.getUTCDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const start = addDaysToDateKey(dateKey, mondayOffset);
+  return { startDate: start, endDate: addDaysToDateKey(start, 6) };
 }
 
 function getIsoTimestampMs(value: string | null | undefined) {
@@ -242,8 +256,8 @@ type AssignmentTimelineMeta = {
 };
 
 type AssignmentWithPublishState = Assignment & {
-  isPublished?: boolean;
-  is_published?: boolean;
+  isPublished?: boolean | string;
+  is_published?: boolean | string;
   publishedAt?: string | null;
   published_at?: string | null;
   publishedBy?: string | null;
@@ -432,11 +446,12 @@ type NeedsQueueRequest = {
   taskId?: string;
   submittedBy?: string;
   requestedBy: string;
-  requestedByType: 'client' | 'manager' | 'crew';
+  requestedByType: TaskRequest['requestedByType'];
   priority: 'high' | 'medium' | 'low';
   status: 'new' | 'assigned' | 'dismissed' | string;
   preferredLocation?: string;
   location?: string;
+  description?: string;
   notes: string;
   createdAt?: string;
 };
@@ -633,6 +648,7 @@ type QuickPlanSuggestion = {
   estimatedHours: number;
   status: string;
   propertyId: string | null;
+  workOrderId?: string | null;
 };
 
 type SuggestedTaskItem = {
@@ -914,6 +930,10 @@ export default function WorkboardContent() {
     orgId,
   );
   const assignmentWorkOrdersQuery = useRevenueWorkOrders(effectivePropertyId, orgId, assignmentDialogOpen);
+  const assignmentsQueryKey = useMemo(
+    () => ['assignments', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'] as const,
+    [boardDate, effectivePropertyId, orgId],
+  );
   const assignmentsQuery = useAssignments(boardDate, effectivePropertyId, orgId);
   const assignmentPublishStateQueryKey = useMemo(
     () => ['assignments', 'publish-state', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'] as const,
@@ -1023,8 +1043,12 @@ export default function WorkboardContent() {
     staleTime: 1000 * 60 * 2,
   });
 
+  const taskRequestsQueryKey = useMemo(
+    () => ['task-requests', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'] as const,
+    [boardDate, effectivePropertyId, orgId],
+  );
   const taskRequestsQuery = useQuery({
-    queryKey: ['task-requests', boardDate, effectivePropertyId ?? 'all', orgId ?? 'all-orgs'],
+    queryKey: taskRequestsQueryKey,
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase) return [] as NeedsQueueRequest[];
@@ -2091,23 +2115,23 @@ export default function WorkboardContent() {
 
   const upsertAssignmentInCache = useCallback(
     (nextAssignment: Assignment) => {
-      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) => {
+      queryClient.setQueryData<Assignment[]>(assignmentsQueryKey, (current) => {
         const existing = current ?? [];
         const withoutExisting = existing.filter((assignment) => assignment.id !== nextAssignment.id);
         return [...withoutExisting, nextAssignment];
       });
     },
-    [assignmentsQuery.queryKey, queryClient],
+    [assignmentsQueryKey, queryClient],
   );
 
   const removeAssignmentFromCache = useCallback(
     (assignmentId: string) => {
-      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) => {
+      queryClient.setQueryData<Assignment[]>(assignmentsQueryKey, (current) => {
         const existing = current ?? [];
         return existing.filter((assignment) => assignment.id !== assignmentId);
       });
     },
-    [assignmentsQuery.queryKey, queryClient],
+    [assignmentsQueryKey, queryClient],
   );
 
   const appendAssignmentToCaches = useCallback(
@@ -2115,11 +2139,11 @@ export default function WorkboardContent() {
       const scopedAssignmentsKey = ['assignments', boardDate, effectivePropertyId ?? 'all', currentUser?.orgId ?? 'all-orgs'];
       const dateAssignmentsKey = ['assignments', currentUser?.orgId ?? 'all-orgs', boardDate];
 
-      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) => [...(current ?? []), nextAssignment]);
+      queryClient.setQueryData<Assignment[]>(assignmentsQueryKey, (current) => [...(current ?? []), nextAssignment]);
       queryClient.setQueryData<Assignment[]>(scopedAssignmentsKey, (current) => [...(current ?? []), nextAssignment]);
       queryClient.setQueryData<Assignment[]>(dateAssignmentsKey, (current) => [...(current ?? []), nextAssignment]);
     },
-    [assignmentsQuery.queryKey, boardDate, currentUser?.orgId, effectivePropertyId, queryClient],
+    [assignmentsQueryKey, boardDate, currentUser?.orgId, effectivePropertyId, queryClient],
   );
 
   const setAssignmentActualHours = useCallback(
@@ -2128,7 +2152,7 @@ export default function WorkboardContent() {
       const nextHours = Math.max(0, Number(hours));
       const previousActualHours = Number(assignment.actualHours ?? 0);
 
-      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+      queryClient.setQueryData<Assignment[]>(assignmentsQueryKey, (current) =>
         (current ?? []).map((row) =>
           row.id === assignment.id
             ? {
@@ -2146,7 +2170,7 @@ export default function WorkboardContent() {
         .eq('org_id', currentUser.orgId));
 
       if (error) {
-        queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+        queryClient.setQueryData<Assignment[]>(assignmentsQueryKey, (current) =>
           (current ?? []).map((row) =>
             row.id === assignment.id
               ? {
@@ -2165,7 +2189,7 @@ export default function WorkboardContent() {
         void queryClient.invalidateQueries({ queryKey: ['assignments'] });
       }, 0);
     },
-    [assignmentsQuery.queryKey, currentUser?.orgId, queryClient],
+    [assignmentsQueryKey, currentUser?.orgId, queryClient],
   );
 
   const syncTimelineCaches = useCallback(
@@ -2178,7 +2202,7 @@ export default function WorkboardContent() {
         actualHours?: number;
       },
     ) => {
-      queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+      queryClient.setQueryData<Assignment[]>(assignmentsQueryKey, (current) =>
         (current ?? []).map((row) => {
           if (row.id !== assignmentId) return row;
           const enriched = row as Assignment & Record<string, unknown>;
@@ -2191,8 +2215,9 @@ export default function WorkboardContent() {
             row.actualCompletedAt = patch.actualCompletedAt;
           }
           if (patch.status) {
-            enriched.status = patch.status;
-            row.status = normalizeAssignmentStatus(patch.status) as Assignment['status'];
+            const normalizedStatus = normalizeAssignmentStatus(patch.status) as Assignment['status'];
+            enriched.status = normalizedStatus;
+            row.status = normalizedStatus;
           }
           if (typeof patch.actualHours === 'number' && Number.isFinite(patch.actualHours)) {
             enriched.actual_hours = patch.actualHours;
@@ -2202,7 +2227,7 @@ export default function WorkboardContent() {
         }),
       );
     },
-    [assignmentsQuery.queryKey, queryClient],
+    [assignmentsQueryKey, queryClient],
   );
 
   const getAssignmentTimelineMeta = useCallback(
@@ -2227,6 +2252,13 @@ export default function WorkboardContent() {
             : typeof assignmentRecord.order === 'number'
               ? Number(assignmentRecord.order)
               : 0),
+        actualHours:
+          timelineRow?.actualHours ??
+          (typeof assignmentRecord.actual_hours === 'number'
+            ? Number(assignmentRecord.actual_hours)
+            : typeof assignment.actualHours === 'number'
+              ? Number(assignment.actualHours)
+              : null),
       };
     },
     [assignmentTimelineById],
@@ -2830,7 +2862,7 @@ export default function WorkboardContent() {
     overdueThresholdDate.setDate(overdueThresholdDate.getDate() - overdueThresholdDays);
     let overdueCount = 0;
     let maxOverdueDays = 0;
-    for (const unit of equipmentList as Array<Record<string, unknown>>) {
+    for (const unit of equipmentList) {
       const lastServicedRaw = String(unit.lastService ?? unit.last_serviced ?? '');
       if (!lastServicedRaw) continue;
       const lastServicedDate = new Date(lastServicedRaw);
@@ -3518,7 +3550,7 @@ export default function WorkboardContent() {
     }
 
     const now = Date.now();
-    for (const unit of equipmentList as Array<Record<string, unknown>>) {
+    for (const unit of equipmentList) {
       const lastServiceRaw = unit.lastService ?? unit.last_serviced;
       if (!lastServiceRaw) continue;
       const lastServiceDate = new Date(String(lastServiceRaw));
@@ -3594,7 +3626,7 @@ export default function WorkboardContent() {
     const overdueThresholdDays = Math.max(1, escalationThresholds.equipmentServiceOverdueDays);
     const overdueThresholdDate = new Date();
     overdueThresholdDate.setDate(overdueThresholdDate.getDate() - overdueThresholdDays);
-    const equipmentNotes = (equipmentList as Array<Record<string, unknown>>)
+    const equipmentNotes = equipmentList
       .map((unit) => {
         const unitName = String(unit.unit_name ?? unit.name ?? 'Equipment');
         const status = String(unit.status ?? '').toLowerCase();
@@ -4449,7 +4481,7 @@ export default function WorkboardContent() {
       toast.error(`Failed to dismiss request: ${error.message}`);
       return;
     }
-    queryClient.setQueryData<NeedsQueueRequest[] | undefined>(taskRequestsQuery.queryKey, (current) =>
+    queryClient.setQueryData<NeedsQueueRequest[] | undefined>(taskRequestsQueryKey, (current) =>
       (current ?? []).map((request) =>
         request.id === requestId ? { ...request, status: 'dismissed' } : request,
       ),
@@ -4507,7 +4539,7 @@ export default function WorkboardContent() {
             })),
           ];
 
-    queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+    queryClient.setQueryData<Assignment[]>(assignmentsQueryKey, (current) =>
       (current ?? []).map((assignment) => {
         const match = orderUpdates.find((update) => update.id === assignment.id);
         if (!match) return assignment;
@@ -4550,7 +4582,7 @@ export default function WorkboardContent() {
       ...nextTarget.map((assignment, index) => ({ id: assignment.id, employee_id: targetEmployeeId, order_index: index })),
     ];
 
-    queryClient.setQueryData<Assignment[]>(assignmentsQuery.queryKey, (current) =>
+    queryClient.setQueryData<Assignment[]>(assignmentsQueryKey, (current) =>
       (current ?? []).map((assignment) => {
         const match = orderUpdates.find((update) => update.id === assignment.id);
         if (!match) return assignment;
@@ -5546,11 +5578,11 @@ export default function WorkboardContent() {
                       assignmentTimelineById={assignmentTimelineRecord}
                       breakEvents={breakChipsByEmployee[lane.employee.id] ?? []}
                       operationalTimezone={operationalTimezone}
-                      onStartAssignment={(assignment) => {
-                        void startAssignmentTimeline(assignment);
+                      onStartAssignment={async (assignment) => {
+                        await startAssignmentTimeline(assignment);
                       }}
-                      onCompleteAssignment={(assignment, employeeAssignments) => {
-                        void completeAssignmentTimeline(assignment, employeeAssignments);
+                      onCompleteAssignment={async (assignment, employeeAssignments) => {
+                        await completeAssignmentTimeline(assignment, employeeAssignments);
                       }}
                       onSaveAssignmentTimes={(assignment, employeeAssignments, startInput, endInput) => {
                         void saveAssignmentTimelineTimes(assignment, employeeAssignments, startInput, endInput);

@@ -712,7 +712,7 @@ export default function LaunchPortalPage() {
               {!errorMessage && authDebugMessage ? (
                 <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-3 text-xs text-amber-300">
                   {authDebugMessage}
-                  {hasSession && (authState === 'network-timeout' || authState === 'profile-error' || authState === 'profile-missing') ? (
+                  {hasSession && (authState === 'profile-error' || authState === 'profile-missing') ? (
                     <div className="mt-2">
                       <Button type="button" size="sm" variant="outline" className="border-surface-border text-text-secondary hover:bg-surface-hover hover:text-text-primary" onClick={() => void retryAuthHydration()}>
                         Retry profile load

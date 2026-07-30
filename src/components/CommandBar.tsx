@@ -217,7 +217,7 @@ export function CommandBar({ open, onOpenChange, currentDate, currentPropertyId 
     }));
     const assignedEmployeeSet = new Set((assignmentsResult.data ?? []).map((row) => String(row.employee_id ?? '')));
     const unassignedCrew = Array.from(
-      new Set(
+      new Set<string>(
         (schedulesResult.data ?? [])
           .map((row) => String(row.employee_id ?? ''))
           .filter((employeeId) => employeeId && !assignedEmployeeSet.has(employeeId))

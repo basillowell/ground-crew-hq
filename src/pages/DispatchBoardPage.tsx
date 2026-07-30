@@ -25,20 +25,22 @@ import { createClient } from '@/lib/supabase';
 
 const supabase = createClient();
 
-type AbortableSupabaseRequest<T> = {
-  abortSignal: (signal: AbortSignal) => PromiseLike<T>;
+type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
+  abortSignal: (signal: AbortSignal) => T;
 };
 
-async function withDispatchAbortControllerTimeout<T extends { error: unknown }>(
+type SupabaseTimeoutResult = { data: null; error: Error };
+
+async function withDispatchAbortControllerTimeout<T extends PromiseLike<unknown>>(
   request: AbortableSupabaseRequest<T>,
-): Promise<T> {
+): Promise<Awaited<T> | SupabaseTimeoutResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
     return await request.abortSignal(controller.signal);
   } catch (error) {
     if (controller.signal.aborted) {
-      return { data: null, error: new Error('Save timed out — please try again') } as T;
+      return { data: null, error: new Error('Save timed out — please try again') };
     }
     throw error;
   } finally {

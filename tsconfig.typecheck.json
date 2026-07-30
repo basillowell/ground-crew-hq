@@ -1,0 +1,30 @@
+{
+  // Honest type-check gate. The root tsconfig.json has "files": [], so plain
+  // `tsc` checks nothing and `next build`'s type pass is effectively hollow.
+  // This config type-checks the real hand-written project (src + app + utils)
+  // with the same loose settings the build uses. Run via `npm run typecheck`.
+  "compilerOptions": {
+    "allowJs": true,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "strict": false,
+    "strictNullChecks": false,
+    "skipLibCheck": true,
+    "jsx": "preserve",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "target": "esnext",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*", "./*"]
+    },
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": ["src", "app", "utils", "next-env.d.ts"]
+}

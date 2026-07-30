@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, Tooltip, useMapEvents } from 'react-leaflet';
-import type { Layer, LeafletEvent, PathOptions } from 'leaflet';
+import type { Layer, PathOptions } from 'leaflet';
 import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
@@ -171,12 +171,12 @@ export function PropertyMap({
               // Geoman fires edit events on the LAYER, not the map, so these must be
               // bound per-polygon. Binding them on the map (as GeomanControl does for
               // pm:create) silently never fires and leaves Save disabled after an edit.
-              'pm:update': (event: LeafletEvent) => {
-                const geometry = layerToBoundaryGeoJson(event.target as GeoJsonEditLayer);
+              'pm:update': (event) => {
+                const geometry = layerToBoundaryGeoJson(event.layer as GeoJsonEditLayer);
                 if (geometry) onBoundaryChange(geometry);
               },
-              'pm:dragend': (event: LeafletEvent) => {
-                const geometry = layerToBoundaryGeoJson(event.target as GeoJsonEditLayer);
+              'pm:dragend': (event) => {
+                const geometry = layerToBoundaryGeoJson(event.layer as GeoJsonEditLayer);
                 if (geometry) onBoundaryChange(geometry);
               },
             }}
