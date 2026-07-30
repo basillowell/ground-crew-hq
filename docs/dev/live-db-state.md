@@ -560,18 +560,23 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 | org_id                 | uuid        | YES      |              |
 | weather_location_label | text        | YES      |              |
 | boundary_geojson       | jsonb       | YES      |              |
-| boundary               | geometry(Polygon,4326) | YES |         |
 | calculated_acreage     | numeric     | YES      |              |
 
 sort_order persists manual drag-and-drop ordering, ascending.
 
 boundary_geojson is the client-writable surface (PostgREST reads/writes plain jsonb —
-never touch `boundary` or `calculated_acreage` directly from application code).
-boundary and calculated_acreage are GENERATED ALWAYS STORED columns derived from
-boundary_geojson via ST_GeomFromGeoJSON/ST_Area; both are DB-maintained and read-only
-to the client. calculated_acreage is in acres and is a cross-check against the manual
-acreage field — it never overwrites it. GIST index on boundary
-(properties_boundary_gist_idx). NULL boundary_geojson = boundary not drawn yet.
+never touch `calculated_acreage` directly from application code).
+calculated_acreage is a GENERATED ALWAYS STORED column derived from boundary_geojson
+via extensions.ST_GeomFromGeoJSON/extensions.ST_Area (PostGIS lives in the `extensions`
+schema as of 2026-07-30 — see postgis-relocation-runbook.md); DB-maintained and
+read-only to the client. calculated_acreage is in acres and is a cross-check against
+the manual acreage field — it never overwrites it. NULL boundary_geojson = boundary
+not drawn yet.
+
+The `boundary` geometry column and its GIST index (properties_boundary_gist_idx) were
+dropped in the 2026-07-30 PostGIS relocation (unused by the app, which reads only
+boundary_geojson + calculated_acreage). Recreate a geometry column + GIST index
+qualified to `extensions` only if server-side spatial queries are ever added.
 
 RLS:
 - INSERT uses an `org_id` membership check only because a new row has no existing property `id`.
@@ -594,8 +599,6 @@ RLS:
 | created_at      | timestamptz | NO       | now()             |
 | location_geojson| jsonb       | YES      |                   |
 | area_geojson    | jsonb       | YES      |                   |
-| location        | geometry(Point,4326)   | YES |            |
-| area            | geometry(Polygon,4326) | YES |            |
 | calculated_area_acres | numeric | YES     |                   |
 
 > FK: property_id -> properties.id. property_id is required (NOT NULL) — a project
@@ -606,9 +609,11 @@ RLS:
 > - location_geojson / area_geojson are the ONLY columns application code writes.
 >   Plain PostgREST jsonb. location_geojson is a GeoJSON Point (the map pin);
 >   area_geojson is an optional GeoJSON Polygon for a per-project sub-area.
-> - location, area and calculated_area_acres are GENERATED ALWAYS STORED and are
->   read-only to the client — writes will be rejected. GIST indexes on both
->   geometry columns.
+> - calculated_area_acres is GENERATED ALWAYS STORED and read-only to the client —
+>   writes are rejected. Derived from area_geojson via extensions.ST_Area (PostGIS in
+>   the `extensions` schema as of 2026-07-30). The `location`/`area` geometry columns
+>   and their GIST indexes were dropped in the PostGIS relocation (unused); recreate
+>   qualified to `extensions` if server-side spatial queries are added.
 > - Decision: pins ship first, per-project areas are a later phase. Both columns
 >   exist now so that phase needs no migration.
 

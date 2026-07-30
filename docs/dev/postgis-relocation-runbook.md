@@ -1,6 +1,10 @@
 # PostGIS Relocation Runbook — move PostGIS out of `public`
 
-> Status: **READY TO EXECUTE** (not yet started as of 2026-07-28, HEAD `0165d29`).
+> Status: **DONE** — executed 2026-07-30. PostGIS relocated to `extensions`;
+> `spatial_ref_sys` out of `public`; the 2 acreage columns recreated
+> (extensions-qualified) and verified identical to the pre-drop baseline;
+> `rls_disabled_in_public` CRITICAL cleared. Migrations:
+> `postgis_relocation_step1_drop_dependents`, `postgis_relocation_step3_recreate_acreage_qualified`.
 > Purpose: resolve the CRITICAL `rls_disabled_in_public` finding on
 > `public.spatial_ref_sys` by moving PostGIS to the `extensions` schema, so the
 > table is no longer exposed via PostgREST. Keeps PostGIS and the acreage
