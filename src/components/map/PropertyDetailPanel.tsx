@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Edit3, FolderKanban, MapPin, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { CalendarDays, Edit3, FolderKanban, MapPin, Plus, RefreshCw, Shapes, Trash2, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -28,8 +28,13 @@ type PropertyDetailPanelProps = {
   selectedProjectId?: string | null;
   pinPlacementProjectId?: string | null;
   pinPlacementSaving: boolean;
+  areaEditProjectId?: string | null;
+  areaSaving: boolean;
   onStartPlacePin: (project: PropertyProject) => void;
   onCancelPlacePin: () => void;
+  onStartEditArea: (project: PropertyProject) => void;
+  onCancelEditArea: () => void;
+  onClearArea: (project: PropertyProject) => void;
   onClose: () => void;
 };
 
@@ -172,8 +177,13 @@ export function PropertyDetailPanel({
   selectedProjectId,
   pinPlacementProjectId,
   pinPlacementSaving,
+  areaEditProjectId,
+  areaSaving,
   onStartPlacePin,
   onCancelPlacePin,
+  onStartEditArea,
+  onCancelEditArea,
+  onClearArea,
   onClose,
 }: PropertyDetailPanelProps) {
   const projectsQuery = useProjects(property.id, orgId ?? undefined);
@@ -280,6 +290,8 @@ export function PropertyDetailPanel({
               const isExpanded = expandedProject?.id === project.id;
               const isPlacingThisPin = pinPlacementProjectId === project.id;
               const hasProjectPin = Boolean(project.locationGeojson);
+              const isEditingThisArea = areaEditProjectId === project.id;
+              const hasProjectArea = Boolean(project.areaGeojson);
               return (
                 <Card key={project.id} className={`border-surface-border bg-surface-card p-4 ${isExpanded ? 'ring-1 ring-brand-dim' : ''}`}>
                   <button type="button" className="w-full text-left" onClick={() => setExpandedProjectId(isExpanded ? null : project.id)}>
@@ -297,7 +309,7 @@ export function PropertyDetailPanel({
                       </div>
                     </div>
                   </button>
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <Button type="button" variant="outline" size="sm" onClick={() => openEditProject(project)} disabled={!canManage}>
                       <Edit3 className="mr-2 h-3.5 w-3.5" />
                       Edit
@@ -308,10 +320,34 @@ export function PropertyDetailPanel({
                         variant={isPlacingThisPin ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => (isPlacingThisPin ? onCancelPlacePin() : onStartPlacePin(project))}
-                        disabled={pinPlacementSaving}
+                        disabled={pinPlacementSaving || areaSaving}
                       >
                         <MapPin className="mr-2 h-3.5 w-3.5" />
                         {isPlacingThisPin ? 'Cancel pin' : hasProjectPin ? 'Move pin' : 'Place pin'}
+                      </Button>
+                    ) : null}
+                    {canManage ? (
+                      <Button
+                        type="button"
+                        variant={isEditingThisArea ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => (isEditingThisArea ? onCancelEditArea() : onStartEditArea(project))}
+                        disabled={areaSaving || pinPlacementSaving}
+                      >
+                        <Shapes className="mr-2 h-3.5 w-3.5" />
+                        {isEditingThisArea ? 'Cancel area' : hasProjectArea ? 'Edit area' : 'Draw area'}
+                      </Button>
+                    ) : null}
+                    {canManage && hasProjectArea ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-status-warning"
+                        onClick={() => onClearArea(project)}
+                        disabled={areaSaving}
+                      >
+                        Clear
                       </Button>
                     ) : null}
                     <Button type="button" variant="outline" size="sm" className="text-status-warning" onClick={() => void handleDeleteProject(project)} disabled={!canManage || deleteProjectMutation.isPending}>

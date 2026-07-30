@@ -91,6 +91,7 @@ export type PropertyProject = {
   color: string | null;
   createdAt: string;
   locationGeojson: ProjectLocationGeoJson | null;
+  areaGeojson: PropertyBoundaryGeoJson | null;
 };
 
 export type ProjectTimelineEvent = {
@@ -293,6 +294,7 @@ type DbProject = {
   color: string | null;
   created_at: string;
   location_geojson: unknown;
+  area_geojson: unknown;
 };
 
 type DbProjectTimelineEvent = {
@@ -899,6 +901,7 @@ function toProject(row: DbProject): PropertyProject {
     color: row.color,
     createdAt: row.created_at,
     locationGeojson: isProjectLocationGeoJson(row.location_geojson) ? row.location_geojson : null,
+    areaGeojson: isPropertyBoundaryGeoJson(row.area_geojson) ? row.area_geojson : null,
   };
 }
 
@@ -1926,10 +1929,10 @@ async function fetchPropertyBoundaries(orgId?: string): Promise<PropertyBoundary
     if (orgId && propertyIds.length > 0) {
       const { data: projectData, error: projectError } = await client
         .from('projects')
-        .select('id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson')
+        .select(PROJECT_SELECT_COLUMNS)
         .eq('org_id', orgId)
         .in('property_id', propertyIds)
-        .not('location_geojson', 'is', null)
+        .or('location_geojson.not.is.null,area_geojson.not.is.null')
         .order('created_at', { ascending: false });
       if (projectError) throw projectError;
       projectRows = (projectData ?? []) as DbProject[];
@@ -3554,7 +3557,7 @@ type TimelineEventMutationPayload = {
 export const PROJECT_PHOTO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const;
 export const PROJECT_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const PROJECT_PHOTOS_BUCKET = 'project-photos';
-const PROJECT_SELECT_COLUMNS = 'id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson';
+const PROJECT_SELECT_COLUMNS = 'id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson, area_geojson';
 const PROJECT_PHOTO_SELECT_COLUMNS = 'id, org_id, property_id, project_id, timeline_event_id, storage_path, caption, content_type, size_bytes, uploaded_by, sort_order, created_at';
 const SIGNATURE_SELECT_COLUMNS = 'id, org_id, property_id, assignment_id, signer_name, signature_data, signed_at, captured_by, created_at';
 
@@ -3589,6 +3592,12 @@ export type SetProjectLocationPayload = {
   projectId: string;
   latitude: number;
   longitude: number;
+};
+
+export type SetProjectAreaPayload = {
+  propertyId: string;
+  projectId: string;
+  areaGeojson: PropertyBoundaryGeoJson | null;
 };
 
 async function fetchProjects(propertyId: string, orgId?: string): Promise<PropertyProject[]> {
@@ -3909,6 +3918,31 @@ async function setProjectLocation(orgId: string, payload: SetProjectLocationPayl
   return Promise.race([savePromise, timeoutPromise]);
 }
 
+async function setProjectArea(orgId: string, payload: SetProjectAreaPayload): Promise<PropertyProject> {
+  if (!payload.propertyId || payload.propertyId === 'all') throw new Error('Select a property before editing an area.');
+  if (!payload.projectId || payload.projectId === 'all') throw new Error('Choose a project before editing an area.');
+  if (payload.areaGeojson !== null && !isPropertyBoundaryGeoJson(payload.areaGeojson)) throw new Error('Choose a valid project area.');
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Project area request timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('projects')
+      .update({ area_geojson: payload.areaGeojson })
+      .eq('id', payload.projectId)
+      .eq('property_id', payload.propertyId)
+      .eq('org_id', orgId)
+      .select(PROJECT_SELECT_COLUMNS)
+      .single();
+    if (error) throw error;
+    return toProject(data as DbProject);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
 async function createTimelineEvent(orgId: string, payload: TimelineEventMutationPayload): Promise<ProjectTimelineEvent> {
   const client = ensureSupabase();
   const { data, error } = await client
@@ -4119,6 +4153,21 @@ export function useSetProjectLocation(orgId?: string) {
     mutationFn: (payload: SetProjectLocationPayload) => {
       if (!orgId) throw new Error('Organization is required to place a project pin.');
       return setProjectLocation(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useSetProjectArea(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SetProjectAreaPayload) => {
+      if (!orgId) throw new Error('Organization is required to save a project area.');
+      return setProjectArea(orgId, payload);
     },
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });

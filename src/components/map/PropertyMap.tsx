@@ -15,9 +15,12 @@ type PropertyMapProps = {
   currentPropertyId: string;
   editMode: boolean;
   canEditBoundary: boolean;
+  selectedProjectId: string | null;
   pinPlacementProject: { projectId: string; projectName: string } | null;
   pinPlacementDisabled: boolean;
+  areaEditProjectId: string | null;
   onBoundaryChange: (geojson: PropertyBoundaryGeoJson | null) => void;
+  onAreaChange: (geojson: PropertyBoundaryGeoJson | null) => void;
   onSelectProperty: (propertyId: string) => void;
   onSelectProject: (propertyId: string, projectId: string) => void;
   onPlaceProjectPin: (latitude: number, longitude: number) => void;
@@ -34,7 +37,11 @@ type GeoJsonEditLayer = Layer & {
 };
 
 function propertyToPolygonPositions(property: PropertyBoundary): LatLngTuple[][] {
-  return (property.boundaryGeojson?.coordinates ?? []).map((ring) =>
+  return geoJsonToPolygonPositions(property.boundaryGeojson);
+}
+
+function geoJsonToPolygonPositions(geojson: PropertyBoundaryGeoJson | null | undefined): LatLngTuple[][] {
+  return (geojson?.coordinates ?? []).map((ring) =>
     ring
       .filter((point) => point.length >= 2 && Number.isFinite(point[0]) && Number.isFinite(point[1]))
       .map(([longitude, latitude]) => [latitude, longitude] as LatLngTuple),
@@ -65,6 +72,11 @@ type ProjectPin = PropertyProject & {
   markerColor: string;
 };
 
+type ProjectArea = PropertyProject & {
+  propertyName: string;
+  areaColor: string;
+};
+
 function ProjectPinClickHandler({
   active,
   disabled,
@@ -89,9 +101,12 @@ export function PropertyMap({
   currentPropertyId,
   editMode,
   canEditBoundary,
+  selectedProjectId,
   pinPlacementProject,
   pinPlacementDisabled,
+  areaEditProjectId,
   onBoundaryChange,
+  onAreaChange,
   onSelectProperty,
   onSelectProject,
   onPlaceProjectPin,
@@ -114,12 +129,26 @@ export function PropertyMap({
       ),
     [visibleProperties],
   );
+  const projectAreas = useMemo(
+    () =>
+      visibleProperties.flatMap((property) =>
+        property.projects
+          .filter((project) => project.areaGeojson)
+          .map((project) => ({
+            ...project,
+            propertyName: property.name,
+            areaColor: project.color ?? property.color,
+          })),
+      ),
+    [visibleProperties],
+  );
   const selectedProperty = currentPropertyId === 'all'
     ? null
     : properties.find((property) => property.id === currentPropertyId) ?? null;
   const initialCenter = getInitialCenter(properties);
   const isPlacingProjectPin = Boolean(pinPlacementProject);
-  const canEditSelectedBoundary = editMode && !isPlacingProjectPin && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
+  const isAreaEditActive = Boolean(areaEditProjectId) && !editMode && !isPlacingProjectPin;
+  const canEditSelectedBoundary = editMode && !isPlacingProjectPin && !areaEditProjectId && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
 
   const polygonOptionsById = useMemo(() => {
     const options = new Map<string, GeomanPathOptions>();
@@ -159,6 +188,7 @@ export function PropertyMap({
           onPlaceProjectPin={onPlaceProjectPin}
         />
         {canEditSelectedBoundary ? <GeomanControl onBoundaryChange={onBoundaryChange} /> : null}
+        {isAreaEditActive ? <GeomanControl onBoundaryChange={onAreaChange} /> : null}
         {mappedProperties.map((property) => (
           <Polygon
             key={`${property.id}-${currentPropertyId}-${canEditSelectedBoundary ? 'edit' : 'view'}`}
@@ -166,7 +196,7 @@ export function PropertyMap({
             pathOptions={polygonOptionsById.get(property.id)}
             eventHandlers={{
               click: () => {
-                if (!isPlacingProjectPin) onSelectProperty(property.id);
+                if (!isPlacingProjectPin && !isAreaEditActive) onSelectProperty(property.id);
               },
               // Geoman fires edit events on the LAYER, not the map, so these must be
               // bound per-polygon. Binding them on the map (as GeomanControl does for
@@ -189,6 +219,47 @@ export function PropertyMap({
             </Tooltip>
           </Polygon>
         ))}
+        {projectAreas.map((project: ProjectArea) => {
+          const isSelected = selectedProjectId === project.id;
+          const isEditingThisArea = isAreaEditActive && areaEditProjectId === project.id;
+          return (
+            <Polygon
+              key={`${project.id}-area-${isEditingThisArea ? 'edit' : 'view'}-${isSelected ? 'selected' : 'normal'}`}
+              positions={geoJsonToPolygonPositions(project.areaGeojson)}
+              pathOptions={{
+                color: isSelected ? 'oklch(var(--text-inverse))' : project.areaColor,
+                fillColor: project.areaColor,
+                fillOpacity: isSelected ? 0.52 : 0.2,
+                opacity: isSelected ? 1 : 0.85,
+                pmIgnore: isAreaEditActive ? !isEditingThisArea : true,
+                weight: isSelected ? 4 : 2,
+              }}
+              eventHandlers={{
+                click: (event) => {
+                  event.originalEvent.stopPropagation();
+                  if (!isPlacingProjectPin && !isAreaEditActive) onSelectProject(project.propertyId, project.id);
+                },
+                'pm:update': (event) => {
+                  if (!isEditingThisArea) return;
+                  const geometry = layerToBoundaryGeoJson(event.layer as GeoJsonEditLayer);
+                  if (geometry) onAreaChange(geometry);
+                },
+                'pm:dragend': (event) => {
+                  if (!isEditingThisArea) return;
+                  const geometry = layerToBoundaryGeoJson(event.layer as GeoJsonEditLayer);
+                  if (geometry) onAreaChange(geometry);
+                },
+              }}
+            >
+              <Tooltip sticky>
+                <div className="space-y-1">
+                  <div className="font-semibold">{project.name}</div>
+                  <div>{project.propertyName}</div>
+                </div>
+              </Tooltip>
+            </Polygon>
+          );
+        })}
         {projectPins.map((project: ProjectPin) => {
           const coordinates = project.locationGeojson?.coordinates;
           if (!coordinates) return null;
@@ -208,7 +279,7 @@ export function PropertyMap({
               eventHandlers={{
                 click: (event) => {
                   event.originalEvent.stopPropagation();
-                  if (!isPlacingProjectPin) onSelectProject(project.propertyId, project.id);
+                  if (!isPlacingProjectPin && !isAreaEditActive) onSelectProject(project.propertyId, project.id);
                 },
               }}
             >

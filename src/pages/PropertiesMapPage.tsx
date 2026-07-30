@@ -14,6 +14,7 @@ import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
   usePropertyBoundaries,
   useSavePropertyBoundary,
+  useSetProjectArea,
   useSetProjectLocation,
   type PropertyBoundaryGeoJson,
   type PropertyProject,
@@ -40,12 +41,16 @@ export default function PropertiesMapPage() {
   const boundariesQuery = usePropertyBoundaries(orgId ?? undefined);
   const saveBoundaryMutation = useSavePropertyBoundary(orgId ?? undefined);
   const setProjectLocationMutation = useSetProjectLocation(orgId ?? undefined);
+  const setProjectAreaMutation = useSetProjectArea(orgId ?? undefined);
   const pinSaveInFlightRef = useRef(false);
   const [editMode, setEditMode] = useState(false);
   const [pendingBoundaryGeojson, setPendingBoundaryGeojson] = useState<PropertyBoundaryGeoJson | null | undefined>(undefined);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [pinPlacementProject, setPinPlacementProject] = useState<{ propertyId: string; projectId: string; projectName: string } | null>(null);
   const [pinSavingProjectId, setPinSavingProjectId] = useState<string | null>(null);
+  const [areaEditProject, setAreaEditProject] = useState<{ propertyId: string; projectId: string; projectName: string } | null>(null);
+  const [pendingAreaGeojson, setPendingAreaGeojson] = useState<PropertyBoundaryGeoJson | null | undefined>(undefined);
+  const [areaSavingProjectId, setAreaSavingProjectId] = useState<string | null>(null);
   const properties = boundariesQuery.data ?? [];
   const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
     currentUser,
@@ -58,11 +63,14 @@ export default function PropertiesMapPage() {
   const canViewMap = currentRole === 'admin' || currentRole === 'manager';
   const hasConcretePropertySelected = selectedPropertyId !== 'all' && Boolean(selectedProperty);
   const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
+  const hasPendingAreaChange = pendingAreaGeojson !== undefined;
 
   useEffect(() => {
     setEditMode(false);
     setPendingBoundaryGeojson(undefined);
     setPinPlacementProject(null);
+    setAreaEditProject(null);
+    setPendingAreaGeojson(undefined);
   }, [selectedPropertyId]);
 
   const handleSaveBoundary = async () => {
@@ -87,6 +95,9 @@ export default function PropertiesMapPage() {
       return;
     }
     setEditMode(false);
+    setPendingBoundaryGeojson(undefined);
+    setAreaEditProject(null);
+    setPendingAreaGeojson(undefined);
     setSelectedProjectId(project.id);
     setSelectedPropertyId(project.propertyId);
     setPinPlacementProject({ propertyId: project.propertyId, projectId: project.id, projectName: project.name });
@@ -95,6 +106,8 @@ export default function PropertiesMapPage() {
   const handleSelectProject = (propertyId: string, projectId: string) => {
     setEditMode(false);
     setPinPlacementProject(null);
+    setAreaEditProject(null);
+    setPendingAreaGeojson(undefined);
     setSelectedProjectId(projectId);
     if (propertyId && propertyId !== selectedPropertyId) setSelectedPropertyId(propertyId);
   };
@@ -102,6 +115,72 @@ export default function PropertiesMapPage() {
   const handleCancelPinPlacement = () => {
     if (pinSaveInFlightRef.current) return;
     setPinPlacementProject(null);
+  };
+
+  const handleStartEditArea = (project: PropertyProject) => {
+    if (!canViewMap || areaSavingProjectId) return;
+    if (!project.propertyId || project.propertyId === 'all') {
+      toast.error('Select a property before editing an area.');
+      return;
+    }
+    setEditMode(false);
+    setPendingBoundaryGeojson(undefined);
+    setPinPlacementProject(null);
+    setSelectedProjectId(project.id);
+    setSelectedPropertyId(project.propertyId);
+    setAreaEditProject({ propertyId: project.propertyId, projectId: project.id, projectName: project.name });
+    setPendingAreaGeojson(undefined);
+  };
+
+  const handleCancelEditArea = () => {
+    if (areaSavingProjectId) return;
+    setAreaEditProject(null);
+    setPendingAreaGeojson(undefined);
+  };
+
+  const handleSaveArea = async () => {
+    if (!orgId || !areaEditProject || !hasPendingAreaChange) return;
+    setAreaSavingProjectId(areaEditProject.projectId);
+    try {
+      await setProjectAreaMutation.mutateAsync({
+        propertyId: areaEditProject.propertyId,
+        projectId: areaEditProject.projectId,
+        areaGeojson: pendingAreaGeojson ?? null,
+      });
+      setSelectedProjectId(areaEditProject.projectId);
+      setPendingAreaGeojson(undefined);
+      setAreaEditProject(null);
+      toast.success('Project area saved.');
+    } catch (error) {
+      console.error('Project area save failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Project area could not be saved.');
+    } finally {
+      setAreaSavingProjectId(null);
+    }
+  };
+
+  const handleClearArea = async (project: PropertyProject) => {
+    if (!canViewMap || !orgId || areaSavingProjectId) return;
+    const confirmed = window.confirm(`Clear the mapped area for "${project.name}"?`);
+    if (!confirmed) return;
+    setAreaSavingProjectId(project.id);
+    try {
+      await setProjectAreaMutation.mutateAsync({
+        propertyId: project.propertyId,
+        projectId: project.id,
+        areaGeojson: null,
+      });
+      if (areaEditProject?.projectId === project.id) {
+        setAreaEditProject(null);
+        setPendingAreaGeojson(undefined);
+      }
+      toast.success('Project area cleared.');
+    } catch (error) {
+      console.error('Project area clear failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Project area could not be cleared.');
+    } finally {
+      setAreaSavingProjectId(null);
+    }
   };
 
   const handlePlaceProjectPin = async (latitude: number, longitude: number) => {
@@ -176,6 +255,11 @@ export default function PropertiesMapPage() {
               Unsaved boundary changes are ready to save.
             </div>
           ) : null}
+          {areaEditProject ? (
+            <div className="mt-2 text-xs font-medium text-brand-bright">
+              Editing area for {areaEditProject.projectName}{hasPendingAreaChange ? ' - unsaved changes are ready to save.' : '.'}
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
           <PropertySelector
@@ -191,9 +275,11 @@ export default function PropertiesMapPage() {
             className="h-10 rounded-xl"
             onClick={() => {
               setPinPlacementProject(null);
+              setAreaEditProject(null);
+              setPendingAreaGeojson(undefined);
               setEditMode((current) => !current);
             }}
-            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinSavingProjectId)}
+            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinSavingProjectId) || Boolean(areaSavingProjectId)}
           >
             <Edit3 className="mr-2 h-4 w-4" />
             {editMode ? 'Editing' : 'Edit boundary'}
@@ -202,17 +288,39 @@ export default function PropertiesMapPage() {
             type="button"
             className="h-10 rounded-xl"
             onClick={() => void handleSaveBoundary()}
-            disabled={!hasPendingBoundaryChange || !hasConcretePropertySelected || saveBoundaryMutation.isPending}
+            disabled={!hasPendingBoundaryChange || !hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinPlacementProject) || Boolean(areaEditProject)}
           >
             <Save className="mr-2 h-4 w-4" />
             {saveBoundaryMutation.isPending ? 'Saving...' : 'Save boundary'}
           </Button>
+          {areaEditProject ? (
+            <>
+              <Button
+                type="button"
+                className="h-10 rounded-xl"
+                onClick={() => void handleSaveArea()}
+                disabled={!hasPendingAreaChange || Boolean(areaSavingProjectId)}
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {areaSavingProjectId === areaEditProject.projectId ? 'Saving...' : 'Save area'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl"
+                onClick={handleCancelEditArea}
+                disabled={Boolean(areaSavingProjectId)}
+              >
+                Cancel area
+              </Button>
+            </>
+          ) : null}
           <Button
             type="button"
             variant="outline"
             className="h-10 rounded-xl border-surface-border bg-surface-card/80"
             onClick={() => void boundariesQuery.refetch()}
-            disabled={boundariesQuery.isFetching || saveBoundaryMutation.isPending}
+            disabled={boundariesQuery.isFetching || saveBoundaryMutation.isPending || Boolean(areaSavingProjectId)}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${boundariesQuery.isFetching ? 'animate-spin' : ''}`} />
             Retry
@@ -243,9 +351,12 @@ export default function PropertiesMapPage() {
           currentPropertyId={selectedPropertyId || 'all'}
           editMode={editMode}
           canEditBoundary={canViewMap}
+          selectedProjectId={selectedProjectId}
           pinPlacementProject={pinPlacementProject}
           pinPlacementDisabled={Boolean(pinSavingProjectId)}
+          areaEditProjectId={areaEditProject?.projectId ?? null}
           onBoundaryChange={setPendingBoundaryGeojson}
+          onAreaChange={setPendingAreaGeojson}
           onSelectProperty={setSelectedPropertyId}
           onSelectProject={handleSelectProject}
           onPlaceProjectPin={handlePlaceProjectPin}
@@ -261,11 +372,18 @@ export default function PropertiesMapPage() {
           selectedProjectId={selectedProjectId}
           pinPlacementProjectId={pinPlacementProject?.projectId ?? null}
           pinPlacementSaving={Boolean(pinSavingProjectId)}
+          areaEditProjectId={areaEditProject?.projectId ?? null}
+          areaSaving={Boolean(areaSavingProjectId)}
           onStartPlacePin={handleStartPlacePin}
           onCancelPlacePin={handleCancelPinPlacement}
+          onStartEditArea={handleStartEditArea}
+          onCancelEditArea={handleCancelEditArea}
+          onClearArea={(project) => void handleClearArea(project)}
           onClose={() => {
             setSelectedProjectId(null);
             setPinPlacementProject(null);
+            setAreaEditProject(null);
+            setPendingAreaGeojson(undefined);
             setSelectedPropertyId('all');
           }}
         />
