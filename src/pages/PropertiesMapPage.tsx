@@ -65,6 +65,19 @@ export default function PropertiesMapPage() {
   const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
   const hasPendingAreaChange = pendingAreaGeojson !== undefined;
 
+  const handleSelectProperty = (propertyId: string) => {
+    if (propertyId !== selectedPropertyId) setSelectedProjectId(null);
+    setSelectedPropertyId(propertyId);
+  };
+
+  const handleSelectWorkspaceProject = (projectId: string | null) => {
+    setEditMode(false);
+    setPinPlacementProject(null);
+    setAreaEditProject(null);
+    setPendingAreaGeojson(undefined);
+    setSelectedProjectId(projectId);
+  };
+
   useEffect(() => {
     setEditMode(false);
     setPendingBoundaryGeojson(undefined);
@@ -230,7 +243,7 @@ export default function PropertiesMapPage() {
   }
 
   return (
-    <section className={`flex flex-1 flex-col gap-4 p-4 md:p-6 ${hasConcretePropertySelected ? 'xl:pr-[38rem]' : ''}`}>
+    <section className="flex flex-1 flex-col gap-5 p-4 md:p-6">
       <div className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-card p-4 shadow-sm md:flex-row md:flex-wrap md:items-end md:justify-between">
         <div className="min-w-[16rem] flex-1">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
@@ -267,7 +280,7 @@ export default function PropertiesMapPage() {
             allowAllProperties
             orgId={orgId}
             value={selectedPropertyId}
-            onChange={setSelectedPropertyId}
+            onChange={handleSelectProperty}
           />
           <Button
             type="button"
@@ -349,6 +362,7 @@ export default function PropertiesMapPage() {
         <PropertyMap
           properties={properties}
           currentPropertyId={selectedPropertyId || 'all'}
+          className={hasConcretePropertySelected ? 'h-[380px] min-h-[320px] max-h-[420px]' : undefined}
           editMode={editMode}
           canEditBoundary={canViewMap}
           selectedProjectId={selectedProjectId}
@@ -357,7 +371,7 @@ export default function PropertiesMapPage() {
           areaEditProjectId={areaEditProject?.projectId ?? null}
           onBoundaryChange={setPendingBoundaryGeojson}
           onAreaChange={setPendingAreaGeojson}
-          onSelectProperty={setSelectedPropertyId}
+          onSelectProperty={handleSelectProperty}
           onSelectProject={handleSelectProject}
           onPlaceProjectPin={handlePlaceProjectPin}
           onCancelPinPlacement={handleCancelPinPlacement}
@@ -379,6 +393,7 @@ export default function PropertiesMapPage() {
           onStartEditArea={handleStartEditArea}
           onCancelEditArea={handleCancelEditArea}
           onClearArea={(project) => void handleClearArea(project)}
+          onProjectSelect={handleSelectWorkspaceProject}
           onClose={() => {
             setSelectedProjectId(null);
             setPinPlacementProject(null);

@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { ProjectPhotoStrip } from '@/components/map/ProjectPhotoStrip';
 import { ProjectFormDialog } from '@/components/map/ProjectFormDialog';
+import { ProjectGantt } from '@/components/map/ProjectGantt';
 import { TimelineEventForm } from '@/components/map/TimelineEventForm';
 import {
   useDeleteProject,
@@ -35,6 +36,7 @@ type PropertyDetailPanelProps = {
   onStartEditArea: (project: PropertyProject) => void;
   onCancelEditArea: () => void;
   onClearArea: (project: PropertyProject) => void;
+  onProjectSelect?: (projectId: string | null) => void;
   onClose: () => void;
 };
 
@@ -192,6 +194,7 @@ export function PropertyDetailPanel({
   onStartEditArea,
   onCancelEditArea,
   onClearArea,
+  onProjectSelect,
   onClose,
 }: PropertyDetailPanelProps) {
   const projectsQuery = useProjects(property.id, orgId ?? undefined);
@@ -222,6 +225,11 @@ export function PropertyDetailPanel({
     }
   }, [projects, selectedProjectId]);
 
+  const handleSelectProject = (projectId: string | null) => {
+    setExpandedProjectId(projectId);
+    onProjectSelect?.(projectId);
+  };
+
   const openCreateProject = () => {
     setEditingProject(null);
     setProjectDialogOpen(true);
@@ -238,7 +246,7 @@ export function PropertyDetailPanel({
     if (!confirmed) return;
     try {
       await deleteProjectMutation.mutateAsync({ propertyId: property.id, projectId: project.id });
-      if (expandedProjectId === project.id) setExpandedProjectId(null);
+      if (expandedProjectId === project.id) handleSelectProject(null);
       toast.success('Project deleted.');
     } catch (error) {
       console.error('Project delete failed:', error);
@@ -247,8 +255,8 @@ export function PropertyDetailPanel({
   };
 
   return (
-    <aside className="flex w-full flex-col rounded-xl border border-surface-border bg-surface-elevated shadow-xl xl:fixed xl:bottom-0 xl:right-0 xl:top-[85px] xl:z-10 xl:h-[calc(100vh-85px)] xl:max-w-xl xl:rounded-none xl:border-0 xl:border-l">
-      <div className="border-b border-surface-border bg-surface-card p-4">
+    <div className="space-y-5">
+      <div className="rounded-xl border border-surface-border bg-surface-card p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Property projects</div>
@@ -271,9 +279,9 @@ export function PropertyDetailPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div>
         {projectsQuery.isLoading && !projectsQuery.data ? (
-          <div className="space-y-3">
+          <div className="grid gap-4 lg:grid-cols-[minmax(280px,360px)_1fr]">
             <Skeleton className="h-24 rounded-xl" />
             <Skeleton className="h-24 rounded-xl" />
           </div>
@@ -293,88 +301,120 @@ export function PropertyDetailPanel({
             <p className="mt-1 text-sm text-text-secondary">Create the first project for this property to start tracking milestones.</p>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {projects.map((project) => {
-              const isExpanded = expandedProject?.id === project.id;
-              const isPlacingThisPin = pinPlacementProjectId === project.id;
-              const hasProjectPin = Boolean(project.locationGeojson);
-              const isEditingThisArea = areaEditProjectId === project.id;
-              const hasProjectArea = Boolean(project.areaGeojson);
-              return (
-                <Card key={project.id} className={`border-surface-border bg-surface-card p-4 ${isExpanded ? 'ring-1 ring-brand-dim' : ''}`}>
-                  <button type="button" className="w-full text-left" onClick={() => setExpandedProjectId(isExpanded ? null : project.id)}>
-                    <div className="flex items-start justify-between gap-3">
+          <div className="space-y-5">
+            <ProjectGantt
+              projects={projects}
+              orgId={orgId}
+              selectedProjectId={expandedProject?.id ?? null}
+              onSelectProject={handleSelectProject}
+            />
+            <div className="grid gap-5 lg:grid-cols-[minmax(280px,380px)_1fr]">
+              <div className="space-y-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Project selector</div>
+                {projects.map((project) => {
+                  const isSelected = expandedProject?.id === project.id;
+                  const isPlacingThisPin = pinPlacementProjectId === project.id;
+                  const hasProjectPin = Boolean(project.locationGeojson);
+                  const isEditingThisArea = areaEditProjectId === project.id;
+                  const hasProjectArea = Boolean(project.areaGeojson);
+                  return (
+                    <Card key={project.id} className={`border-surface-border bg-surface-card p-4 ${isSelected ? 'ring-1 ring-brand-dim' : ''}`}>
+                      <button type="button" className="w-full text-left" onClick={() => handleSelectProject(project.id)}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: project.color ?? property.color }} />
+                              <h3 className="truncate font-bold text-text-primary">{project.name}</h3>
+                              <Badge variant="outline" className={statusClassName(project.status)}>{project.status}</Badge>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-text-muted">
+                              <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />{formatDate(project.startDate)}</span>
+                              <span>Target {formatDate(project.targetEndDate)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => openEditProject(project)} disabled={!canManage}>
+                          <Edit3 className="mr-2 h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        {canManage ? (
+                          <Button
+                            type="button"
+                            variant={isPlacingThisPin ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => (isPlacingThisPin ? onCancelPlacePin() : onStartPlacePin(project))}
+                            disabled={pinPlacementSaving || areaSaving}
+                          >
+                            <MapPin className="mr-2 h-3.5 w-3.5" />
+                            {isPlacingThisPin ? 'Cancel pin' : hasProjectPin ? 'Move pin' : 'Place pin'}
+                          </Button>
+                        ) : null}
+                        {canManage ? (
+                          <Button
+                            type="button"
+                            variant={isEditingThisArea ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => (isEditingThisArea ? onCancelEditArea() : onStartEditArea(project))}
+                            disabled={areaSaving || pinPlacementSaving}
+                          >
+                            <Shapes className="mr-2 h-3.5 w-3.5" />
+                            {isEditingThisArea ? 'Cancel area' : hasProjectArea ? 'Edit area' : 'Draw area'}
+                          </Button>
+                        ) : null}
+                        {canManage && hasProjectArea ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-status-warning"
+                            onClick={() => onClearArea(project)}
+                            disabled={areaSaving}
+                          >
+                            Clear
+                          </Button>
+                        ) : null}
+                        <Button type="button" variant="outline" size="sm" className="text-status-warning" onClick={() => void handleDeleteProject(project)} disabled={!canManage || deleteProjectMutation.isPending}>
+                          <Trash2 className="mr-2 h-3.5 w-3.5" />
+                          Delete
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+              <div>
+                {expandedProject ? (
+                  <Card className="border-surface-border bg-surface-card p-5">
+                    <div className="flex flex-col gap-2 border-b border-surface-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: project.color ?? property.color }} />
-                          <h3 className="truncate font-bold text-text-primary">{project.name}</h3>
-                          <Badge variant="outline" className={statusClassName(project.status)}>{project.status}</Badge>
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: expandedProject.color ?? property.color }} />
+                          <h3 className="truncate text-xl font-bold text-text-primary">{expandedProject.name}</h3>
+                          <Badge variant="outline" className={statusClassName(expandedProject.status)}>{expandedProject.status}</Badge>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-text-muted">
-                          <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />{formatDate(project.startDate)}</span>
-                          <span>Target {formatDate(project.targetEndDate)}</span>
+                        <div className="mt-2 flex flex-wrap gap-3 text-sm text-text-muted">
+                          <span className="inline-flex items-center gap-1"><CalendarDays className="h-4 w-4" />{formatDate(expandedProject.startDate)}</span>
+                          <span>Target {formatDate(expandedProject.targetEndDate)}</span>
                         </div>
                       </div>
                     </div>
-                  </button>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => openEditProject(project)} disabled={!canManage}>
-                      <Edit3 className="mr-2 h-3.5 w-3.5" />
-                      Edit
-                    </Button>
-                    {canManage ? (
-                      <Button
-                        type="button"
-                        variant={isPlacingThisPin ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => (isPlacingThisPin ? onCancelPlacePin() : onStartPlacePin(project))}
-                        disabled={pinPlacementSaving || areaSaving}
-                      >
-                        <MapPin className="mr-2 h-3.5 w-3.5" />
-                        {isPlacingThisPin ? 'Cancel pin' : hasProjectPin ? 'Move pin' : 'Place pin'}
-                      </Button>
-                    ) : null}
-                    {canManage ? (
-                      <Button
-                        type="button"
-                        variant={isEditingThisArea ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => (isEditingThisArea ? onCancelEditArea() : onStartEditArea(project))}
-                        disabled={areaSaving || pinPlacementSaving}
-                      >
-                        <Shapes className="mr-2 h-3.5 w-3.5" />
-                        {isEditingThisArea ? 'Cancel area' : hasProjectArea ? 'Edit area' : 'Draw area'}
-                      </Button>
-                    ) : null}
-                    {canManage && hasProjectArea ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-status-warning"
-                        onClick={() => onClearArea(project)}
-                        disabled={areaSaving}
-                      >
-                        Clear
-                      </Button>
-                    ) : null}
-                    <Button type="button" variant="outline" size="sm" className="text-status-warning" onClick={() => void handleDeleteProject(project)} disabled={!canManage || deleteProjectMutation.isPending}>
-                      <Trash2 className="mr-2 h-3.5 w-3.5" />
-                      Delete
-                    </Button>
-                  </div>
-                  {isExpanded ? (
                     <ProjectTimeline
-                      project={project}
+                      project={expandedProject}
                       propertyId={property.id}
                       orgId={orgId}
                       canManage={canManage}
                       createdBy={createdBy}
                     />
-                  ) : null}
-                </Card>
-              );
-            })}
+                  </Card>
+                ) : (
+                  <Card className="border-dashed border-surface-border bg-surface-card p-5 text-sm text-text-secondary">
+                    Select a project to review progress submissions and photos.
+                  </Card>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -386,6 +426,6 @@ export function PropertyDetailPanel({
         propertyId={property.id}
         project={editingProject}
       />
-    </aside>
+    </div>
   );
 }

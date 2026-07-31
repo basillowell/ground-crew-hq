@@ -49,8 +49,22 @@ export function getPropertyBounds(properties: PropertyBoundary[]): [LatLngTuple,
   return [[minLat, minLng], [maxLat, maxLng]];
 }
 
+function getFitSignature(properties: PropertyBoundary[], selectedPropertyId: string) {
+  const fitProperties = selectedPropertyId === 'all'
+    ? properties
+    : properties.filter((property) => property.id === selectedPropertyId);
+
+  return JSON.stringify(
+    fitProperties.map((property) => ({
+      id: property.id,
+      boundary: property.boundaryGeojson?.coordinates ?? null,
+    })),
+  );
+}
+
 export function FitBounds({ properties, selectedPropertyId }: FitBoundsProps) {
   const map = useMap();
+  const fitSignature = getFitSignature(properties, selectedPropertyId);
 
   useEffect(() => {
     const visibleProperties = selectedPropertyId === 'all'
@@ -59,7 +73,7 @@ export function FitBounds({ properties, selectedPropertyId }: FitBoundsProps) {
     const bounds = getPropertyBounds(visibleProperties);
     if (!bounds) return;
     map.fitBounds(bounds, { animate: false, maxZoom: 18, padding: [32, 32] });
-  }, [map, properties, selectedPropertyId]);
+  }, [map, selectedPropertyId, fitSignature]);
 
   return null;
 }

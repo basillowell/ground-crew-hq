@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
 import type { PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
+import { cn } from '@/lib/utils';
 
 type LatLngTuple = [number, number];
 
 type PropertyMapProps = {
   properties: PropertyBoundary[];
   currentPropertyId: string;
+  className?: string;
   editMode: boolean;
   canEditBoundary: boolean;
   selectedProjectId: string | null;
@@ -99,6 +101,7 @@ function ProjectPinClickHandler({
 export function PropertyMap({
   properties,
   currentPropertyId,
+  className,
   editMode,
   canEditBoundary,
   selectedProjectId,
@@ -167,7 +170,7 @@ export function PropertyMap({
   }, [canEditSelectedBoundary, currentPropertyId, mappedProperties]);
 
   return (
-    <div className="relative h-[min(68vh,720px)] min-h-[520px] overflow-hidden rounded-xl border border-surface-border bg-surface-card shadow-md">
+    <div className={cn('relative h-[min(68vh,720px)] min-h-[520px] overflow-hidden rounded-xl border border-surface-border bg-surface-card shadow-md', className)}>
       <MapContainer
         center={initialCenter}
         zoom={13}
