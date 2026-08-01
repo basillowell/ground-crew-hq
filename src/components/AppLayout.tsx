@@ -8,6 +8,7 @@ import {
   Clock,
   Home,
   LayoutDashboard,
+  ListTodo,
   Mail,
   Map as MapIcon,
   MapPin,
@@ -476,6 +477,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const mobilePrimaryTabs = [
     { label: 'Field View', route: '/app/field', icon: MapPin },
     { label: 'Workflow', route: '/app/workboard', icon: ClipboardList },
+    { label: 'Open Tasks', route: '/app/open-tasks', icon: ListTodo },
     { label: 'Team', route: '/app/employees', icon: Users },
   ];
   const employeeTabs = [
@@ -493,6 +495,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { label: 'Applications', route: '/app/applications', icon: ShieldCheck },
     { label: 'Safety', route: '/app/safety', icon: Shield },
     { label: 'Reports', route: '/app/reports', icon: BarChart3 },
+    { label: 'Open Tasks', route: '/app/open-tasks', icon: ListTodo },
     { label: 'Breakroom', route: '/app/breakroom', icon: LayoutDashboard },
     { label: 'Messaging', route: '/app/messaging', icon: Mail },
     { label: 'Settings', route: '/app/settings', icon: Settings },

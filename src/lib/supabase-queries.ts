@@ -1499,6 +1499,36 @@ async function fetchAssignmentsRange(startDate: string, endDate: string, propert
   return (data as DbAssignment[]).map(toAssignment);
 }
 
+export const CLOSED_ASSIGNMENT_STATUSES = ['done', 'completed', 'complete'] as const;
+
+async function fetchOpenAssignmentsBacklog(today: string, propertyId?: string, orgId?: string): Promise<Assignment[]> {
+  const client = ensureSupabase();
+  const scopedPropertyId = propertyId && propertyId !== 'all' ? propertyId : undefined;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    let query = client
+      .from('assignments')
+      .select(ASSIGNMENTS_SELECT_COLUMNS)
+      .lt('date', today)
+      .not('status', 'in', `("${CLOSED_ASSIGNMENT_STATUSES.join('\",\"')}")`)
+      .order('date', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (orgId) query = query.eq('org_id', orgId);
+    if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
+    const { data, error } = await query.abortSignal(controller.signal);
+    if (error) throw error;
+    return (data as DbAssignment[]).map(toAssignment);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Open tasks backlog request timed out after 15 seconds.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function fetchEmployeeEquipmentHistory(employeeId: string, orgId?: string): Promise<EmployeeEquipmentHistoryRow[]> {
   const client = ensureSupabase();
   const controller = new AbortController();
@@ -1863,6 +1893,18 @@ export function useAssignmentsRange(startDate: string, endDate: string, property
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
     retry: 3,
+    retryDelay: 1000,
+  });
+}
+
+export function useOpenAssignmentsBacklog(today: string, propertyId?: string, orgId?: string) {
+  return useQuery({
+    queryKey: ['open-assignments-backlog', today, propertyId ?? 'all', orgId ?? 'all-orgs'],
+    queryFn: () => fetchOpenAssignmentsBacklog(today, propertyId, orgId),
+    enabled: Boolean(today && orgId),
+    staleTime: 1000 * 60 * 2,
+    placeholderData: (prev) => prev,
+    retry: 2,
     retryDelay: 1000,
   });
 }

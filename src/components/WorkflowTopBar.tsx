@@ -49,6 +49,7 @@ const routeTitles: Record<string, RouteTitle> = {
   '/app/dashboard': { title: 'Command Center', subtitle: 'Cross-property operations at a glance' },
   '/app/dispatch': { title: 'Dispatch', subtitle: "Today's crew assignments" },
   '/app/workboard': { title: 'Workflow', subtitle: 'Assign tasks and manage daily operations.' },
+  '/app/open-tasks': { title: 'Open Tasks', subtitle: 'Review past assignments that still need closeout.' },
   '/app/scheduler': { title: 'Scheduler', subtitle: 'Manage employee shifts.' },
   '/app/employees': { title: 'Team', subtitle: 'Manage your crew roster.' },
   '/app/properties': { title: 'Properties', subtitle: 'Map boundaries and project context.' },

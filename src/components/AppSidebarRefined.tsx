@@ -7,6 +7,7 @@ import {
   FileText as FileTextIcon,
   HelpCircle,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   Map as MapIcon,
   Menu,
@@ -88,6 +89,7 @@ const primaryOperations: NavItemConfig[] = [
   { label: 'Dispatch', href: '/app/dispatch', icon: CalendarDays, moduleId: 'workflow' },
   { label: 'Scheduler', href: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
   { label: 'Workflow', href: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
+  { label: 'Open Tasks', href: '/app/open-tasks', icon: ListTodo, moduleId: 'workflow' },
 ];
 
 const management: NavItemConfig[] = [
