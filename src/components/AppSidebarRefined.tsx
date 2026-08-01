@@ -78,11 +78,8 @@ type NavSectionProps = {
 };
 
 const SIDEBAR_GROUPS_STORAGE_KEY = 'gchq-sidebar-groups-v1';
-const defaultGroupState: Record<NavGroupId, boolean> = {
-  primary: true,
-  management: false,
-  settings: false,
-};
+const defaultOpenGroup: NavGroupId = 'primary';
+const navGroupIds: NavGroupId[] = ['primary', 'management', 'settings'];
 
 const primaryOperations: NavItemConfig[] = [
   { label: 'Command Center', href: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
@@ -111,25 +108,30 @@ const complianceAndSettings: NavItemConfig[] = [
   { label: 'Help', href: 'mailto:support@groundcrewhq.com', icon: HelpCircle },
 ];
 
-function readStoredGroupState(): Record<NavGroupId, boolean> {
-  if (typeof window === 'undefined') return defaultGroupState;
+function isNavGroupId(value: unknown): value is NavGroupId {
+  return typeof value === 'string' && navGroupIds.includes(value as NavGroupId);
+}
+
+function readStoredOpenGroup(): NavGroupId {
+  if (typeof window === 'undefined') return defaultOpenGroup;
   try {
     const raw = window.localStorage.getItem(SIDEBAR_GROUPS_STORAGE_KEY);
-    if (!raw) return defaultGroupState;
-    const parsed = JSON.parse(raw) as Partial<Record<NavGroupId, unknown>>;
-    return {
-      primary: typeof parsed.primary === 'boolean' ? parsed.primary : defaultGroupState.primary,
-      management: typeof parsed.management === 'boolean' ? parsed.management : defaultGroupState.management,
-      settings: typeof parsed.settings === 'boolean' ? parsed.settings : defaultGroupState.settings,
-    };
+    if (!raw) return defaultOpenGroup;
+    const parsed = JSON.parse(raw) as unknown;
+    if (isNavGroupId(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object') {
+      const legacyState = parsed as Partial<Record<NavGroupId, unknown>>;
+      return navGroupIds.find((groupId) => legacyState[groupId] === true) ?? defaultOpenGroup;
+    }
+    return defaultOpenGroup;
   } catch {
-    return defaultGroupState;
+    return defaultOpenGroup;
   }
 }
 
-function persistGroupState(nextState: Record<NavGroupId, boolean>) {
+function persistOpenGroup(nextGroup: NavGroupId) {
   try {
-    window.localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(nextState));
+    window.localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(nextGroup));
   } catch {
     /* UI preference persistence is best-effort. */
   }
@@ -272,14 +274,14 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentPropertyClassId);
   const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];
   const navRole: NavRole = currentRole === 'admin' || currentRole === 'manager' ? 'admin' : 'employee';
-  const [openGroups, setOpenGroups] = useState<Record<NavGroupId, boolean>>(() => readStoredGroupState());
+  const [openGroup, setOpenGroup] = useState<NavGroupId>(() => readStoredOpenGroup());
 
   useEffect(() => {
-    persistGroupState(openGroups);
-  }, [openGroups]);
+    persistOpenGroup(openGroup);
+  }, [openGroup]);
 
   const toggleGroup = (groupId: NavGroupId) => {
-    setOpenGroups((current) => ({ ...current, [groupId]: !current[groupId] }));
+    setOpenGroup(groupId);
   };
 
   const withVisibility = (items: NavItemConfig[]) =>
@@ -377,7 +379,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
           icon={ClipboardList}
           items={primaryItems}
           collapsed={collapsed}
-          open={openGroups.primary}
+          open={openGroup === 'primary'}
           onToggle={toggleGroup}
           renderItems={renderItems}
           className="pb-2"
@@ -389,7 +391,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
           icon={UsersRound}
           items={managementItems}
           collapsed={collapsed}
-          open={openGroups.management}
+          open={openGroup === 'management'}
           onToggle={toggleGroup}
           renderItems={renderItems}
           className="border-t border-surface-border pt-3"
@@ -403,7 +405,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
           icon={Shield}
           items={footerItems}
           collapsed={collapsed}
-          open={openGroups.settings}
+          open={openGroup === 'settings'}
           onToggle={toggleGroup}
           renderItems={renderItems}
           className={collapsed ? '' : 'pt-1'}
