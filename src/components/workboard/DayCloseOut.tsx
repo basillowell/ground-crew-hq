@@ -182,13 +182,9 @@ export function DayCloseOutReviewRows({
     }, {});
   }, [tasks]);
   const orderedTaskCategories = useMemo(() => Object.keys(groupedTasks).sort((a, b) => a.localeCompare(b)), [groupedTasks]);
-  const templateClass = onDelete
-    ? showScheduledHours
-      ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_92px_56px]'
-      : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_92px_56px]'
-    : showScheduledHours
-      ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_92px]'
-      : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_92px]';
+  const templateClass = showScheduledHours
+    ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_116px]'
+    : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_116px]';
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border">
       <div className={`grid grid-cols-1 gap-3 bg-surface-elevated px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted ${templateClass}`}>
@@ -197,7 +193,6 @@ export function DayCloseOutReviewRows({
         <span>Start</span>
         <span>End</span>
         <span className="text-right">Hours</span>
-        {onDelete ? <span className="text-right">Actions</span> : null}
       </div>
       <div className="divide-y divide-surface-border">
         {rows.map((row, index) => {
@@ -271,17 +266,17 @@ export function DayCloseOutReviewRows({
                   className={disabled ? 'pointer-events-none opacity-70' : ''}
                 />
               </label>
-              <div className="text-left sm:text-right">
-                <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Hours</p>
-                <p className="font-mono text-sm font-semibold text-text-primary">{row.hours.toFixed(2)}</p>
-              </div>
-              {onDelete ? (
-                <div className="flex justify-start sm:justify-end">
+              <div className="flex items-center justify-between gap-2 sm:justify-end">
+                <div className="text-left sm:text-right">
+                  <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Hours</p>
+                  <p className="font-mono text-sm font-semibold text-text-primary">{row.hours.toFixed(2)}</p>
+                </div>
+                {onDelete ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-10 w-10 text-status-danger hover:bg-status-danger/10 hover:text-status-danger"
+                    className="h-10 w-10 shrink-0 text-status-danger hover:bg-status-danger/10 hover:text-status-danger"
                     onClick={() => onDelete(assignmentId)}
                     disabled={deleteDisabled || isDeleting}
                     aria-label={`Delete ${getTaskName(row.assignment, tasks)}`}
@@ -289,8 +284,8 @@ export function DayCloseOutReviewRows({
                   >
                     {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </Button>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
           );
         })}
