@@ -106,8 +106,14 @@
 | is_published        | boolean     | NO       | false      |
 | published_at        | timestamptz | YES      |            |
 | published_by        | uuid        | YES      |            |
+| approved_by         | uuid        | YES      |            |
+| approved_at         | timestamptz | YES      |            |
 | work_order_id       | uuid        | YES      |            |
 
+> approved_by: nullable FK -> employees.id. Supervisor who reviewed/approved
+> this assignment's logged times. NULL = not yet approved. approved_at is the
+> payroll audit timestamp for that approval.
+>
 > work_order_id (migration revenue_phase3_payments_and_job_link, 2026-07-24):
 > nullable FK -> work_orders.id (decision O-2). Links the labor unit (an
 > assignment's actual_hours) to the billed unit (a work order) so Job Costing can

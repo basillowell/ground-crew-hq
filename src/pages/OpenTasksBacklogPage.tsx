@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { AlertTriangle, CalendarClock, CheckCircle2, RefreshCw, UsersRound } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -75,6 +76,7 @@ function statusBadgeClass(status?: string | null) {
 }
 
 export default function OpenTasksBacklogPage() {
+  const router = useRouter();
   const { currentUser, orgId, userRole } = useOrgProfile();
   const role = String(userRole ?? currentUser?.role ?? '').toLowerCase();
   const canViewBacklog = role === 'admin' || role === 'manager';
@@ -155,6 +157,11 @@ export default function OpenTasksBacklogPage() {
 
   const isLoading = propertiesLoading || backlogQuery.isLoading || employeesQuery.isLoading || tasksQuery.isLoading;
   const error = backlogQuery.error || employeesQuery.error || tasksQuery.error;
+
+  const openDayReview = (employeeId: string, date: string) => {
+    if (!employeeId || employeeId === 'unknown-employee' || !date) return;
+    router.push(`/app/open-tasks/review?employeeId=${encodeURIComponent(employeeId)}&date=${encodeURIComponent(date)}`);
+  };
 
   if (!canViewBacklog) {
     return (
@@ -264,11 +271,16 @@ export default function OpenTasksBacklogPage() {
 
                 {propertyGroup.employees.map((employeeGroup) => (
                   <div key={employeeGroup.employeeId} className="border-b border-surface-border last:border-b-0">
-                    <div className="flex items-center gap-2 px-4 py-3">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      onClick={() => openDayReview(employeeGroup.employeeId, employeeGroup.assignments[0]?.date ?? '')}
+                      aria-label={`Review ${employeeGroup.employeeName}'s oldest open day`}
+                    >
                       <UsersRound className="h-4 w-4 text-text-muted" />
                       <h4 className="text-sm font-medium text-text-primary">{employeeGroup.employeeName}</h4>
                       <span className="text-xs text-text-muted">{employeeGroup.assignments.length} open</span>
-                    </div>
+                    </button>
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[860px] border-collapse text-sm">
                         <thead className="bg-surface-card/70 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
@@ -283,7 +295,20 @@ export default function OpenTasksBacklogPage() {
                         </thead>
                         <tbody>
                           {employeeGroup.assignments.map((assignment) => (
-                            <tr key={assignment.id} className="border-t border-surface-border">
+                            <tr
+                              key={assignment.id}
+                              role="button"
+                              tabIndex={0}
+                              className="cursor-pointer border-t border-surface-border transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                              onClick={() => openDayReview(employeeGroup.employeeId, assignment.date)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  openDayReview(employeeGroup.employeeId, assignment.date);
+                                }
+                              }}
+                              aria-label={`Review ${employeeGroup.employeeName} on ${formatDisplayDate(assignment.date)}`}
+                            >
                               <td className="px-4 py-3 text-text-secondary">{employeeGroup.employeeName}</td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-text-primary">{assignment.taskName}</div>

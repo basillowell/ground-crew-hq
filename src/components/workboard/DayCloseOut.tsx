@@ -39,7 +39,7 @@ type DayCloseOutProps = {
   ) => Promise<boolean>;
 };
 
-type ChainedAssignmentRow = {
+export type ChainedAssignmentRow = {
   assignment: Assignment;
   start: string;
   end: string;
@@ -141,6 +141,87 @@ export function getChainedAssignmentStartTime({
 function getTaskName(assignment: Assignment, tasks: Task[]) {
   if (assignment.title) return assignment.title;
   return tasks.find((task) => task.id === assignment.taskId)?.name ?? 'Task';
+}
+
+function getTaskCategory(assignment: Assignment, tasks: Task[]) {
+  return tasks.find((task) => task.id === assignment.taskId)?.category ?? 'General';
+}
+
+export function DayCloseOutReviewRows({
+  rows,
+  tasks,
+  disabled = false,
+  showScheduledHours = false,
+  onEndChange,
+}: {
+  rows: ChainedAssignmentRow[];
+  tasks: Task[];
+  disabled?: boolean;
+  showScheduledHours?: boolean;
+  onEndChange: (assignmentId: string, endTime: string) => void;
+}) {
+  const templateClass = showScheduledHours
+    ? 'sm:grid-cols-[minmax(0,1fr)_96px_96px_176px_92px]'
+    : 'sm:grid-cols-[minmax(0,1fr)_96px_176px_92px]';
+  return (
+    <div className="overflow-hidden rounded-xl border border-surface-border">
+      <div className={`grid grid-cols-1 gap-3 bg-surface-elevated px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted ${templateClass}`}>
+        <span>Task</span>
+        {showScheduledHours ? <span>Scheduled</span> : null}
+        <span>Start</span>
+        <span>End</span>
+        <span className="text-right">Hours</span>
+      </div>
+      <div className="divide-y divide-surface-border">
+        {rows.map((row, index) => {
+          const assignmentId = getAssignmentId(row.assignment, index);
+          const status = normalizeStatus(row.assignment.status);
+          return (
+            <div
+              key={assignmentId}
+              className={`grid grid-cols-1 gap-3 px-3 py-3 sm:items-center ${templateClass}`}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-text-primary">{getTaskName(row.assignment, tasks)}</p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <Badge variant="secondary" className="text-[10px] capitalize">
+                    {status}
+                  </Badge>
+                  {showScheduledHours ? (
+                    <Badge variant="outline" className="text-[10px]">
+                      {getTaskCategory(row.assignment, tasks)}
+                    </Badge>
+                  ) : null}
+                </div>
+              </div>
+              {showScheduledHours ? (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Scheduled</p>
+                  <p className="font-mono text-sm text-text-primary">{Number(row.assignment.estimatedHours ?? 0).toFixed(1)}h</p>
+                </div>
+              ) : null}
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Start</p>
+                <p className="font-mono text-sm text-text-primary">{row.start}</p>
+              </div>
+              <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+                <span className="sm:hidden">End</span>
+                <TimeSelect
+                  value={row.end}
+                  onChange={(value) => onEndChange(assignmentId, value)}
+                  className={disabled ? 'pointer-events-none opacity-70' : ''}
+                />
+              </label>
+              <div className="text-left sm:text-right">
+                <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Hours</p>
+                <p className="font-mono text-sm font-semibold text-text-primary">{row.hours.toFixed(2)}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function DayCloseOut({

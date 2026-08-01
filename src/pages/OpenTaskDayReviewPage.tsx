@@ -1,0 +1,598 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, CheckCircle2, Clock, Loader2, Save, ShieldCheck } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { toast } from '@/components/ui/sonner';
+import { EmptyState } from '@/components/EmptyState';
+import { ErrorRetry } from '@/components/ErrorRetry';
+import { PageSkeleton } from '@/components/PageSkeleton';
+import { TableSkeleton } from '@/components/TableSkeleton';
+import {
+  DayCloseOutReviewRows,
+  getChainedAssignmentRows,
+  getChainedAssignmentStartTime,
+} from '@/components/workboard/DayCloseOut';
+import type { Assignment, Employee, Task } from '@/data/seedData';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { useProperties } from '@/lib/supabase-queries';
+import { createClient } from '@/lib/supabase';
+import { getOperationalTimezone, wallClockToStoredIso } from '@/lib/timeWorkflow';
+
+const supabase = createClient();
+const REVIEW_TIMEOUT_MS = 15000;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+type AssignmentReviewRow = {
+  id: string;
+  employee_id: string;
+  property_id: string | null;
+  task_id: string | null;
+  date: string;
+  location: string | null;
+  status: string | null;
+  order_index: number | null;
+  estimated_hours: number | null;
+  actual_hours: number | null;
+  actual_start_at: string | null;
+  actual_completed_at: string | null;
+  completed_at: string | null;
+  start_time: string | null;
+  title: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+};
+
+type ScheduleReviewRow = {
+  id: string;
+  employee_id: string;
+  property_id: string;
+  date: string;
+  shift_start: string;
+  shift_end: string;
+  status: string | null;
+};
+
+type EmployeeReviewRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  property_id: string | null;
+};
+
+type TaskReviewRow = {
+  id: string;
+  name: string | null;
+  category: string | null;
+};
+
+type ReviewData = {
+  assignments: Array<Assignment & { approvedBy?: string | null; approvedAt?: string | null }>;
+  schedules: ScheduleReviewRow[];
+  employees: Employee[];
+  tasks: Task[];
+};
+
+type SupabaseResult<T> = {
+  data: T | null;
+  error: { message: string } | null;
+};
+
+function withReviewTimeout<T>(promise: PromiseLike<T>, label: string, timeoutMs = REVIEW_TIMEOUT_MS): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out. Try again.`)), timeoutMs);
+  });
+  return Promise.race([Promise.resolve(promise), timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+function isUuid(value: string | null) {
+  return Boolean(value && value !== 'all' && UUID_PATTERN.test(value));
+}
+
+function isDateKey(value: string | null) {
+  return Boolean(value && DATE_PATTERN.test(value));
+}
+
+function formatDisplayDate(dateKey: string) {
+  const value = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(value.getTime())) return dateKey;
+  return value.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatTime(value?: string | null) {
+  const hhmm = String(value ?? '').slice(0, 5);
+  if (!hhmm.includes(':')) return 'Not scheduled';
+  const [hoursRaw, minutesRaw] = hhmm.split(':');
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 'Not scheduled';
+  const suffix = hours >= 12 ? 'PM' : 'AM';
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hour12}:${String(minutes).padStart(2, '0')} ${suffix}`;
+}
+
+function formatEmployeeName(employee?: Employee | null) {
+  if (!employee) return 'Unknown Employee';
+  return `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim() || 'Unnamed Employee';
+}
+
+function formatApprovedAt(value?: string | null) {
+  if (!value) return 'unknown time';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function timeToMinutes(value?: string | null) {
+  const hhmm = String(value ?? '').slice(0, 5);
+  const [hours, minutes] = hhmm.split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
+  return hours * 60 + minutes;
+}
+
+function toEmployee(row: EmployeeReviewRow): Employee {
+  return {
+    id: row.id,
+    firstName: row.first_name ?? '',
+    lastName: row.last_name ?? '',
+    propertyId: row.property_id ?? undefined,
+    group: 'General',
+    role: 'Crew',
+    wage: 0,
+    phone: '',
+    email: '',
+    photo: '',
+    status: 'active',
+    department: 'Operations',
+    language: 'English',
+    workerType: 'full-time',
+    hireDate: '',
+  };
+}
+
+function toTask(row: TaskReviewRow): Task {
+  return {
+    id: row.id,
+    name: row.name ?? 'Task',
+    category: row.category ?? 'General',
+    duration: 0,
+    estimatedHours: 0,
+    color: 'oklch(var(--primary))',
+    icon: 'list-checks',
+    status: 'active',
+    priority: 0,
+  };
+}
+
+function toAssignment(row: AssignmentReviewRow): Assignment & { approvedBy?: string | null; approvedAt?: string | null } {
+  const estimatedHours = Number(row.estimated_hours ?? 0);
+  const safeEstimatedHours = Number.isFinite(estimatedHours) ? Math.max(estimatedHours, 0) : 0;
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    propertyId: row.property_id ?? undefined,
+    taskId: row.task_id ?? '',
+    date: row.date,
+    location: row.location ?? undefined,
+    startTime: String(row.start_time ?? '06:00').slice(0, 5),
+    duration: Math.round(safeEstimatedHours * 60),
+    estimatedHours: safeEstimatedHours,
+    actualHours: Number(row.actual_hours ?? 0),
+    actual_hours: Number(row.actual_hours ?? 0),
+    title: row.title ?? undefined,
+    area: row.location ?? 'Unassigned area',
+    order: row.order_index ?? undefined,
+    actualStartAt: row.actual_start_at,
+    actualCompletedAt: row.actual_completed_at,
+    completedAt: row.completed_at,
+    actual_start_at: row.actual_start_at,
+    actual_completed_at: row.actual_completed_at,
+    completed_at: row.completed_at,
+    status: (String(row.status ?? 'planned').replace('_', '-') as Assignment['status']) ?? 'planned',
+    approvedBy: row.approved_by,
+    approvedAt: row.approved_at,
+  };
+}
+
+async function fetchReviewData(orgId: string, employeeId: string, date: string): Promise<ReviewData> {
+  const assignmentsPromise = withReviewTimeout(
+    supabase
+      .from('assignments')
+      .select('id, employee_id, property_id, task_id, date, location, status, order_index, estimated_hours, actual_hours, actual_start_at, actual_completed_at, completed_at, start_time, title, approved_by, approved_at')
+      .eq('org_id', orgId)
+      .eq('employee_id', employeeId)
+      .eq('date', date)
+      .order('order_index', { ascending: true })
+      .order('created_at', { ascending: true }),
+    'Assignments review fetch',
+  );
+  const schedulesPromise = withReviewTimeout(
+    supabase
+      .from('schedule_entries')
+      .select('id, employee_id, property_id, date, shift_start, shift_end, status')
+      .eq('org_id', orgId)
+      .eq('employee_id', employeeId)
+      .eq('date', date)
+      .order('shift_start', { ascending: true }),
+    'Schedule review fetch',
+  );
+  const employeesPromise = withReviewTimeout(
+    supabase
+      .from('employees')
+      .select('id, first_name, last_name, property_id')
+      .eq('org_id', orgId),
+    'Employee review fetch',
+  );
+  const tasksPromise = withReviewTimeout(
+    supabase
+      .from('tasks')
+      .select('id, name, category')
+      .eq('org_id', orgId),
+    'Task review fetch',
+  );
+
+  const [assignmentsResult, schedulesResult, employeesResult, tasksResult] = await Promise.all([
+    assignmentsPromise,
+    schedulesPromise,
+    employeesPromise,
+    tasksPromise,
+  ]) as [
+    SupabaseResult<AssignmentReviewRow[]>,
+    SupabaseResult<ScheduleReviewRow[]>,
+    SupabaseResult<EmployeeReviewRow[]>,
+    SupabaseResult<TaskReviewRow[]>,
+  ];
+
+  if (assignmentsResult.error) throw assignmentsResult.error;
+  if (schedulesResult.error) throw schedulesResult.error;
+  if (employeesResult.error) throw employeesResult.error;
+  if (tasksResult.error) throw tasksResult.error;
+
+  return {
+    assignments: ((assignmentsResult.data ?? []) as AssignmentReviewRow[]).map(toAssignment),
+    schedules: (schedulesResult.data ?? []) as ScheduleReviewRow[],
+    employees: ((employeesResult.data ?? []) as EmployeeReviewRow[]).map(toEmployee),
+    tasks: ((tasksResult.data ?? []) as TaskReviewRow[]).map(toTask),
+  };
+}
+
+async function saveReviewedTimes({
+  orgId,
+  employeeId,
+  date,
+  rows,
+  timezone,
+}: {
+  orgId: string;
+  employeeId: string;
+  date: string;
+  rows: ReturnType<typeof getChainedAssignmentRows>;
+  timezone: string;
+}) {
+  for (const row of rows) {
+    if (!row.assignment.id) continue;
+    const startIso = row.start ? wallClockToStoredIso(date, row.start, timezone) : null;
+    const endIso = row.end ? wallClockToStoredIso(date, row.end, timezone) : null;
+    const payload: Record<string, unknown> = {
+      actual_start_at: startIso,
+      actual_completed_at: endIso,
+      actual_hours: Number(row.hours.toFixed(2)),
+    };
+    if (endIso) payload.status = 'completed';
+    const updateResult = await withReviewTimeout(
+      supabase
+        .from('assignments')
+        .update(payload)
+        .eq('id', row.assignment.id)
+        .eq('org_id', orgId)
+        .eq('employee_id', employeeId)
+        .eq('date', date),
+      'Reviewed time save',
+    ) as SupabaseResult<null>;
+    if (updateResult.error) throw updateResult.error;
+  }
+}
+
+async function approveReviewedDay({ orgId, employeeId, date, assignmentIds }: { orgId: string; employeeId: string; date: string; assignmentIds: string[] }) {
+  const reviewerResult = await withReviewTimeout(supabase.rpc('current_employee_id'), 'Reviewer lookup') as SupabaseResult<string>;
+  if (reviewerResult.error) throw reviewerResult.error;
+  const reviewerEmployeeId = reviewerResult.data ? String(reviewerResult.data) : '';
+  if (!isUuid(reviewerEmployeeId)) throw new Error('Could not identify the approving employee. Try again after reconnecting.');
+
+  const approvalResult = await withReviewTimeout(
+    supabase
+      .from('assignments')
+      .update({ approved_by: reviewerEmployeeId, approved_at: new Date().toISOString() })
+      .in('id', assignmentIds)
+      .eq('org_id', orgId)
+      .eq('employee_id', employeeId)
+      .eq('date', date),
+    'Day approval save',
+  ) as SupabaseResult<null>;
+  if (approvalResult.error) throw approvalResult.error;
+}
+
+export default function OpenTaskDayReviewPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const employeeId = searchParams.get('employeeId');
+  const date = searchParams.get('date');
+  const { currentUser, orgId, userRole } = useOrgProfile();
+  const role = String(userRole ?? currentUser?.role ?? '').toLowerCase();
+  const canReview = role === 'admin' || role === 'manager';
+  const validEmployeeId = isUuid(employeeId) ? employeeId ?? '' : '';
+  const validDate = isDateKey(date) ? date ?? '' : '';
+  const queryOrgId = canReview && orgId ? orgId : '';
+  const queryClient = useQueryClient();
+  const propertiesQuery = useProperties(queryOrgId || undefined);
+  const [endOverrides, setEndOverrides] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setEndOverrides({});
+  }, [validEmployeeId, validDate]);
+
+  const reviewQuery = useQuery({
+    queryKey: ['open-tasks-day-review', queryOrgId, validEmployeeId, validDate],
+    queryFn: () => fetchReviewData(queryOrgId, validEmployeeId, validDate),
+    enabled: Boolean(queryOrgId && validEmployeeId && validDate),
+    staleTime: 1000 * 60,
+    retry: 2,
+    retryDelay: 1000,
+  });
+
+  const reviewData = reviewQuery.data;
+  const employee = reviewData?.employees.find((row) => row.id === validEmployeeId) ?? null;
+  const schedules = reviewData?.schedules ?? [];
+  const firstSchedule = schedules[0] ?? null;
+  const latestSchedule = schedules.reduce<ScheduleReviewRow | null>((latest, schedule) => {
+    if (!latest) return schedule;
+    return timeToMinutes(schedule.shift_end) > timeToMinutes(latest.shift_end) ? schedule : latest;
+  }, null);
+  const propertyById = useMemo(
+    () => new Map((propertiesQuery.data ?? []).map((property) => [property.id, property])),
+    [propertiesQuery.data],
+  );
+  const reviewProperty = firstSchedule?.property_id
+    ? propertyById.get(firstSchedule.property_id)
+    : reviewData?.assignments[0]?.propertyId
+      ? propertyById.get(reviewData.assignments[0].propertyId ?? '')
+      : null;
+  const operationalTimezone = getOperationalTimezone(reviewProperty);
+  const shiftStart = firstSchedule?.shift_start?.slice(0, 5) ?? reviewData?.assignments[0]?.startTime ?? '06:00';
+  const shiftEnd = latestSchedule?.shift_end?.slice(0, 5) ?? '17:00';
+
+  const rows = useMemo(
+    () => getChainedAssignmentRows({
+      assignments: reviewData?.assignments ?? [],
+      shiftStart,
+      nowTime: shiftEnd,
+      timezone: operationalTimezone,
+      endOverrides,
+    }),
+    [endOverrides, operationalTimezone, reviewData?.assignments, shiftEnd, shiftStart],
+  );
+  const firstDerivedStart = reviewData?.assignments[0]
+    ? getChainedAssignmentStartTime({
+        assignment: reviewData.assignments[0],
+        assignments: reviewData.assignments,
+        shiftStart,
+        nowTime: shiftEnd,
+        timezone: operationalTimezone,
+      })
+    : shiftStart;
+  const totalScheduled = rows.reduce((sum, row) => sum + Number(row.assignment.estimatedHours ?? 0), 0);
+  const totalActual = rows.reduce((sum, row) => sum + row.hours, 0);
+  const assignmentIds = rows.map((row) => row.assignment.id).filter((id): id is string => Boolean(id));
+  const approvedRows = (reviewData?.assignments ?? []).filter((assignment) => assignment.approvedBy || assignment.approvedAt);
+  const isApproved = approvedRows.length > 0;
+  const firstApproval = approvedRows[0] ?? null;
+  const approver = firstApproval?.approvedBy ? reviewData?.employees.find((row) => row.id === firstApproval.approvedBy) : null;
+  const hasUnsavedEdits = Object.keys(endOverrides).length > 0;
+  const saveMutation = useMutation({
+    mutationFn: () => saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone }),
+    onSuccess: async () => {
+      setEndOverrides({});
+      await Promise.all([
+        reviewQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'] }),
+      ]);
+      toast.success('Reviewed times saved.');
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Reviewed times could not be saved.');
+    },
+  });
+  const approveMutation = useMutation({
+    mutationFn: () => approveReviewedDay({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentIds }),
+    onSuccess: async () => {
+      await Promise.all([
+        reviewQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'] }),
+      ]);
+      toast.success('Day approved.');
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Day could not be approved.');
+    },
+  });
+
+  const handleEndChange = (assignmentId: string, endTime: string) => {
+    if (isApproved) return;
+    setEndOverrides((current) => ({ ...current, [assignmentId]: endTime }));
+  };
+
+  const handleApprove = () => {
+    if (isApproved || approveMutation.isPending || saveMutation.isPending) return;
+    if (hasUnsavedEdits) {
+      toast.info('Save reviewed times before approving the day.');
+      return;
+    }
+    if (assignmentIds.length === 0) {
+      toast.info('No assignments are available to approve.');
+      return;
+    }
+    const confirmed = window.confirm(`Approve ${assignmentIds.length} assignment${assignmentIds.length === 1 ? '' : 's'} for ${formatEmployeeName(employee)} on ${formatDisplayDate(validDate)}?`);
+    if (!confirmed) return;
+    approveMutation.mutate();
+  };
+
+  if (!canReview) {
+    return (
+      <div className="main-content space-y-6 p-4 md:p-6">
+        <Card className="border-surface-border bg-surface-card p-8 text-center shadow-sm">
+          <ShieldCheck className="mx-auto h-8 w-8 text-status-pending" />
+          <h2 className="mt-3 text-lg font-semibold text-text-primary">Supervisor access required</h2>
+          <p className="mt-1 text-sm text-text-muted">Day reviews are available to admins and managers.</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!validEmployeeId || !validDate) {
+    return (
+      <div className="main-content space-y-6 p-4 md:p-6">
+        <Button type="button" variant="ghost" className="gap-2" onClick={() => router.push('/app/open-tasks')}>
+          <ArrowLeft className="h-4 w-4" />
+          Back to Open Tasks
+        </Button>
+        <ErrorRetry message="Choose a valid employee and date from Open Tasks before reviewing a day." onRetry={() => router.push('/app/open-tasks')} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="main-content space-y-6 p-4 md:p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <Button type="button" variant="ghost" className="mb-3 gap-2 px-0" onClick={() => router.push('/app/open-tasks')}>
+            <ArrowLeft className="h-4 w-4" />
+            Back to Open Tasks
+          </Button>
+          <div className="flex items-center gap-2 text-sm font-medium text-status-pending">
+            <Clock className="h-4 w-4" />
+            Daily closeout review
+          </div>
+          <h1 className="mt-2 text-2xl font-semibold text-text-primary">
+            {formatEmployeeName(employee)} - {formatDisplayDate(validDate)}
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-text-muted">
+            Review logged task times against the scheduled shift before approval.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-10 gap-2"
+            onClick={() => saveMutation.mutate()}
+            disabled={isApproved || rows.length === 0 || saveMutation.isPending || reviewQuery.isLoading}
+          >
+            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save reviewed times
+          </Button>
+          <Button
+            type="button"
+            className="min-h-10 gap-2"
+            onClick={handleApprove}
+            disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending}
+          >
+            {approveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Approve day
+          </Button>
+        </div>
+      </div>
+
+      {reviewQuery.isLoading ? (
+        <PageSkeleton />
+      ) : reviewQuery.error ? (
+        <ErrorRetry
+          message={reviewQuery.error instanceof Error ? reviewQuery.error.message : 'Could not load the day review.'}
+          onRetry={() => void reviewQuery.refetch()}
+        />
+      ) : !reviewData ? (
+        <TableSkeleton />
+      ) : (
+        <>
+          <div className="grid gap-3 lg:grid-cols-4">
+            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Scheduled shift</p>
+              <p className="mt-2 text-lg font-semibold text-text-primary">{formatTime(firstSchedule?.shift_start)}-{formatTime(firstSchedule?.shift_end)}</p>
+              <p className="mt-1 text-xs text-text-muted">{schedules.length > 1 ? `${schedules.length} shift entries found` : reviewProperty?.name ?? 'Schedule entry'}</p>
+            </Card>
+            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Assignments</p>
+              <p className="mt-2 text-2xl font-semibold text-text-primary">{rows.length}</p>
+              <p className="mt-1 text-xs text-text-muted">Full day context</p>
+            </Card>
+            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Hours</p>
+              <p className="mt-2 text-2xl font-semibold text-text-primary">{totalActual.toFixed(2)}</p>
+              <p className="mt-1 text-xs text-text-muted">Scheduled {totalScheduled.toFixed(1)}h - first start {firstDerivedStart}</p>
+            </Card>
+            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Approval</p>
+              {isApproved ? (
+                <>
+                  <p className="mt-2 text-sm font-semibold text-status-success">Approved</p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    By {formatEmployeeName(approver)} at {formatApprovedAt(firstApproval?.approvedAt)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 text-sm font-semibold text-status-pending">Not approved</p>
+                  <p className="mt-1 text-xs text-text-muted">Save reviewed times, then approve.</p>
+                </>
+              )}
+            </Card>
+          </div>
+
+          {isApproved ? (
+            <div className="rounded-lg border border-status-success/30 bg-status-success/10 px-4 py-3 text-sm text-status-success">
+              This day is already approved and is shown read-only. Re-opening approved time is a separate supervisor action.
+            </div>
+          ) : hasUnsavedEdits ? (
+            <div className="rounded-lg border border-status-pending/30 bg-status-pending/10 px-4 py-3 text-sm text-status-pending">
+              You have unsaved time edits. Save reviewed times before approving this day.
+            </div>
+          ) : null}
+
+          {rows.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="No assignments for this day"
+              description="The selected employee has no assignments on this date."
+            />
+          ) : (
+            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-text-primary">Assignments reviewed</h2>
+                  <p className="mt-1 text-xs text-text-muted">Start time is chained from the shift and previous task end. Edit the end time to adjust actual hours.</p>
+                </div>
+                <Badge variant="outline" className="border-surface-border text-text-secondary">
+                  {shiftStart}-{shiftEnd} shift window
+                </Badge>
+              </div>
+              <DayCloseOutReviewRows
+                rows={rows}
+                tasks={reviewData.tasks}
+                disabled={isApproved || saveMutation.isPending || approveMutation.isPending}
+                showScheduledHours
+                onEndChange={handleEndChange}
+              />
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
