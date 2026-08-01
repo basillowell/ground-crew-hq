@@ -97,12 +97,14 @@ export function getChainedAssignmentRows({
   shiftStart,
   nowTime,
   timezone,
+  startOverrides = {},
   endOverrides = {},
 }: {
   assignments: Assignment[];
   shiftStart: string;
   nowTime: string;
   timezone: string;
+  startOverrides?: Record<string, string>;
   endOverrides?: Record<string, string>;
 }): ChainedAssignmentRow[] {
   let nextDefaultStart = shiftStart || nowTime;
@@ -110,7 +112,8 @@ export function getChainedAssignmentRows({
   return assignments.map((assignment, index) => {
     const assignmentId = getAssignmentId(assignment, index);
     const actualStart = getActualStartInput(assignment, timezone);
-    const start = actualStart || nextDefaultStart || shiftStart || nowTime;
+    const chainedStart = actualStart || nextDefaultStart || shiftStart || nowTime;
+    const start = startOverrides[assignmentId] ?? chainedStart;
     const actualEnd = getActualEndInput(assignment, timezone);
     const end = endOverrides[assignmentId] ?? (actualEnd || nowTime);
     const hours = calculateHours(start, end);
@@ -152,17 +155,30 @@ export function DayCloseOutReviewRows({
   tasks,
   disabled = false,
   showScheduledHours = false,
+  onTaskChange,
+  onStartChange,
   onEndChange,
 }: {
   rows: ChainedAssignmentRow[];
   tasks: Task[];
   disabled?: boolean;
   showScheduledHours?: boolean;
+  onTaskChange?: (assignmentId: string, taskId: string) => void;
+  onStartChange?: (assignmentId: string, startTime: string) => void;
   onEndChange: (assignmentId: string, endTime: string) => void;
 }) {
+  const groupedTasks = useMemo(() => {
+    return tasks.reduce<Record<string, Task[]>>((groups, task) => {
+      const category = task.category || 'General';
+      groups[category] = groups[category] ?? [];
+      groups[category].push(task);
+      return groups;
+    }, {});
+  }, [tasks]);
+  const orderedTaskCategories = useMemo(() => Object.keys(groupedTasks).sort((a, b) => a.localeCompare(b)), [groupedTasks]);
   const templateClass = showScheduledHours
-    ? 'sm:grid-cols-[minmax(0,1fr)_96px_96px_176px_92px]'
-    : 'sm:grid-cols-[minmax(0,1fr)_96px_176px_92px]';
+    ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_92px]'
+    : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_92px]';
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border">
       <div className={`grid grid-cols-1 gap-3 bg-surface-elevated px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted ${templateClass}`}>
@@ -182,7 +198,30 @@ export function DayCloseOutReviewRows({
               className={`grid grid-cols-1 gap-3 px-3 py-3 sm:items-center ${templateClass}`}
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-text-primary">{getTaskName(row.assignment, tasks)}</p>
+                {onTaskChange ? (
+                  <label className="block text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+                    <span className="sm:hidden">Task</span>
+                    <select
+                      value={row.assignment.taskId ?? ''}
+                      onChange={(event) => onTaskChange(assignmentId, event.target.value)}
+                      disabled={disabled}
+                      className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      <option value="">General assignment</option>
+                      {orderedTaskCategories.map((category) => (
+                        <optgroup key={category} label={category}>
+                          {groupedTasks[category].map((task) => (
+                            <option key={task.id} value={task.id}>
+                              {task.name} ({Number(task.estimatedHours ?? task.estimated_hours ?? 0)}h)
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <p className="truncate text-sm font-medium text-text-primary">{getTaskName(row.assignment, tasks)}</p>
+                )}
                 <div className="mt-1 flex flex-wrap gap-2">
                   <Badge variant="secondary" className="text-[10px] capitalize">
                     {status}
@@ -200,10 +239,18 @@ export function DayCloseOutReviewRows({
                   <p className="font-mono text-sm text-text-primary">{Number(row.assignment.estimatedHours ?? 0).toFixed(1)}h</p>
                 </div>
               ) : null}
-              <div>
-                <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Start</p>
-                <p className="font-mono text-sm text-text-primary">{row.start}</p>
-              </div>
+              <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+                <span className="sm:hidden">Start</span>
+                {onStartChange ? (
+                  <TimeSelect
+                    value={row.start}
+                    onChange={(value) => onStartChange(assignmentId, value)}
+                    className={disabled ? 'pointer-events-none opacity-70' : ''}
+                  />
+                ) : (
+                  <p className="font-mono text-sm text-text-primary">{row.start}</p>
+                )}
+              </label>
               <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
                 <span className="sm:hidden">End</span>
                 <TimeSelect

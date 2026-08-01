@@ -67,6 +67,7 @@ type TaskReviewRow = {
   id: string;
   name: string | null;
   category: string | null;
+  estimated_hours: number | null;
 };
 
 type ReviewData = {
@@ -161,8 +162,9 @@ function toTask(row: TaskReviewRow): Task {
     id: row.id,
     name: row.name ?? 'Task',
     category: row.category ?? 'General',
-    duration: 0,
-    estimatedHours: 0,
+    duration: Math.round(Number(row.estimated_hours ?? 0) * 60),
+    estimatedHours: Number(row.estimated_hours ?? 0),
+    estimated_hours: Number(row.estimated_hours ?? 0),
     color: 'oklch(var(--primary))',
     icon: 'list-checks',
     status: 'active',
@@ -232,8 +234,10 @@ async function fetchReviewData(orgId: string, employeeId: string, date: string):
   const tasksPromise = withReviewTimeout(
     supabase
       .from('tasks')
-      .select('id, name, category')
-      .eq('org_id', orgId),
+      .select('id, name, category, estimated_hours')
+      .eq('org_id', orgId)
+      .order('category', { ascending: true })
+      .order('name', { ascending: true }),
     'Task review fetch',
   );
 
@@ -268,12 +272,16 @@ async function saveReviewedTimes({
   date,
   rows,
   timezone,
+  taskOverrides,
+  tasks,
 }: {
   orgId: string;
   employeeId: string;
   date: string;
   rows: ReturnType<typeof getChainedAssignmentRows>;
   timezone: string;
+  taskOverrides: Record<string, string>;
+  tasks: Task[];
 }) {
   for (const row of rows) {
     if (!row.assignment.id) continue;
@@ -285,6 +293,13 @@ async function saveReviewedTimes({
       actual_hours: Number(row.hours.toFixed(2)),
     };
     if (endIso) payload.status = 'completed';
+    if (Object.prototype.hasOwnProperty.call(taskOverrides, row.assignment.id)) {
+      const nextTaskId = taskOverrides[row.assignment.id] ?? '';
+      if (nextTaskId && !isUuid(nextTaskId)) throw new Error('Invalid task ID. Please reselect a task.');
+      const nextTask = nextTaskId ? tasks.find((task) => task.id === nextTaskId) : null;
+      payload.task_id = nextTaskId || null;
+      payload.title = nextTask?.name ?? null;
+    }
     const updateResult = await withReviewTimeout(
       supabase
         .from('assignments')
@@ -331,10 +346,14 @@ export default function OpenTaskDayReviewPage() {
   const queryOrgId = canReview && orgId ? orgId : '';
   const queryClient = useQueryClient();
   const propertiesQuery = useProperties(queryOrgId || undefined);
+  const [startOverrides, setStartOverrides] = useState<Record<string, string>>({});
   const [endOverrides, setEndOverrides] = useState<Record<string, string>>({});
+  const [taskOverrides, setTaskOverrides] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    setStartOverrides({});
     setEndOverrides({});
+    setTaskOverrides({});
   }, [validEmployeeId, validDate]);
 
   const reviewQuery = useQuery({
@@ -366,21 +385,37 @@ export default function OpenTaskDayReviewPage() {
   const operationalTimezone = getOperationalTimezone(reviewProperty);
   const shiftStart = firstSchedule?.shift_start?.slice(0, 5) ?? reviewData?.assignments[0]?.startTime ?? '06:00';
   const shiftEnd = latestSchedule?.shift_end?.slice(0, 5) ?? '17:00';
+  const taskById = useMemo(() => new Map((reviewData?.tasks ?? []).map((task) => [task.id, task])), [reviewData?.tasks]);
+  const reviewAssignments = useMemo(
+    () => (reviewData?.assignments ?? []).map((assignment) => {
+      const assignmentId = assignment.id ?? '';
+      if (!Object.prototype.hasOwnProperty.call(taskOverrides, assignmentId)) return assignment;
+      const taskId = taskOverrides[assignmentId] ?? '';
+      const selectedTask = taskId ? taskById.get(taskId) : null;
+      return {
+        ...assignment,
+        taskId,
+        title: selectedTask?.name ?? undefined,
+      };
+    }),
+    [reviewData?.assignments, taskById, taskOverrides],
+  );
 
   const rows = useMemo(
     () => getChainedAssignmentRows({
-      assignments: reviewData?.assignments ?? [],
+      assignments: reviewAssignments,
       shiftStart,
       nowTime: shiftEnd,
       timezone: operationalTimezone,
+      startOverrides,
       endOverrides,
     }),
-    [endOverrides, operationalTimezone, reviewData?.assignments, shiftEnd, shiftStart],
+    [endOverrides, operationalTimezone, reviewAssignments, shiftEnd, shiftStart, startOverrides],
   );
-  const firstDerivedStart = reviewData?.assignments[0]
+  const firstDerivedStart = reviewAssignments[0]
     ? getChainedAssignmentStartTime({
-        assignment: reviewData.assignments[0],
-        assignments: reviewData.assignments,
+        assignment: reviewAssignments[0],
+        assignments: reviewAssignments,
         shiftStart,
         nowTime: shiftEnd,
         timezone: operationalTimezone,
@@ -393,11 +428,13 @@ export default function OpenTaskDayReviewPage() {
   const isApproved = approvedRows.length > 0;
   const firstApproval = approvedRows[0] ?? null;
   const approver = firstApproval?.approvedBy ? reviewData?.employees.find((row) => row.id === firstApproval.approvedBy) : null;
-  const hasUnsavedEdits = Object.keys(endOverrides).length > 0;
+  const hasUnsavedEdits = Object.keys(startOverrides).length > 0 || Object.keys(endOverrides).length > 0 || Object.keys(taskOverrides).length > 0;
   const saveMutation = useMutation({
-    mutationFn: () => saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone }),
+    mutationFn: () => saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] }),
     onSuccess: async () => {
+      setStartOverrides({});
       setEndOverrides({});
+      setTaskOverrides({});
       await Promise.all([
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
@@ -423,6 +460,20 @@ export default function OpenTaskDayReviewPage() {
       toast.error(error instanceof Error ? error.message : 'Day could not be approved.');
     },
   });
+
+  const handleTaskChange = (assignmentId: string, taskId: string) => {
+    if (isApproved) return;
+    if (taskId && !isUuid(taskId)) {
+      toast.error('Invalid task ID. Please reselect a task.');
+      return;
+    }
+    setTaskOverrides((current) => ({ ...current, [assignmentId]: taskId }));
+  };
+
+  const handleStartChange = (assignmentId: string, startTime: string) => {
+    if (isApproved) return;
+    setStartOverrides((current) => ({ ...current, [assignmentId]: startTime }));
+  };
 
   const handleEndChange = (assignmentId: string, endTime: string) => {
     if (isApproved) return;
@@ -576,7 +627,7 @@ export default function OpenTaskDayReviewPage() {
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold text-text-primary">Assignments reviewed</h2>
-                  <p className="mt-1 text-xs text-text-muted">Start time is chained from the shift and previous task end. Edit the end time to adjust actual hours.</p>
+                  <p className="mt-1 text-xs text-text-muted">Start time is prefilled from the shift and previous task end. Edit task, start, or end time before saving.</p>
                 </div>
                 <Badge variant="outline" className="border-surface-border text-text-secondary">
                   {shiftStart}-{shiftEnd} shift window
@@ -587,6 +638,8 @@ export default function OpenTaskDayReviewPage() {
                 tasks={reviewData.tasks}
                 disabled={isApproved || saveMutation.isPending || approveMutation.isPending}
                 showScheduledHours
+                onTaskChange={handleTaskChange}
+                onStartChange={handleStartChange}
                 onEndChange={handleEndChange}
               />
             </Card>
