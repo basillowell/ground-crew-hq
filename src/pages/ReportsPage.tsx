@@ -131,12 +131,15 @@ type LaborSummaryRow = {
   varianceCost: number;
 };
 
-type CostByTaskRow = {
+type CategoryLaborRow = {
   category: string;
   tasksCompleted: number;
-  totalHours: number;
-  totalCost: number;
-  avgCostPerTask: number;
+  scheduledHours: number;
+  actualHours: number;
+  variance: number;
+  scheduledCost: number;
+  actualCost: number;
+  varianceCost: number;
 };
 
 function toIsoDate(value: Date) {
@@ -200,6 +203,16 @@ function calculateShiftHours(shiftStart?: string | null, shiftEnd?: string | nul
   const raw = endMinutes - startMinutes;
   if (raw <= 0) return 0;
   return raw / 60;
+}
+
+function withReportTimeout<T>(promise: PromiseLike<T>, label: string, timeoutMs = 15000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out. Try again.`)), timeoutMs);
+  });
+  return Promise.race([Promise.resolve(promise), timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
 }
 
 export default function ReportsPage() {
@@ -304,7 +317,8 @@ export default function ReportsPage() {
     setLoading(true);
     setError(null);
 
-    let assignmentsQuery = supabase
+    try {
+      let assignmentsQuery = supabase
       .from('assignments')
       .select('id, employee_id, task_id, property_id, date, status, estimated_hours, actual_hours')
       .eq('org_id', orgId)
@@ -355,23 +369,22 @@ export default function ReportsPage() {
       trendAssignmentsQuery = trendAssignmentsQuery.eq('property_id', selectedPropertyId);
       trendScheduleEntriesQuery = trendScheduleEntriesQuery.eq('property_id', selectedPropertyId);
     }
-
-    let tasksQuery = supabase
+    const tasksQuery = supabase
       .from('tasks')
       .select('id, name, category')
       .eq('org_id', orgId);
 
-    if (selectedPropertyId !== 'all') {
-      tasksQuery = tasksQuery.eq('property_id', selectedPropertyId);
-    }
-
-    const [assignmentsResult, clockEventsResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] = await Promise.all([
-      assignmentsQuery,
-      clockEventsQuery,
-      tasksQuery,
-      trendAssignmentsQuery,
-      trendScheduleEntriesQuery,
-    ]);
+    const [assignmentsResult, clockEventsResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] =
+      await withReportTimeout(
+        Promise.all([
+          assignmentsQuery,
+          clockEventsQuery,
+          tasksQuery,
+          trendAssignmentsQuery,
+          trendScheduleEntriesQuery,
+        ]),
+        'Report data',
+      );
 
     let equipmentQuery = supabase
       .from('equipment_units')
@@ -389,11 +402,13 @@ export default function ReportsPage() {
     if (selectedPropertyId !== 'all') {
       openNeedsQuery = openNeedsQuery.eq('property_id', selectedPropertyId);
     }
-
-    const [equipmentResult, openNeedsResult] = await Promise.all([
-      equipmentQuery,
-      openNeedsQuery,
-    ]);
+    const [equipmentResult, openNeedsResult] = await withReportTimeout(
+      Promise.all([
+        equipmentQuery,
+        openNeedsQuery,
+      ]),
+      'Report support data',
+    );
 
 
     if (
@@ -426,8 +441,11 @@ export default function ReportsPage() {
     setTrendScheduleEntries((trendScheduleEntriesResult.data ?? []) as ScheduleEntryTrendRow[]);
     setEquipmentRows((equipmentResult.data ?? []) as EquipmentRow[]);
     setOpenNeedsCount(openNeedsResult.count ?? 0);
-
     setLoading(false);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Unable to load report data');
+      setLoading(false);
+    }
   }, [endDate, orgId, selectedPropertyId, startDate]);
 
   useEffect(() => {
@@ -440,7 +458,8 @@ export default function ReportsPage() {
     setTimesheetLoading(true);
     setTimesheetError(null);
 
-    const weekStartDate = new Date(`${timesheetWeekStart}T00:00:00`);
+    try {
+      const weekStartDate = new Date(`${timesheetWeekStart}T00:00:00`);
     const weekEndDate = addDays(weekStartDate, 6);
     const weekEnd = toIsoDate(weekEndDate);
 
@@ -463,7 +482,10 @@ export default function ReportsPage() {
       assignmentsQuery = assignmentsQuery.eq('property_id', selectedPropertyId);
     }
 
-    const [schedulesResult, assignmentsResult] = await Promise.all([schedulesQuery, assignmentsQuery]);
+    const [schedulesResult, assignmentsResult] = await withReportTimeout(
+      Promise.all([schedulesQuery, assignmentsQuery]),
+      'Timesheet data',
+    );
     if (schedulesResult.error || assignmentsResult.error) {
       setTimesheetError(schedulesResult.error?.message ?? assignmentsResult.error?.message ?? 'Failed to load timesheet data');
       setTimesheetLoading(false);
@@ -473,6 +495,10 @@ export default function ReportsPage() {
     setTimesheetSchedules((schedulesResult.data ?? []) as TimesheetScheduleRow[]);
     setTimesheetAssignments((assignmentsResult.data ?? []) as AssignmentRow[]);
     setTimesheetLoading(false);
+    } catch (fetchError) {
+      setTimesheetError(fetchError instanceof Error ? fetchError.message : 'Failed to load timesheet data');
+      setTimesheetLoading(false);
+    }
   }, [orgId, selectedPropertyId, timesheetWeekStart]);
 
   useEffect(() => {
@@ -614,55 +640,69 @@ export default function ReportsPage() {
     );
   }, [laborRows]);
 
-  const costByTaskRows = useMemo<CostByTaskRow[]>(() => {
+  const categoryLaborRows = useMemo<CategoryLaborRow[]>(() => {
     const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
     const taskCategoryById = new Map(tasks.map((task) => [task.id, task.category?.trim() || 'General']));
-    const byCategory = new Map<string, CostByTaskRow>();
+    const byCategory = new Map<string, CategoryLaborRow>();
 
     assignments.forEach((assignment) => {
       const category = taskCategoryById.get(assignment.task_id ?? '') ?? 'General';
       const employee = employeeById.get(assignment.employee_id);
       const hourlyRate = Number(employee?.hourly_rate ?? 0);
+      const scheduledHours = Number(assignment.estimated_hours ?? 0);
       const actualHours = Number(assignment.actual_hours ?? 0);
-      const cost = actualHours * hourlyRate;
       const existing = byCategory.get(category) ?? {
         category,
         tasksCompleted: 0,
-        totalHours: 0,
-        totalCost: 0,
-        avgCostPerTask: 0,
+        scheduledHours: 0,
+        actualHours: 0,
+        variance: 0,
+        scheduledCost: 0,
+        actualCost: 0,
+        varianceCost: 0,
       };
-      existing.totalHours += actualHours;
-      existing.totalCost += cost;
+      existing.scheduledHours += scheduledHours;
+      existing.actualHours += actualHours;
+      existing.scheduledCost += scheduledHours * hourlyRate;
+      existing.actualCost += actualHours * hourlyRate;
       if (assignment.status === 'done') {
         existing.tasksCompleted += 1;
       }
       byCategory.set(category, existing);
     });
 
-    const rows = Array.from(byCategory.values()).map((row) => ({
-      ...row,
-      avgCostPerTask: row.tasksCompleted > 0 ? row.totalCost / row.tasksCompleted : 0,
-    }));
+    const rows = Array.from(byCategory.values()).map((row) => {
+      const variance = row.actualHours - row.scheduledHours;
+      const varianceCost = row.actualCost - row.scheduledCost;
+      return { ...row, variance, varianceCost };
+    });
 
     return rows.sort((a, b) => a.category.localeCompare(b.category));
   }, [assignments, allEmployees, tasks]);
 
-  const costByTaskTotals = useMemo(() => {
-    return costByTaskRows.reduce(
+  const categoryLaborTotals = useMemo(() => {
+    return categoryLaborRows.reduce(
       (sum, row) => {
         sum.tasksCompleted += row.tasksCompleted;
-        sum.totalHours += row.totalHours;
-        sum.totalCost += row.totalCost;
+        sum.scheduledHours += row.scheduledHours;
+        sum.actualHours += row.actualHours;
+        sum.variance += row.variance;
+        sum.scheduledCost += row.scheduledCost;
+        sum.actualCost += row.actualCost;
+        sum.varianceCost += row.varianceCost;
         return sum;
       },
       {
         tasksCompleted: 0,
-        totalHours: 0,
-        totalCost: 0,
+        scheduledHours: 0,
+        actualHours: 0,
+        variance: 0,
+        scheduledCost: 0,
+        actualCost: 0,
+        varianceCost: 0,
       },
     );
-  }, [costByTaskRows]);
+  }, [categoryLaborRows]);
 
   const trendChartData = useMemo(() => {
     const now = new Date();
@@ -812,22 +852,28 @@ export default function ReportsPage() {
       formatCurrency(totals.actualCost),
       formatCurrency(totals.varianceCost),
     ];
-    const costHeaders = ['Task Category', 'Tasks Completed', 'Total Hours', 'Total Cost', 'Avg Cost/Task'];
-    const costRows = costByTaskRows.map((row) => [
+    const categoryHeaders = ['Task Category', 'Scheduled Hours', 'Actual Hours', 'Tasks Completed', 'Variance', 'Scheduled Cost', 'Actual Cost', 'Variance ($)'];
+    const categoryRows = categoryLaborRows.map((row) => [
       row.category,
+      formatHours(row.scheduledHours),
+      formatHours(row.actualHours),
       row.tasksCompleted,
-      formatHours(row.totalHours),
-      formatCurrency(row.totalCost),
-      formatCurrency(row.avgCostPerTask),
+      formatHours(row.variance),
+      formatCurrency(row.scheduledCost),
+      formatCurrency(row.actualCost),
+      formatCurrency(row.varianceCost),
     ]);
-    const costTotalsRow = [
+    const categoryTotalsRow = [
       'Totals',
-      costByTaskTotals.tasksCompleted,
-      formatHours(costByTaskTotals.totalHours),
-      formatCurrency(costByTaskTotals.totalCost),
-      formatCurrency(costByTaskTotals.tasksCompleted > 0 ? costByTaskTotals.totalCost / costByTaskTotals.tasksCompleted : 0),
+      formatHours(categoryLaborTotals.scheduledHours),
+      formatHours(categoryLaborTotals.actualHours),
+      categoryLaborTotals.tasksCompleted,
+      formatHours(categoryLaborTotals.variance),
+      formatCurrency(categoryLaborTotals.scheduledCost),
+      formatCurrency(categoryLaborTotals.actualCost),
+      formatCurrency(categoryLaborTotals.varianceCost),
     ];
-    const csvString = [headers, ...dataRows, totalsRow, [], costHeaders, ...costRows, costTotalsRow]
+    const csvString = [headers, ...dataRows, totalsRow, [], categoryHeaders, ...categoryRows, categoryTotalsRow]
       .map((cells) => cells.map((cell) => quoteCsv(cell)).join(','))
       .join('\n');
     const blob = new Blob([csvString], { type: 'text/csv' });
@@ -839,7 +885,7 @@ export default function ReportsPage() {
     anchor.click();
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-  }, [costByTaskRows, costByTaskTotals, laborRows, totals]);
+  }, [categoryLaborRows, categoryLaborTotals, laborRows, totals]);
 
   const selectedPropertyName = useMemo(() => {
     if (selectedPropertyId === 'all') return 'All Properties';
@@ -1401,12 +1447,12 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
-        <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Cost by Task</h3>
+        <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 600 }}>Task Category Labor Breakdown</h3>
         {loading ? (
           <TableSkeleton />
         ) : error ? (
           <ErrorRetry message={error} onRetry={() => void fetchReportData()} />
-        ) : costByTaskRows.length === 0 ? (
+        ) : categoryLaborRows.length === 0 ? (
           <EmptyState
             icon={BarChart3}
             title="No report data available"
@@ -1414,33 +1460,52 @@ export default function ReportsPage() {
           />
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e5e7eb', textAlign: 'left', color: '#6b7280' }}>
                   <th style={{ padding: '8px' }}>Task Category</th>
+                  <th style={{ padding: '8px' }}>Scheduled Hours</th>
+                  <th style={{ padding: '8px' }}>Actual Hours</th>
                   <th style={{ padding: '8px' }}>Tasks Completed</th>
-                  <th style={{ padding: '8px' }}>Total Hours</th>
-                  <th style={{ padding: '8px' }}>Total Cost</th>
-                  <th style={{ padding: '8px' }}>Avg Cost/Task</th>
+                  <th style={{ padding: '8px' }}>Variance</th>
+                  <th style={{ padding: '8px' }}>Scheduled Cost</th>
+                  <th style={{ padding: '8px' }}>Actual Cost</th>
+                  <th style={{ padding: '8px' }}>Variance ($)</th>
                 </tr>
               </thead>
               <tbody>
-                {costByTaskRows.map((row) => (
+                {categoryLaborRows.map((row) => (
                   <tr key={row.category} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '8px' }}>{row.category}</td>
+                    <td style={{ padding: '8px' }}>{formatHours(row.scheduledHours)}</td>
+                    <td style={{ padding: '8px' }}>{formatHours(row.actualHours)}</td>
                     <td style={{ padding: '8px' }}>{row.tasksCompleted}</td>
-                    <td style={{ padding: '8px' }}>{formatHours(row.totalHours)}</td>
-                    <td style={{ padding: '8px' }}>{formatCurrency(row.totalCost)}</td>
-                    <td style={{ padding: '8px' }}>{formatCurrency(row.avgCostPerTask)}</td>
+                    <td style={{ padding: '8px', color: row.variance <= 0 ? '#166534' : '#dc2626', fontWeight: 600 }}>
+                      {row.variance >= 0 ? '+' : ''}
+                      {formatHours(row.variance)}
+                    </td>
+                    <td style={{ padding: '8px' }}>{formatCurrency(row.scheduledCost)}</td>
+                    <td style={{ padding: '8px' }}>{formatCurrency(row.actualCost)}</td>
+                    <td style={{ padding: '8px', color: row.varianceCost <= 0 ? '#166534' : '#dc2626', fontWeight: 600 }}>
+                      {row.varianceCost >= 0 ? '+' : ''}
+                      {formatCurrency(row.varianceCost)}
+                    </td>
                   </tr>
                 ))}
                 <tr style={{ borderTop: '2px solid #e5e7eb', fontWeight: 700 }}>
                   <td style={{ padding: '8px' }}>Totals</td>
-                  <td style={{ padding: '8px' }}>{costByTaskTotals.tasksCompleted}</td>
-                  <td style={{ padding: '8px' }}>{formatHours(costByTaskTotals.totalHours)}</td>
-                  <td style={{ padding: '8px' }}>{formatCurrency(costByTaskTotals.totalCost)}</td>
-                  <td style={{ padding: '8px' }}>
-                    {formatCurrency(costByTaskTotals.tasksCompleted > 0 ? costByTaskTotals.totalCost / costByTaskTotals.tasksCompleted : 0)}
+                  <td style={{ padding: '8px' }}>{formatHours(categoryLaborTotals.scheduledHours)}</td>
+                  <td style={{ padding: '8px' }}>{formatHours(categoryLaborTotals.actualHours)}</td>
+                  <td style={{ padding: '8px' }}>{categoryLaborTotals.tasksCompleted}</td>
+                  <td style={{ padding: '8px', color: categoryLaborTotals.variance <= 0 ? '#166534' : '#dc2626' }}>
+                    {categoryLaborTotals.variance >= 0 ? '+' : ''}
+                    {formatHours(categoryLaborTotals.variance)}
+                  </td>
+                  <td style={{ padding: '8px' }}>{formatCurrency(categoryLaborTotals.scheduledCost)}</td>
+                  <td style={{ padding: '8px' }}>{formatCurrency(categoryLaborTotals.actualCost)}</td>
+                  <td style={{ padding: '8px', color: categoryLaborTotals.varianceCost <= 0 ? '#166534' : '#dc2626' }}>
+                    {categoryLaborTotals.varianceCost >= 0 ? '+' : ''}
+                    {formatCurrency(categoryLaborTotals.varianceCost)}
                   </td>
                 </tr>
               </tbody>
