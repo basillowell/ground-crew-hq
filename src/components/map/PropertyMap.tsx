@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, Tooltip, useMapEvents } from 'react-leaflet';
+import { useEffect, useMemo } from 'react';
+import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import type { Layer, PathOptions } from 'leaflet';
 import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
@@ -23,6 +23,7 @@ type PropertyMapProps = {
   areaEditProjectId: string | null;
   onBoundaryChange: (geojson: PropertyBoundaryGeoJson | null) => void;
   onAreaChange: (geojson: PropertyBoundaryGeoJson | null) => void;
+  onAreaCreate: (geojson: PropertyBoundaryGeoJson) => void | Promise<void>;
   onSelectProperty: (propertyId: string) => void;
   onSelectProject: (propertyId: string, projectId: string) => void;
   onPlaceProjectPin: (latitude: number, longitude: number) => void;
@@ -97,6 +98,37 @@ function ProjectPinClickHandler({
 
   return null;
 }
+function MapResizeInvalidator({ watchKey }: { watchKey: string }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const container = map.getContainer();
+    let frameId: number | null = null;
+
+    const invalidate = () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        map.invalidateSize({ animate: false, pan: false });
+        frameId = null;
+      });
+    };
+
+    invalidate();
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(invalidate)
+      : null;
+    resizeObserver?.observe(container);
+    const delayedInvalidateId = window.setTimeout(invalidate, 220);
+
+    return () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      window.clearTimeout(delayedInvalidateId);
+      resizeObserver?.disconnect();
+    };
+  }, [map, watchKey]);
+
+  return null;
+}
 
 export function PropertyMap({
   properties,
@@ -110,15 +142,22 @@ export function PropertyMap({
   areaEditProjectId,
   onBoundaryChange,
   onAreaChange,
+  onAreaCreate,
   onSelectProperty,
   onSelectProject,
   onPlaceProjectPin,
   onCancelPinPlacement,
 }: PropertyMapProps) {
-  const mappedProperties = properties.filter((property) => property.boundaryGeojson);
-  const visibleProperties = currentPropertyId === 'all'
-    ? properties
-    : properties.filter((property) => property.id === currentPropertyId);
+  const mappedProperties = useMemo(
+    () => properties.filter((property) => property.boundaryGeojson),
+    [properties],
+  );
+  const visibleProperties = useMemo(
+    () => currentPropertyId === 'all'
+      ? properties
+      : properties.filter((property) => property.id === currentPropertyId),
+    [currentPropertyId, properties],
+  );
   const projectPins = useMemo(
     () =>
       visibleProperties.flatMap((property) =>
@@ -145,13 +184,25 @@ export function PropertyMap({
       ),
     [visibleProperties],
   );
-  const selectedProperty = currentPropertyId === 'all'
-    ? null
-    : properties.find((property) => property.id === currentPropertyId) ?? null;
-  const initialCenter = getInitialCenter(properties);
+  const selectedProperty = useMemo(
+    () => currentPropertyId === 'all'
+      ? null
+      : properties.find((property) => property.id === currentPropertyId) ?? null,
+    [currentPropertyId, properties],
+  );
+  const initialCenter = useMemo(() => getInitialCenter(properties), [properties]);
   const isPlacingProjectPin = Boolean(pinPlacementProject);
   const isAreaEditActive = Boolean(areaEditProjectId) && !editMode && !isPlacingProjectPin;
   const canEditSelectedBoundary = editMode && !isPlacingProjectPin && !areaEditProjectId && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
+  const isMapInteractionActive = editMode || isAreaEditActive || isPlacingProjectPin;
+  const resizeWatchKey = [
+    currentPropertyId,
+    selectedProjectId ?? 'none',
+    pinPlacementProject?.projectId ?? 'none',
+    areaEditProjectId ?? 'none',
+    editMode ? 'editing' : 'viewing',
+    className ?? 'default',
+  ].join('|');
 
   const polygonOptionsById = useMemo(() => {
     const options = new Map<string, GeomanPathOptions>();
@@ -160,7 +211,7 @@ export function PropertyMap({
       options.set(property.id, {
         color: isSelected ? '#ffffff' : property.color,
         fillColor: property.color,
-        fillOpacity: isSelected ? 0.46 : 0.28,
+        fillOpacity: isSelected ? 0.2 : 0.28,
         opacity: 0.95,
         pmIgnore: canEditSelectedBoundary ? !isSelected : true,
         weight: isSelected ? 4 : 2,
@@ -176,7 +227,11 @@ export function PropertyMap({
         zoom={13}
         maxZoom={19}
         scrollWheelZoom
-        className="h-full w-full"
+        zoomSnap={0.25}
+        zoomDelta={0.5}
+        wheelPxPerZoomLevel={80}
+        preferCanvas
+        className="h-full w-full touch-none overscroll-contain"
       >
         <TileLayer
           attribution="USGS The National Map"
@@ -184,14 +239,15 @@ export function PropertyMap({
           maxNativeZoom={16}
           url={USGS_IMAGERY_TILE_URL}
         />
-        <FitBounds properties={visibleProperties} selectedPropertyId={currentPropertyId} />
+        <MapResizeInvalidator watchKey={resizeWatchKey} />
+        <FitBounds properties={visibleProperties} selectedPropertyId={currentPropertyId} disabled={isMapInteractionActive} />
         <ProjectPinClickHandler
           active={isPlacingProjectPin}
           disabled={pinPlacementDisabled}
           onPlaceProjectPin={onPlaceProjectPin}
         />
         {canEditSelectedBoundary ? <GeomanControl onBoundaryChange={onBoundaryChange} /> : null}
-        {isAreaEditActive ? <GeomanControl onBoundaryChange={onAreaChange} /> : null}
+        {isAreaEditActive ? <GeomanControl onBoundaryChange={onAreaChange} onCreateComplete={onAreaCreate} /> : null}
         {mappedProperties.map((property) => (
           <Polygon
             key={`${property.id}-${currentPropertyId}-${canEditSelectedBoundary ? 'edit' : 'view'}`}

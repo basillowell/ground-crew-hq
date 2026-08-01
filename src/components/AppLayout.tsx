@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -45,6 +45,16 @@ import { applyThemeSurfaces } from '@/lib/colorConversion';
 import { cn } from '@/lib/utils';
 
 const supabase = createClient();
+const SIDEBAR_RAIL_STORAGE_KEY = 'gchq-sidebar-rail-open-v1';
+
+function readDesktopSidebarOpen() {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(SIDEBAR_RAIL_STORAGE_KEY) !== 'collapsed';
+  } catch {
+    return true;
+  }
+}
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -123,6 +133,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [department, setDepartment] = useState('All Departments');
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(() => readDesktopSidebarOpen());
   const [inAppNotifications, setInAppNotifications] = useState<AppNotification[]>([]);
   const { currentUser, currentRole, orgId, signOut, isPlanActive, isOrgReady } = useOrgProfile();
   const { resolvedTheme } = useTheme();
@@ -449,6 +460,15 @@ export function AppLayout({ children }: AppLayoutProps) {
   };
 
   const closeMobileSidebar = () => setMobileSidebarOpen(false);
+
+  const handleDesktopSidebarOpenChange = (open: boolean) => {
+    setDesktopSidebarOpen(open);
+    try {
+      window.localStorage.setItem(SIDEBAR_RAIL_STORAGE_KEY, open ? 'expanded' : 'collapsed');
+    } catch {
+      /* UI preference persistence is best-effort. */
+    }
+  };
   const shouldShowFeedbackWidget = !(
     pathname === '/' ||
     pathname.startsWith('/app/field')
@@ -544,7 +564,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      open={desktopSidebarOpen}
+      onOpenChange={handleDesktopSidebarOpenChange}
+      style={{ '--sidebar-width': '15rem', '--sidebar-width-icon': '3.5rem' } as CSSProperties}
+    >
       <div className="flex h-screen w-full overflow-hidden bg-surface-base">
         {isReadOnlyDemo && showDemoBanner ? (
           <div className="fixed inset-x-0 top-0 z-50 h-9 bg-status-complete text-text-primary">
@@ -597,11 +621,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         ) : null}
         <div
-          className={`fixed left-0 top-0 z-40 h-screen w-60 flex-col overflow-hidden border-r border-surface-border bg-surface-base transition-transform duration-200 ease-in-out ${
-            currentRole === 'employee' ? 'hidden md:flex' : 'flex'
-          } ${
-            mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-          }`}
+          className={cn(
+            'fixed left-0 top-0 z-40 h-screen w-60 flex-col overflow-hidden border-r border-surface-border bg-surface-base transition-[transform,width] duration-200 ease-in-out',
+            desktopSidebarOpen ? 'md:w-60' : 'md:w-14',
+            currentRole === 'employee' ? 'hidden md:flex' : 'flex',
+            mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          )}
         >
             <AppSidebarRefined
               onNavigate={closeMobileSidebar}
@@ -609,7 +634,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               chemicalLogsBadgeCount={chemicalLogsPendingCount}
             />
         </div>
-        <div className={`ml-0 md:ml-60 overflow-y-auto overflow-x-hidden flex min-w-0 flex-1 flex-col ${isReadOnlyDemo && showDemoBanner ? 'pt-9' : ''}`}>
+        <div className={cn('ml-0 overflow-y-auto overflow-x-hidden flex min-w-0 flex-1 flex-col transition-[margin] duration-200 ease-in-out', desktopSidebarOpen ? 'md:ml-60' : 'md:ml-14', isReadOnlyDemo && showDemoBanner ? 'pt-9' : '')}>
           <WorkflowTopBar
             department={department}
             setDepartment={setDepartment}

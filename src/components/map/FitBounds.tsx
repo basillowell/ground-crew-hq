@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useMap } from 'react-leaflet';
 import type { PropertyBoundary } from '@/lib/supabase-queries';
 
@@ -9,6 +9,7 @@ type LatLngTuple = [number, number];
 type FitBoundsProps = {
   properties: PropertyBoundary[];
   selectedPropertyId: string;
+  disabled?: boolean;
 };
 
 function coordinatesToLatLngs(property: PropertyBoundary): LatLngTuple[] {
@@ -62,18 +63,19 @@ function getFitSignature(properties: PropertyBoundary[], selectedPropertyId: str
   );
 }
 
-export function FitBounds({ properties, selectedPropertyId }: FitBoundsProps) {
+export function FitBounds({ properties, selectedPropertyId, disabled = false }: FitBoundsProps) {
   const map = useMap();
-  const fitSignature = getFitSignature(properties, selectedPropertyId);
+  const fitSignature = useMemo(() => getFitSignature(properties, selectedPropertyId), [properties, selectedPropertyId]);
 
   useEffect(() => {
+    if (disabled) return;
     const visibleProperties = selectedPropertyId === 'all'
       ? properties
       : properties.filter((property) => property.id === selectedPropertyId);
     const bounds = getPropertyBounds(visibleProperties);
     if (!bounds) return;
     map.fitBounds(bounds, { animate: false, maxZoom: 18, padding: [32, 32] });
-  }, [map, selectedPropertyId, fitSignature]);
+  }, [disabled, map, properties, selectedPropertyId, fitSignature]);
 
   return null;
 }

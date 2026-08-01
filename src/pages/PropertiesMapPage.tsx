@@ -151,14 +151,14 @@ export default function PropertiesMapPage() {
     setPendingAreaGeojson(undefined);
   };
 
-  const handleSaveArea = async () => {
-    if (!orgId || !areaEditProject || !hasPendingAreaChange) return;
+  const saveProjectArea = async (areaGeojson: PropertyBoundaryGeoJson | null) => {
+    if (!orgId || !areaEditProject || areaSavingProjectId) return;
     setAreaSavingProjectId(areaEditProject.projectId);
     try {
       await setProjectAreaMutation.mutateAsync({
         propertyId: areaEditProject.propertyId,
         projectId: areaEditProject.projectId,
-        areaGeojson: pendingAreaGeojson ?? null,
+        areaGeojson,
       });
       setSelectedProjectId(areaEditProject.projectId);
       setPendingAreaGeojson(undefined);
@@ -170,6 +170,16 @@ export default function PropertiesMapPage() {
     } finally {
       setAreaSavingProjectId(null);
     }
+  };
+
+  const handleSaveArea = async () => {
+    if (!hasPendingAreaChange) return;
+    await saveProjectArea(pendingAreaGeojson ?? null);
+  };
+
+  const handleFinishArea = async (geojson: PropertyBoundaryGeoJson) => {
+    setPendingAreaGeojson(geojson);
+    await saveProjectArea(geojson);
   };
 
   const handleClearArea = async (project: PropertyProject) => {
@@ -362,7 +372,7 @@ export default function PropertiesMapPage() {
         <PropertyMap
           properties={properties}
           currentPropertyId={selectedPropertyId || 'all'}
-          className={hasConcretePropertySelected ? 'h-[380px] min-h-[320px] max-h-[420px]' : undefined}
+          className={areaEditProject || pinPlacementProject ? 'h-[min(78vh,780px)] min-h-[620px] max-h-[820px]' : hasConcretePropertySelected ? 'h-[380px] min-h-[320px] max-h-[420px]' : undefined}
           editMode={editMode}
           canEditBoundary={canViewMap}
           selectedProjectId={selectedProjectId}
@@ -371,6 +381,7 @@ export default function PropertiesMapPage() {
           areaEditProjectId={areaEditProject?.projectId ?? null}
           onBoundaryChange={setPendingBoundaryGeojson}
           onAreaChange={setPendingAreaGeojson}
+          onAreaCreate={handleFinishArea}
           onSelectProperty={handleSelectProperty}
           onSelectProject={handleSelectProject}
           onPlaceProjectPin={handlePlaceProjectPin}

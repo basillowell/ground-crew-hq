@@ -31,10 +31,12 @@ type GeomanMap = L.Map & {
   };
 };
 
-type BoundaryChangeHandler = (geojson: PropertyBoundaryGeoJson | null) => void;
+type BoundaryChangeHandler = (geojson: PropertyBoundaryGeoJson | null) => void | Promise<void>;
+type CreateCompleteHandler = (geojson: PropertyBoundaryGeoJson) => void | Promise<void>;
 
 type GeomanControlProps = {
   onBoundaryChange: BoundaryChangeHandler;
+  onCreateComplete?: CreateCompleteHandler;
   position?: ControlPosition;
 };
 
@@ -101,7 +103,7 @@ const LeafletGeomanControl = createControlComponent<Control, Pick<GeomanControlP
   },
 );
 
-export function GeomanControl({ onBoundaryChange, position = 'topleft' }: GeomanControlProps) {
+export function GeomanControl({ onBoundaryChange, onCreateComplete, position = 'topleft' }: GeomanControlProps) {
   const map = useMap();
 
   useEffect(() => {
@@ -109,13 +111,21 @@ export function GeomanControl({ onBoundaryChange, position = 'topleft' }: Geoman
       'pm:create': (event) => {
         const layerEvent = event as GeomanLayerEvent;
         const geometry = layerToBoundaryGeoJson(layerEvent.layer);
-        if (geometry) onBoundaryChange(geometry);
-        layerEvent.layer?.remove?.();
+        if (!geometry) {
+          layerEvent.layer?.remove?.();
+          return;
+        }
+
+        const changeHandler = onCreateComplete ?? onBoundaryChange;
+        void Promise.resolve(changeHandler(geometry))
+          .catch((error) => {
+            console.error('Geoman geometry commit failed:', error);
+          })
+          .finally(() => {
+            layerEvent.layer?.remove?.();
+          });
       },
-      'pm:update': (event) => {
-        const geometry = layerToBoundaryGeoJson((event as GeomanLayerEvent).layer);
-        if (geometry) onBoundaryChange(geometry);
-      },
+
       'pm:remove': () => {
         onBoundaryChange(null);
       },
@@ -125,7 +135,7 @@ export function GeomanControl({ onBoundaryChange, position = 'topleft' }: Geoman
     return () => {
       map.off(eventHandlers);
     };
-  }, [map, onBoundaryChange]);
+  }, [map, onBoundaryChange, onCreateComplete]);
 
   return <LeafletGeomanControl position={position} />;
 }
