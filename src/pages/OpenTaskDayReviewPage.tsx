@@ -210,6 +210,7 @@ async function fetchReviewData(orgId: string, employeeId: string, date: string):
       .eq('org_id', orgId)
       .eq('employee_id', employeeId)
       .eq('date', date)
+      .is('deleted_at', null)
       .order('order_index', { ascending: true })
       .order('created_at', { ascending: true }),
     'Assignments review fetch',
@@ -333,6 +334,27 @@ async function approveReviewedDay({ orgId, employeeId, date, assignmentIds }: { 
   if (approvalResult.error) throw approvalResult.error;
 }
 
+async function softDeleteReviewedAssignment({ orgId, employeeId, date, assignmentId }: { orgId: string; employeeId: string; date: string; assignmentId: string }) {
+  if (!isUuid(assignmentId)) throw new Error('Invalid assignment ID. Refresh and try again.');
+  const reviewerResult = await withReviewTimeout(supabase.rpc('current_employee_id'), 'Reviewer lookup') as SupabaseResult<string>;
+  if (reviewerResult.error) throw reviewerResult.error;
+  const reviewerEmployeeId = reviewerResult.data ? String(reviewerResult.data) : '';
+  if (!isUuid(reviewerEmployeeId)) throw new Error('Could not identify the deleting employee. Try again after reconnecting.');
+
+  const deleteResult = await withReviewTimeout(
+    supabase
+      .from('assignments')
+      .update({ deleted_at: 'now', deleted_by: reviewerEmployeeId })
+      .eq('id', assignmentId)
+      .eq('org_id', orgId)
+      .eq('employee_id', employeeId)
+      .eq('date', date)
+      .is('deleted_at', null),
+    'Assignment delete save',
+  ) as SupabaseResult<null>;
+  if (deleteResult.error) throw deleteResult.error;
+}
+
 export default function OpenTaskDayReviewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -349,6 +371,7 @@ export default function OpenTaskDayReviewPage() {
   const [startOverrides, setStartOverrides] = useState<Record<string, string>>({});
   const [endOverrides, setEndOverrides] = useState<Record<string, string>>({});
   const [taskOverrides, setTaskOverrides] = useState<Record<string, string>>({});
+  const [deletingAssignmentId, setDeletingAssignmentId] = useState<string | null>(null);
 
   useEffect(() => {
     setStartOverrides({});
@@ -446,6 +469,29 @@ export default function OpenTaskDayReviewPage() {
       toast.error(error instanceof Error ? error.message : 'Reviewed times could not be saved.');
     },
   });
+  const deleteMutation = useMutation({
+    mutationFn: (assignmentId: string) => softDeleteReviewedAssignment({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentId }),
+    onMutate: (assignmentId) => {
+      setDeletingAssignmentId(assignmentId);
+    },
+    onSuccess: async () => {
+      setStartOverrides({});
+      setEndOverrides({});
+      setTaskOverrides({});
+      await Promise.all([
+        reviewQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'] }),
+      ]);
+      toast.success('Assignment removed from review.');
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Assignment could not be removed.');
+    },
+    onSettled: () => {
+      setDeletingAssignmentId(null);
+    },
+  });
   const approveMutation = useMutation({
     mutationFn: () => approveReviewedDay({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentIds }),
     onSuccess: async () => {
@@ -478,6 +524,15 @@ export default function OpenTaskDayReviewPage() {
   const handleEndChange = (assignmentId: string, endTime: string) => {
     if (isApproved) return;
     setEndOverrides((current) => ({ ...current, [assignmentId]: endTime }));
+  };
+
+  const handleDeleteAssignment = (assignmentId: string) => {
+    if (deleteMutation.isPending || saveMutation.isPending || approveMutation.isPending) return;
+    const row = rows.find((item) => item.assignment.id === assignmentId);
+    const taskLabel = row?.assignment.title || reviewData?.tasks.find((task) => task.id === row?.assignment.taskId)?.name || 'this assignment';
+    const confirmed = window.confirm(`Remove ${taskLabel} from this day review? This soft-deletes the assignment and removes it from Open Tasks.`);
+    if (!confirmed) return;
+    deleteMutation.mutate(assignmentId);
   };
 
   const handleApprove = () => {
@@ -544,7 +599,7 @@ export default function OpenTaskDayReviewPage() {
             variant="outline"
             className="min-h-10 gap-2"
             onClick={() => saveMutation.mutate()}
-            disabled={isApproved || rows.length === 0 || saveMutation.isPending || reviewQuery.isLoading}
+            disabled={isApproved || rows.length === 0 || saveMutation.isPending || deleteMutation.isPending || reviewQuery.isLoading}
           >
             {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save reviewed times
@@ -553,7 +608,7 @@ export default function OpenTaskDayReviewPage() {
             type="button"
             className="min-h-10 gap-2"
             onClick={handleApprove}
-            disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending}
+            disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending || deleteMutation.isPending}
           >
             {approveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
             Approve day
@@ -636,11 +691,14 @@ export default function OpenTaskDayReviewPage() {
               <DayCloseOutReviewRows
                 rows={rows}
                 tasks={reviewData.tasks}
-                disabled={isApproved || saveMutation.isPending || approveMutation.isPending}
+                disabled={isApproved || saveMutation.isPending || approveMutation.isPending || deleteMutation.isPending}
                 showScheduledHours
                 onTaskChange={handleTaskChange}
                 onStartChange={handleStartChange}
                 onEndChange={handleEndChange}
+                onDelete={handleDeleteAssignment}
+                deletingAssignmentId={deletingAssignmentId}
+                deleteDisabled={saveMutation.isPending || approveMutation.isPending || deleteMutation.isPending}
               />
             </Card>
           )}

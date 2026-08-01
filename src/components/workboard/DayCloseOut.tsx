@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, CloudRain, Loader2, RefreshCw } from 'lucide-react';
+import { CheckCircle2, CloudRain, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -158,6 +158,9 @@ export function DayCloseOutReviewRows({
   onTaskChange,
   onStartChange,
   onEndChange,
+  onDelete,
+  deletingAssignmentId,
+  deleteDisabled = false,
 }: {
   rows: ChainedAssignmentRow[];
   tasks: Task[];
@@ -166,6 +169,9 @@ export function DayCloseOutReviewRows({
   onTaskChange?: (assignmentId: string, taskId: string) => void;
   onStartChange?: (assignmentId: string, startTime: string) => void;
   onEndChange: (assignmentId: string, endTime: string) => void;
+  onDelete?: (assignmentId: string) => void;
+  deletingAssignmentId?: string | null;
+  deleteDisabled?: boolean;
 }) {
   const groupedTasks = useMemo(() => {
     return tasks.reduce<Record<string, Task[]>>((groups, task) => {
@@ -176,9 +182,13 @@ export function DayCloseOutReviewRows({
     }, {});
   }, [tasks]);
   const orderedTaskCategories = useMemo(() => Object.keys(groupedTasks).sort((a, b) => a.localeCompare(b)), [groupedTasks]);
-  const templateClass = showScheduledHours
-    ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_92px]'
-    : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_92px]';
+  const templateClass = onDelete
+    ? showScheduledHours
+      ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_92px_56px]'
+      : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_92px_56px]'
+    : showScheduledHours
+      ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_92px]'
+      : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_92px]';
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border">
       <div className={`grid grid-cols-1 gap-3 bg-surface-elevated px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted ${templateClass}`}>
@@ -187,11 +197,13 @@ export function DayCloseOutReviewRows({
         <span>Start</span>
         <span>End</span>
         <span className="text-right">Hours</span>
+        {onDelete ? <span className="text-right">Actions</span> : null}
       </div>
       <div className="divide-y divide-surface-border">
         {rows.map((row, index) => {
           const assignmentId = getAssignmentId(row.assignment, index);
           const status = normalizeStatus(row.assignment.status);
+          const isDeleting = deletingAssignmentId === assignmentId;
           return (
             <div
               key={assignmentId}
@@ -263,6 +275,22 @@ export function DayCloseOutReviewRows({
                 <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Hours</p>
                 <p className="font-mono text-sm font-semibold text-text-primary">{row.hours.toFixed(2)}</p>
               </div>
+              {onDelete ? (
+                <div className="flex justify-start sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 text-status-danger hover:bg-status-danger/10 hover:text-status-danger"
+                    onClick={() => onDelete(assignmentId)}
+                    disabled={deleteDisabled || isDeleting}
+                    aria-label={`Delete ${getTaskName(row.assignment, tasks)}`}
+                    title="Delete assignment"
+                  >
+                    {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           );
         })}
