@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, CloudRain, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, CloudRain, Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -150,6 +150,11 @@ function getTaskCategory(assignment: Assignment, tasks: Task[]) {
   return tasks.find((task) => task.id === assignment.taskId)?.category ?? 'General';
 }
 
+function getTaskIsUnpaid(assignment: Assignment, tasks: Task[]) {
+  const task = tasks.find((taskItem) => taskItem.id === assignment.taskId);
+  return Boolean(task?.isUnpaid ?? task?.is_unpaid);
+}
+
 export function DayCloseOutReviewRows({
   rows,
   tasks,
@@ -161,6 +166,9 @@ export function DayCloseOutReviewRows({
   onDelete,
   deletingAssignmentId,
   deleteDisabled = false,
+  onInsertBreak,
+  insertBreakDisabled = false,
+  insertingBreakIndex = null,
 }: {
   rows: ChainedAssignmentRow[];
   tasks: Task[];
@@ -172,6 +180,9 @@ export function DayCloseOutReviewRows({
   onDelete?: (assignmentId: string) => void;
   deletingAssignmentId?: string | null;
   deleteDisabled?: boolean;
+  onInsertBreak?: (insertIndex: number) => void;
+  insertBreakDisabled?: boolean;
+  insertingBreakIndex?: number | null;
 }) {
   const groupedTasks = useMemo(() => {
     return tasks.reduce<Record<string, Task[]>>((groups, task) => {
@@ -185,6 +196,25 @@ export function DayCloseOutReviewRows({
   const templateClass = showScheduledHours
     ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_116px]'
     : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_116px]';
+  const renderInsertBreakButton = (insertIndex: number, label: string) => {
+    if (!onInsertBreak) return null;
+    const isInserting = insertingBreakIndex === insertIndex;
+    return (
+      <div className="bg-surface-base px-3 py-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="min-h-9 gap-2 border-dashed text-xs text-text-secondary hover:text-text-primary"
+          onClick={() => onInsertBreak(insertIndex)}
+          disabled={insertBreakDisabled || isInserting}
+        >
+          {isInserting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          {label}
+        </Button>
+      </div>
+    );
+  };
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border">
       <div className={`grid grid-cols-1 gap-3 bg-surface-elevated px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted ${templateClass}`}>
@@ -195,13 +225,15 @@ export function DayCloseOutReviewRows({
         <span className="text-right">Hours</span>
       </div>
       <div className="divide-y divide-surface-border">
+        {renderInsertBreakButton(0, 'Insert break before first task')}
         {rows.map((row, index) => {
           const assignmentId = getAssignmentId(row.assignment, index);
           const status = normalizeStatus(row.assignment.status);
           const isDeleting = deletingAssignmentId === assignmentId;
+          const isUnpaid = getTaskIsUnpaid(row.assignment, tasks);
           return (
+            <Fragment key={assignmentId}>
             <div
-              key={assignmentId}
               className={`grid grid-cols-1 gap-3 px-3 py-3 sm:items-center ${templateClass}`}
             >
               <div className="min-w-0">
@@ -236,6 +268,11 @@ export function DayCloseOutReviewRows({
                   {showScheduledHours ? (
                     <Badge variant="outline" className="text-[10px]">
                       {getTaskCategory(row.assignment, tasks)}
+                    </Badge>
+                  ) : null}
+                  {isUnpaid ? (
+                    <Badge variant="outline" className="border-status-pending/40 text-[10px] text-status-pending">
+                      Unpaid
                     </Badge>
                   ) : null}
                 </div>
@@ -287,6 +324,8 @@ export function DayCloseOutReviewRows({
                 ) : null}
               </div>
             </div>
+            {renderInsertBreakButton(index + 1, index === rows.length - 1 ? 'Insert break after last task' : 'Insert break here')}
+            </Fragment>
           );
         })}
       </div>

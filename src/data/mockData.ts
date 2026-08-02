@@ -55,6 +55,8 @@ export interface Task {
   notes?: string;
   description?: string;
   safetySensitive?: boolean;
+  isUnpaid?: boolean;
+  is_unpaid?: boolean;
 }
 
 export interface EquipmentType {

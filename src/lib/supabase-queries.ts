@@ -609,6 +609,7 @@ type DbTask = {
   skillTags?: string[] | null;
   equipmentTags?: string[] | null;
   notes?: string | null;
+  is_unpaid?: boolean | null;
   created_at: string;
 };
 
@@ -1277,6 +1278,8 @@ function toTask(row: DbTask): Task {
     skillTags: row.skillTags ?? [],
     equipmentTags: row.equipmentTags ?? [],
     notes: row.notes ?? row.description ?? '',
+    isUnpaid: Boolean(row.is_unpaid),
+    is_unpaid: Boolean(row.is_unpaid),
   };
 }
 

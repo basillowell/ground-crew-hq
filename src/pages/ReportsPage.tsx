@@ -98,6 +98,7 @@ type TaskRow = {
   id: string;
   name: string | null;
   category: string | null;
+  is_unpaid: boolean | null;
 };
 
 
@@ -203,6 +204,19 @@ function calculateShiftHours(shiftStart?: string | null, shiftEnd?: string | nul
   const raw = endMinutes - startMinutes;
   if (raw <= 0) return 0;
   return raw / 60;
+}
+
+function isTaskUnpaid(task?: TaskRow | null) {
+  return Boolean(task?.is_unpaid);
+}
+
+function getAssignmentActualHours(assignment: AssignmentRow) {
+  const hours = Number(assignment.actual_hours ?? 0);
+  return Number.isFinite(hours) ? hours : 0;
+}
+
+function getPaidActualHours(assignment: AssignmentRow, taskById: Map<string, TaskRow>) {
+  return isTaskUnpaid(taskById.get(assignment.task_id ?? '')) ? 0 : getAssignmentActualHours(assignment);
 }
 
 function withReportTimeout<T>(promise: PromiseLike<T>, label: string, timeoutMs = 15000): Promise<T> {
@@ -371,7 +385,7 @@ export default function ReportsPage() {
     }
     const tasksQuery = supabase
       .from('tasks')
-      .select('id, name, category')
+      .select('id, name, category, is_unpaid')
       .eq('org_id', orgId);
 
     const [assignmentsResult, clockEventsResult, tasksResult, trendAssignmentsResult, trendScheduleEntriesResult] =
@@ -472,7 +486,7 @@ export default function ReportsPage() {
 
     let assignmentsQuery = supabase
       .from('assignments')
-      .select('id, employee_id, property_id, date, actual_hours')
+      .select('id, employee_id, task_id, property_id, date, actual_hours')
       .eq('org_id', orgId)
       .gte('date', timesheetWeekStart)
       .lte('date', weekEnd);
@@ -509,6 +523,8 @@ export default function ReportsPage() {
   const laborRows = useMemo<LaborSummaryRow[]>(() => {
     const byEmployee = new Map<string, LaborSummaryRow>();
     const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const unpaidHoursByEmployee = new Map<string, number>();
     const clockHoursByEmployee = new Map<string, { hours: number; days: Set<string> }>();
     const openClockInByEmployee = new Map<string, Date>();
 
@@ -556,7 +572,11 @@ export default function ReportsPage() {
       };
 
       const scheduledHours = Number(assignment.estimated_hours ?? 0);
-      const actualHours = Number(assignment.actual_hours ?? 0);
+      const rawActualHours = getAssignmentActualHours(assignment);
+      const actualHours = getPaidActualHours(assignment, taskById);
+      if (rawActualHours > 0 && isTaskUnpaid(taskById.get(assignment.task_id ?? ''))) {
+        unpaidHoursByEmployee.set(employeeId, (unpaidHoursByEmployee.get(employeeId) ?? 0) + rawActualHours);
+      }
       existing.scheduledHours += scheduledHours;
       existing.actualHours += actualHours;
       existing.scheduledCost += scheduledHours * hourlyRate;
@@ -581,9 +601,10 @@ export default function ReportsPage() {
         varianceCost: 0,
       };
 
-      if (clockSummary.hours > existing.actualHours) {
-        existing.actualHours = clockSummary.hours;
-        existing.actualCost = clockSummary.hours * hourlyRate;
+      const paidClockHours = Math.max(0, clockSummary.hours - (unpaidHoursByEmployee.get(employeeId) ?? 0));
+      if (paidClockHours > existing.actualHours) {
+        existing.actualHours = paidClockHours;
+        existing.actualCost = paidClockHours * hourlyRate;
       }
       byEmployee.set(employeeId, existing);
     });
@@ -599,7 +620,7 @@ export default function ReportsPage() {
     });
 
     return Array.from(byEmployee.values()).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [assignments, clockEvents, allEmployees]);
+  }, [assignments, clockEvents, allEmployees, tasks]);
 
   const hasLaborResult = !loading || Boolean(error) || laborRows.length > 0;
 
@@ -642,15 +663,16 @@ export default function ReportsPage() {
 
   const categoryLaborRows = useMemo<CategoryLaborRow[]>(() => {
     const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
-    const taskCategoryById = new Map(tasks.map((task) => [task.id, task.category?.trim() || 'General']));
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
     const byCategory = new Map<string, CategoryLaborRow>();
 
     assignments.forEach((assignment) => {
-      const category = taskCategoryById.get(assignment.task_id ?? '') ?? 'General';
+      const task = taskById.get(assignment.task_id ?? '');
+      const category = task?.category?.trim() || 'General';
       const employee = employeeById.get(assignment.employee_id);
       const hourlyRate = Number(employee?.hourly_rate ?? 0);
       const scheduledHours = Number(assignment.estimated_hours ?? 0);
-      const actualHours = Number(assignment.actual_hours ?? 0);
+      const actualHours = getPaidActualHours(assignment, taskById);
       const existing = byCategory.get(category) ?? {
         category,
         tasksCompleted: 0,
@@ -726,12 +748,13 @@ export default function ReportsPage() {
       ]),
     );
     const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
     trendAssignments.forEach((assignment) => {
       const month = String(assignment.date).slice(0, 7);
       const bucket = byMonth.get(month);
       if (!bucket) return;
       const estimated = Number(assignment.estimated_hours ?? 0);
-      const actual = Number(assignment.actual_hours ?? 0);
+      const actual = getPaidActualHours(assignment, taskById);
       bucket.totalTasks += 1;
       if ((assignment.status ?? '').toLowerCase() === 'done') bucket.doneTasks += 1;
       bucket.scheduledHours += estimated;
@@ -746,7 +769,7 @@ export default function ReportsPage() {
       actualHours: Number(row.actualHours.toFixed(1)),
       laborCost: Number(row.laborCost.toFixed(2)),
     }));
-  }, [allEmployees, trendAssignments]);
+  }, [allEmployees, tasks, trendAssignments]);
 
   const ytdCost = useMemo(
     () => trendChartData.reduce((sum, row) => sum + Number(row.laborCost ?? 0), 0),
@@ -774,6 +797,7 @@ export default function ReportsPage() {
     const last4StartKey = toIsoDate(last4Start);
     const employeeById = new Map(allEmployees.map((employee) => [employee.id, employee]));
     const byEmployee = new Map<string, { name: string; actualHours: number; shiftHours: number }>();
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
 
     const shiftHoursForEntry = (entry: ScheduleEntryTrendRow) => {
       const startValue = entry.shift_start?.slice(0, 5);
@@ -803,7 +827,7 @@ export default function ReportsPage() {
         const employee = employeeById.get(assignment.employee_id);
         const name = employee ? `${employee.first_name ?? ''} ${employee.last_name ?? ''}`.trim() || 'Unnamed Employee' : 'Unknown Employee';
         const existing = byEmployee.get(assignment.employee_id) ?? { name, actualHours: 0, shiftHours: 0 };
-        existing.actualHours += Number(assignment.actual_hours ?? assignment.estimated_hours ?? 0);
+        existing.actualHours += getPaidActualHours(assignment, taskById);
         byEmployee.set(assignment.employee_id, existing);
       });
 
@@ -826,7 +850,7 @@ export default function ReportsPage() {
       })
       .sort((a, b) => b.averageHours - a.averageHours)
       .slice(0, 12);
-  }, [allEmployees, trendAssignments, trendScheduleEntries]);
+  }, [allEmployees, tasks, trendAssignments, trendScheduleEntries]);
 
   const exportCsv = useCallback(() => {
     const headers = ['Employee', 'Days Worked', 'Scheduled Hours', 'Actual Hours', 'Tasks Completed', 'Variance', 'Scheduled Cost', 'Actual Cost', 'Variance ($)'];
@@ -944,7 +968,8 @@ export default function ReportsPage() {
     const coverageScore = shiftHours > 0 ? Math.min(25, (assignedHours / shiftHours) * 25) : 0;
 
     const scheduledHours7 = last7Assignments.reduce((sum, row) => sum + Number(row.estimated_hours ?? 0), 0);
-    const actualHours7 = last7Assignments.reduce((sum, row) => sum + Number(row.actual_hours ?? 0), 0);
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const actualHours7 = last7Assignments.reduce((sum, row) => sum + getPaidActualHours(row, taskById), 0);
     const varianceScore = scheduledHours7 > 0 ? clamp(20 - (Math.abs(actualHours7 - scheduledHours7) / scheduledHours7) * 20, 0, 20) : 0;
 
     const overdueCount = overdueEquipmentRows.length;
@@ -953,7 +978,7 @@ export default function ReportsPage() {
     const needsScore = openNeedsCount === 0 ? 10 : openNeedsCount <= 3 ? 5 : 0;
 
     return Math.round(clamp(completionScore + coverageScore + varianceScore + equipmentScore + needsScore, 0, 100));
-  }, [openNeedsCount, overdueEquipmentRows.length, trendAssignments, trendScheduleEntries]);
+  }, [openNeedsCount, overdueEquipmentRows.length, tasks, trendAssignments, trendScheduleEntries]);
 
   const efficiencyLabel = useMemo(() => {
     if (efficiencyScore >= 90) return 'Excellent';
@@ -982,7 +1007,9 @@ export default function ReportsPage() {
     assignments.forEach((assignment) => {
       const task = categoryByTaskId.get(assignment.task_id ?? '');
       const taskName = task?.name?.trim() || 'Uncategorized Task';
-      topTasks.set(taskName, (topTasks.get(taskName) ?? 0) + Number(assignment.actual_hours ?? assignment.estimated_hours ?? 0));
+      const paidHours = getPaidActualHours(assignment, categoryByTaskId);
+      if (paidHours <= 0) return;
+      topTasks.set(taskName, (topTasks.get(taskName) ?? 0) + paidHours);
     });
     const topFive = Array.from(topTasks.entries())
       .map(([name, hours]) => ({ name, hours }))
@@ -1048,6 +1075,7 @@ export default function ReportsPage() {
     const employeeMap = new Map(allEmployees.map((employee) => [employee.id, employee]));
     const scheduledByEmployeeDay = new Map<string, number>();
     const actualByEmployeeDay = new Map<string, number>();
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
 
     timesheetSchedules.forEach((entry) => {
       const key = `${entry.employee_id}|${entry.date}`;
@@ -1057,8 +1085,8 @@ export default function ReportsPage() {
 
     timesheetAssignments.forEach((entry) => {
       const key = `${entry.employee_id}|${entry.date}`;
-      const hours = Number(entry.actual_hours ?? 0);
-      actualByEmployeeDay.set(key, (actualByEmployeeDay.get(key) ?? 0) + (Number.isFinite(hours) ? hours : 0));
+      const hours = getPaidActualHours(entry, taskById);
+      actualByEmployeeDay.set(key, (actualByEmployeeDay.get(key) ?? 0) + hours);
     });
 
     const employeeIds = new Set<string>([
@@ -1088,7 +1116,7 @@ export default function ReportsPage() {
         return { employeeId, employeeName, hourlyRate, days, totalScheduled, totalActual, cost };
       })
       .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-  }, [allEmployees, timesheetAssignments, timesheetSchedules, timesheetWeekDays]);
+  }, [allEmployees, tasks, timesheetAssignments, timesheetSchedules, timesheetWeekDays]);
 
   const timesheetTotals = useMemo(() => {
     return timesheetRows.reduce(
