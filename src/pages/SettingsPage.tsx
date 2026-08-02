@@ -104,6 +104,8 @@ interface SchedulerSettings {
   min_shift_hours: number;
   max_shift_hours: number;
   overtime_threshold_hours: number;
+  default_break_minutes: number;
+  default_break_paid: boolean;
   escalation_config?: Partial<EscalationThresholds> | null;
 }
 
@@ -1137,7 +1139,7 @@ function OperationsTab({
     <div className="space-y-8">
       <WorkspaceTab orgId={orgId} userRole={userRole} currentPropertyId={currentPropertyId} onClearPropertySelection={onClearPropertySelection} />
       <div className="border-t border-dashed border-surface-border pt-6">
-        <SchedulerTab orgId={orgId} />
+        <SchedulerTab orgId={orgId} userRole={userRole} />
       </div>
     </div>
   );
@@ -4527,7 +4529,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
   );
 }
 
-function SchedulerTab({ orgId }: { orgId: string | null }) {
+function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: string | null }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -4547,6 +4549,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
   const [newStart, setNewStart] = useState('05:00');
   const [newEnd, setNewEnd] = useState('13:30');
   const [newDays, setNewDays] = useState<string[]>(['mon', 'tue', 'wed', 'thu', 'fri']);
+  const canManageSchedulerSettings = ['admin', 'manager'].includes(String(userRole ?? '').toLowerCase());
 
   const dayOptions = [
     { key: 'mon', label: 'M' },
@@ -4582,16 +4585,28 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
     }
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await supabase.from('scheduler_settings').select('*').eq('org_id', orgId).single();
-    if (fetchError) {
-      setError(fetchError.message);
+    try {
+      const { data, error: fetchError } = await withSettingsAbortControllerTimeout(
+        supabase.from('scheduler_settings').select('*').eq('org_id', orgId).single(),
+      );
+      if (fetchError) {
+        setError(fetchError.message);
+        setLoading(false);
+        return;
+      }
+      const nextSettings = data as SchedulerSettings;
+      setSettings({
+        ...nextSettings,
+        default_break_minutes: Number(nextSettings.default_break_minutes ?? 30),
+        default_break_paid: Boolean(nextSettings.default_break_paid ?? false),
+      });
+      setAlertsConfig(normalizeAlertsConfig(nextSettings.escalation_config));
       setLoading(false);
-      return;
+    } catch (fetchError) {
+      const message = fetchError instanceof Error ? fetchError.message : 'Scheduler settings could not be loaded.';
+      setError(message);
+      setLoading(false);
     }
-    const nextSettings = data as SchedulerSettings;
-    setSettings(nextSettings);
-    setAlertsConfig(normalizeAlertsConfig(nextSettings.escalation_config));
-    setLoading(false);
   }, [orgId]);
 
   const fetchTemplates = useCallback(async () => {
@@ -4637,20 +4652,30 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
     currentDays.includes(dayValue) ? currentDays.filter((day) => day !== dayValue) : [...currentDays, dayValue];
 
   const saveSettings = async () => {
-    if (!supabase || !orgId || !settings) return;
+    if (!supabase || !orgId || !settings || !canManageSchedulerSettings) return;
     setSaving(true);
     setError(null);
-    const { error: saveError } = await supabase
-      .from('scheduler_settings')
-      .update({
-        operational_day_start: settings.operational_day_start,
-        operational_day_end: settings.operational_day_end,
-        operational_days: settings.operational_days,
-        min_shift_hours: settings.min_shift_hours,
-        max_shift_hours: settings.max_shift_hours,
-        overtime_threshold_hours: settings.overtime_threshold_hours,
-      })
-      .eq('org_id', orgId);
+    let saveError: Error | null = null;
+    try {
+      const result = await withSettingsAbortControllerTimeout(
+        supabase
+          .from('scheduler_settings')
+          .update({
+            operational_day_start: settings.operational_day_start,
+            operational_day_end: settings.operational_day_end,
+            operational_days: settings.operational_days,
+            min_shift_hours: settings.min_shift_hours,
+            max_shift_hours: settings.max_shift_hours,
+            overtime_threshold_hours: settings.overtime_threshold_hours,
+            default_break_minutes: Math.max(0, Math.round(Number(settings.default_break_minutes || 0))),
+            default_break_paid: Boolean(settings.default_break_paid),
+          })
+          .eq('org_id', orgId),
+      );
+      saveError = result.error ?? null;
+    } catch (error) {
+      saveError = error instanceof Error ? error : new Error('Scheduler settings could not be saved.');
+    }
     setSaving(false);
     if (saveError) {
       setError(saveError.message);
@@ -4663,7 +4688,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
   };
 
   const saveAlertsConfig = async () => {
-    if (!supabase || !orgId) return;
+    if (!supabase || !orgId || !canManageSchedulerSettings) return;
     setAlertsSaving(true);
     setError(null);
     const { error: saveError } = await supabase
@@ -4747,6 +4772,11 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
       <section className="rounded-xl border border-surface-border bg-surface-card p-5">
         <h3 className="text-base font-semibold text-text-primary">Operational Day</h3>
         <p className="mb-4 mt-1 text-sm text-text-muted">Define the standard operating window and active work days.</p>
+        {!canManageSchedulerSettings ? (
+          <div className="mb-4 rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+            Admin or manager access is required to change scheduler settings.
+          </div>
+        ) : null}
 
         {loading ? (
           <PageSkeleton />
@@ -4761,6 +4791,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
                   id="settings-operational-day-start"
                   value={settings.operational_day_start.slice(0, 5)}
                   onChange={(event) => setSettings((cur) => (cur ? { ...cur, operational_day_start: `${event.target.value}:00` } : cur))}
+                  disabled={!canManageSchedulerSettings}
                   className={`${settingsInputClass} mt-1.5`}
                 />
               </div>
@@ -4770,6 +4801,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
                   id="settings-operational-day-end"
                   value={settings.operational_day_end.slice(0, 5)}
                   onChange={(event) => setSettings((cur) => (cur ? { ...cur, operational_day_end: `${event.target.value}:00` } : cur))}
+                  disabled={!canManageSchedulerSettings}
                   className={`${settingsInputClass} mt-1.5`}
                 />
               </div>
@@ -4796,6 +4828,7 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
                           : 'border-surface-border bg-surface-elevated text-text-muted hover:bg-surface-hover hover:text-text-primary'
                       }`}
                       aria-pressed={active}
+                      disabled={!canManageSchedulerSettings}
                     >
                       {day.label}
                     </button>
@@ -4807,21 +4840,47 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
             <div className="grid gap-4 sm:grid-cols-3">
               <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
                 Min Shift Hours
-                <input className={`${settingsInputClass} mt-1.5`} type="number" value={settings.min_shift_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, min_shift_hours: Number(event.target.value) } : cur))} />
+                <input className={`${settingsInputClass} mt-1.5`} type="number" disabled={!canManageSchedulerSettings} value={settings.min_shift_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, min_shift_hours: Number(event.target.value) } : cur))} />
               </label>
               <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
                 Max Shift Hours
-                <input className={`${settingsInputClass} mt-1.5`} type="number" value={settings.max_shift_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, max_shift_hours: Number(event.target.value) } : cur))} />
+                <input className={`${settingsInputClass} mt-1.5`} type="number" disabled={!canManageSchedulerSettings} value={settings.max_shift_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, max_shift_hours: Number(event.target.value) } : cur))} />
               </label>
               <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
                 Overtime Threshold
-                <input className={`${settingsInputClass} mt-1.5`} type="number" value={settings.overtime_threshold_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, overtime_threshold_hours: Number(event.target.value) } : cur))} />
+                <input className={`${settingsInputClass} mt-1.5`} type="number" disabled={!canManageSchedulerSettings} value={settings.overtime_threshold_hours} onChange={(event) => setSettings((cur) => (cur ? { ...cur, overtime_threshold_hours: Number(event.target.value) } : cur))} />
               </label>
+            </div>
+
+            <div className="rounded-xl border border-surface-border bg-surface-elevated p-4">
+              <div className="grid gap-4 md:grid-cols-[minmax(180px,1fr)_auto] md:items-center">
+                <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                  Default Break Duration
+                  <input
+                    className={`${settingsInputClass} mt-1.5`}
+                    type="number"
+                    min={0}
+                    step={5}
+                    disabled={!canManageSchedulerSettings}
+                    value={settings.default_break_minutes}
+                    onChange={(event) => setSettings((cur) => (cur ? { ...cur, default_break_minutes: Math.max(0, Number(event.target.value || '0')) } : cur))}
+                  />
+                </label>
+                <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-text-secondary">
+                  <span className="font-medium text-text-primary">Paid break</span>
+                  <Switch
+                    checked={settings.default_break_paid}
+                    disabled={!canManageSchedulerSettings}
+                    onCheckedChange={(checked) => setSettings((cur) => (cur ? { ...cur, default_break_paid: checked } : cur))}
+                  />
+                </label>
+              </div>
+              <p className="mt-2 text-xs text-text-muted">Unpaid breaks are excluded from paid worked-hour and cost totals.</p>
             </div>
 
             <button
               onClick={() => void saveSettings()}
-              disabled={saving}
+              disabled={saving || !canManageSchedulerSettings}
               className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-brand-bright disabled:opacity-60"
             >
               {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save'}
@@ -4906,13 +4965,15 @@ function SchedulerTab({ orgId }: { orgId: string | null }) {
                 min={min}
                 max={max}
                 value={alertsConfig[field]}
+                disabled={!canManageSchedulerSettings}
                 onChange={(event) => setAlertsConfig((current) => ({ ...current, [field]: Number(event.target.value || '0') }))}
               />
             </label>
           ))}
           <button
             onClick={() => void saveAlertsConfig()}
-            className={`w-fit rounded-lg px-4 py-2 text-sm font-medium text-text-inverse transition-colors ${alertsSaved ? 'bg-status-active' : 'bg-brand hover:bg-brand-bright'}`}
+            disabled={alertsSaving || !canManageSchedulerSettings}
+            className={`w-fit rounded-lg px-4 py-2 text-sm font-medium text-text-inverse transition-colors disabled:opacity-60 ${alertsSaved ? 'bg-status-active' : 'bg-brand hover:bg-brand-bright'}`}
           >
             {alertsSaving ? 'Saving...' : alertsSaved ? 'Saved ✓' : 'Save alerts'}
           </button>

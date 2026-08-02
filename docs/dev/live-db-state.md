@@ -802,6 +802,12 @@ can_manage_property(property_id).
 | operational_days              | text[]      | YES      | ['mon','tue','wed','thu','fri','sat'] |
 | property_id                   | uuid        | YES      |                          |
 | escalation_config             | jsonb       | YES      |                          |
+| default_break_minutes         | integer     | NO       | 30                       |
+| default_break_paid            | boolean     | NO       | false                    |
+
+> default_break_minutes/default_break_paid: org-level break/lunch policy
+> defaults for scheduler and downstream worked-hour calculations. Unpaid breaks
+> are excluded from paid-hours/cost totals.
 
 ---
 
@@ -911,11 +917,15 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | estimated_hours | numeric     | YES      | 1         |
 | location        | text        | YES      |           |
 | sop_id          | uuid        | YES      |           |
+| is_unpaid       | boolean     | NO       | false     |
 
 > sop_id: nullable FK to sops.id. When set, this task has an associated
 > SOP that should be surfaced to the assigned employee (see
 > MobileFieldWorkspacePage.tsx) when they're working the task. null = no
 > SOP required for this task.
+>
+> is_unpaid: excludes this task from paid-hours/cost totals when computing
+> worked hours. Intended for break/lunch tasks.
 
 ---
 
