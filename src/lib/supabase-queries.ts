@@ -1515,6 +1515,7 @@ async function fetchOpenAssignmentsBacklog(today: string, propertyId?: string, o
       .select(ASSIGNMENTS_SELECT_COLUMNS)
       .lt('date', today)
       .is('deleted_at', null)
+      .is('approved_at', null)
       .not('status', 'in', `("${CLOSED_ASSIGNMENT_STATUSES.join('\",\"')}")`)
       .order('date', { ascending: true })
       .order('created_at', { ascending: true });

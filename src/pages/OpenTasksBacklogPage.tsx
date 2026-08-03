@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { AlertTriangle, CalendarClock, CheckCircle2, RefreshCw, UsersRound } from 'lucide-react';
+import { Fragment, useMemo, useState } from 'react';
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, RefreshCw, UsersRound } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -8,6 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { TableSkeleton } from '@/components/TableSkeleton';
+import { OpenTaskDayReviewPanel } from '@/components/workboard/OpenTaskDayReviewPanel';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
@@ -47,6 +47,10 @@ function normalizeStatusLabel(status?: string | null) {
   return value ? value.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Planned';
 }
 
+function makeReviewKey(employeeId: string, date: string) {
+  return employeeId + '|' + date;
+}
+
 type BacklogAssignment = Assignment & {
   overdueDays: number;
   taskName: string;
@@ -76,7 +80,6 @@ function statusBadgeClass(status?: string | null) {
 }
 
 export default function OpenTasksBacklogPage() {
-  const router = useRouter();
   const { currentUser, orgId, userRole } = useOrgProfile();
   const role = String(userRole ?? currentUser?.role ?? '').toLowerCase();
   const canViewBacklog = role === 'admin' || role === 'manager';
@@ -90,6 +93,7 @@ export default function OpenTasksBacklogPage() {
   const backlogQuery = useOpenAssignmentsBacklog(todayKey, selectedPropertyId, queryOrgId);
   const employeesQuery = useEmployees(undefined, queryOrgId, 'all');
   const tasksQuery = useTasks(undefined, queryOrgId);
+  const [expandedReviewKeys, setExpandedReviewKeys] = useState<Set<string>>(() => new Set());
 
   const groups = useMemo<PropertyBacklogGroup[]>(() => {
     const propertyById = new Map(properties.map((property) => [property.id, property]));
@@ -158,9 +162,23 @@ export default function OpenTasksBacklogPage() {
   const isLoading = propertiesLoading || backlogQuery.isLoading || employeesQuery.isLoading || tasksQuery.isLoading;
   const error = backlogQuery.error || employeesQuery.error || tasksQuery.error;
 
-  const openDayReview = (employeeId: string, date: string) => {
+  const toggleDayReview = (employeeId: string, date: string) => {
     if (!employeeId || employeeId === 'unknown-employee' || !date) return;
-    router.push(`/app/open-tasks/review?employeeId=${encodeURIComponent(employeeId)}&date=${encodeURIComponent(date)}`);
+    const key = makeReviewKey(employeeId, date);
+    setExpandedReviewKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const closeDayReview = (key: string) => {
+    setExpandedReviewKeys((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
   };
 
   if (!canViewBacklog) {
@@ -185,7 +203,7 @@ export default function OpenTasksBacklogPage() {
           </div>
           <h1 className="mt-2 text-2xl font-semibold text-text-primary">Open Tasks</h1>
           <p className="mt-1 max-w-2xl text-sm text-text-muted">
-            Assignments dated before {formatDisplayDate(todayKey)} that are not marked closed.
+            Assignments dated before {formatDisplayDate(todayKey)} that are not marked closed or approved.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -232,7 +250,7 @@ export default function OpenTasksBacklogPage() {
           <div>
             <h2 className="text-base font-semibold text-text-primary">Backlog by property and crew</h2>
             <p className="mt-1 text-xs text-text-muted">
-              Closed statuses excluded: {CLOSED_ASSIGNMENT_STATUSES.join(', ')}.
+              Closed statuses excluded: {CLOSED_ASSIGNMENT_STATUSES.join(', ')}. Approved days are hidden from this queue.
             </p>
           </div>
           {totals.assignments > 0 ? (
@@ -269,66 +287,100 @@ export default function OpenTasksBacklogPage() {
                   </Badge>
                 </div>
 
-                {propertyGroup.employees.map((employeeGroup) => (
-                  <div key={employeeGroup.employeeId} className="border-b border-surface-border last:border-b-0">
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                      onClick={() => openDayReview(employeeGroup.employeeId, employeeGroup.assignments[0]?.date ?? '')}
-                      aria-label={`Review ${employeeGroup.employeeName}'s oldest open day`}
-                    >
-                      <UsersRound className="h-4 w-4 text-text-muted" />
-                      <h4 className="text-sm font-medium text-text-primary">{employeeGroup.employeeName}</h4>
-                      <span className="text-xs text-text-muted">{employeeGroup.assignments.length} open</span>
-                    </button>
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[860px] border-collapse text-sm">
-                        <thead className="bg-surface-card/70 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
-                          <tr>
-                            <th className="px-4 py-2 font-medium">Employee</th>
-                            <th className="px-4 py-2 font-medium">Task</th>
-                            <th className="px-4 py-2 font-medium">Date</th>
-                            <th className="px-4 py-2 font-medium">Scheduled</th>
-                            <th className="px-4 py-2 font-medium">Status</th>
-                            <th className="px-4 py-2 font-medium">Days overdue</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {employeeGroup.assignments.map((assignment) => (
-                            <tr
-                              key={assignment.id}
-                              role="button"
-                              tabIndex={0}
-                              className="cursor-pointer border-t border-surface-border transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                              onClick={() => openDayReview(employeeGroup.employeeId, assignment.date)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                  event.preventDefault();
-                                  openDayReview(employeeGroup.employeeId, assignment.date);
-                                }
-                              }}
-                              aria-label={`Review ${employeeGroup.employeeName} on ${formatDisplayDate(assignment.date)}`}
-                            >
-                              <td className="px-4 py-3 text-text-secondary">{employeeGroup.employeeName}</td>
-                              <td className="px-4 py-3">
-                                <div className="font-medium text-text-primary">{assignment.taskName}</div>
-                                <div className="mt-0.5 text-xs text-text-muted">{assignment.taskCategory}</div>
-                              </td>
-                              <td className="px-4 py-3 text-text-secondary">{formatDisplayDate(assignment.date)}</td>
-                              <td className="px-4 py-3 text-text-secondary">{Number(assignment.estimatedHours ?? 0).toFixed(1)}h</td>
-                              <td className="px-4 py-3">
-                                <Badge variant="outline" className={statusBadgeClass(assignment.status)}>
-                                  {normalizeStatusLabel(assignment.status)}
-                                </Badge>
-                              </td>
-                              <td className="px-4 py-3 font-semibold text-status-pending">{assignment.overdueDays}d</td>
+                {propertyGroup.employees.map((employeeGroup) => {
+                  const oldestDate = employeeGroup.assignments[0]?.date ?? '';
+                  const oldestReviewKey = makeReviewKey(employeeGroup.employeeId, oldestDate);
+                  const isOldestReviewExpanded = expandedReviewKeys.has(oldestReviewKey);
+
+                  return (
+                    <div key={employeeGroup.employeeId} className="border-b border-surface-border last:border-b-0">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                        onClick={() => toggleDayReview(employeeGroup.employeeId, oldestDate)}
+                        aria-expanded={isOldestReviewExpanded}
+                        aria-label={`${isOldestReviewExpanded ? 'Collapse' : 'Review'} ${employeeGroup.employeeName}'s oldest open day`}
+                      >
+                        <ChevronDown className={cn('h-4 w-4 text-text-muted transition-transform', isOldestReviewExpanded ? undefined : '-rotate-90')} />
+                        <UsersRound className="h-4 w-4 text-text-muted" />
+                        <h4 className="text-sm font-medium text-text-primary">{employeeGroup.employeeName}</h4>
+                        <span className="text-xs text-text-muted">{employeeGroup.assignments.length} open</span>
+                      </button>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[860px] border-collapse text-sm">
+                          <thead className="bg-surface-card/70 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
+                            <tr>
+                              <th className="px-4 py-2 font-medium">Employee</th>
+                              <th className="px-4 py-2 font-medium">Task</th>
+                              <th className="px-4 py-2 font-medium">Date</th>
+                              <th className="px-4 py-2 font-medium">Scheduled</th>
+                              <th className="px-4 py-2 font-medium">Status</th>
+                              <th className="px-4 py-2 font-medium">Days overdue</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {employeeGroup.assignments.map((assignment, index) => {
+                              const reviewKey = makeReviewKey(employeeGroup.employeeId, assignment.date);
+                              const isExpanded = expandedReviewKeys.has(reviewKey);
+                              const isLastForDate = employeeGroup.assignments[index + 1]?.date !== assignment.date;
+
+                              return (
+                                <Fragment key={assignment.id}>
+                                  <tr
+                                    role="button"
+                                    tabIndex={0}
+                                    className={cn(
+                                      'cursor-pointer border-t border-surface-border transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                                      isExpanded ? 'bg-surface-card/70' : undefined,
+                                    )}
+                                    onClick={() => toggleDayReview(employeeGroup.employeeId, assignment.date)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        toggleDayReview(employeeGroup.employeeId, assignment.date);
+                                      }
+                                    }}
+                                    aria-expanded={isExpanded}
+                                    aria-label={`${isExpanded ? 'Collapse' : 'Review'} ${employeeGroup.employeeName} on ${formatDisplayDate(assignment.date)}`}
+                                  >
+                                    <td className="px-4 py-3 text-text-secondary">{employeeGroup.employeeName}</td>
+                                    <td className="px-4 py-3">
+                                      <div className="font-medium text-text-primary">{assignment.taskName}</div>
+                                      <div className="mt-0.5 text-xs text-text-muted">{assignment.taskCategory}</div>
+                                    </td>
+                                    <td className="px-4 py-3 text-text-secondary">{formatDisplayDate(assignment.date)}</td>
+                                    <td className="px-4 py-3 text-text-secondary">{Number(assignment.estimatedHours ?? 0).toFixed(1)}h</td>
+                                    <td className="px-4 py-3">
+                                      <Badge variant="outline" className={statusBadgeClass(assignment.status)}>
+                                        {normalizeStatusLabel(assignment.status)}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 font-semibold text-status-pending">{assignment.overdueDays}d</td>
+                                  </tr>
+                                  {isExpanded && isLastForDate ? (
+                                    <tr className="border-t border-surface-border">
+                                      <td colSpan={6} className="bg-surface-card/60 px-4 py-4">
+                                        <OpenTaskDayReviewPanel
+                                          employeeId={employeeGroup.employeeId}
+                                          date={assignment.date}
+                                          className="space-y-4"
+                                          onApproved={() => {
+                                            closeDayReview(reviewKey);
+                                            void backlogQuery.refetch();
+                                          }}
+                                        />
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                </Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </section>
             ))}
           </div>
