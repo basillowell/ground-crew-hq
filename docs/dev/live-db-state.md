@@ -804,10 +804,11 @@ can_manage_property(property_id).
 | escalation_config             | jsonb       | YES      |                          |
 | default_break_minutes         | integer     | NO       | 30                       |
 | default_break_paid            | boolean     | NO       | false                    |
+| default_break_start_time      | time        | NO       | '11:00:00'               |
 
-> default_break_minutes/default_break_paid: org-level break/lunch policy
-> defaults for scheduler and downstream worked-hour calculations. Unpaid breaks
-> are excluded from paid-hours/cost totals.
+> default_break_minutes/default_break_paid/default_break_start_time: org-level
+> break/lunch policy defaults for scheduler and downstream worked-hour
+> calculations. Unpaid breaks are excluded from paid-hours/cost totals.
 
 ---
 

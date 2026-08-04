@@ -73,11 +73,13 @@ type TaskReviewRow = {
 type SchedulerSettingsReviewRow = {
   default_break_minutes: number | null;
   default_break_paid: boolean | null;
+  default_break_start_time: string | null;
 };
 
 type BreakPolicy = {
   defaultBreakMinutes: number;
   defaultBreakPaid: boolean;
+  defaultBreakStartTime: string;
 };
 
 type ReviewData = {
@@ -157,6 +159,15 @@ function minutesToTime(totalMinutes: number) {
 
 function addMinutesToTime(value: string, minutes: number) {
   return minutesToTime(timeToMinutes(value) + minutes);
+}
+
+function normalizeClockTime(value?: string | null, fallback = '11:00') {
+  const match = /^(\d{1,2}):(\d{2})/.exec(String(value ?? '').trim());
+  if (!match) return fallback;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return fallback;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 function getTaskIsUnpaid(task?: Task | null) {
@@ -276,7 +287,7 @@ async function fetchReviewData(orgId: string, employeeId: string, date: string):
   const settingsPromise = withReviewTimeout(
     supabase
       .from('scheduler_settings')
-      .select('default_break_minutes, default_break_paid')
+      .select('default_break_minutes, default_break_paid, default_break_start_time')
       .eq('org_id', orgId)
       .maybeSingle(),
     'Break policy fetch',
@@ -303,6 +314,7 @@ async function fetchReviewData(orgId: string, employeeId: string, date: string):
   if (settingsResult.error) throw settingsResult.error;
   const settings = settingsResult.data as SchedulerSettingsReviewRow | null;
   const configuredMinutes = Number(settings?.default_break_minutes ?? 30);
+  const configuredBreakStartTime = normalizeClockTime(settings?.default_break_start_time, '11:00');
 
   return {
     assignments: ((assignmentsResult.data ?? []) as AssignmentReviewRow[]).map(toAssignment),
@@ -312,6 +324,7 @@ async function fetchReviewData(orgId: string, employeeId: string, date: string):
     breakPolicy: {
       defaultBreakMinutes: Number.isFinite(configuredMinutes) ? Math.max(0, Math.round(configuredMinutes)) : 30,
       defaultBreakPaid: Boolean(settings?.default_break_paid ?? false),
+      defaultBreakStartTime: configuredBreakStartTime,
     },
   };
 }
@@ -410,7 +423,7 @@ async function insertBreakAssignment({
   const nextRow = rows[insertIndex] ?? null;
   const propertyId = nextRow?.assignment.propertyId ?? previousRow?.assignment.propertyId ?? null;
   if (!propertyId || !isUuid(propertyId)) throw new Error('Could not identify the property for this break. Refresh the review and try again.');
-  const breakStart = nextRow?.start ?? previousRow?.end ?? '06:00';
+  const breakStart = normalizeClockTime(breakPolicy.defaultBreakStartTime, '11:00');
   const breakEnd = addMinutesToTime(breakStart, breakMinutes);
   const breakTask = await ensureBreakTask({
     orgId,
@@ -445,18 +458,10 @@ async function insertBreakAssignment({
   for (const [index, row] of rows.entries()) {
     if (!row.assignment.id) continue;
     const nextOrder = index >= insertIndex ? index + 2 : index + 1;
-    const payload: Record<string, unknown> = { order_index: nextOrder };
-    if (index >= insertIndex) {
-      const shiftedStart = addMinutesToTime(row.start, breakMinutes);
-      const shiftedEnd = addMinutesToTime(row.end, breakMinutes);
-      payload.start_time = shiftedStart;
-      payload.actual_start_at = wallClockToStoredIso(date, shiftedStart, timezone);
-      payload.actual_completed_at = wallClockToStoredIso(date, shiftedEnd, timezone);
-    }
     const updateResult = await withReviewTimeout(
       supabase
         .from('assignments')
-        .update(payload)
+        .update({ order_index: nextOrder })
         .eq('id', row.assignment.id)
         .eq('org_id', orgId)
         .eq('employee_id', employeeId)
@@ -709,15 +714,20 @@ export function OpenTaskDayReviewPanel({
     },
   });
   const insertBreakMutation = useMutation({
-    mutationFn: (insertIndex: number) => insertBreakAssignment({
+    mutationFn: async (insertIndex: number) => {
+      if (hasUnsavedEdits) {
+        await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
+      }
+      return insertBreakAssignment({
       orgId: queryOrgId,
       employeeId: validEmployeeId,
       date: validDate,
       rows,
       insertIndex,
       timezone: operationalTimezone,
-      breakPolicy: reviewData?.breakPolicy ?? { defaultBreakMinutes: 30, defaultBreakPaid: false },
-    }),
+      breakPolicy: reviewData?.breakPolicy ?? { defaultBreakMinutes: 30, defaultBreakPaid: false, defaultBreakStartTime: '11:00' },
+      });
+    },
     onMutate: (insertIndex) => {
       setInsertingBreakIndex(insertIndex);
     },
@@ -731,7 +741,7 @@ export function OpenTaskDayReviewPanel({
         queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'], refetchType: 'all' }),
         queryClient.invalidateQueries({ queryKey: ['tasks', queryOrgId] }),
       ]);
-      toast.success('Break inserted and following tasks shifted.');
+      toast.success('Break inserted.');
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : 'Break could not be inserted.');
@@ -755,6 +765,27 @@ export function OpenTaskDayReviewPanel({
       toast.error(error instanceof Error ? error.message : 'Day could not be approved.');
     },
   });
+  const saveAndApproveMutation = useMutation({
+    mutationFn: async () => {
+      await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
+      await approveReviewedDay({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentIds });
+    },
+    onSuccess: async () => {
+      setStartOverrides({});
+      setEndOverrides({});
+      setTaskOverrides({});
+      await Promise.all([
+        reviewQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'], refetchType: 'all' }),
+      ]);
+      onApproved?.();
+      toast.success('Reviewed times saved and day approved.');
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Day could not be saved and approved.');
+    },
+  });
 
   const handleTaskChange = (assignmentId: string, taskId: string) => {
     if (isApproved) return;
@@ -776,7 +807,7 @@ export function OpenTaskDayReviewPanel({
   };
 
   const handleDeleteAssignment = (assignmentId: string) => {
-    if (deleteMutation.isPending || saveMutation.isPending || approveMutation.isPending || insertBreakMutation.isPending) return;
+    if (deleteMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || insertBreakMutation.isPending) return;
     const row = rows.find((item) => item.assignment.id === assignmentId);
     const taskLabel = row?.assignment.title || reviewData?.tasks.find((task) => task.id === row?.assignment.taskId)?.name || 'this assignment';
     const confirmed = window.confirm(`Remove ${taskLabel} from this day review? This soft-deletes the assignment and removes it from Open Tasks.`);
@@ -785,16 +816,12 @@ export function OpenTaskDayReviewPanel({
   };
 
   const handleInsertBreak = (insertIndex: number) => {
-    if (isApproved || insertBreakMutation.isPending || saveMutation.isPending || deleteMutation.isPending || approveMutation.isPending) return;
-    if (hasUnsavedEdits) {
-      toast.info('Save reviewed time edits before inserting a break.');
-      return;
-    }
+    if (isApproved || insertBreakMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || approveMutation.isPending) return;
     insertBreakMutation.mutate(insertIndex);
   };
 
   const handleApprove = () => {
-    if (isApproved || approveMutation.isPending || saveMutation.isPending || insertBreakMutation.isPending) return;
+    if (isApproved || approveMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || insertBreakMutation.isPending) return;
     if (hasUnsavedEdits) {
       toast.info('Save reviewed times before approving the day.');
       return;
@@ -806,6 +833,17 @@ export function OpenTaskDayReviewPanel({
     const confirmed = window.confirm(`Approve ${assignmentIds.length} assignment${assignmentIds.length === 1 ? '' : 's'} for ${formatEmployeeName(employee)} on ${formatDisplayDate(validDate)}?`);
     if (!confirmed) return;
     approveMutation.mutate();
+  };
+
+  const handleSaveAndApprove = () => {
+    if (isApproved || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || insertBreakMutation.isPending) return;
+    if (assignmentIds.length === 0) {
+      toast.info('No assignments are available to approve.');
+      return;
+    }
+    const confirmed = window.confirm(`Save reviewed times and approve ${assignmentIds.length} assignment${assignmentIds.length === 1 ? '' : 's'} for ${formatEmployeeName(employee)} on ${formatDisplayDate(validDate)}?`);
+    if (!confirmed) return;
+    saveAndApproveMutation.mutate();
   };
 
   if (!canReview) {
@@ -861,19 +899,29 @@ export function OpenTaskDayReviewPanel({
             variant="outline"
             className="min-h-10 gap-2"
             onClick={() => saveMutation.mutate()}
-            disabled={isApproved || rows.length === 0 || saveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || reviewQuery.isLoading}
+            disabled={isApproved || rows.length === 0 || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || reviewQuery.isLoading}
           >
             {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save reviewed times
           </Button>
           <Button
             type="button"
+            variant="outline"
             className="min-h-10 gap-2"
             onClick={handleApprove}
-            disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending}
+            disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending}
           >
             {approveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
             Approve day
+          </Button>
+          <Button
+            type="button"
+            className="min-h-10 gap-2"
+            onClick={handleSaveAndApprove}
+            disabled={isApproved || rows.length === 0 || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || reviewQuery.isLoading}
+          >
+            {saveAndApproveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Save & Approve
           </Button>
         </div>
       </div>
@@ -930,7 +978,7 @@ export function OpenTaskDayReviewPanel({
             </div>
           ) : hasUnsavedEdits ? (
             <div className="rounded-lg border border-status-pending/30 bg-status-pending/10 px-4 py-3 text-sm text-status-pending">
-              You have unsaved time edits. Save reviewed times before approving this day.
+              You have unsaved time edits. Save reviewed times or use Save & Approve when the day is ready.
             </div>
           ) : null}
 
@@ -954,16 +1002,16 @@ export function OpenTaskDayReviewPanel({
               <DayCloseOutReviewRows
                 rows={rows}
                 tasks={reviewData.tasks}
-                disabled={isApproved || saveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending}
+                disabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending}
                 showScheduledHours
                 onTaskChange={handleTaskChange}
                 onStartChange={handleStartChange}
                 onEndChange={handleEndChange}
                 onDelete={handleDeleteAssignment}
                 deletingAssignmentId={deletingAssignmentId}
-                deleteDisabled={saveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending}
+                deleteDisabled={saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending}
                 onInsertBreak={handleInsertBreak}
-                insertBreakDisabled={isApproved || hasUnsavedEdits || saveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending}
+                insertBreakDisabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending}
                 insertingBreakIndex={insertingBreakIndex}
               />
             </Card>

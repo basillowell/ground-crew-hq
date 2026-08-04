@@ -106,6 +106,7 @@ interface SchedulerSettings {
   overtime_threshold_hours: number;
   default_break_minutes: number;
   default_break_paid: boolean;
+  default_break_start_time: string;
   escalation_config?: Partial<EscalationThresholds> | null;
 }
 
@@ -4599,6 +4600,7 @@ function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: str
         ...nextSettings,
         default_break_minutes: Number(nextSettings.default_break_minutes ?? 30),
         default_break_paid: Boolean(nextSettings.default_break_paid ?? false),
+        default_break_start_time: String(nextSettings.default_break_start_time ?? '11:00:00').slice(0, 5) + ':00',
       });
       setAlertsConfig(normalizeAlertsConfig(nextSettings.escalation_config));
       setLoading(false);
@@ -4669,6 +4671,7 @@ function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: str
             overtime_threshold_hours: settings.overtime_threshold_hours,
             default_break_minutes: Math.max(0, Math.round(Number(settings.default_break_minutes || 0))),
             default_break_paid: Boolean(settings.default_break_paid),
+            default_break_start_time: settings.default_break_start_time ? `${settings.default_break_start_time.slice(0, 5)}:00` : '11:00:00',
           })
           .eq('org_id', orgId),
       );
@@ -4853,7 +4856,7 @@ function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: str
             </div>
 
             <div className="rounded-xl border border-surface-border bg-surface-elevated p-4">
-              <div className="grid gap-4 md:grid-cols-[minmax(180px,1fr)_auto] md:items-center">
+              <div className="grid gap-4 md:grid-cols-[minmax(160px,1fr)_minmax(160px,1fr)_auto] md:items-center">
                 <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
                   Default Break Duration
                   <input
@@ -4866,6 +4869,16 @@ function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: str
                     onChange={(event) => setSettings((cur) => (cur ? { ...cur, default_break_minutes: Math.max(0, Number(event.target.value || '0')) } : cur))}
                   />
                 </label>
+                <div className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                  <label htmlFor="settings-default-break-start-time">Default Break Start</label>
+                  <TimeInput
+                    id="settings-default-break-start-time"
+                    value={settings.default_break_start_time.slice(0, 5)}
+                    onChange={(event) => setSettings((cur) => (cur ? { ...cur, default_break_start_time: event.target.value ? `${event.target.value}:00` : '11:00:00' } : cur))}
+                    disabled={!canManageSchedulerSettings}
+                    className={`${settingsInputClass} mt-1.5`}
+                  />
+                </div>
                 <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-sm text-text-secondary">
                   <span className="font-medium text-text-primary">Paid break</span>
                   <Switch
@@ -4875,7 +4888,7 @@ function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: str
                   />
                 </label>
               </div>
-              <p className="mt-2 text-xs text-text-muted">Unpaid breaks are excluded from paid worked-hour and cost totals.</p>
+              <p className="mt-2 text-xs text-text-muted">Break rows default to this clock time and duration. Unpaid breaks are excluded from paid worked-hour and cost totals.</p>
             </div>
 
             <button
