@@ -493,7 +493,6 @@ async function saveReviewedTimes({
       actual_completed_at: endIso,
       actual_hours: Number(row.hours.toFixed(2)),
     };
-    if (endIso) payload.status = 'completed';
     if (Object.prototype.hasOwnProperty.call(taskOverrides, row.assignment.id)) {
       const nextTaskId = taskOverrides[row.assignment.id] ?? '';
       if (nextTaskId && !isUuid(nextTaskId)) throw new Error('Invalid task ID. Please reselect a task.');
