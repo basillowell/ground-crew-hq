@@ -57,10 +57,15 @@ type BacklogAssignment = Assignment & {
   taskCategory: string;
 };
 
+type EnrichedBacklogAssignment = BacklogAssignment & {
+  employeeName: string;
+  propertyName: string;
+};
+
 type EmployeeBacklogGroup = {
   employeeId: string;
   employeeName: string;
-  assignments: BacklogAssignment[];
+  assignments: EnrichedBacklogAssignment[];
 };
 
 type PropertyBacklogGroup = {
@@ -69,6 +74,11 @@ type PropertyBacklogGroup = {
   assignmentCount: number;
   oldestDate: string;
   employees: EmployeeBacklogGroup[];
+};
+
+type DateBacklogGroup = {
+  date: string;
+  assignments: EnrichedBacklogAssignment[];
 };
 
 function statusBadgeClass(status?: string | null) {
@@ -94,38 +104,51 @@ export default function OpenTasksBacklogPage() {
   const employeesQuery = useEmployees(undefined, queryOrgId, 'all');
   const tasksQuery = useTasks(undefined, queryOrgId);
   const [expandedReviewKeys, setExpandedReviewKeys] = useState<Set<string>>(() => new Set());
+  const [groupBy, setGroupBy] = useState<'employee' | 'date'>('employee');
 
-  const groups = useMemo<PropertyBacklogGroup[]>(() => {
+  const enrichedAssignments = useMemo<EnrichedBacklogAssignment[]>(() => {
     const propertyById = new Map(properties.map((property) => [property.id, property]));
     const employeeById = new Map((employeesQuery.data ?? []).map((employee) => [employee.id, employee]));
     const taskById = new Map((tasksQuery.data ?? []).map((task) => [task.id, task]));
-    const byProperty = new Map<string, Map<string, EmployeeBacklogGroup>>();
 
-    (backlogQuery.data ?? []).forEach((assignment) => {
+    return (backlogQuery.data ?? []).map((assignment) => {
       const propertyId = assignment.propertyId ?? 'unknown-property';
       const employeeId = assignment.employeeId || 'unknown-employee';
-      const propertyGroup = byProperty.get(propertyId) ?? new Map<string, EmployeeBacklogGroup>();
       const employee = employeeById.get(employeeId);
       const task = taskById.get(assignment.taskId);
-      const employeeGroup = propertyGroup.get(employeeId) ?? {
-        employeeId,
-        employeeName: employeeName(employee),
-        assignments: [],
-      };
+      const property = propertyById.get(propertyId);
 
-      employeeGroup.assignments.push({
+      return {
         ...assignment,
         overdueDays: daysBetween(assignment.date, todayKey),
         taskName: assignment.title?.trim() || task?.name || 'Untitled Task',
         taskCategory: task?.category || 'General',
-      });
+        employeeName: employeeName(employee),
+        propertyName: property?.name ?? 'Unknown Property',
+      };
+    });
+  }, [backlogQuery.data, employeesQuery.data, properties, tasksQuery.data, todayKey]);
+
+  const groups = useMemo<PropertyBacklogGroup[]>(() => {
+    const byProperty = new Map<string, Map<string, EmployeeBacklogGroup>>();
+
+    enrichedAssignments.forEach((assignment) => {
+      const propertyId = assignment.propertyId ?? 'unknown-property';
+      const employeeId = assignment.employeeId || 'unknown-employee';
+      const propertyGroup = byProperty.get(propertyId) ?? new Map<string, EmployeeBacklogGroup>();
+      const employeeGroup = propertyGroup.get(employeeId) ?? {
+        employeeId,
+        employeeName: assignment.employeeName,
+        assignments: [],
+      };
+
+      employeeGroup.assignments.push(assignment);
       propertyGroup.set(employeeId, employeeGroup);
       byProperty.set(propertyId, propertyGroup);
     });
 
     return Array.from(byProperty.entries())
       .map(([propertyId, employees]) => {
-        const property = propertyById.get(propertyId);
         const employeeGroups = Array.from(employees.values())
           .map((group) => ({
             ...group,
@@ -140,24 +163,46 @@ export default function OpenTasksBacklogPage() {
         const oldestDate = assignments[0]?.date ?? todayKey;
         return {
           propertyId,
-          propertyName: property?.name ?? 'Unknown Property',
+          propertyName: assignments[0]?.propertyName ?? 'Unknown Property',
           assignmentCount: assignments.length,
           oldestDate,
           employees: employeeGroups,
         };
       })
       .sort((first, second) => first.oldestDate.localeCompare(second.oldestDate) || first.propertyName.localeCompare(second.propertyName));
-  }, [backlogQuery.data, employeesQuery.data, properties, tasksQuery.data, todayKey]);
+  }, [enrichedAssignments, todayKey]);
+
+  const dateGroups = useMemo<DateBacklogGroup[]>(() => {
+    const byDate = new Map<string, EnrichedBacklogAssignment[]>();
+
+    enrichedAssignments.forEach((assignment) => {
+      const assignments = byDate.get(assignment.date) ?? [];
+      assignments.push(assignment);
+      byDate.set(assignment.date, assignments);
+    });
+
+    return Array.from(byDate.entries())
+      .map(([date, assignments]) => ({
+        date,
+        assignments: assignments.sort(
+          (first, second) =>
+            first.employeeName.localeCompare(second.employeeName) ||
+            first.propertyName.localeCompare(second.propertyName) ||
+            first.taskName.localeCompare(second.taskName),
+        ),
+      }))
+      .sort((first, second) => first.date.localeCompare(second.date));
+  }, [enrichedAssignments]);
 
   const totals = useMemo(() => {
-    const assignments = groups.flatMap((property) => property.employees.flatMap((employee) => employee.assignments));
+    const assignments = enrichedAssignments;
     return {
       assignments: assignments.length,
-      properties: groups.length,
-      employees: new Set(assignments.map((assignment) => assignment.employeeId)).size,
+      properties: new Set(assignments.map((assignment) => assignment.propertyId ?? 'unknown-property')).size,
+      employees: new Set(assignments.map((assignment) => assignment.employeeId || 'unknown-employee')).size,
       oldestDays: assignments.reduce((max, assignment) => Math.max(max, assignment.overdueDays), 0),
     };
-  }, [groups]);
+  }, [enrichedAssignments]);
 
   const isLoading = propertiesLoading || backlogQuery.isLoading || employeesQuery.isLoading || tasksQuery.isLoading;
   const error = backlogQuery.error || employeesQuery.error || tasksQuery.error;
@@ -213,6 +258,26 @@ export default function OpenTasksBacklogPage() {
             value={selectedPropertyId}
             onChange={setSelectedPropertyId}
           />
+          <div className="flex h-10 items-center rounded-lg border border-surface-border bg-surface-elevated p-1">
+            <span className="px-2 text-xs font-medium uppercase tracking-[0.14em] text-text-muted">Group by</span>
+            {(['employee', 'date'] as const).map((mode) => {
+              const isActive = groupBy === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  className={cn(
+                    'h-8 rounded-md px-3 text-sm font-medium capitalize transition-colors',
+                    isActive ? 'bg-surface-card text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary',
+                  )}
+                  onClick={() => setGroupBy(mode)}
+                  aria-pressed={isActive}
+                >
+                  {mode === 'employee' ? 'Employee' : 'Date'}
+                </button>
+              );
+            })}
+          </div>
           <Button
             type="button"
             variant="outline"
@@ -248,7 +313,7 @@ export default function OpenTasksBacklogPage() {
       <div className="rounded-xl border border-surface-border bg-surface-card p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-text-primary">Backlog by property and crew</h2>
+            <h2 className="text-base font-semibold text-text-primary">{groupBy === 'employee' ? 'Backlog by property and crew' : 'Backlog by date'}</h2>
             <p className="mt-1 text-xs text-text-muted">
               Closed statuses excluded: {CLOSED_ASSIGNMENT_STATUSES.join(', ')}. Approved days are hidden from this queue.
             </p>
@@ -267,7 +332,7 @@ export default function OpenTasksBacklogPage() {
             message={error instanceof Error ? error.message : 'Failed to load open tasks'}
             onRetry={() => void backlogQuery.refetch()}
           />
-        ) : groups.length === 0 ? (
+        ) : (groupBy === 'employee' ? groups.length === 0 : dateGroups.length === 0) ? (
           <EmptyState
             icon={CheckCircle2}
             title="No open tasks in the backlog"
@@ -275,114 +340,204 @@ export default function OpenTasksBacklogPage() {
           />
         ) : (
           <div className="space-y-5">
-            {groups.map((propertyGroup) => (
-              <section key={propertyGroup.propertyId} className="overflow-hidden rounded-lg border border-surface-border bg-surface-elevated/40">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-text-primary">{propertyGroup.propertyName}</h3>
-                    <p className="mt-0.5 text-xs text-text-muted">Oldest open task: {formatDisplayDate(propertyGroup.oldestDate)}</p>
-                  </div>
-                  <Badge variant="outline" className="border-surface-border text-text-secondary">
-                    {propertyGroup.assignmentCount} task{propertyGroup.assignmentCount === 1 ? '' : 's'}
-                  </Badge>
-                </div>
-
-                {propertyGroup.employees.map((employeeGroup) => {
-                  const oldestDate = employeeGroup.assignments[0]?.date ?? '';
-                  const oldestReviewKey = makeReviewKey(employeeGroup.employeeId, oldestDate);
-                  const isOldestReviewExpanded = expandedReviewKeys.has(oldestReviewKey);
-
-                  return (
-                    <div key={employeeGroup.employeeId} className="border-b border-surface-border last:border-b-0">
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                        onClick={() => toggleDayReview(employeeGroup.employeeId, oldestDate)}
-                        aria-expanded={isOldestReviewExpanded}
-                        aria-label={`${isOldestReviewExpanded ? 'Collapse' : 'Review'} ${employeeGroup.employeeName}'s oldest open day`}
-                      >
-                        <ChevronDown className={cn('h-4 w-4 text-text-muted transition-transform', isOldestReviewExpanded ? undefined : '-rotate-90')} />
-                        <UsersRound className="h-4 w-4 text-text-muted" />
-                        <h4 className="text-sm font-medium text-text-primary">{employeeGroup.employeeName}</h4>
-                        <span className="text-xs text-text-muted">{employeeGroup.assignments.length} open</span>
-                      </button>
-                      <div className="overflow-x-auto">
-                        <table className="w-full min-w-[860px] border-collapse text-sm">
-                          <thead className="bg-surface-card/70 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
-                            <tr>
-                              <th className="px-4 py-2 font-medium">Employee</th>
-                              <th className="px-4 py-2 font-medium">Task</th>
-                              <th className="px-4 py-2 font-medium">Date</th>
-                              <th className="px-4 py-2 font-medium">Scheduled</th>
-                              <th className="px-4 py-2 font-medium">Status</th>
-                              <th className="px-4 py-2 font-medium">Days overdue</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {employeeGroup.assignments.map((assignment, index) => {
-                              const reviewKey = makeReviewKey(employeeGroup.employeeId, assignment.date);
-                              const isExpanded = expandedReviewKeys.has(reviewKey);
-                              const isLastForDate = employeeGroup.assignments[index + 1]?.date !== assignment.date;
-
-                              return (
-                                <Fragment key={assignment.id}>
-                                  <tr
-                                    role="button"
-                                    tabIndex={0}
-                                    className={cn(
-                                      'cursor-pointer border-t border-surface-border transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
-                                      isExpanded ? 'bg-surface-card/70' : undefined,
-                                    )}
-                                    onClick={() => toggleDayReview(employeeGroup.employeeId, assignment.date)}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter' || event.key === ' ') {
-                                        event.preventDefault();
-                                        toggleDayReview(employeeGroup.employeeId, assignment.date);
-                                      }
-                                    }}
-                                    aria-expanded={isExpanded}
-                                    aria-label={`${isExpanded ? 'Collapse' : 'Review'} ${employeeGroup.employeeName} on ${formatDisplayDate(assignment.date)}`}
-                                  >
-                                    <td className="px-4 py-3 text-text-secondary">{employeeGroup.employeeName}</td>
-                                    <td className="px-4 py-3">
-                                      <div className="font-medium text-text-primary">{assignment.taskName}</div>
-                                      <div className="mt-0.5 text-xs text-text-muted">{assignment.taskCategory}</div>
-                                    </td>
-                                    <td className="px-4 py-3 text-text-secondary">{formatDisplayDate(assignment.date)}</td>
-                                    <td className="px-4 py-3 text-text-secondary">{Number(assignment.estimatedHours ?? 0).toFixed(1)}h</td>
-                                    <td className="px-4 py-3">
-                                      <Badge variant="outline" className={statusBadgeClass(assignment.status)}>
-                                        {normalizeStatusLabel(assignment.status)}
-                                      </Badge>
-                                    </td>
-                                    <td className="px-4 py-3 font-semibold text-status-pending">{assignment.overdueDays}d</td>
-                                  </tr>
-                                  {isExpanded && isLastForDate ? (
-                                    <tr className="border-t border-surface-border">
-                                      <td colSpan={6} className="bg-surface-card/60 px-4 py-4">
-                                        <OpenTaskDayReviewPanel
-                                          employeeId={employeeGroup.employeeId}
-                                          date={assignment.date}
-                                          className="space-y-4"
-                                          onApproved={() => {
-                                            closeDayReview(reviewKey);
-                                            void backlogQuery.refetch();
-                                          }}
-                                        />
-                                      </td>
-                                    </tr>
-                                  ) : null}
-                                </Fragment>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+            {groupBy === 'employee' ? (
+              groups.map((propertyGroup) => (
+                <section key={propertyGroup.propertyId} className="overflow-hidden rounded-lg border border-surface-border bg-surface-elevated/40">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-text-primary">{propertyGroup.propertyName}</h3>
+                      <p className="mt-0.5 text-xs text-text-muted">Oldest open task: {formatDisplayDate(propertyGroup.oldestDate)}</p>
                     </div>
-                  );
-                })}
-              </section>
-            ))}
+                    <Badge variant="outline" className="border-surface-border text-text-secondary">
+                      {propertyGroup.assignmentCount} task{propertyGroup.assignmentCount === 1 ? '' : 's'}
+                    </Badge>
+                  </div>
+
+                  {propertyGroup.employees.map((employeeGroup) => {
+                    const oldestDate = employeeGroup.assignments[0]?.date ?? '';
+                    const oldestReviewKey = makeReviewKey(employeeGroup.employeeId, oldestDate);
+                    const isOldestReviewExpanded = expandedReviewKeys.has(oldestReviewKey);
+
+                    return (
+                      <div key={employeeGroup.employeeId} className="border-b border-surface-border last:border-b-0">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                          onClick={() => toggleDayReview(employeeGroup.employeeId, oldestDate)}
+                          aria-expanded={isOldestReviewExpanded}
+                          aria-label={`${isOldestReviewExpanded ? 'Collapse' : 'Review'} ${employeeGroup.employeeName}'s oldest open day`}
+                        >
+                          <ChevronDown className={cn('h-4 w-4 text-text-muted transition-transform', isOldestReviewExpanded ? undefined : '-rotate-90')} />
+                          <UsersRound className="h-4 w-4 text-text-muted" />
+                          <h4 className="text-sm font-medium text-text-primary">{employeeGroup.employeeName}</h4>
+                          <span className="text-xs text-text-muted">{employeeGroup.assignments.length} open</span>
+                        </button>
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[860px] border-collapse text-sm">
+                            <thead className="bg-surface-card/70 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
+                              <tr>
+                                <th className="px-4 py-2 font-medium">Employee</th>
+                                <th className="px-4 py-2 font-medium">Task</th>
+                                <th className="px-4 py-2 font-medium">Date</th>
+                                <th className="px-4 py-2 font-medium">Scheduled</th>
+                                <th className="px-4 py-2 font-medium">Status</th>
+                                <th className="px-4 py-2 font-medium">Days overdue</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {employeeGroup.assignments.map((assignment, index) => {
+                                const reviewKey = makeReviewKey(employeeGroup.employeeId, assignment.date);
+                                const isExpanded = expandedReviewKeys.has(reviewKey);
+                                const isLastForDate = employeeGroup.assignments[index + 1]?.date !== assignment.date;
+
+                                return (
+                                  <Fragment key={assignment.id}>
+                                    <tr
+                                      role="button"
+                                      tabIndex={0}
+                                      className={cn(
+                                        'cursor-pointer border-t border-surface-border transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                                        isExpanded ? 'bg-surface-card/70' : undefined,
+                                      )}
+                                      onClick={() => toggleDayReview(employeeGroup.employeeId, assignment.date)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                          event.preventDefault();
+                                          toggleDayReview(employeeGroup.employeeId, assignment.date);
+                                        }
+                                      }}
+                                      aria-expanded={isExpanded}
+                                      aria-label={`${isExpanded ? 'Collapse' : 'Review'} ${employeeGroup.employeeName} on ${formatDisplayDate(assignment.date)}`}
+                                    >
+                                      <td className="px-4 py-3 text-text-secondary">{employeeGroup.employeeName}</td>
+                                      <td className="px-4 py-3">
+                                        <div className="font-medium text-text-primary">{assignment.taskName}</div>
+                                        <div className="mt-0.5 text-xs text-text-muted">{assignment.taskCategory}</div>
+                                      </td>
+                                      <td className="px-4 py-3 text-text-secondary">{formatDisplayDate(assignment.date)}</td>
+                                      <td className="px-4 py-3 text-text-secondary">{Number(assignment.estimatedHours ?? 0).toFixed(1)}h</td>
+                                      <td className="px-4 py-3">
+                                        <Badge variant="outline" className={statusBadgeClass(assignment.status)}>
+                                          {normalizeStatusLabel(assignment.status)}
+                                        </Badge>
+                                      </td>
+                                      <td className="px-4 py-3 font-semibold text-status-pending">{assignment.overdueDays}d</td>
+                                    </tr>
+                                    {isExpanded && isLastForDate ? (
+                                      <tr className="border-t border-surface-border">
+                                        <td colSpan={6} className="bg-surface-card/60 px-4 py-4">
+                                          <OpenTaskDayReviewPanel
+                                            employeeId={employeeGroup.employeeId}
+                                            date={assignment.date}
+                                            className="space-y-4"
+                                            onApproved={() => {
+                                              closeDayReview(reviewKey);
+                                              void backlogQuery.refetch();
+                                            }}
+                                          />
+                                        </td>
+                                      </tr>
+                                    ) : null}
+                                  </Fragment>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </section>
+              ))
+            ) : (
+              dateGroups.map((dateGroup) => (
+                <section key={dateGroup.date} className="overflow-hidden rounded-lg border border-surface-border bg-surface-elevated/40">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-text-primary">{formatDisplayDate(dateGroup.date)}</h3>
+                      <p className="mt-0.5 text-xs text-text-muted">Oldest-first date queue across the current property filter</p>
+                    </div>
+                    <Badge variant="outline" className="border-surface-border text-text-secondary">
+                      {dateGroup.assignments.length} task{dateGroup.assignments.length === 1 ? '' : 's'}
+                    </Badge>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[940px] border-collapse text-sm">
+                      <thead className="bg-surface-card/70 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
+                        <tr>
+                          <th className="px-4 py-2 font-medium">Property</th>
+                          <th className="px-4 py-2 font-medium">Employee</th>
+                          <th className="px-4 py-2 font-medium">Task</th>
+                          <th className="px-4 py-2 font-medium">Scheduled</th>
+                          <th className="px-4 py-2 font-medium">Status</th>
+                          <th className="px-4 py-2 font-medium">Days overdue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dateGroup.assignments.map((assignment, index) => {
+                          const employeeId = assignment.employeeId || 'unknown-employee';
+                          const reviewKey = makeReviewKey(employeeId, assignment.date);
+                          const isExpanded = expandedReviewKeys.has(reviewKey);
+                          const nextAssignment = dateGroup.assignments[index + 1];
+                          const isLastForReview = nextAssignment?.employeeId !== assignment.employeeId || nextAssignment?.date !== assignment.date;
+
+                          return (
+                            <Fragment key={assignment.id}>
+                              <tr
+                                role="button"
+                                tabIndex={0}
+                                className={cn(
+                                  'cursor-pointer border-t border-surface-border transition-colors hover:bg-surface-card/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                                  isExpanded ? 'bg-surface-card/70' : undefined,
+                                )}
+                                onClick={() => toggleDayReview(employeeId, assignment.date)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    toggleDayReview(employeeId, assignment.date);
+                                  }
+                                }}
+                                aria-expanded={isExpanded}
+                                aria-label={`${isExpanded ? 'Collapse' : 'Review'} ${assignment.employeeName} on ${formatDisplayDate(assignment.date)}`}
+                              >
+                                <td className="px-4 py-3 text-text-secondary">{assignment.propertyName}</td>
+                                <td className="px-4 py-3 text-text-secondary">{assignment.employeeName}</td>
+                                <td className="px-4 py-3">
+                                  <div className="font-medium text-text-primary">{assignment.taskName}</div>
+                                  <div className="mt-0.5 text-xs text-text-muted">{assignment.taskCategory}</div>
+                                </td>
+                                <td className="px-4 py-3 text-text-secondary">{Number(assignment.estimatedHours ?? 0).toFixed(1)}h</td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline" className={statusBadgeClass(assignment.status)}>
+                                    {normalizeStatusLabel(assignment.status)}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-status-pending">{assignment.overdueDays}d</td>
+                              </tr>
+                              {isExpanded && isLastForReview ? (
+                                <tr className="border-t border-surface-border">
+                                  <td colSpan={6} className="bg-surface-card/60 px-4 py-4">
+                                    <OpenTaskDayReviewPanel
+                                      employeeId={employeeId}
+                                      date={assignment.date}
+                                      className="space-y-4"
+                                      onApproved={() => {
+                                        closeDayReview(reviewKey);
+                                        void backlogQuery.refetch();
+                                      }}
+                                    />
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))
+            )}
           </div>
         )}
       </div>
