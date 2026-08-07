@@ -53,6 +53,18 @@ function timeToMinutes(value?: string) {
   return hours * 60 + minutes;
 }
 
+function normalizeReviewTimeInput(value?: string) {
+  const [rawHour, rawMinute] = String(value || '').split(':');
+  const hour = Number(rawHour);
+  const minute = Number(rawMinute);
+  if (!Number.isFinite(hour) || hour < 0 || hour > 23 || !Number.isFinite(minute) || minute < 0 || minute > 59) return '';
+  const roundedMinute = Math.round(minute / 5) * 5;
+  if (roundedMinute >= 60) {
+    return `${String((hour + 1) % 24).padStart(2, '0')}:00`;
+  }
+  return `${String(hour).padStart(2, '0')}:${String(roundedMinute).padStart(2, '0')}`;
+}
+
 function getAssignmentId(assignment: Assignment, fallbackIndex: number) {
   return assignment.id ?? `assignment-${fallbackIndex}`;
 }
@@ -63,7 +75,7 @@ function getActualStartInput(assignment: Assignment, timezone: string) {
     assignment.actualStartAt ??
     assignment.actual_start_at ??
     (typeof assignmentRecord.actual_start_at === 'string' ? String(assignmentRecord.actual_start_at) : null);
-  return source ? storedIsoToWallClock(source, timezone) : '';
+  return source ? normalizeReviewTimeInput(storedIsoToWallClock(source, timezone)) : '';
 }
 
 function getActualEndInput(assignment: Assignment, timezone: string) {
@@ -78,7 +90,7 @@ function getActualEndInput(assignment: Assignment, timezone: string) {
       : typeof assignmentRecord.completed_at === 'string'
         ? String(assignmentRecord.completed_at)
         : null);
-  return source ? storedIsoToWallClock(source, timezone) : '';
+  return source ? normalizeReviewTimeInput(storedIsoToWallClock(source, timezone)) : '';
 }
 
 function normalizeStatus(status: string | null | undefined) {
@@ -107,18 +119,18 @@ export function getChainedAssignmentRows({
   startOverrides?: Record<string, string>;
   endOverrides?: Record<string, string>;
 }): ChainedAssignmentRow[] {
-  let nextDefaultStart = shiftStart || nowTime;
+  let nextDefaultStart = normalizeReviewTimeInput(shiftStart) || normalizeReviewTimeInput(nowTime);
 
   return assignments.map((assignment, index) => {
     const assignmentId = getAssignmentId(assignment, index);
     const actualStart = getActualStartInput(assignment, timezone);
-    const chainedStart = actualStart || nextDefaultStart || shiftStart || nowTime;
-    const start = startOverrides[assignmentId] ?? chainedStart;
+    const chainedStart = actualStart || nextDefaultStart || normalizeReviewTimeInput(shiftStart) || normalizeReviewTimeInput(nowTime);
+    const start = normalizeReviewTimeInput(startOverrides[assignmentId] ?? chainedStart);
     const actualEnd = getActualEndInput(assignment, timezone);
-    const end = endOverrides[assignmentId] ?? (actualEnd || nowTime);
+    const end = normalizeReviewTimeInput(endOverrides[assignmentId] ?? (actualEnd || nowTime));
     const hours = calculateHours(start, end);
 
-    nextDefaultStart = end || shiftStart || nowTime;
+    nextDefaultStart = end || normalizeReviewTimeInput(shiftStart) || normalizeReviewTimeInput(nowTime);
     return { assignment, start, end, hours };
   });
 }
