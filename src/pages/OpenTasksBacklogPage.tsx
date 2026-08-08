@@ -1,13 +1,15 @@
 import { Fragment, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, RefreshCw, UsersRound } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, Loader2, RefreshCw, UsersRound } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { toast } from '@/components/ui/sonner';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { TableSkeleton } from '@/components/TableSkeleton';
-import { OpenTaskDayReviewPanel } from '@/components/workboard/OpenTaskDayReviewPanel';
+import { OpenTaskDayReviewPanel, approveReviewedDay } from '@/components/workboard/OpenTaskDayReviewPanel';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
@@ -81,6 +83,32 @@ type DateBacklogGroup = {
   assignments: EnrichedBacklogAssignment[];
 };
 
+type ReviewOrderItem = {
+  key: string;
+  employeeId: string;
+  date: string;
+};
+
+function getAssignmentActualHours(assignment: Assignment) {
+  const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+  const actualHours = Number(assignment.actualHours ?? assignmentRecord.actual_hours ?? 0);
+  return Number.isFinite(actualHours) ? actualHours : 0;
+}
+
+function getAssignmentEstimatedHours(assignment: Assignment) {
+  const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+  const estimatedHours = Number(assignment.estimatedHours ?? assignmentRecord.estimated_hours ?? 0);
+  return Number.isFinite(estimatedHours) ? estimatedHours : 0;
+}
+
+function isQuickApproveEligible(assignments: EnrichedBacklogAssignment[]) {
+  return assignments.length > 0 && assignments.every((assignment) => getAssignmentActualHours(assignment) === getAssignmentEstimatedHours(assignment));
+}
+
+function getAssignmentIds(assignments: EnrichedBacklogAssignment[]) {
+  return assignments.map((assignment) => assignment.id).filter((id): id is string => Boolean(id));
+}
+
 function statusBadgeClass(status?: string | null) {
   const normalized = String(status ?? '').toLowerCase();
   if (normalized === 'in_progress' || normalized === 'in-progress' || normalized === 'started' || normalized === 'active') {
@@ -94,6 +122,7 @@ export default function OpenTasksBacklogPage() {
   const role = String(userRole ?? currentUser?.role ?? '').toLowerCase();
   const canViewBacklog = role === 'admin' || role === 'manager';
   const queryOrgId = canViewBacklog ? orgId ?? undefined : undefined;
+  const queryClient = useQueryClient();
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(queryOrgId);
   const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
     currentUser,
@@ -105,6 +134,7 @@ export default function OpenTasksBacklogPage() {
   const tasksQuery = useTasks(undefined, queryOrgId);
   const [expandedReviewKeys, setExpandedReviewKeys] = useState<Set<string>>(() => new Set());
   const [groupBy, setGroupBy] = useState<'employee' | 'date'>('employee');
+  const [quickApprovingKey, setQuickApprovingKey] = useState<string | null>(null);
 
   const enrichedAssignments = useMemo<EnrichedBacklogAssignment[]>(() => {
     const propertyById = new Map(properties.map((property) => [property.id, property]));
@@ -194,6 +224,32 @@ export default function OpenTasksBacklogPage() {
       .sort((first, second) => first.date.localeCompare(second.date));
   }, [enrichedAssignments]);
 
+  const reviewOrder = useMemo<ReviewOrderItem[]>(() => {
+    const seen = new Set<string>();
+    const items: ReviewOrderItem[] = [];
+    const addItem = (employeeId: string, date: string) => {
+      if (!employeeId || employeeId === 'unknown-employee' || !date) return;
+      const key = makeReviewKey(employeeId, date);
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ key, employeeId, date });
+    };
+
+    if (groupBy === 'employee') {
+      groups.forEach((propertyGroup) => {
+        propertyGroup.employees.forEach((employeeGroup) => {
+          employeeGroup.assignments.forEach((assignment) => addItem(employeeGroup.employeeId, assignment.date));
+        });
+      });
+      return items;
+    }
+
+    dateGroups.forEach((dateGroup) => {
+      dateGroup.assignments.forEach((assignment) => addItem(assignment.employeeId || 'unknown-employee', assignment.date));
+    });
+    return items;
+  }, [dateGroups, groupBy, groups]);
+
   const totals = useMemo(() => {
     const assignments = enrichedAssignments;
     return {
@@ -207,6 +263,54 @@ export default function OpenTasksBacklogPage() {
   const isLoading = propertiesLoading || backlogQuery.isLoading || employeesQuery.isLoading || tasksQuery.isLoading;
   const error = backlogQuery.error || employeesQuery.error || tasksQuery.error;
 
+  const advanceAfterApproval = (approvedKey: string) => {
+    const currentIndex = reviewOrder.findIndex((item) => item.key === approvedKey);
+    const nextItem = currentIndex >= 0
+      ? reviewOrder.slice(currentIndex + 1).find((item) => item.key !== approvedKey)
+      : reviewOrder.find((item) => item.key !== approvedKey);
+
+    setExpandedReviewKeys((current) => {
+      const next = new Set(current);
+      next.delete(approvedKey);
+      if (nextItem) next.add(nextItem.key);
+      return next;
+    });
+  };
+
+  const quickApproveMutation = useMutation({
+    mutationFn: async ({
+      employeeId,
+      date,
+      assignmentIds,
+    }: {
+      reviewKey: string;
+      employeeId: string;
+      date: string;
+      assignmentIds: string[];
+    }) => {
+      if (!queryOrgId) throw new Error('Organization is still loading. Try again.');
+      await approveReviewedDay({ orgId: queryOrgId, employeeId, date, assignmentIds });
+    },
+    onMutate: ({ reviewKey }) => {
+      setQuickApprovingKey(reviewKey);
+    },
+    onSuccess: async (_data, variables) => {
+      advanceAfterApproval(variables.reviewKey);
+      await Promise.all([
+        backlogQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'], refetchType: 'all' }),
+      ]);
+      toast.success('Day approved.');
+    },
+    onError: (mutationError) => {
+      toast.error(mutationError instanceof Error ? mutationError.message : 'Day could not be approved.');
+    },
+    onSettled: () => {
+      setQuickApprovingKey(null);
+    },
+  });
+
   const toggleDayReview = (employeeId: string, date: string) => {
     if (!employeeId || employeeId === 'unknown-employee' || !date) return;
     const key = makeReviewKey(employeeId, date);
@@ -218,12 +322,57 @@ export default function OpenTasksBacklogPage() {
     });
   };
 
-  const closeDayReview = (key: string) => {
-    setExpandedReviewKeys((current) => {
-      const next = new Set(current);
-      next.delete(key);
-      return next;
-    });
+  const handleReviewedDayApproved = (reviewKey: string) => {
+    advanceAfterApproval(reviewKey);
+    void backlogQuery.refetch();
+  };
+
+  const handleQuickApprove = (employeeId: string, date: string, assignments: EnrichedBacklogAssignment[]) => {
+    const reviewKey = makeReviewKey(employeeId, date);
+    if (!isQuickApproveEligible(assignments)) {
+      toast.info('Open the full review for days with a time variance.');
+      return;
+    }
+    const assignmentIds = getAssignmentIds(assignments);
+    if (assignmentIds.length === 0) {
+      toast.info('No assignments are available to approve.');
+      return;
+    }
+    quickApproveMutation.mutate({ reviewKey, employeeId, date, assignmentIds });
+  };
+
+  const getVisibleReviewAssignments = (employeeId: string, date: string) =>
+    enrichedAssignments.filter((assignment) => (assignment.employeeId || 'unknown-employee') === employeeId && assignment.date === date);
+
+  const renderQuickApproveCell = (employeeId: string, date: string, assignments: EnrichedBacklogAssignment[], showAction: boolean) => {
+    if (!showAction) return <td className="px-4 py-3" />;
+    const reviewKey = makeReviewKey(employeeId, date);
+    const isEligible = isQuickApproveEligible(assignments);
+    const isApproving = quickApprovingKey === reviewKey && quickApproveMutation.isPending;
+    return (
+      <td className="px-4 py-3">
+        {isEligible ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-9 gap-2 border-status-success/30 bg-status-success/10 text-status-success hover:bg-status-success/15 hover:text-status-success"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleQuickApprove(employeeId, date, assignments);
+            }}
+            disabled={quickApproveMutation.isPending}
+          >
+            {isApproving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            Approve
+          </Button>
+        ) : (
+          <Badge variant="outline" className="border-status-pending/30 bg-status-pending/10 text-status-pending">
+            Needs review
+          </Badge>
+        )}
+      </td>
+    );
   };
 
   if (!canViewBacklog) {
@@ -373,7 +522,7 @@ export default function OpenTasksBacklogPage() {
                           <span className="text-xs text-text-muted">{employeeGroup.assignments.length} open</span>
                         </button>
                         <div className="overflow-x-auto">
-                          <table className="w-full min-w-[860px] border-collapse text-sm">
+                          <table className="w-full min-w-[980px] border-collapse text-sm">
                             <thead className="bg-surface-card/70 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
                               <tr>
                                 <th className="px-4 py-2 font-medium">Employee</th>
@@ -382,6 +531,7 @@ export default function OpenTasksBacklogPage() {
                                 <th className="px-4 py-2 font-medium">Scheduled</th>
                                 <th className="px-4 py-2 font-medium">Status</th>
                                 <th className="px-4 py-2 font-medium">Days overdue</th>
+                                <th className="px-4 py-2 font-medium">Review</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -389,6 +539,7 @@ export default function OpenTasksBacklogPage() {
                                 const reviewKey = makeReviewKey(employeeGroup.employeeId, assignment.date);
                                 const isExpanded = expandedReviewKeys.has(reviewKey);
                                 const isLastForDate = employeeGroup.assignments[index + 1]?.date !== assignment.date;
+                                const dayAssignments = getVisibleReviewAssignments(employeeGroup.employeeId, assignment.date);
 
                                 return (
                                   <Fragment key={assignment.id}>
@@ -422,18 +573,16 @@ export default function OpenTasksBacklogPage() {
                                         </Badge>
                                       </td>
                                       <td className="px-4 py-3 font-semibold text-status-pending">{assignment.overdueDays}d</td>
+                                      {renderQuickApproveCell(employeeGroup.employeeId, assignment.date, dayAssignments, isLastForDate)}
                                     </tr>
                                     {isExpanded && isLastForDate ? (
                                       <tr className="border-t border-surface-border">
-                                        <td colSpan={6} className="bg-surface-card/60 px-4 py-4">
+                                        <td colSpan={7} className="bg-surface-card/60 px-4 py-4">
                                           <OpenTaskDayReviewPanel
                                             employeeId={employeeGroup.employeeId}
                                             date={assignment.date}
                                             className="space-y-4"
-                                            onApproved={() => {
-                                              closeDayReview(reviewKey);
-                                              void backlogQuery.refetch();
-                                            }}
+                                            onApproved={() => handleReviewedDayApproved(reviewKey)}
                                           />
                                         </td>
                                       </tr>
@@ -462,7 +611,7 @@ export default function OpenTasksBacklogPage() {
                     </Badge>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[940px] border-collapse text-sm">
+                    <table className="w-full min-w-[1060px] border-collapse text-sm">
                       <thead className="bg-surface-card/70 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
                         <tr>
                           <th className="px-4 py-2 font-medium">Property</th>
@@ -471,6 +620,7 @@ export default function OpenTasksBacklogPage() {
                           <th className="px-4 py-2 font-medium">Scheduled</th>
                           <th className="px-4 py-2 font-medium">Status</th>
                           <th className="px-4 py-2 font-medium">Days overdue</th>
+                          <th className="px-4 py-2 font-medium">Review</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -480,6 +630,7 @@ export default function OpenTasksBacklogPage() {
                           const isExpanded = expandedReviewKeys.has(reviewKey);
                           const nextAssignment = dateGroup.assignments[index + 1];
                           const isLastForReview = nextAssignment?.employeeId !== assignment.employeeId || nextAssignment?.date !== assignment.date;
+                          const dayAssignments = getVisibleReviewAssignments(employeeId, assignment.date);
 
                           return (
                             <Fragment key={assignment.id}>
@@ -513,18 +664,16 @@ export default function OpenTasksBacklogPage() {
                                   </Badge>
                                 </td>
                                 <td className="px-4 py-3 font-semibold text-status-pending">{assignment.overdueDays}d</td>
+                                {renderQuickApproveCell(employeeId, assignment.date, dayAssignments, isLastForReview)}
                               </tr>
                               {isExpanded && isLastForReview ? (
                                 <tr className="border-t border-surface-border">
-                                  <td colSpan={6} className="bg-surface-card/60 px-4 py-4">
+                                  <td colSpan={7} className="bg-surface-card/60 px-4 py-4">
                                     <OpenTaskDayReviewPanel
                                       employeeId={employeeId}
                                       date={assignment.date}
                                       className="space-y-4"
-                                      onApproved={() => {
-                                        closeDayReview(reviewKey);
-                                        void backlogQuery.refetch();
-                                      }}
+                                      onApproved={() => handleReviewedDayApproved(reviewKey)}
                                     />
                                   </td>
                                 </tr>

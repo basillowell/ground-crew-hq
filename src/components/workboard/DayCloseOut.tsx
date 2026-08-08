@@ -181,6 +181,9 @@ export function DayCloseOutReviewRows({
   onInsertBreak,
   insertBreakDisabled = false,
   insertingBreakIndex = null,
+  onInsertTask,
+  insertTaskDisabled = false,
+  insertingTaskIndex = null,
 }: {
   rows: ChainedAssignmentRow[];
   tasks: Task[];
@@ -195,7 +198,11 @@ export function DayCloseOutReviewRows({
   onInsertBreak?: (insertIndex: number) => void;
   insertBreakDisabled?: boolean;
   insertingBreakIndex?: number | null;
+  onInsertTask?: (insertIndex: number, taskId: string) => void;
+  insertTaskDisabled?: boolean;
+  insertingTaskIndex?: number | null;
 }) {
+  const [insertTaskSelections, setInsertTaskSelections] = useState<Record<number, string>>({});
   const groupedTasks = useMemo(() => {
     return tasks.reduce<Record<string, Task[]>>((groups, task) => {
       const category = task.category || 'General';
@@ -208,22 +215,58 @@ export function DayCloseOutReviewRows({
   const templateClass = showScheduledHours
     ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_116px]'
     : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_116px]';
-  const renderInsertBreakButton = (insertIndex: number, label: string) => {
-    if (!onInsertBreak) return null;
-    const isInserting = insertingBreakIndex === insertIndex;
+  const renderInsertActions = (insertIndex: number, breakLabel: string, taskLabel: string) => {
+    if (!onInsertBreak && !onInsertTask) return null;
+    const isInsertingBreak = insertingBreakIndex === insertIndex;
+    const isInsertingTask = insertingTaskIndex === insertIndex;
     return (
-      <div className="bg-surface-base px-3 py-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="min-h-9 gap-2 border-dashed text-xs text-text-secondary hover:text-text-primary"
-          onClick={() => onInsertBreak(insertIndex)}
-          disabled={insertBreakDisabled || isInserting}
-        >
-          {isInserting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-          {label}
-        </Button>
+      <div className="flex flex-wrap gap-2 bg-surface-base px-3 py-2">
+        {onInsertBreak ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-9 gap-2 border-dashed text-xs text-text-secondary hover:text-text-primary"
+            onClick={() => onInsertBreak(insertIndex)}
+            disabled={insertBreakDisabled || isInsertingBreak}
+          >
+            {isInsertingBreak ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            {breakLabel}
+          </Button>
+        ) : null}
+        {onInsertTask ? (
+          <label className="relative">
+            <span className="sr-only">{taskLabel}</span>
+            {isInsertingTask ? (
+              <Loader2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-text-muted" />
+            ) : (
+              <Plus className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+            )}
+            <select
+              value={insertTaskSelections[insertIndex] ?? ''}
+              onChange={(event) => {
+                const taskId = event.target.value;
+                setInsertTaskSelections((current) => ({ ...current, [insertIndex]: taskId }));
+                if (!taskId) return;
+                onInsertTask(insertIndex, taskId);
+                setInsertTaskSelections((current) => ({ ...current, [insertIndex]: '' }));
+              }}
+              disabled={insertTaskDisabled || isInsertingTask || tasks.length === 0}
+              className="h-9 min-w-[220px] rounded-md border border-dashed border-input bg-background pl-8 pr-8 text-xs text-text-secondary hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <option value="">{taskLabel}</option>
+              {orderedTaskCategories.map((category) => (
+                <optgroup key={category} label={category}>
+                  {groupedTasks[category].map((task) => (
+                    <option key={task.id} value={task.id}>
+                      {task.name} ({Number(task.estimatedHours ?? task.estimated_hours ?? 0)}h)
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
     );
   };
@@ -237,7 +280,7 @@ export function DayCloseOutReviewRows({
         <span className="text-right">Hours</span>
       </div>
       <div className="divide-y divide-surface-border">
-        {renderInsertBreakButton(0, 'Insert break before first task')}
+        {renderInsertActions(0, 'Insert break before first task', 'Insert task before first task')}
         {rows.map((row, index) => {
           const assignmentId = getAssignmentId(row.assignment, index);
           const status = normalizeStatus(row.assignment.status);
@@ -336,7 +379,11 @@ export function DayCloseOutReviewRows({
                 ) : null}
               </div>
             </div>
-            {renderInsertBreakButton(index + 1, index === rows.length - 1 ? 'Insert break after last task' : 'Insert break here')}
+            {renderInsertActions(
+              index + 1,
+              index === rows.length - 1 ? 'Insert break after last task' : 'Insert break here',
+              index === rows.length - 1 ? 'Insert task after last task' : 'Insert task here',
+            )}
             </Fragment>
           );
         })}
