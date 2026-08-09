@@ -759,6 +759,7 @@ export function OpenTaskDayReviewPanel({
   const totalLogged = rows.reduce((sum, row) => sum + row.hours, 0);
   const totalUnpaid = rows.reduce((sum, row) => sum + (getAssignmentIsUnpaid(row.assignment, reviewTasks) ? row.hours : 0), 0);
   const totalActual = Math.max(0, totalLogged - totalUnpaid);
+  const paidAssignmentCount = rows.filter((row) => !getAssignmentIsUnpaid(row.assignment, reviewTasks)).length;
   const assignmentIds = rows.map((row) => row.assignment.id).filter((id): id is string => Boolean(id));
   const approvedRows = (reviewData?.assignments ?? []).filter((assignment) => assignment.approvedBy || assignment.approvedAt);
   const isApproved = approvedRows.length > 0;
@@ -1118,7 +1119,7 @@ export function OpenTaskDayReviewPanel({
               </Card>
               <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
                 <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Assignments</p>
-                <p className="mt-2 text-2xl font-semibold text-text-primary">{rows.length}</p>
+                <p className="mt-2 text-2xl font-semibold text-text-primary">{paidAssignmentCount}</p>
                 <p className="mt-1 text-xs text-text-muted">Full day context</p>
               </Card>
               <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
