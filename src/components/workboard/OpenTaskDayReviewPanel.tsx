@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { TableSkeleton } from '@/components/TableSkeleton';
+import { AvatarInitials } from '@/components/shared';
 import {
   DayCloseOutReviewRows,
   getChainedAssignmentRows,
@@ -24,6 +25,14 @@ const supabase = createClient();
 const REVIEW_TIMEOUT_MS = 15000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const EMPLOYEE_ACCENT_SWATCHES = [
+  { solid: 'oklch(0.76 0.16 142)', soft: 'oklch(0.76 0.16 142 / 0.14)' },
+  { solid: 'oklch(0.78 0.15 85)', soft: 'oklch(0.78 0.15 85 / 0.14)' },
+  { solid: 'oklch(0.72 0.15 230)', soft: 'oklch(0.72 0.15 230 / 0.14)' },
+  { solid: 'oklch(0.76 0.14 25)', soft: 'oklch(0.76 0.14 25 / 0.14)' },
+  { solid: 'oklch(0.74 0.14 300)', soft: 'oklch(0.74 0.14 300 / 0.14)' },
+  { solid: 'oklch(0.78 0.12 190)', soft: 'oklch(0.78 0.12 190 / 0.14)' },
+];
 
 type AssignmentReviewRow = {
   id: string;
@@ -134,6 +143,15 @@ function formatTime(value?: string | null) {
 function formatEmployeeName(employee?: Employee | null) {
   if (!employee) return 'Unknown Employee';
   return `${employee.firstName ?? ''} ${employee.lastName ?? ''}`.trim() || 'Unnamed Employee';
+}
+
+function getEmployeeAccent(employeeId?: string | null) {
+  const key = employeeId || 'unknown-employee';
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+  }
+  return EMPLOYEE_ACCENT_SWATCHES[hash % EMPLOYEE_ACCENT_SWATCHES.length];
 }
 
 function formatApprovedAt(value?: string | null) {
@@ -681,6 +699,7 @@ export function OpenTaskDayReviewPanel({
 
   const reviewData = reviewQuery.data;
   const employee = reviewData?.employees.find((row) => row.id === validEmployeeId) ?? null;
+  const employeeAccent = getEmployeeAccent(validEmployeeId);
   const schedules = reviewData?.schedules ?? [];
   const firstSchedule = schedules[0] ?? null;
   const latestSchedule = schedules.reduce<ScheduleReviewRow | null>((latest, schedule) => {
@@ -1010,9 +1029,31 @@ export function OpenTaskDayReviewPanel({
             <Clock className="h-4 w-4" />
             Daily closeout review
           </div>
-          <h1 className="mt-2 text-2xl font-semibold text-text-primary">
-            {formatEmployeeName(employee)} - {formatDisplayDate(validDate)}
-          </h1>
+          <div
+            className="mt-3 flex max-w-2xl items-center gap-3 rounded-xl border border-surface-border border-l-4 bg-surface-card/80 px-3 py-3 shadow-sm"
+            style={{
+              borderLeftColor: employeeAccent.solid,
+              backgroundImage: `linear-gradient(90deg, ${employeeAccent.soft}, transparent 68%)`,
+            }}
+          >
+            <AvatarInitials
+              firstName={employee?.firstName ?? ''}
+              lastName={employee?.lastName ?? ''}
+              size="lg"
+              className="border-2"
+              style={{
+                backgroundColor: employeeAccent.soft,
+                borderColor: employeeAccent.solid,
+                color: employeeAccent.solid,
+              }}
+            />
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-semibold text-text-primary">
+                {formatEmployeeName(employee)}
+              </h1>
+              <p className="mt-0.5 text-sm font-medium text-text-muted">{formatDisplayDate(validDate)}</p>
+            </div>
+          </div>
           <p className="mt-1 max-w-2xl text-sm text-text-muted">
             Review logged task times against the scheduled shift before approval.
           </p>
