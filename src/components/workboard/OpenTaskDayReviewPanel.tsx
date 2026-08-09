@@ -1169,7 +1169,7 @@ export function OpenTaskDayReviewPanel({
                     <p className="mt-1 text-xs text-text-muted">Start time is prefilled from the shift and previous task end. Edit task, start, or end time before saving.</p>
                   </div>
                   <Badge variant="outline" className="border-surface-border text-text-secondary">
-                    {shiftStart}-{shiftEnd} shift window
+                    {formatTime(shiftStart)}-{formatTime(shiftEnd)} shift window
                   </Badge>
                 </div>
                 <DayCloseOutReviewRows
