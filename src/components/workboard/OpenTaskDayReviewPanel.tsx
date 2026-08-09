@@ -1017,175 +1017,184 @@ export function OpenTaskDayReviewPanel({
 
   return (
     <div className={className}>
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          {showBackButton && onBack ? (
-            <Button type="button" variant="ghost" className="mb-3 gap-2 px-0" onClick={onBack}>
-              <ArrowLeft className="h-4 w-4" />
-              Back to Open Tasks
-            </Button>
-          ) : null}
-          <div className="flex items-center gap-2 text-sm font-medium text-status-pending">
-            <Clock className="h-4 w-4" />
-            Daily closeout review
-          </div>
-          <div
-            className="mt-3 flex max-w-2xl items-center gap-3 rounded-xl border border-surface-border border-l-4 bg-surface-card/80 px-3 py-3 shadow-sm"
-            style={{
-              borderLeftColor: employeeAccent.solid,
-              backgroundImage: `linear-gradient(90deg, ${employeeAccent.soft}, transparent 68%)`,
-            }}
-          >
-            <AvatarInitials
-              firstName={employee?.firstName ?? ''}
-              lastName={employee?.lastName ?? ''}
-              size="lg"
-              className="border-2"
+      <div
+        className="space-y-4 rounded-xl border border-l-4 bg-surface-card/35 p-4 shadow-sm"
+        style={{
+          borderColor: employeeAccent.soft,
+          borderLeftColor: employeeAccent.solid,
+          boxShadow: `inset 1px 0 0 ${employeeAccent.soft}`,
+        }}
+      >
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            {showBackButton && onBack ? (
+              <Button type="button" variant="ghost" className="mb-3 gap-2 px-0" onClick={onBack}>
+                <ArrowLeft className="h-4 w-4" />
+                Back to Open Tasks
+              </Button>
+            ) : null}
+            <div className="flex items-center gap-2 text-sm font-medium text-status-pending">
+              <Clock className="h-4 w-4" />
+              Daily closeout review
+            </div>
+            <div
+              className="mt-3 flex max-w-2xl items-center gap-3 rounded-xl border border-surface-border border-l-4 bg-surface-card/80 px-3 py-3 shadow-sm"
               style={{
-                backgroundColor: employeeAccent.soft,
-                borderColor: employeeAccent.solid,
-                color: employeeAccent.solid,
+                borderLeftColor: employeeAccent.solid,
+                backgroundImage: `linear-gradient(90deg, ${employeeAccent.soft}, transparent 68%)`,
               }}
-            />
-            <div className="min-w-0">
-              <h1 className="truncate text-2xl font-semibold text-text-primary">
-                {formatEmployeeName(employee)}
-              </h1>
-              <p className="mt-0.5 text-sm font-medium text-text-muted">{formatDisplayDate(validDate)}</p>
-            </div>
-          </div>
-          <p className="mt-1 max-w-2xl text-sm text-text-muted">
-            Review logged task times against the scheduled shift before approval.
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-10 gap-2"
-            onClick={() => saveMutation.mutate()}
-            disabled={isApproved || rows.length === 0 || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || reviewQuery.isLoading}
-          >
-            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save reviewed times
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-10 gap-2"
-            onClick={handleApprove}
-            disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-          >
-            {approveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            Approve day
-          </Button>
-          <Button
-            type="button"
-            className="min-h-10 gap-2"
-            onClick={handleSaveAndApprove}
-            disabled={isApproved || rows.length === 0 || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || reviewQuery.isLoading}
-          >
-            {saveAndApproveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            Save & Approve
-          </Button>
-        </div>
-      </div>
-
-      {reviewQuery.isLoading ? (
-        <PageSkeleton />
-      ) : reviewQuery.error ? (
-        <ErrorRetry
-          message={reviewQuery.error instanceof Error ? reviewQuery.error.message : 'Could not load the day review.'}
-          onRetry={() => void reviewQuery.refetch()}
-        />
-      ) : !reviewData ? (
-        <TableSkeleton />
-      ) : (
-        <>
-          <div className="grid gap-3 lg:grid-cols-4">
-            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Scheduled shift</p>
-              <p className="mt-2 text-lg font-semibold text-text-primary">{formatTime(firstSchedule?.shift_start)}-{formatTime(firstSchedule?.shift_end)}</p>
-              <p className="mt-1 text-xs text-text-muted">{schedules.length > 1 ? `${schedules.length} shift entries found` : reviewProperty?.name ?? 'Schedule entry'}</p>
-            </Card>
-            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Assignments</p>
-              <p className="mt-2 text-2xl font-semibold text-text-primary">{rows.length}</p>
-              <p className="mt-1 text-xs text-text-muted">Full day context</p>
-            </Card>
-            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Hours</p>
-              <p className="mt-2 text-2xl font-semibold text-text-primary">{totalActual.toFixed(2)}</p>
-              <p className="mt-1 text-xs text-text-muted">Logged {totalLogged.toFixed(2)}h - unpaid {totalUnpaid.toFixed(2)}h</p>
-              <p className="mt-1 text-xs text-text-muted">Scheduled {totalScheduled.toFixed(1)}h - first start {firstDerivedStart}</p>
-            </Card>
-            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Approval</p>
-              {isApproved ? (
-                <>
-                  <p className="mt-2 text-sm font-semibold text-status-success">Approved</p>
-                  <p className="mt-1 text-xs text-text-muted">
-                    By {formatEmployeeName(approver)} at {formatApprovedAt(firstApproval?.approvedAt)}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-2 text-sm font-semibold text-status-pending">Not approved</p>
-                  <p className="mt-1 text-xs text-text-muted">Save reviewed times, then approve.</p>
-                </>
-              )}
-            </Card>
-          </div>
-
-          {isApproved ? (
-            <div className="rounded-lg border border-status-success/30 bg-status-success/10 px-4 py-3 text-sm text-status-success">
-              This day is already approved and is shown read-only. Re-opening approved time is a separate supervisor action.
-            </div>
-          ) : hasUnsavedEdits ? (
-            <div className="rounded-lg border border-status-pending/30 bg-status-pending/10 px-4 py-3 text-sm text-status-pending">
-              You have unsaved time edits. Save reviewed times or use Save & Approve when the day is ready.
-            </div>
-          ) : null}
-
-          {rows.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle2}
-              title="No assignments for this day"
-              description="The selected employee has no assignments on this date."
-            />
-          ) : (
-            <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold text-text-primary">Assignments reviewed</h2>
-                  <p className="mt-1 text-xs text-text-muted">Start time is prefilled from the shift and previous task end. Edit task, start, or end time before saving.</p>
-                </div>
-                <Badge variant="outline" className="border-surface-border text-text-secondary">
-                  {shiftStart}-{shiftEnd} shift window
-                </Badge>
-              </div>
-              <DayCloseOutReviewRows
-                rows={rows}
-                tasks={reviewData.tasks}
-                disabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-                showScheduledHours
-                onTaskChange={handleTaskChange}
-                onStartChange={handleStartChange}
-                onEndChange={handleEndChange}
-                onDelete={handleDeleteAssignment}
-                deletingAssignmentId={deletingAssignmentId}
-                deleteDisabled={saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-                onInsertBreak={handleInsertBreak}
-                insertBreakDisabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-                insertingBreakIndex={insertingBreakIndex}
-                onInsertTask={handleInsertTask}
-                insertTaskDisabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-                insertingTaskIndex={insertingTaskIndex}
+            >
+              <AvatarInitials
+                firstName={employee?.firstName ?? ''}
+                lastName={employee?.lastName ?? ''}
+                size="lg"
+                className="border-2"
+                style={{
+                  backgroundColor: employeeAccent.soft,
+                  borderColor: employeeAccent.solid,
+                  color: employeeAccent.solid,
+                }}
               />
-            </Card>
-          )}
-        </>
-      )}
+              <div className="min-w-0">
+                <h1 className="truncate text-2xl font-semibold text-text-primary">
+                  {formatEmployeeName(employee)}
+                </h1>
+                <p className="mt-0.5 text-sm font-medium text-text-muted">{formatDisplayDate(validDate)}</p>
+              </div>
+            </div>
+            <p className="mt-1 max-w-2xl text-sm text-text-muted">
+              Review logged task times against the scheduled shift before approval.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-10 gap-2"
+              onClick={() => saveMutation.mutate()}
+              disabled={isApproved || rows.length === 0 || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || reviewQuery.isLoading}
+            >
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save reviewed times
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-10 gap-2"
+              onClick={handleApprove}
+              disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
+            >
+              {approveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Approve day
+            </Button>
+            <Button
+              type="button"
+              className="min-h-10 gap-2"
+              onClick={handleSaveAndApprove}
+              disabled={isApproved || rows.length === 0 || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || reviewQuery.isLoading}
+            >
+              {saveAndApproveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Save & Approve
+            </Button>
+          </div>
+        </div>
+
+        {reviewQuery.isLoading ? (
+          <PageSkeleton />
+        ) : reviewQuery.error ? (
+          <ErrorRetry
+            message={reviewQuery.error instanceof Error ? reviewQuery.error.message : 'Could not load the day review.'}
+            onRetry={() => void reviewQuery.refetch()}
+          />
+        ) : !reviewData ? (
+          <TableSkeleton />
+        ) : (
+          <>
+            <div className="grid gap-3 lg:grid-cols-4">
+              <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+                <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Scheduled shift</p>
+                <p className="mt-2 text-lg font-semibold text-text-primary">{formatTime(firstSchedule?.shift_start)}-{formatTime(firstSchedule?.shift_end)}</p>
+                <p className="mt-1 text-xs text-text-muted">{schedules.length > 1 ? `${schedules.length} shift entries found` : reviewProperty?.name ?? 'Schedule entry'}</p>
+              </Card>
+              <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+                <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Assignments</p>
+                <p className="mt-2 text-2xl font-semibold text-text-primary">{rows.length}</p>
+                <p className="mt-1 text-xs text-text-muted">Full day context</p>
+              </Card>
+              <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+                <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Hours</p>
+                <p className="mt-2 text-2xl font-semibold text-text-primary">{totalActual.toFixed(2)}</p>
+                <p className="mt-1 text-xs text-text-muted">Logged {totalLogged.toFixed(2)}h - unpaid {totalUnpaid.toFixed(2)}h</p>
+                <p className="mt-1 text-xs text-text-muted">Scheduled {totalScheduled.toFixed(1)}h - first start {firstDerivedStart}</p>
+              </Card>
+              <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+                <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Approval</p>
+                {isApproved ? (
+                  <>
+                    <p className="mt-2 text-sm font-semibold text-status-success">Approved</p>
+                    <p className="mt-1 text-xs text-text-muted">
+                      By {formatEmployeeName(approver)} at {formatApprovedAt(firstApproval?.approvedAt)}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-2 text-sm font-semibold text-status-pending">Not approved</p>
+                    <p className="mt-1 text-xs text-text-muted">Save reviewed times, then approve.</p>
+                  </>
+                )}
+              </Card>
+            </div>
+
+            {isApproved ? (
+              <div className="rounded-lg border border-status-success/30 bg-status-success/10 px-4 py-3 text-sm text-status-success">
+                This day is already approved and is shown read-only. Re-opening approved time is a separate supervisor action.
+              </div>
+            ) : hasUnsavedEdits ? (
+              <div className="rounded-lg border border-status-pending/30 bg-status-pending/10 px-4 py-3 text-sm text-status-pending">
+                You have unsaved time edits. Save reviewed times or use Save & Approve when the day is ready.
+              </div>
+            ) : null}
+
+            {rows.length === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="No assignments for this day"
+                description="The selected employee has no assignments on this date."
+              />
+            ) : (
+              <Card className="border-surface-border bg-surface-card p-4 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold text-text-primary">Assignments reviewed</h2>
+                    <p className="mt-1 text-xs text-text-muted">Start time is prefilled from the shift and previous task end. Edit task, start, or end time before saving.</p>
+                  </div>
+                  <Badge variant="outline" className="border-surface-border text-text-secondary">
+                    {shiftStart}-{shiftEnd} shift window
+                  </Badge>
+                </div>
+                <DayCloseOutReviewRows
+                  rows={rows}
+                  tasks={reviewData.tasks}
+                  disabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
+                  showScheduledHours
+                  onTaskChange={handleTaskChange}
+                  onStartChange={handleStartChange}
+                  onEndChange={handleEndChange}
+                  onDelete={handleDeleteAssignment}
+                  deletingAssignmentId={deletingAssignmentId}
+                  deleteDisabled={saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
+                  onInsertBreak={handleInsertBreak}
+                  insertBreakDisabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
+                  insertingBreakIndex={insertingBreakIndex}
+                  onInsertTask={handleInsertTask}
+                  insertTaskDisabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
+                  insertingTaskIndex={insertingTaskIndex}
+                />
+              </Card>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
