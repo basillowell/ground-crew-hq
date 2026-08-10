@@ -24,6 +24,11 @@ Theme tokens use OKLCH payloads.
   --text-secondary: 71.067% 0.03511 256.79;  /* #94a3b8 - pure slate-400, no green tint */
   --text-muted: 44.553% 0.03745 257.28;        /* #475569 - slate-600 */
   --text-inverse: 18.754% 0.00512 173.77;       /* #111413 */
+  --status-active: 72.275% 0.19201 149.58;
+  --status-pending: 76.859% 0.16466 70.08;
+  --status-warning: 63.683% 0.20785 25.33;
+  --status-complete: 62.308% 0.18801 259.81;
+  --status-hold: 55.439% 0.04072 257.42;
 
   /* Elevation shadows (dark). Black drop shadows read weakly on dark surfaces,
      so md+ pair a low-alpha top-edge inset highlight (light catching the top)
@@ -46,6 +51,11 @@ html.light {
   --text-muted: 60.558% 0.06175 144.77;      /* #6b8c6b */
   --text-inverse: 96.301% 0.00677 145.52;    /* #f0f4f0 */
   --brand-ghost: 94.833% 0.03139 163.24;     /* #dcf5e8 - light emerald tint */
+  --status-active: 54.979% 0.13945 149.81;
+  --status-pending: 59.925% 0.13386 70.34;
+  --status-warning: 55.837% 0.19071 25.61;
+  --status-complete: 55.107% 0.16772 259.96;
+  --status-hold: 45.308% 0.04017 257.30;
   /* shadcn/ui overrides for light mode */
   --background: 90.495% 0.01708 145.43;
   --foreground: 20.443% 0.02002 159.90;
