@@ -173,12 +173,12 @@ export default function CommandCenterOperationalPage() {
                 return (
                   <Card key={property.id} className="group cursor-pointer overflow-hidden border transition-all hover:border-primary/30 hover:shadow-lg"
                     onClick={() => router.push(`/app/workboard?property=${encodeURIComponent(property.id)}`)}>
-                    <div className="h-1.5" style={{ background: property.color ?? '#16a34a' }} />
+                    <div className="h-1.5 bg-brand" style={property.color ? { background: property.color } : undefined} />
                     <div className="space-y-4 p-5">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-bold text-white"
-                            style={{ background: property.color ?? '#16a34a' }}>
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand text-sm font-bold text-text-inverse"
+                            style={property.color ? { background: property.color } : undefined}>
                             {property.logoInitials ?? property.name?.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
@@ -217,8 +217,8 @@ export default function CommandCenterOperationalPage() {
                 return (
                   <div key={property.id} className="flex cursor-pointer items-center gap-4 p-4 hover:bg-muted/30 transition-colors"
                     onClick={() => router.push(`/app/workboard?property=${encodeURIComponent(property.id)}`)}>
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg text-xs font-bold text-white"
-                      style={{ background: property.color ?? '#16a34a' }}>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-xs font-bold text-text-inverse"
+                      style={property.color ? { background: property.color } : undefined}>
                       {property.logoInitials ?? property.name?.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -244,7 +244,7 @@ export default function CommandCenterOperationalPage() {
                 <Activity className="h-4 w-4 text-primary" /> Live Crew Activity
               </h3>
               <Badge variant="outline" className="text-[10px]">
-                <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
+                <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-status-active" />
                 Live
               </Badge>
             </div>
@@ -252,7 +252,7 @@ export default function CommandCenterOperationalPage() {
               <p className="text-xs text-muted-foreground py-4 text-center">No crew activity today</p>
             ) : liveCrew.map(member => (
               <div key={member.id} className="flex items-center gap-2.5 rounded-lg p-2 hover:bg-muted/50 transition-colors">
-                <span className={`h-2 w-2 rounded-full ${member.status === 'active' ? 'bg-green-500' : member.status === 'scheduled' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                <span className={`h-2 w-2 rounded-full ${member.status === 'active' ? 'bg-status-active' : member.status === 'scheduled' ? 'bg-status-pending' : 'bg-status-hold'}`} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{member.name}</div>
                   <div className="truncate text-[11px] text-muted-foreground">{member.currentTask || member.status} · {member.propertyShortName}</div>
