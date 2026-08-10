@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, Clock, Loader2, Plus, Save, ShieldCheck } from
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { TimeSelect } from '@/components/TimeSelect';
 import { toast } from '@/components/ui/sonner';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorRetry } from '@/components/ErrorRetry';
@@ -127,6 +128,11 @@ type InsertTaskPayload = {
   task: Task;
 };
 
+type SplitTimeRange = {
+  start: string;
+  end: string;
+};
+
 type SupabaseResult<T> = {
   data: T | null;
   error: { message: string } | null;
@@ -228,29 +234,8 @@ function normalizeTaskMatchKey(name: string, category: string) {
   return `${name.trim().toLowerCase()}::${category.trim().toLowerCase()}`;
 }
 
-function formatHoursInput(value: number) {
-  if (!Number.isFinite(value)) return '0';
-  return value.toFixed(2).replace(/\.?0+$/, '');
-}
-
-function parseHoursInput(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-}
-
-function distributeSplitHours(propertyIds: string[], totalHoursText: string) {
-  const totalHours = parseHoursInput(totalHoursText);
-  if (propertyIds.length === 0) return {};
-  const evenShare = totalHours / propertyIds.length;
-  let assigned = 0;
-  return propertyIds.reduce<Record<string, string>>((result, propertyId, index) => {
-    const value = index === propertyIds.length - 1
-      ? Math.max(0, totalHours - assigned)
-      : Number(evenShare.toFixed(2));
-    assigned += value;
-    result[propertyId] = formatHoursInput(value);
-    return result;
-  }, {});
+function calculateSplitHours(start: string, end: string) {
+  return Math.max(0, timeToMinutes(end) - timeToMinutes(start)) / 60;
 }
 
 function toEmployee(row: EmployeeReviewRow): Employee {
@@ -688,9 +673,8 @@ async function insertSplitAssignments({
   taskName,
   category,
   estimatedHours,
-  hoursByProperty,
+  timeRangesByProperty,
   timezone,
-  startTime,
   nextOrderIndex,
 }: {
   orgId: string;
@@ -700,16 +684,17 @@ async function insertSplitAssignments({
   taskName: string;
   category: string;
   estimatedHours: number;
-  hoursByProperty: Record<string, number>;
+  timeRangesByProperty: Record<string, SplitTimeRange>;
   timezone: string;
-  startTime: string;
   nextOrderIndex: number;
 }) {
-  let cursor = normalizeClockTime(startTime, '06:00');
-
   for (const [index, propertyId] of propertyIds.entries()) {
     if (!isUuid(propertyId)) throw new Error('Invalid property selection. Please reselect properties.');
-    const hours = Math.max(0, Number(hoursByProperty[propertyId] ?? 0));
+    const range = timeRangesByProperty[propertyId];
+    const start = normalizeClockTime(range?.start, '');
+    const end = normalizeClockTime(range?.end, '');
+    if (!start || !end) throw new Error('Choose start and end times for every selected property.');
+    const hours = Number(calculateSplitHours(start, end).toFixed(2));
     if (hours <= 0) continue;
     const task = await ensurePropertyTask({
       orgId,
@@ -718,8 +703,6 @@ async function insertSplitAssignments({
       category,
       estimatedHours,
     });
-    const durationMinutes = Math.round(hours * 60);
-    const end = addMinutesToTime(cursor, durationMinutes);
     const insertResult = await withReviewTimeout(
       supabase
         .from('assignments')
@@ -734,15 +717,14 @@ async function insertSplitAssignments({
           order_index: nextOrderIndex + index,
           estimated_hours: Number(hours.toFixed(2)),
           actual_hours: Number(hours.toFixed(2)),
-          actual_start_at: wallClockToStoredIso(date, cursor, timezone),
+          actual_start_at: wallClockToStoredIso(date, start, timezone),
           actual_completed_at: wallClockToStoredIso(date, end, timezone),
-          start_time: cursor,
+          start_time: start,
           title: task.name,
         }),
       'Split assignment create',
     ) as SupabaseResult<null>;
     if (insertResult.error) throw insertResult.error;
-    cursor = end;
   }
 }
 
@@ -877,8 +859,7 @@ export function OpenTaskDayReviewPanel({
   const [splitOpen, setSplitOpen] = useState(false);
   const [splitTaskKey, setSplitTaskKey] = useState('');
   const [splitPropertyIds, setSplitPropertyIds] = useState<string[]>([]);
-  const [splitTotalHours, setSplitTotalHours] = useState('');
-  const [splitHoursByProperty, setSplitHoursByProperty] = useState<Record<string, string>>({});
+  const [splitTimesByProperty, setSplitTimesByProperty] = useState<Record<string, SplitTimeRange>>({});
 
   useEffect(() => {
     setStartOverrides({});
@@ -889,8 +870,7 @@ export function OpenTaskDayReviewPanel({
     setSplitOpen(false);
     setSplitTaskKey('');
     setSplitPropertyIds([]);
-    setSplitTotalHours('');
-    setSplitHoursByProperty({});
+    setSplitTimesByProperty({});
   }, [validEmployeeId, validDate]);
 
   const reviewQuery = useQuery({
@@ -1134,16 +1114,19 @@ export function OpenTaskDayReviewPanel({
       if (!selectedSplitTask) throw new Error('Choose a task to split across properties.');
       const validPropertyIds = splitPropertyIds.filter((propertyId) => isUuid(propertyId));
       if (validPropertyIds.length === 0) throw new Error('Choose at least one property.');
-      const hoursByProperty = validPropertyIds.reduce<Record<string, number>>((result, propertyId) => {
-        result[propertyId] = parseHoursInput(splitHoursByProperty[propertyId] ?? '0');
+      const timeRangesByProperty = validPropertyIds.reduce<Record<string, SplitTimeRange>>((result, propertyId) => {
+        const range = splitTimesByProperty[propertyId];
+        if (range) result[propertyId] = range;
         return result;
       }, {});
-      const totalSplitHours = Object.values(hoursByProperty).reduce((sum, hours) => sum + hours, 0);
-      if (totalSplitHours <= 0) throw new Error('Enter hours greater than 0 before saving the split.');
+      const totalSplitHours = validPropertyIds.reduce((sum, propertyId) => {
+        const range = timeRangesByProperty[propertyId];
+        return sum + calculateSplitHours(range?.start ?? '', range?.end ?? '');
+      }, 0);
+      if (totalSplitHours <= 0) throw new Error('Choose start and end times for every selected property.');
       if (hasUnsavedEdits) {
         await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
       }
-      const latestEndMinutes = rows.reduce((latest, row) => Math.max(latest, timeToMinutes(row.end)), timeToMinutes(shiftStart));
       const nextOrderIndex = rows.reduce((latest, row) => Math.max(latest, Number(row.assignment.order ?? 0)), 0) + 1;
       await insertSplitAssignments({
         orgId: queryOrgId,
@@ -1153,9 +1136,8 @@ export function OpenTaskDayReviewPanel({
         taskName: selectedSplitTask.name,
         category: selectedSplitTask.category,
         estimatedHours: selectedSplitTask.estimatedHours,
-        hoursByProperty,
+        timeRangesByProperty,
         timezone: operationalTimezone,
-        startTime: minutesToTime(latestEndMinutes),
         nextOrderIndex,
       });
     },
@@ -1166,8 +1148,7 @@ export function OpenTaskDayReviewPanel({
       setSplitOpen(false);
       setSplitTaskKey('');
       setSplitPropertyIds([]);
-      setSplitTotalHours('');
-      setSplitHoursByProperty({});
+      setSplitTimesByProperty({});
       await Promise.all([
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
@@ -1236,28 +1217,46 @@ export function OpenTaskDayReviewPanel({
     setEndOverrides((current) => ({ ...current, [assignmentId]: endTime }));
   };
 
-  const handleSplitTotalHoursChange = (value: string) => {
-    setSplitTotalHours(value);
-    setSplitHoursByProperty(distributeSplitHours(splitPropertyIds, value));
-  };
-
   const handleToggleSplitProperty = (propertyId: string) => {
     if (!isUuid(propertyId)) {
       toast.error('Invalid property selection. Please reselect properties.');
       return;
     }
     setSplitPropertyIds((current) => {
-      const next = current.includes(propertyId)
-        ? current.filter((id) => id !== propertyId)
-        : [...current, propertyId];
-      setSplitHoursByProperty(distributeSplitHours(next, splitTotalHours));
-      return next;
+      if (current.includes(propertyId)) {
+        setSplitTimesByProperty((times) => {
+          const nextTimes = { ...times };
+          delete nextTimes[propertyId];
+          return nextTimes;
+        });
+        return current.filter((id) => id !== propertyId);
+      }
+
+      const lastSelectedPropertyId = current[current.length - 1];
+      const lastSplitEnd = lastSelectedPropertyId ? splitTimesByProperty[lastSelectedPropertyId]?.end : '';
+      const latestReviewEnd = rows.reduce((latest, row) => Math.max(latest, timeToMinutes(row.end)), timeToMinutes(shiftStart));
+      const start = normalizeClockTime(lastSplitEnd, minutesToTime(latestReviewEnd));
+      const selectedTaskHours = Number(selectedSplitTask?.estimatedHours ?? 0);
+      const durationMinutes = Math.max(15, Math.round((Number.isFinite(selectedTaskHours) && selectedTaskHours > 0 ? selectedTaskHours : 1) * 60));
+      const end = addMinutesToTime(start, durationMinutes);
+      setSplitTimesByProperty((times) => ({
+        ...times,
+        [propertyId]: times[propertyId] ?? { start, end },
+      }));
+      return [...current, propertyId];
     });
   };
 
-  const handleSplitPropertyHoursChange = (propertyId: string, value: string) => {
+  const handleSplitTimeChange = (propertyId: string, field: keyof SplitTimeRange, value: string) => {
     if (!isUuid(propertyId)) return;
-    setSplitHoursByProperty((current) => ({ ...current, [propertyId]: value }));
+    setSplitTimesByProperty((current) => ({
+      ...current,
+      [propertyId]: {
+        start: current[propertyId]?.start ?? shiftStart,
+        end: current[propertyId]?.end ?? shiftEnd,
+        [field]: value,
+      },
+    }));
   };
 
   const handleSaveSplit = () => {
@@ -1268,6 +1267,14 @@ export function OpenTaskDayReviewPanel({
     }
     if (splitPropertyIds.length === 0) {
       toast.error('Choose at least one property.');
+      return;
+    }
+    const invalidProperty = splitPropertyIds.find((propertyId) => {
+      const range = splitTimesByProperty[propertyId];
+      return !range || calculateSplitHours(range.start, range.end) <= 0;
+    });
+    if (invalidProperty) {
+      toast.error('Each selected property needs an end time after its start time.');
       return;
     }
     splitAcrossPropertiesMutation.mutate();
@@ -1525,7 +1532,7 @@ export function OpenTaskDayReviewPanel({
                 </div>
                 {splitOpen ? (
                   <div className="mb-4 rounded-xl border border-surface-border bg-surface-elevated/35 p-3">
-                    <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.2fr)_160px]">
+                    <div className="grid gap-3">
                       <label className="text-xs font-medium uppercase tracking-wide text-text-muted">
                         Task
                         <select
@@ -1542,25 +1549,14 @@ export function OpenTaskDayReviewPanel({
                           ))}
                         </select>
                       </label>
-                      <label className="text-xs font-medium uppercase tracking-wide text-text-muted">
-                        Total hours
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.25"
-                          value={splitTotalHours}
-                          onChange={(event) => handleSplitTotalHoursChange(event.target.value)}
-                          disabled={isApproved || splitAcrossPropertiesMutation.isPending}
-                          className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
-                          placeholder="8"
-                        />
-                      </label>
                     </div>
                     <div className="mt-3">
                       <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Properties</p>
-                      <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      <div className="mt-2 grid gap-2 xl:grid-cols-2">
                         {activeProperties.map((property) => {
                           const selected = splitPropertyIds.includes(property.id);
+                          const timeRange = splitTimesByProperty[property.id];
+                          const splitHours = timeRange ? calculateSplitHours(timeRange.start, timeRange.end) : 0;
                           return (
                             <div key={property.id} className="rounded-lg border border-surface-border bg-surface-card/70 p-2">
                               <label className="flex items-start gap-2 text-sm text-text-primary">
@@ -1577,18 +1573,28 @@ export function OpenTaskDayReviewPanel({
                                 </span>
                               </label>
                               {selected ? (
-                                <label className="mt-2 block text-[10px] font-medium uppercase tracking-wide text-text-muted">
-                                  Hours here
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.25"
-                                    value={splitHoursByProperty[property.id] ?? ''}
-                                    onChange={(event) => handleSplitPropertyHoursChange(property.id, event.target.value)}
-                                    disabled={isApproved || splitAcrossPropertiesMutation.isPending}
-                                    className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
-                                  />
-                                </label>
+                                <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_72px] sm:items-end">
+                                  <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                                    Start
+                                    <TimeSelect
+                                      value={timeRange?.start ?? shiftStart}
+                                      onChange={(value) => handleSplitTimeChange(property.id, 'start', value)}
+                                      className={isApproved || splitAcrossPropertiesMutation.isPending ? 'pointer-events-none opacity-70' : ''}
+                                    />
+                                  </label>
+                                  <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                                    End
+                                    <TimeSelect
+                                      value={timeRange?.end ?? shiftEnd}
+                                      onChange={(value) => handleSplitTimeChange(property.id, 'end', value)}
+                                      className={isApproved || splitAcrossPropertiesMutation.isPending ? 'pointer-events-none opacity-70' : ''}
+                                    />
+                                  </label>
+                                  <div className="rounded-md border border-surface-border bg-surface-elevated px-2 py-2 text-right">
+                                    <p className="text-[10px] uppercase tracking-wide text-text-muted">Hours</p>
+                                    <p className="font-mono text-sm font-semibold text-text-primary">{splitHours.toFixed(2)}</p>
+                                  </div>
+                                </div>
                               ) : null}
                             </div>
                           );
@@ -1600,7 +1606,7 @@ export function OpenTaskDayReviewPanel({
                     </div>
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                       <p className="text-xs text-text-muted">
-                        Creates one assignment per selected property, using that property's matching task when available.
+                        Creates one assignment per selected property using each property's start and end time.
                       </p>
                       <Button
                         type="button"
