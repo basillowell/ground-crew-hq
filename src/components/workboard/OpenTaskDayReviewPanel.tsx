@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, CheckCircle2, Clock, Loader2, Save, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Loader2, Plus, Save, ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -13,7 +13,6 @@ import { AvatarInitials } from '@/components/shared';
 import {
   DayCloseOutReviewRows,
   getChainedAssignmentRows,
-  getChainedAssignmentStartTime,
 } from '@/components/workboard/DayCloseOut';
 import type { Assignment, Employee, Task } from '@/data/seedData';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
@@ -73,6 +72,7 @@ type EmployeeReviewRow = {
 
 type TaskReviewRow = {
   id: string;
+  property_id: string | null;
   name: string | null;
   category: string | null;
   estimated_hours: number | null;
@@ -97,6 +97,34 @@ type ReviewData = {
   employees: Employee[];
   tasks: Task[];
   breakPolicy: BreakPolicy;
+};
+
+type PropertyAssignmentGroup = {
+  propertyId: string;
+  propertyName: string;
+  shiftStart: string;
+  shiftEnd: string;
+  rows: ReturnType<typeof getChainedAssignmentRows>;
+};
+
+type SplitTaskOption = {
+  key: string;
+  name: string;
+  category: string;
+  estimatedHours: number;
+  taskByPropertyId: Map<string, Task>;
+};
+
+type InsertBreakPayload = {
+  insertIndex: number;
+  rows: ReturnType<typeof getChainedAssignmentRows>;
+};
+
+type InsertTaskPayload = {
+  insertIndex: number;
+  rows: ReturnType<typeof getChainedAssignmentRows>;
+  shiftStart: string;
+  task: Task;
 };
 
 type SupabaseResult<T> = {
@@ -196,6 +224,35 @@ function getAssignmentIsUnpaid(assignment: Assignment, tasks: Task[]) {
   return getTaskIsUnpaid(tasks.find((task) => task.id === assignment.taskId));
 }
 
+function normalizeTaskMatchKey(name: string, category: string) {
+  return `${name.trim().toLowerCase()}::${category.trim().toLowerCase()}`;
+}
+
+function formatHoursInput(value: number) {
+  if (!Number.isFinite(value)) return '0';
+  return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function parseHoursInput(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+function distributeSplitHours(propertyIds: string[], totalHoursText: string) {
+  const totalHours = parseHoursInput(totalHoursText);
+  if (propertyIds.length === 0) return {};
+  const evenShare = totalHours / propertyIds.length;
+  let assigned = 0;
+  return propertyIds.reduce<Record<string, string>>((result, propertyId, index) => {
+    const value = index === propertyIds.length - 1
+      ? Math.max(0, totalHours - assigned)
+      : Number(evenShare.toFixed(2));
+    assigned += value;
+    result[propertyId] = formatHoursInput(value);
+    return result;
+  }, {});
+}
+
 function toEmployee(row: EmployeeReviewRow): Employee {
   return {
     id: row.id,
@@ -219,6 +276,7 @@ function toEmployee(row: EmployeeReviewRow): Employee {
 function toTask(row: TaskReviewRow): Task {
   return {
     id: row.id,
+    propertyId: row.property_id ?? undefined,
     name: row.name ?? 'Task',
     category: row.category ?? 'General',
     duration: Math.round(Number(row.estimated_hours ?? 0) * 60),
@@ -296,7 +354,7 @@ async function fetchReviewData(orgId: string, employeeId: string, date: string):
   const tasksPromise = withReviewTimeout(
     supabase
       .from('tasks')
-      .select('id, name, category, estimated_hours, is_unpaid')
+      .select('id, property_id, name, category, estimated_hours, is_unpaid')
       .eq('org_id', orgId)
       .order('category', { ascending: true })
       .order('name', { ascending: true }),
@@ -358,12 +416,13 @@ async function ensureBreakTask({
   durationHours: number;
   isUnpaid: boolean;
 }): Promise<Task> {
-  const taskSelect = 'id, name, category, estimated_hours, is_unpaid';
+  const taskSelect = 'id, property_id, name, category, estimated_hours, is_unpaid';
   const existingResult = await withReviewTimeout(
     supabase
       .from('tasks')
       .select(taskSelect)
       .eq('org_id', orgId)
+      .eq('property_id', propertyId)
       .eq('name', 'Lunch Break')
       .limit(1)
       .maybeSingle(),
@@ -412,6 +471,57 @@ async function ensureBreakTask({
   ) as SupabaseResult<TaskReviewRow>;
   if (insertResult.error) throw insertResult.error;
   if (!insertResult.data) throw new Error('Break task could not be created.');
+  return toTask(insertResult.data);
+}
+
+async function ensurePropertyTask({
+  orgId,
+  propertyId,
+  taskName,
+  category,
+  estimatedHours,
+}: {
+  orgId: string;
+  propertyId: string;
+  taskName: string;
+  category: string;
+  estimatedHours: number;
+}): Promise<Task> {
+  const taskSelect = 'id, property_id, name, category, estimated_hours, is_unpaid';
+  const existingResult = await withReviewTimeout(
+    supabase
+      .from('tasks')
+      .select(taskSelect)
+      .eq('org_id', orgId)
+      .eq('property_id', propertyId)
+      .eq('name', taskName)
+      .eq('category', category)
+      .limit(1)
+      .maybeSingle(),
+    'Property task lookup',
+  ) as SupabaseResult<TaskReviewRow>;
+  if (existingResult.error) throw existingResult.error;
+  if (existingResult.data) return toTask(existingResult.data);
+
+  const insertResult = await withReviewTimeout(
+    supabase
+      .from('tasks')
+      .insert({
+        org_id: orgId,
+        property_id: propertyId,
+        name: taskName,
+        category,
+        estimated_hours: estimatedHours,
+        is_unpaid: false,
+        status: 'active',
+        priority: 1,
+      })
+      .select(taskSelect)
+      .single(),
+    'Property task create',
+  ) as SupabaseResult<TaskReviewRow>;
+  if (insertResult.error) throw insertResult.error;
+  if (!insertResult.data) throw new Error('Task could not be created for the selected property.');
   return toTask(insertResult.data);
 }
 
@@ -515,7 +625,16 @@ async function insertTaskAssignment({
   const nextRow = rows[insertIndex] ?? null;
   const propertyId = nextRow?.assignment.propertyId ?? previousRow?.assignment.propertyId ?? null;
   if (!propertyId || !isUuid(propertyId)) throw new Error('Could not identify the property for this task. Refresh the review and try again.');
-  const taskDurationHours = Number(task.estimatedHours ?? task.estimated_hours ?? 0);
+  const propertyTask = task.propertyId === propertyId
+    ? task
+    : await ensurePropertyTask({
+        orgId,
+        propertyId,
+        taskName: task.name,
+        category: task.category ?? 'General',
+        estimatedHours: Number(task.estimatedHours ?? task.estimated_hours ?? 0) || 0,
+      });
+  const taskDurationHours = Number(propertyTask.estimatedHours ?? propertyTask.estimated_hours ?? 0);
   const durationHours = Number.isFinite(taskDurationHours) ? Math.max(0, taskDurationHours) : 0;
   const durationMinutes = Math.max(0, Math.round(durationHours * 60));
   const start = previousRow?.end || nextRow?.start || normalizeClockTime(shiftStart, '06:00');
@@ -528,9 +647,9 @@ async function insertTaskAssignment({
         org_id: orgId,
         employee_id: employeeId,
         property_id: propertyId,
-        task_id: task.id,
+        task_id: propertyTask.id,
         date,
-        location: task.category ?? 'General',
+        location: propertyTask.category ?? 'General',
         status: 'completed',
         order_index: insertIndex + 1,
         estimated_hours: durationHours,
@@ -538,7 +657,7 @@ async function insertTaskAssignment({
         actual_start_at: wallClockToStoredIso(date, start, timezone),
         actual_completed_at: wallClockToStoredIso(date, end, timezone),
         start_time: start,
-        title: task.name,
+        title: propertyTask.name,
       }),
     'Task assignment create',
   ) as SupabaseResult<null>;
@@ -558,6 +677,72 @@ async function insertTaskAssignment({
       'Task chain update',
     ) as SupabaseResult<null>;
     if (updateResult.error) throw updateResult.error;
+  }
+}
+
+async function insertSplitAssignments({
+  orgId,
+  employeeId,
+  date,
+  propertyIds,
+  taskName,
+  category,
+  estimatedHours,
+  hoursByProperty,
+  timezone,
+  startTime,
+  nextOrderIndex,
+}: {
+  orgId: string;
+  employeeId: string;
+  date: string;
+  propertyIds: string[];
+  taskName: string;
+  category: string;
+  estimatedHours: number;
+  hoursByProperty: Record<string, number>;
+  timezone: string;
+  startTime: string;
+  nextOrderIndex: number;
+}) {
+  let cursor = normalizeClockTime(startTime, '06:00');
+
+  for (const [index, propertyId] of propertyIds.entries()) {
+    if (!isUuid(propertyId)) throw new Error('Invalid property selection. Please reselect properties.');
+    const hours = Math.max(0, Number(hoursByProperty[propertyId] ?? 0));
+    if (hours <= 0) continue;
+    const task = await ensurePropertyTask({
+      orgId,
+      propertyId,
+      taskName,
+      category,
+      estimatedHours,
+    });
+    const durationMinutes = Math.round(hours * 60);
+    const end = addMinutesToTime(cursor, durationMinutes);
+    const insertResult = await withReviewTimeout(
+      supabase
+        .from('assignments')
+        .insert({
+          org_id: orgId,
+          employee_id: employeeId,
+          property_id: propertyId,
+          task_id: task.id,
+          date,
+          location: category,
+          status: 'completed',
+          order_index: nextOrderIndex + index,
+          estimated_hours: Number(hours.toFixed(2)),
+          actual_hours: Number(hours.toFixed(2)),
+          actual_start_at: wallClockToStoredIso(date, cursor, timezone),
+          actual_completed_at: wallClockToStoredIso(date, end, timezone),
+          start_time: cursor,
+          title: task.name,
+        }),
+      'Split assignment create',
+    ) as SupabaseResult<null>;
+    if (insertResult.error) throw insertResult.error;
+    cursor = end;
   }
 }
 
@@ -590,8 +775,18 @@ async function saveReviewedTimes({
     if (Object.prototype.hasOwnProperty.call(taskOverrides, row.assignment.id)) {
       const nextTaskId = taskOverrides[row.assignment.id] ?? '';
       if (nextTaskId && !isUuid(nextTaskId)) throw new Error('Invalid task ID. Please reselect a task.');
-      const nextTask = nextTaskId ? tasks.find((task) => task.id === nextTaskId) : null;
-      payload.task_id = nextTaskId || null;
+      let nextTask = nextTaskId ? tasks.find((task) => task.id === nextTaskId) ?? null : null;
+      if (nextTask && row.assignment.propertyId && nextTask.propertyId !== row.assignment.propertyId) {
+        if (!isUuid(row.assignment.propertyId)) throw new Error('Could not identify the assignment property. Refresh and try again.');
+        nextTask = await ensurePropertyTask({
+          orgId,
+          propertyId: row.assignment.propertyId,
+          taskName: nextTask.name,
+          category: nextTask.category ?? 'General',
+          estimatedHours: Number(nextTask.estimatedHours ?? nextTask.estimated_hours ?? 0) || 0,
+        });
+      }
+      payload.task_id = nextTask?.id ?? null;
       payload.title = nextTask?.name ?? null;
     }
     const updateResult = await withReviewTimeout(
@@ -679,6 +874,11 @@ export function OpenTaskDayReviewPanel({
   const [deletingAssignmentId, setDeletingAssignmentId] = useState<string | null>(null);
   const [insertingBreakIndex, setInsertingBreakIndex] = useState<number | null>(null);
   const [insertingTaskIndex, setInsertingTaskIndex] = useState<number | null>(null);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [splitTaskKey, setSplitTaskKey] = useState('');
+  const [splitPropertyIds, setSplitPropertyIds] = useState<string[]>([]);
+  const [splitTotalHours, setSplitTotalHours] = useState('');
+  const [splitHoursByProperty, setSplitHoursByProperty] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setStartOverrides({});
@@ -686,6 +886,11 @@ export function OpenTaskDayReviewPanel({
     setTaskOverrides({});
     setInsertingBreakIndex(null);
     setInsertingTaskIndex(null);
+    setSplitOpen(false);
+    setSplitTaskKey('');
+    setSplitPropertyIds([]);
+    setSplitTotalHours('');
+    setSplitHoursByProperty({});
   }, [validEmployeeId, validDate]);
 
   const reviewQuery = useQuery({
@@ -710,6 +915,12 @@ export function OpenTaskDayReviewPanel({
     () => new Map((propertiesQuery.data ?? []).map((property) => [property.id, property])),
     [propertiesQuery.data],
   );
+  const activeProperties = useMemo(
+    () => (propertiesQuery.data ?? [])
+      .filter((property) => String(property.status ?? 'active').toLowerCase() !== 'archived')
+      .sort((first, second) => first.name.localeCompare(second.name)),
+    [propertiesQuery.data],
+  );
   const reviewProperty = firstSchedule?.property_id
     ? propertyById.get(firstSchedule.property_id)
     : reviewData?.assignments[0]?.propertyId
@@ -719,6 +930,10 @@ export function OpenTaskDayReviewPanel({
   const shiftStart = firstSchedule?.shift_start?.slice(0, 5) ?? reviewData?.assignments[0]?.startTime ?? '06:00';
   const shiftEnd = latestSchedule?.shift_end?.slice(0, 5) ?? '17:00';
   const taskById = useMemo(() => new Map((reviewData?.tasks ?? []).map((task) => [task.id, task])), [reviewData?.tasks]);
+  const scheduleByPropertyId = useMemo(
+    () => new Map(schedules.map((schedule) => [schedule.property_id, schedule])),
+    [schedules],
+  );
   const reviewAssignments = useMemo(
     () => (reviewData?.assignments ?? []).map((assignment) => {
       const assignmentId = assignment.id ?? '';
@@ -734,27 +949,58 @@ export function OpenTaskDayReviewPanel({
     [reviewData?.assignments, taskById, taskOverrides],
   );
 
-  const rows = useMemo(
-    () => getChainedAssignmentRows({
-      assignments: reviewAssignments,
-      shiftStart,
-      nowTime: shiftEnd,
-      timezone: operationalTimezone,
-      startOverrides,
-      endOverrides,
-    }),
-    [endOverrides, operationalTimezone, reviewAssignments, shiftEnd, shiftStart, startOverrides],
-  );
-  const firstDerivedStart = reviewAssignments[0]
-    ? getChainedAssignmentStartTime({
-        assignment: reviewAssignments[0],
-        assignments: reviewAssignments,
-        shiftStart,
-        nowTime: shiftEnd,
-        timezone: operationalTimezone,
-      })
-    : shiftStart;
+  const propertyAssignmentGroups = useMemo<PropertyAssignmentGroup[]>(() => {
+    const grouped = new Map<string, Assignment[]>();
+    reviewAssignments.forEach((assignment) => {
+      const propertyId = assignment.propertyId ?? 'unknown-property';
+      const assignments = grouped.get(propertyId) ?? [];
+      assignments.push(assignment);
+      grouped.set(propertyId, assignments);
+    });
+
+    return Array.from(grouped.entries()).map(([propertyId, assignments]) => {
+      const propertySchedule = scheduleByPropertyId.get(propertyId);
+      const propertyShiftStart = propertySchedule?.shift_start?.slice(0, 5) ?? shiftStart;
+      const propertyShiftEnd = propertySchedule?.shift_end?.slice(0, 5) ?? shiftEnd;
+      return {
+        propertyId,
+        propertyName: propertyById.get(propertyId)?.name ?? assignments[0]?.location ?? 'Unknown Property',
+        shiftStart: propertyShiftStart,
+        shiftEnd: propertyShiftEnd,
+        rows: getChainedAssignmentRows({
+          assignments,
+          shiftStart: propertyShiftStart,
+          nowTime: propertyShiftEnd,
+          timezone: operationalTimezone,
+          startOverrides,
+          endOverrides,
+        }),
+      };
+    });
+  }, [endOverrides, operationalTimezone, propertyById, reviewAssignments, scheduleByPropertyId, shiftEnd, shiftStart, startOverrides]);
+  const rows = useMemo(() => propertyAssignmentGroups.flatMap((group) => group.rows), [propertyAssignmentGroups]);
+  const firstDerivedStart = rows[0]?.start ?? shiftStart;
   const reviewTasks = reviewData?.tasks ?? [];
+  const splitTaskOptions = useMemo<SplitTaskOption[]>(() => {
+    const options = new Map<string, SplitTaskOption>();
+    reviewTasks.forEach((task) => {
+      if (getTaskIsUnpaid(task)) return;
+      const name = task.name?.trim() || 'Task';
+      const category = task.category?.trim() || 'General';
+      const key = normalizeTaskMatchKey(name, category);
+      const option = options.get(key) ?? {
+        key,
+        name,
+        category,
+        estimatedHours: Number(task.estimatedHours ?? task.estimated_hours ?? 0) || 0,
+        taskByPropertyId: new Map<string, Task>(),
+      };
+      if (task.propertyId) option.taskByPropertyId.set(task.propertyId, task);
+      options.set(key, option);
+    });
+    return Array.from(options.values()).sort((first, second) => first.category.localeCompare(second.category) || first.name.localeCompare(second.name));
+  }, [reviewTasks]);
+  const selectedSplitTask = splitTaskOptions.find((option) => option.key === splitTaskKey) ?? null;
   const totalScheduled = rows.reduce((sum, row) => sum + Number(row.assignment.estimatedHours ?? 0), 0);
   const totalLogged = rows.reduce((sum, row) => sum + row.hours, 0);
   const totalUnpaid = rows.reduce((sum, row) => sum + (getAssignmentIsUnpaid(row.assignment, reviewTasks) ? row.hours : 0), 0);
@@ -776,6 +1022,7 @@ export function OpenTaskDayReviewPanel({
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
         queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['tasks', queryOrgId] }),
       ]);
       toast.success('Reviewed times saved.');
     },
@@ -796,6 +1043,7 @@ export function OpenTaskDayReviewPanel({
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
         queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['tasks', queryOrgId] }),
       ]);
       toast.success('Assignment removed from review.');
     },
@@ -807,21 +1055,21 @@ export function OpenTaskDayReviewPanel({
     },
   });
   const insertBreakMutation = useMutation({
-    mutationFn: async (insertIndex: number) => {
+    mutationFn: async ({ insertIndex, rows: groupRows }: InsertBreakPayload) => {
       if (hasUnsavedEdits) {
         await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
       }
       return insertBreakAssignment({
-      orgId: queryOrgId,
-      employeeId: validEmployeeId,
-      date: validDate,
-      rows,
-      insertIndex,
-      timezone: operationalTimezone,
-      breakPolicy: reviewData?.breakPolicy ?? { defaultBreakMinutes: 30, defaultBreakPaid: false, defaultBreakStartTime: '11:00' },
+        orgId: queryOrgId,
+        employeeId: validEmployeeId,
+        date: validDate,
+        rows: groupRows,
+        insertIndex,
+        timezone: operationalTimezone,
+        breakPolicy: reviewData?.breakPolicy ?? { defaultBreakMinutes: 30, defaultBreakPaid: false, defaultBreakStartTime: '11:00' },
       });
     },
-    onMutate: (insertIndex) => {
+    onMutate: ({ insertIndex }) => {
       setInsertingBreakIndex(insertIndex);
     },
     onSuccess: async () => {
@@ -844,7 +1092,7 @@ export function OpenTaskDayReviewPanel({
     },
   });
   const insertTaskMutation = useMutation({
-    mutationFn: async ({ insertIndex, task }: { insertIndex: number; task: Task }) => {
+    mutationFn: async ({ insertIndex, rows: groupRows, shiftStart: groupShiftStart, task }: InsertTaskPayload) => {
       if (hasUnsavedEdits) {
         await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
       }
@@ -852,10 +1100,10 @@ export function OpenTaskDayReviewPanel({
         orgId: queryOrgId,
         employeeId: validEmployeeId,
         date: validDate,
-        rows,
+        rows: groupRows,
         insertIndex,
         timezone: operationalTimezone,
-        shiftStart,
+        shiftStart: groupShiftStart,
         task,
       });
     },
@@ -870,6 +1118,7 @@ export function OpenTaskDayReviewPanel({
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
         queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['tasks', queryOrgId] }),
       ]);
       toast.success('Task inserted.');
     },
@@ -878,6 +1127,57 @@ export function OpenTaskDayReviewPanel({
     },
     onSettled: () => {
       setInsertingTaskIndex(null);
+    },
+  });
+  const splitAcrossPropertiesMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedSplitTask) throw new Error('Choose a task to split across properties.');
+      const validPropertyIds = splitPropertyIds.filter((propertyId) => isUuid(propertyId));
+      if (validPropertyIds.length === 0) throw new Error('Choose at least one property.');
+      const hoursByProperty = validPropertyIds.reduce<Record<string, number>>((result, propertyId) => {
+        result[propertyId] = parseHoursInput(splitHoursByProperty[propertyId] ?? '0');
+        return result;
+      }, {});
+      const totalSplitHours = Object.values(hoursByProperty).reduce((sum, hours) => sum + hours, 0);
+      if (totalSplitHours <= 0) throw new Error('Enter hours greater than 0 before saving the split.');
+      if (hasUnsavedEdits) {
+        await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
+      }
+      const latestEndMinutes = rows.reduce((latest, row) => Math.max(latest, timeToMinutes(row.end)), timeToMinutes(shiftStart));
+      const nextOrderIndex = rows.reduce((latest, row) => Math.max(latest, Number(row.assignment.order ?? 0)), 0) + 1;
+      await insertSplitAssignments({
+        orgId: queryOrgId,
+        employeeId: validEmployeeId,
+        date: validDate,
+        propertyIds: validPropertyIds,
+        taskName: selectedSplitTask.name,
+        category: selectedSplitTask.category,
+        estimatedHours: selectedSplitTask.estimatedHours,
+        hoursByProperty,
+        timezone: operationalTimezone,
+        startTime: minutesToTime(latestEndMinutes),
+        nextOrderIndex,
+      });
+    },
+    onSuccess: async () => {
+      setStartOverrides({});
+      setEndOverrides({});
+      setTaskOverrides({});
+      setSplitOpen(false);
+      setSplitTaskKey('');
+      setSplitPropertyIds([]);
+      setSplitTotalHours('');
+      setSplitHoursByProperty({});
+      await Promise.all([
+        reviewQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['tasks', queryOrgId] }),
+      ]);
+      toast.success('Split assignments added.');
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Split assignments could not be added.');
     },
   });
   const approveMutation = useMutation({
@@ -936,8 +1236,45 @@ export function OpenTaskDayReviewPanel({
     setEndOverrides((current) => ({ ...current, [assignmentId]: endTime }));
   };
 
+  const handleSplitTotalHoursChange = (value: string) => {
+    setSplitTotalHours(value);
+    setSplitHoursByProperty(distributeSplitHours(splitPropertyIds, value));
+  };
+
+  const handleToggleSplitProperty = (propertyId: string) => {
+    if (!isUuid(propertyId)) {
+      toast.error('Invalid property selection. Please reselect properties.');
+      return;
+    }
+    setSplitPropertyIds((current) => {
+      const next = current.includes(propertyId)
+        ? current.filter((id) => id !== propertyId)
+        : [...current, propertyId];
+      setSplitHoursByProperty(distributeSplitHours(next, splitTotalHours));
+      return next;
+    });
+  };
+
+  const handleSplitPropertyHoursChange = (propertyId: string, value: string) => {
+    if (!isUuid(propertyId)) return;
+    setSplitHoursByProperty((current) => ({ ...current, [propertyId]: value }));
+  };
+
+  const handleSaveSplit = () => {
+    if (isApproved || splitAcrossPropertiesMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || approveMutation.isPending) return;
+    if (!selectedSplitTask) {
+      toast.error('Choose a task to split across properties.');
+      return;
+    }
+    if (splitPropertyIds.length === 0) {
+      toast.error('Choose at least one property.');
+      return;
+    }
+    splitAcrossPropertiesMutation.mutate();
+  };
+
   const handleDeleteAssignment = (assignmentId: string) => {
-    if (deleteMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending) return;
+    if (deleteMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending) return;
     const row = rows.find((item) => item.assignment.id === assignmentId);
     const taskLabel = row?.assignment.title || reviewData?.tasks.find((task) => task.id === row?.assignment.taskId)?.name || 'this assignment';
     const confirmed = window.confirm(`Remove ${taskLabel} from this day review? This soft-deletes the assignment and removes it from Open Tasks.`);
@@ -945,13 +1282,13 @@ export function OpenTaskDayReviewPanel({
     deleteMutation.mutate(assignmentId);
   };
 
-  const handleInsertBreak = (insertIndex: number) => {
-    if (isApproved || insertBreakMutation.isPending || insertTaskMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || approveMutation.isPending) return;
-    insertBreakMutation.mutate(insertIndex);
+  const handleInsertBreak = (groupRows: ReturnType<typeof getChainedAssignmentRows>, insertIndex: number) => {
+    if (isApproved || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || approveMutation.isPending) return;
+    insertBreakMutation.mutate({ insertIndex, rows: groupRows });
   };
 
-  const handleInsertTask = (insertIndex: number, taskId: string) => {
-    if (isApproved || insertTaskMutation.isPending || insertBreakMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || approveMutation.isPending) return;
+  const handleInsertTask = (groupRows: ReturnType<typeof getChainedAssignmentRows>, groupShiftStart: string, insertIndex: number, taskId: string) => {
+    if (isApproved || insertTaskMutation.isPending || insertBreakMutation.isPending || splitAcrossPropertiesMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || approveMutation.isPending) return;
     if (!isUuid(taskId)) {
       toast.error('Invalid task ID. Please reselect a task.');
       return;
@@ -961,11 +1298,11 @@ export function OpenTaskDayReviewPanel({
       toast.error('Could not find that task. Refresh and try again.');
       return;
     }
-    insertTaskMutation.mutate({ insertIndex, task });
+    insertTaskMutation.mutate({ insertIndex, rows: groupRows, shiftStart: groupShiftStart, task });
   };
 
   const handleApprove = () => {
-    if (isApproved || approveMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending) return;
+    if (isApproved || approveMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending) return;
     if (hasUnsavedEdits) {
       toast.info('Save reviewed times before approving the day.');
       return;
@@ -980,7 +1317,7 @@ export function OpenTaskDayReviewPanel({
   };
 
   const handleSaveAndApprove = () => {
-    if (isApproved || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending) return;
+    if (isApproved || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending) return;
     if (assignmentIds.length === 0) {
       toast.info('No assignments are available to approve.');
       return;
@@ -1073,7 +1410,7 @@ export function OpenTaskDayReviewPanel({
               variant="outline"
               className="min-h-10 gap-2"
               onClick={() => saveMutation.mutate()}
-              disabled={isApproved || rows.length === 0 || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || reviewQuery.isLoading}
+              disabled={isApproved || rows.length === 0 || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending || reviewQuery.isLoading}
             >
               {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save reviewed times
@@ -1083,7 +1420,7 @@ export function OpenTaskDayReviewPanel({
               variant="outline"
               className="min-h-10 gap-2"
               onClick={handleApprove}
-              disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
+              disabled={isApproved || rows.length === 0 || approveMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending}
             >
               {approveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Approve day
@@ -1092,7 +1429,7 @@ export function OpenTaskDayReviewPanel({
               type="button"
               className="min-h-10 gap-2"
               onClick={handleSaveAndApprove}
-              disabled={isApproved || rows.length === 0 || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || reviewQuery.isLoading}
+              disabled={isApproved || rows.length === 0 || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending || reviewQuery.isLoading}
             >
               {saveAndApproveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Save & Approve
@@ -1167,30 +1504,156 @@ export function OpenTaskDayReviewPanel({
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-base font-semibold text-text-primary">Assignments reviewed</h2>
-                    <p className="mt-1 text-xs text-text-muted">Start time is prefilled from the shift and previous task end. Edit task, start, or end time before saving.</p>
+                    <p className="mt-1 text-xs text-text-muted">Start time is prefilled within each property group. Edit task, start, or end time before saving.</p>
                   </div>
-                  <Badge variant="outline" className="border-surface-border text-text-secondary">
-                    {formatTime(shiftStart)}-{formatTime(shiftEnd)} shift window
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="border-surface-border text-text-secondary">
+                      {propertyAssignmentGroups.length} propert{propertyAssignmentGroups.length === 1 ? 'y' : 'ies'}
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="min-h-9 gap-2"
+                      onClick={() => setSplitOpen((current) => !current)}
+                      disabled={isApproved || splitAcrossPropertiesMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Split across properties
+                    </Button>
+                  </div>
                 </div>
-                <DayCloseOutReviewRows
-                  rows={rows}
-                  tasks={reviewData.tasks}
-                  disabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-                  showScheduledHours
-                  onTaskChange={handleTaskChange}
-                  onStartChange={handleStartChange}
-                  onEndChange={handleEndChange}
-                  onDelete={handleDeleteAssignment}
-                  deletingAssignmentId={deletingAssignmentId}
-                  deleteDisabled={saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-                  onInsertBreak={handleInsertBreak}
-                  insertBreakDisabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-                  insertingBreakIndex={insertingBreakIndex}
-                  onInsertTask={handleInsertTask}
-                  insertTaskDisabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
-                  insertingTaskIndex={insertingTaskIndex}
-                />
+                {splitOpen ? (
+                  <div className="mb-4 rounded-xl border border-surface-border bg-surface-elevated/35 p-3">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.2fr)_160px]">
+                      <label className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                        Task
+                        <select
+                          value={splitTaskKey}
+                          onChange={(event) => setSplitTaskKey(event.target.value)}
+                          disabled={isApproved || splitAcrossPropertiesMutation.isPending}
+                          className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          <option value="">Choose task to split</option>
+                          {splitTaskOptions.map((option) => (
+                            <option key={option.key} value={option.key}>
+                              {option.name} - {option.category} ({option.taskByPropertyId.size} propert{option.taskByPropertyId.size === 1 ? 'y' : 'ies'})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                        Total hours
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.25"
+                          value={splitTotalHours}
+                          onChange={(event) => handleSplitTotalHoursChange(event.target.value)}
+                          disabled={isApproved || splitAcrossPropertiesMutation.isPending}
+                          className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+                          placeholder="8"
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">Properties</p>
+                      <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {activeProperties.map((property) => {
+                          const selected = splitPropertyIds.includes(property.id);
+                          return (
+                            <div key={property.id} className="rounded-lg border border-surface-border bg-surface-card/70 p-2">
+                              <label className="flex items-start gap-2 text-sm text-text-primary">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1"
+                                  checked={selected}
+                                  onChange={() => handleToggleSplitProperty(property.id)}
+                                  disabled={isApproved || splitAcrossPropertiesMutation.isPending}
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate font-medium">{property.name}</span>
+                                  <span className="text-xs text-text-muted">{property.shortName || 'Property'}</span>
+                                </span>
+                              </label>
+                              {selected ? (
+                                <label className="mt-2 block text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                                  Hours here
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.25"
+                                    value={splitHoursByProperty[property.id] ?? ''}
+                                    onChange={(event) => handleSplitPropertyHoursChange(property.id, event.target.value)}
+                                    disabled={isApproved || splitAcrossPropertiesMutation.isPending}
+                                    className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+                                  />
+                                </label>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {activeProperties.length === 0 ? (
+                        <p className="mt-2 text-sm text-text-muted">No active properties are available for split entry.</p>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-text-muted">
+                        Creates one assignment per selected property, using that property's matching task when available.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="min-h-9 gap-2"
+                        onClick={handleSaveSplit}
+                        disabled={isApproved || !selectedSplitTask || splitPropertyIds.length === 0 || splitAcrossPropertiesMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending}
+                      >
+                        {splitAcrossPropertiesMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                        Save split
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="space-y-4">
+                  {propertyAssignmentGroups.map((group) => {
+                    const canInsertInGroup = isUuid(group.propertyId);
+                    const groupPaidRows = group.rows.filter((row) => !getAssignmentIsUnpaid(row.assignment, reviewTasks));
+                    const groupPaidHours = groupPaidRows.reduce((sum, row) => sum + row.hours, 0);
+                    return (
+                      <div key={group.propertyId} className="overflow-hidden rounded-xl border border-surface-border bg-surface-elevated/20">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border bg-surface-elevated/45 px-3 py-2">
+                          <div>
+                            <h3 className="text-sm font-semibold text-text-primary">{group.propertyName}</h3>
+                            <p className="mt-0.5 text-xs text-text-muted">{formatTime(group.shiftStart)}-{formatTime(group.shiftEnd)} shift window</p>
+                          </div>
+                          <Badge variant="outline" className="border-surface-border text-text-secondary">
+                            {groupPaidRows.length} task{groupPaidRows.length === 1 ? '' : 's'} - {groupPaidHours.toFixed(2)}h paid
+                          </Badge>
+                        </div>
+                        <DayCloseOutReviewRows
+                          rows={group.rows}
+                          tasks={reviewData.tasks}
+                          disabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending}
+                          showScheduledHours
+                          onTaskChange={handleTaskChange}
+                          onStartChange={handleStartChange}
+                          onEndChange={handleEndChange}
+                          onDelete={handleDeleteAssignment}
+                          deletingAssignmentId={deletingAssignmentId}
+                          deleteDisabled={saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending}
+                          onInsertBreak={canInsertInGroup ? (insertIndex) => handleInsertBreak(group.rows, insertIndex) : undefined}
+                          insertBreakDisabled={!canInsertInGroup || isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending}
+                          insertingBreakIndex={insertingBreakIndex}
+                          onInsertTask={canInsertInGroup ? (insertIndex, taskId) => handleInsertTask(group.rows, group.shiftStart, insertIndex, taskId) : undefined}
+                          insertTaskDisabled={!canInsertInGroup || isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending}
+                          insertingTaskIndex={insertingTaskIndex}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </Card>
             )}
           </>
