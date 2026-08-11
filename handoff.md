@@ -84,6 +84,9 @@ This is a **task** work order (service/property work), NOT equipment maintenance
 `work_orders` table. Once the funnel is live, decide whether that tile should count `task_work_orders`
 instead (or both). Logged in POLISH-CLEANUP.md.
 
+## Backlog — deferred features
+- **Payroll / Timesheet Review (bi-weekly pay-period approval).** Need: one screen to review, PER EMPLOYEE across a pay period, their tasks (assignments + hours), breaks (clock_events), and total logged time, so a supervisor can verify/correct and APPROVE before running payroll. Building blocks already exist: `assignments.approved_by`/`approved_at` (row-level approval audit), the day-level `OpenTaskDayReviewPanel`, and `clock_events` (clock in/out + breaks). Gap: review today is per-DAY, not aggregated per pay-period. Likely home: extend `ReportsPage` or a new `/app/payroll` (or timesheet) view. Shelved 2026-08-11 to finish the work-order funnel first.
+
 ## Immediate next steps (suggested)
 1. Eyeball the live Properties workspace (v7.19.11) — layout, the Gantt, no regressions.
 2. Decide Phase 2 scope: structured stages? real actual-date fields? crew-work-per-project link?

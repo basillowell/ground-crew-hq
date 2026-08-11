@@ -1093,8 +1093,10 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 > before assignment (assignments.property_id is NOT NULL).
 > client_id: nullable FK -> clients.id (on delete set null). The requesting client.
 > source: 'client' | 'internal' (app-enforced, no CHECK).
-> funnel_stage: new -> in_review -> accepted | rejected -> assigned -> completed
+> funnel_stage: new -> in_review -> accepted | rejected -> assigned -> pending_verification -> completed
 > (app-enforced, no CHECK). Deliberately separate from any operational status.
+> pending_verification (2026-08-11): set automatically when the assigned employee marks
+> their assignment done (see trigger below); supervisor then verifies to reach 'completed'.
 > submitted_by / reviewed_by: uuid, no hard FK (mirrors work_orders.submitted_by).
 > Indexes: task_work_orders_org_stage_idx (org_id, funnel_stage),
 > task_work_orders_property_idx (property_id).
@@ -1115,6 +1117,17 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 > Returns the updated task_work_orders row (single composite, not a set). Call via
 > `.rpc('assign_task_work_order', { p_work_order_id, p_employee_id, p_date })`.
 > RLS enforced as the caller: assignments 'manage' + task_work_orders 'manage'.
+
+---
+
+## DB trigger: trg_task_work_order_completion (on assignments)
+> migration task_work_order_completion_trigger (2026-08-11). AFTER UPDATE OF status on
+> assignments. Function sync_task_work_order_on_assignment_complete() — SECURITY DEFINER
+> (so an employee's own-assignment update can cascade to task_work_orders, which employees
+> cannot write via RLS). When an assignment with a non-null task_work_order_id changes
+> status to 'done'/'completed', advances the linked work order funnel_stage from 'assigned'
+> to 'pending_verification' (only from 'assigned', so re-saves are no-ops). Closes the funnel
+> loop: employee completes -> WO awaits supervisor verification.
 
 ---
 
