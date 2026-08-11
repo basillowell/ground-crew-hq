@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
+import { PageHeader } from '@/components/shared/PageHeader';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3,
   Building2, CheckCircle, Clock, Loader2,
-  MapPin, Shield, TrendingUp, Users, Wrench, Zap,
+  Shield, TrendingUp, Users, Wrench, Zap,
 } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
@@ -112,23 +113,17 @@ export default function CommandCenterOperationalPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <PageHeader title="Command Center" compact>
         <PropertySelector
           className="w-full md:w-64"
           orgId={orgId}
           value={selectedPropertyId}
           onChange={setSelectedPropertyId}
         />
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="px-3 py-1.5 text-xs">
-            <MapPin className="mr-1.5 h-3 w-3" />
-            {properties.filter(p => p.status === 'active').length} Active Properties
-          </Badge>
-          <Button size="sm" variant="outline" onClick={() => router.push('/app/workboard')}>
-            <ArrowRight className="mr-1.5 h-3.5 w-3.5" /> Go to Workflow
-          </Button>
-        </div>
-      </div>
+        <Button size="sm" variant="outline" onClick={() => router.push('/app/workboard')}>
+          <ArrowRight className="mr-1.5 h-3.5 w-3.5" /> Go to Workflow
+        </Button>
+      </PageHeader>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
         {metrics.map(m => (
