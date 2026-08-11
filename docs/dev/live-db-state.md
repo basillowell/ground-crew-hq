@@ -1084,6 +1084,7 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | due_date        | date        | YES      |                   |
 | created_at      | timestamptz | NO       | now()             |
 | completed_at    | timestamptz | YES      |                   |
+| punch_list      | text        | YES      |                   |
 
 > migration task_work_order_funnel_p0 (2026-08-11). The CLIENT-REQUEST TASK work
 > order funnel — DISTINCT from work_orders (which is equipment maintenance). A
@@ -1128,6 +1129,19 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 > status to 'done'/'completed', advances the linked work order funnel_stage from 'assigned'
 > to 'pending_verification' (only from 'assigned', so re-saves are no-ops). Closes the funnel
 > loop: employee completes -> WO awaits supervisor verification.
+
+---
+
+## DB function: return_task_work_order_for_rework(p_work_order_id uuid, p_punch_list text) -> task_work_orders
+> migration task_work_order_return_for_rework (2026-08-11). SECURITY INVOKER. The
+> completion-verify gate's rework path: when a supervisor reviews a pending_verification
+> WO and it needs corrections, this atomically (1) reopens the linked assignment(s)
+> (status 'done'/'completed' -> 'in_progress', completed_at=null, notes = the punch-list
+> text so the crew see it in the field view), and (2) moves the WO funnel_stage
+> 'pending_verification' -> 'assigned' and stores punch_list. Guards: WO must exist in the
+> caller's org and be in 'pending_verification'. (task_work_orders.punch_list is a simple
+> free-text corrections list.) Call via
+> .rpc('return_task_work_order_for_rework', { p_work_order_id, p_punch_list }).
 
 ---
 
