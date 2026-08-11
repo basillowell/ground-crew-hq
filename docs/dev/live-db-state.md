@@ -1145,6 +1145,24 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 
 ---
 
+## DB functions: client work order submission (P4, public/anon)
+> migration client_work_order_submission_rpcs (2026-08-11). Two SECURITY DEFINER functions for
+> the public client request portal at /view/request/[token] (anon, no auth — same pattern as
+> get_shared_estimate). Callable by the anon role BY DESIGN (accepted SECDEF baseline, like the
+> shared estimate/invoice RPCs).
+> - get_client_request_context(p_token uuid) -> jsonb { business_name (organizations.name),
+>   client_name }. Validates p_token against clients.client_token WHERE active=true. Returns null
+>   for an invalid/inactive token.
+> - submit_client_work_order(p_token uuid, p_title text, p_description text) -> jsonb
+>   { ok:true, id } | { ok:false, error:'invalid_link'|'title_required' }. Validates the token ->
+>   active client, then inserts a task_work_orders row with org_id/client_id DERIVED from the token,
+>   source='client', funnel_stage='new', priority='medium', property_id null (supervisor sets
+>   priority/property/assignee during review). title capped at 200 chars. Everything sensitive is
+>   server-derived — the client cannot set org/client/source. clients.client_token is NOT NULL
+>   DEFAULT gen_random_uuid(), so every client already has a shareable request link.
+
+---
+
 ## equipment_specs
 | column     | type        | nullable | default           |
 |------------|-------------|----------|-------------------|
