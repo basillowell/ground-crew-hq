@@ -6,10 +6,11 @@ import { PropertySelector } from '@/components/shared/PropertySelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3,
-  Building2, CheckCircle, ClipboardList, Clock, Loader2,
+  Building2, CheckCircle, ClipboardList, Clock,
   TrendingUp, Users, Wrench, Zap,
 } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
@@ -101,10 +102,74 @@ export default function CommandCenterOperationalPage() {
     }), [assignments, employees, properties, scheduleEntries, tasks]);
 
   if (propsLoading) return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="flex items-center gap-3">
-        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-        <span className="text-sm text-muted-foreground">Loading command center...</span>
+    <div className="mx-auto max-w-[1400px] space-y-6 p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Skeleton className="h-4 w-32" />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Skeleton className="h-9 w-full sm:w-64" />
+          <Skeleton className="h-9 w-32" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Card key={`metric-skeleton-${index}`} className="flex items-center gap-3 border p-4">
+            <Skeleton className="h-10 w-10 rounded-xl" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-7 w-12" />
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-8 w-24" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Card key={`property-skeleton-${index}`} className="overflow-hidden border">
+                <Skeleton className="h-1.5 w-full rounded-none" />
+                <div className="space-y-4 p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Skeleton className="h-11 w-11 rounded-xl" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((__, statIndex) => (
+                      <div key={`property-skeleton-${index}-stat-${statIndex}`} className="space-y-2">
+                        <Skeleton className="mx-auto h-6 w-8" />
+                        <Skeleton className="mx-auto h-3 w-10" />
+                      </div>
+                    ))}
+                  </div>
+                  <Skeleton className="h-1.5 w-full" />
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <Card key={`side-skeleton-${index}`} className="space-y-3 p-4">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-4/5" />
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   );
