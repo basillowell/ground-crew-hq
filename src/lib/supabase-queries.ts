@@ -144,6 +144,7 @@ export type BillingClient = {
   address: string;
   notes: string;
   active: boolean;
+  clientToken: string;
   createdAt: string;
 };
 
@@ -368,6 +369,7 @@ type DbBillingClient = {
   address: string | null;
   notes: string | null;
   active: boolean;
+  client_token: string;
   created_at: string;
 };
 
@@ -1005,6 +1007,7 @@ function toBillingClient(row: DbBillingClient): BillingClient {
     address: row.address ?? '',
     notes: row.notes ?? '',
     active: row.active,
+    clientToken: row.client_token,
     createdAt: row.created_at,
   };
 }
@@ -2277,6 +2280,7 @@ const paymentSelectColumns = 'id, org_id, invoice_id, amount, method, reference,
 const revenueWorkOrderSelectColumns = 'id, org_id, property_id, title, status, priority, cost, created_at, completed_at, wo_number';
 const taskWorkOrderSelectColumns = 'id, org_id, property_id, client_id, title, description, priority, source, funnel_stage, submitted_by, reviewed_by, accepted_at, rejected_reason, punch_list, due_date, created_at, completed_at';
 const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
+const clientSelectColumns = 'id, org_id, name, email, phone, address, notes, active, client_token, created_at';
 
 function optionalUuid(value: string | null | undefined): string | null {
   return value && value !== 'all' ? value : null;
@@ -2295,7 +2299,7 @@ async function fetchClients(orgId: string): Promise<BillingClient[]> {
   const fetchPromise = (async () => {
     const { data, error } = await client
       .from('clients')
-      .select('id, org_id, name, email, phone, address, notes, active, created_at')
+      .select(clientSelectColumns)
       .eq('org_id', orgId)
       .order('name', { ascending: true });
     if (error) throw error;
@@ -2709,7 +2713,7 @@ async function createBillingClient(orgId: string, payload: ClientMutationPayload
       notes: payload.notes ?? null,
       active: payload.active ?? true,
     })
-    .select('id, org_id, name, email, phone, address, notes, active, created_at')
+    .select(clientSelectColumns)
     .single();
   if (error) throw error;
   return toBillingClient(data as DbBillingClient);
@@ -2730,7 +2734,7 @@ async function updateBillingClient(orgId: string, payload: ClientMutationPayload
     })
     .eq('id', payload.id)
     .eq('org_id', orgId)
-    .select('id, org_id, name, email, phone, address, notes, active, created_at')
+    .select(clientSelectColumns)
     .single();
   if (error) throw error;
   return toBillingClient(data as DbBillingClient);

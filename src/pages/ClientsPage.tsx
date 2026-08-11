@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Edit3, Mail, Phone, Plus, UserRound, XCircle } from 'lucide-react';
+import { Clipboard, Edit3, Mail, Phone, Plus, UserRound, XCircle } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Button } from '@/components/ui/button';
@@ -145,6 +145,15 @@ export default function ClientsPage() {
     }
   };
 
+  const copyRequestLink = async (client: BillingClient) => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/view/request/${client.clientToken}`);
+      toast.success('Link copied');
+    } catch {
+      toast.error('Unable to copy link');
+    }
+  };
+
   if (!orgId || loading) return <PageSkeleton />;
   if (error) {
     return (
@@ -259,6 +268,10 @@ export default function ClientsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => void copyRequestLink(client)}>
+                        <Clipboard className="h-4 w-4" />
+                        <span className="hidden sm:inline">Copy request link</span>
+                      </Button>
                       <Button type="button" variant="outline" size="sm" onClick={() => openEditDialog(client)}>
                         <Edit3 className="h-4 w-4" />
                         <span className="hidden sm:inline">Edit</span>
