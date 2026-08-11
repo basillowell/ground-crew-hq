@@ -4,74 +4,50 @@ Running list of deferred / follow-up items surfaced while executing the 8-move
 polish gameplan (see the shared gameplan artifact). These are **not** blockers —
 they're things to batch-address in a dedicated cleanup pass.
 
-_Started: 2026-08-10_
+_Started: 2026-08-10 · last swept: 2026-08-11 (Sweep A)_
 
 ## Open
-
-- [ ] **Property-badge text contrast is not luminance-aware.**
-  `src/pages/CommandCenterOperationalPage.tsx` (property cards + list rows) now
-  renders initials with `text-text-inverse` on an arbitrary `property.color`
-  background. `text-inverse` is near-black in dark mode / near-white in light mode,
-  so a property whose org color is dark (navy/forest/maroon) gets unreadable dark
-  initials in dark mode (and pale colors break the other way in light mode). The
-  old `text-white` was a safer static choice on saturated fills.
-  **Fix:** add a shared `getContrastText(hex)` helper (relative-luminance → black/white)
-  and use it wherever a property/org color backs text. Audit other property-badge
-  render sites for the same pattern (workboard, properties map, employees).
-  _Surfaced in: Move 2 (commit cab4265)._
-
-- [ ] **`status.*` token naming is semantically off** (documented in Move 8; optional rename still open).
-  `status.warning` maps to red (hue ~25) while `status.pending` is amber (hue ~70),
-  and separate `--warning` (amber) / `--destructive` (red) tokens also exist.
-  ✅ Mapping is now documented in CLAUDE.md (Move 8, commit 05403e6), so it's no longer a silent trap.
-  Remaining (optional): actually rename the tokens for semantic clarity — a code change touching
-  tailwind.config.ts + all `bg-status-*` consumers. Low priority now that it's documented.
-
-- [ ] **Misleading field name in Command Center `propertyStats`.**
-  `propertyStats.openWorkOrders` is actually `notes.filter(type==='alert').length` and feeds the
-  "Issues / open alerts" tile — but it now sits beside a real "Open Work Orders" tile
-  (`useRevenueWorkOrders`). Rename the field to `openAlerts` to stop it lying about its content.
-  `src/pages/CommandCenterOperationalPage.tsx`. _Surfaced in: Move 4 (commit 0ce7dfe)._
 
 - [ ] **Two live `EmptyState` components with divergent APIs (consolidate, don't delete).**
   `src/components/EmptyState.tsx` (props `icon, title, description, actionLabel, onAction`) is imported
   by ~10 files via `@/components/EmptyState`. `src/components/shared/EmptyState.tsx` (props
   `icon, title, description, action`) is used via the `@/components/shared` barrel (NotesPanel).
-  Both are in active use — NOT dead code. Consolidate to one component + one prop shape and migrate
-  the ~10 call sites, then delete the loser. Real refactor; do it deliberately, not as a "safe delete."
-  _Reclassified out of Move 5 after grep, 2026-08-10._
+  Both are in active use — NOT dead code. Plan (Sweep B): keep the widely-used `@/components/EmptyState`,
+  migrate the one `shared` consumer (NotesPanel) + the barrel export, then delete `shared/EmptyState.tsx`.
 
-- [ ] **Onboarding is unmounted — re-wire `OnboardingWizardV2`.**
-  Decision (2026-08-10): keep V2, delete V1. V1 (`OnboardingWizard.tsx`) is being removed in Move 5.
-  But `OnboardingWizardV2.tsx` is still referenced nowhere — nothing renders onboarding for new
-  users. Remaining work: re-mount V2 in the new-org/new-user flow (or confirm it's intentionally
-  deferred). _Surfaced in: Move 5 grep, 2026-08-10._
+- [ ] **Onboarding is unmounted — re-wire `OnboardingWizardV2`** (feature, deferred).
+  V1 deleted in Move 5. `OnboardingWizardV2.tsx` is still referenced nowhere — nothing renders onboarding
+  for new users. Needs a product decision on WHERE it mounts (new-org / first-login flow), so it's feature
+  work, not mechanical cleanup. Deferred out of the cleanup pass 2026-08-11.
 
-- [ ] **Residual raw-palette indicators (non-pills) violate Rule 23.**
-  A few raw Tailwind colors remain on small indicators the Move 7 sweep correctly skipped:
-  AppLayout's offline banner (`border-yellow-200 bg-yellow-50 text-yellow-900`), the mobile
-  pending-sync banner/dot, and the notification severity dot. Tokenize these to `status.*`
-  (warning/pending) when convenient. Low priority — edge indicators, not core UI.
-  _Surfaced in: Move 7b, 2026-08-10._
-
-- [ ] **Command Center "Open Work Orders" tile counts the wrong table (revisit after funnel P2).**
-  The Move 4 tile uses `useRevenueWorkOrders` → the **equipment** `work_orders` table. Once the task
-  work-order funnel (`task_work_orders`) is live, decide whether that tile should count task WOs
-  instead, or show both equipment + task counts. _Surfaced in: funnel P0, 2026-08-11._
-
-- [ ] **Audit for dead status CSS vars after the migration.**
-  `app/globals.css` still defines `--status-safe / --status-danger / --status-info /
-  --status-muted` from the older system; the canonical Tailwind set is now
-  `active / pending / warning / complete / hold`. Confirm nothing consumes the old
-  vars (note: `src/index.css` is already dead per CLAUDE.md) and remove the unused ones.
+- [ ] **`status.*` token naming is semantically off** (documented; rename intentionally SKIPPED).
+  `status.warning` = red, `status.pending` = amber. Documented in CLAUDE.md (Move 8). Decided 2026-08-11
+  NOT to rename — it's documented, and renaming touches tailwind.config + every `bg-status-*` consumer for
+  marginal gain. Left as-is on purpose.
 
 ## Resolved
 
+- [x] **Command Center "Open Work Orders" tile now counts task work orders** (#7).
+  Was counting the equipment `work_orders` table; now uses `useTaskWorkOrders(orgId)` and counts
+  funnel_stage not in (completed, rejected). Commit `6c3b4cf`, 2026-08-11.
+
+- [x] **Property-badge text contrast is now luminance-aware** (#1).
+  Added `src/lib/colorContrast.ts` `getContrastText(hex)` (WCAG relative luminance) and applied it to
+  property-color-backed initials in Command Center + Settings. Commit `40be763`, 2026-08-11.
+
+- [x] **Renamed misleading `openWorkOrders` → `openAlerts`** in Command Center propertyStats (#3).
+  Commit `40be763`, 2026-08-11.
+
+- [x] **Tokenized residual raw-palette indicators** (#6).
+  Offline banner / pending-sync / notification indicators moved off raw yellow/red/amber to theme-aware
+  `status.*`. Commit `40be763`, 2026-08-11.
+
+- [x] **Removed dead status CSS vars + fixed a broken class** (#8).
+  Removed unused `--status-safe/danger/info/muted` from globals.css; fixed `DayCloseOut.tsx` which used
+  non-existent `status-danger` classes (rendered no color) → `status-warning`. Commit `40be763`, 2026-08-11.
+
 - [x] **`assignTaskWorkOrder` atomicity + double-assign guard (funnel P1).**
-  Replaced the two-write helper with an atomic `SECURITY INVOKER` RPC
-  `assign_task_work_order(p_work_order_id, p_employee_id, p_date)` (migration
-  `assign_task_work_order_rpc`, 2026-08-11): inserts the assignment and sets
-  `funnel_stage='assigned'` in one transaction, and raises unless the WO is in the
-  caller's org, has a property, and is in stage `accepted` — so double-assign is
-  impossible at the DB layer. `assignTaskWorkOrder` now calls it (commit `0ae8a69`).
-  Resolved 2026-08-11.
+  Replaced the two-write helper with an atomic `SECURITY INVOKER` RPC `assign_task_work_order` (migration
+  `assign_task_work_order_rpc`): inserts the assignment and sets `funnel_stage='assigned'` in one
+  transaction; raises unless the WO is in the caller's org, has a property, and is in stage `accepted`.
+  Commit `0ae8a69`, 2026-08-11.
