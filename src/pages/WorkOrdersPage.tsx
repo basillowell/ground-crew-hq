@@ -23,12 +23,17 @@ import {
   type BillingClient,
   type TaskWorkOrder,
   type TaskWorkOrderFunnelStage,
+  useAssignTaskWorkOrder,
+  useBeginReviewTaskWorkOrder,
   useClients,
+  useCompleteTaskWorkOrder,
   useCreateTaskWorkOrder,
+  useEmployees,
   useProperties,
+  useReviewTaskWorkOrder,
   useTaskWorkOrders,
 } from '@/lib/supabase-queries';
-import type { Property } from '@/data/seedData';
+import type { Employee, Property } from '@/data/seedData';
 
 type BadgeVariant = 'active' | 'pending' | 'warning' | 'complete' | 'hold';
 type Priority = 'low' | 'medium' | 'high';
@@ -39,6 +44,11 @@ type WorkOrderFormState = {
   clientId: string;
   propertyId: string;
   priority: Priority;
+};
+
+type AssignFormState = {
+  employeeId: string;
+  date: string;
 };
 
 type LaneConfig = {
@@ -57,6 +67,15 @@ const emptyForm: WorkOrderFormState = {
   propertyId: UNSET_SELECT_VALUE,
   priority: 'medium',
 };
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const emptyAssignForm = (): AssignFormState => ({
+  employeeId: UNSET_SELECT_VALUE,
+  date: todayKey(),
+});
 
 const desktopLanes: LaneConfig[] = [
   { key: 'new', label: 'New', stages: ['new'], variant: 'pending' },
@@ -117,19 +136,36 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function employeeName(employee: Employee) {
+  return `${employee.firstName} ${employee.lastName}`.trim() || employee.email || 'Unnamed employee';
+}
+
 function WorkOrderCard({
   workOrder,
   clients,
   properties,
+  onBeginReview,
+  onAccept,
+  onOpenReject,
+  onOpenAssign,
+  onComplete,
+  pendingAction,
 }: {
   workOrder: TaskWorkOrder;
   clients: BillingClient[];
   properties: Property[];
+  onBeginReview: (workOrder: TaskWorkOrder) => void;
+  onAccept: (workOrder: TaskWorkOrder) => void;
+  onOpenReject: (workOrder: TaskWorkOrder) => void;
+  onOpenAssign: (workOrder: TaskWorkOrder) => void;
+  onComplete: (workOrder: TaskWorkOrder) => void;
+  pendingAction: string | null;
 }) {
   const clientName = findNameById(clients, workOrder.clientId);
   const propertyName = findNameById(properties, workOrder.propertyId);
   const dueDate = formatDate(workOrder.dueDate);
   const priority = (workOrder.priority === 'low' || workOrder.priority === 'high' ? workOrder.priority : 'medium') as Priority;
+  const isPending = pendingAction?.endsWith(`:${workOrder.id}`) ?? false;
 
   return (
     <div className="space-y-3 rounded-lg border border-surface-border bg-surface-card p-3 shadow-sm transition-colors hover:border-brand-dim hover:bg-surface-hover">
@@ -174,6 +210,71 @@ function WorkOrderCard({
           </div>
         ) : null}
       </div>
+
+      {workOrder.funnelStage === 'rejected' && workOrder.rejectedReason ? (
+        <div className="rounded-lg border border-status-warning/25 bg-status-warning/10 p-2 text-xs text-text-secondary">
+          <span className="font-medium text-status-warning">Rejected:</span> {workOrder.rejectedReason}
+        </div>
+      ) : null}
+
+      {workOrder.funnelStage === 'new' ? (
+        <Button
+          type="button"
+          size="sm"
+          className="w-full"
+          disabled={isPending}
+          onClick={() => onBeginReview(workOrder)}
+        >
+          {isPending ? 'Starting review' : 'Begin review'}
+        </Button>
+      ) : null}
+
+      {workOrder.funnelStage === 'in_review' ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={isPending}
+            onClick={() => onAccept(workOrder)}
+          >
+            {isPending ? 'Accepting' : 'Accept'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={() => onOpenReject(workOrder)}
+          >
+            Reject
+          </Button>
+        </div>
+      ) : null}
+
+      {workOrder.funnelStage === 'accepted' ? (
+        <Button
+          type="button"
+          size="sm"
+          className="w-full"
+          disabled={isPending}
+          onClick={() => onOpenAssign(workOrder)}
+        >
+          Assign
+        </Button>
+      ) : null}
+
+      {workOrder.funnelStage === 'assigned' ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={isPending}
+          onClick={() => onComplete(workOrder)}
+        >
+          {isPending ? 'Completing' : 'Mark complete'}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -216,15 +317,25 @@ function LoadingBoard() {
 }
 
 export default function WorkOrdersPage() {
-  const { orgId, currentRole } = useOrgProfile();
+  const { orgId, currentRole, currentUser } = useOrgProfile();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<WorkOrderFormState>(emptyForm);
   const [mobileStage, setMobileStage] = useState<TaskWorkOrderFunnelStage>('new');
+  const [rejectDialogWorkOrder, setRejectDialogWorkOrder] = useState<TaskWorkOrder | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [assignDialogWorkOrder, setAssignDialogWorkOrder] = useState<TaskWorkOrder | null>(null);
+  const [assignForm, setAssignForm] = useState<AssignFormState>(() => emptyAssignForm());
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const canManage = currentRole === 'admin' || currentRole === 'manager';
   const queryOrgId = canManage ? orgId ?? undefined : undefined;
   const createWorkOrderMutation = useCreateTaskWorkOrder();
+  const beginReviewMutation = useBeginReviewTaskWorkOrder();
+  const reviewMutation = useReviewTaskWorkOrder();
+  const assignMutation = useAssignTaskWorkOrder();
+  const completeMutation = useCompleteTaskWorkOrder();
   const workOrdersQuery = useTaskWorkOrders(queryOrgId);
   const clientsQuery = useClients(queryOrgId);
+  const employeesQuery = useEmployees(undefined, queryOrgId);
   const propertiesQuery = useProperties(queryOrgId);
 
   useEffect(() => {
@@ -233,12 +344,14 @@ export default function WorkOrdersPage() {
 
   const workOrders = workOrdersQuery.data ?? [];
   const clients = clientsQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
   const properties = propertiesQuery.data ?? [];
-  const firstLoad = (workOrdersQuery.isLoading || clientsQuery.isLoading || propertiesQuery.isLoading)
+  const firstLoad = (workOrdersQuery.isLoading || clientsQuery.isLoading || employeesQuery.isLoading || propertiesQuery.isLoading)
     && !workOrdersQuery.data
     && !clientsQuery.data
+    && !employeesQuery.data
     && !propertiesQuery.data;
-  const error = workOrdersQuery.error ?? clientsQuery.error ?? propertiesQuery.error;
+  const error = workOrdersQuery.error ?? clientsQuery.error ?? employeesQuery.error ?? propertiesQuery.error;
 
   const workOrdersByStage = useMemo(() => {
     return workOrders.reduce<Record<TaskWorkOrderFunnelStage, TaskWorkOrder[]>>(
@@ -260,6 +373,128 @@ export default function WorkOrdersPage() {
   const closeDialog = () => {
     setDialogOpen(false);
     setForm(emptyForm);
+  };
+
+  const reviewerId = currentUser?.id ?? '';
+
+  const requireReviewer = () => {
+    if (!reviewerId) {
+      toast.error('Cannot identify your user profile for review.');
+      return null;
+    }
+    return reviewerId;
+  };
+
+  const beginReview = async (workOrder: TaskWorkOrder) => {
+    const reviewedBy = requireReviewer();
+    if (!reviewedBy) return;
+    setPendingAction(`begin:${workOrder.id}`);
+    try {
+      await beginReviewMutation.mutateAsync({ id: workOrder.id, reviewedBy });
+      toast.success('Review started');
+    } catch (beginError) {
+      toast.error(getErrorMessage(beginError, 'Unable to begin review'));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const acceptWorkOrder = async (workOrder: TaskWorkOrder) => {
+    const reviewedBy = requireReviewer();
+    if (!reviewedBy) return;
+    setPendingAction(`accept:${workOrder.id}`);
+    try {
+      await reviewMutation.mutateAsync({ id: workOrder.id, decision: 'accept', reviewedBy });
+      toast.success('Work order accepted');
+    } catch (acceptError) {
+      toast.error(getErrorMessage(acceptError, 'Unable to accept work order'));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const openRejectDialog = (workOrder: TaskWorkOrder) => {
+    setRejectDialogWorkOrder(workOrder);
+    setRejectReason('');
+  };
+
+  const closeRejectDialog = () => {
+    setRejectDialogWorkOrder(null);
+    setRejectReason('');
+  };
+
+  const rejectWorkOrder = async () => {
+    if (!rejectDialogWorkOrder) return;
+    const reviewedBy = requireReviewer();
+    if (!reviewedBy) return;
+    setPendingAction(`reject:${rejectDialogWorkOrder.id}`);
+    try {
+      await reviewMutation.mutateAsync({
+        id: rejectDialogWorkOrder.id,
+        decision: 'reject',
+        reviewedBy,
+        rejectedReason: rejectReason.trim() || null,
+      });
+      toast.success('Work order rejected');
+      closeRejectDialog();
+    } catch (rejectError) {
+      toast.error(getErrorMessage(rejectError, 'Unable to reject work order'));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const openAssignDialog = (workOrder: TaskWorkOrder) => {
+    setAssignDialogWorkOrder(workOrder);
+    setAssignForm(emptyAssignForm());
+  };
+
+  const closeAssignDialog = () => {
+    setAssignDialogWorkOrder(null);
+    setAssignForm(emptyAssignForm());
+  };
+
+  const assignableEmployees = useMemo(() => {
+    if (!assignDialogWorkOrder?.propertyId) return employees;
+    return employees.filter((employee) => employee.propertyId === assignDialogWorkOrder.propertyId);
+  }, [assignDialogWorkOrder?.propertyId, employees]);
+
+  const assignWorkOrder = async () => {
+    if (!assignDialogWorkOrder) return;
+    if (assignForm.employeeId === UNSET_SELECT_VALUE) {
+      toast.error('Select an employee.');
+      return;
+    }
+    if (!assignForm.date) {
+      toast.error('Choose an assignment date.');
+      return;
+    }
+    setPendingAction(`assign:${assignDialogWorkOrder.id}`);
+    try {
+      await assignMutation.mutateAsync({
+        workOrder: assignDialogWorkOrder,
+        employeeId: assignForm.employeeId,
+        date: assignForm.date,
+      });
+      toast.success('Work order assigned');
+      closeAssignDialog();
+    } catch (assignError) {
+      toast.error(getErrorMessage(assignError, 'Unable to assign work order'));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const completeWorkOrder = async (workOrder: TaskWorkOrder) => {
+    setPendingAction(`complete:${workOrder.id}`);
+    try {
+      await completeMutation.mutateAsync({ id: workOrder.id });
+      toast.success('Work order completed');
+    } catch (completeError) {
+      toast.error(getErrorMessage(completeError, 'Unable to complete work order'));
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const submitWorkOrder = async () => {
@@ -328,6 +563,7 @@ export default function WorkOrdersPage() {
             onClick={() => {
               void workOrdersQuery.refetch();
               void clientsQuery.refetch();
+              void employeesQuery.refetch();
               void propertiesQuery.refetch();
             }}
           >
@@ -359,6 +595,12 @@ export default function WorkOrdersPage() {
                           workOrder={workOrder}
                           clients={clients}
                           properties={properties}
+                          onBeginReview={(targetWorkOrder) => void beginReview(targetWorkOrder)}
+                          onAccept={(targetWorkOrder) => void acceptWorkOrder(targetWorkOrder)}
+                          onOpenReject={openRejectDialog}
+                          onOpenAssign={openAssignDialog}
+                          onComplete={(targetWorkOrder) => void completeWorkOrder(targetWorkOrder)}
+                          pendingAction={pendingAction}
                         />
                       ))
                     )}
@@ -392,6 +634,12 @@ export default function WorkOrdersPage() {
                     workOrder={workOrder}
                     clients={clients}
                     properties={properties}
+                    onBeginReview={(targetWorkOrder) => void beginReview(targetWorkOrder)}
+                    onAccept={(targetWorkOrder) => void acceptWorkOrder(targetWorkOrder)}
+                    onOpenReject={openRejectDialog}
+                    onOpenAssign={openAssignDialog}
+                    onComplete={(targetWorkOrder) => void completeWorkOrder(targetWorkOrder)}
+                    pendingAction={pendingAction}
                   />
                 ))
               )}
@@ -399,6 +647,98 @@ export default function WorkOrdersPage() {
           </div>
         </>
       )}
+
+      <Dialog open={Boolean(rejectDialogWorkOrder)} onOpenChange={(open) => (open ? undefined : closeRejectDialog())}>
+        <DialogContent className="border-surface-border bg-surface-card text-text-primary sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Reject Work Order</DialogTitle>
+            <DialogDescription>
+              Add a reason if it will help the requester understand the decision.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="work-order-reject-reason">Reason</Label>
+            <Textarea
+              id="work-order-reject-reason"
+              rows={4}
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              placeholder="Optional reason"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeRejectDialog} disabled={reviewMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void rejectWorkOrder()}
+              disabled={reviewMutation.isPending}
+            >
+              {reviewMutation.isPending ? 'Rejecting' : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(assignDialogWorkOrder)} onOpenChange={(open) => (open ? undefined : closeAssignDialog())}>
+        <DialogContent className="border-surface-border bg-surface-card text-text-primary sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Assign Work Order</DialogTitle>
+            <DialogDescription>
+              Choose the crew member and date for the planned assignment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>Employee</Label>
+              <Select
+                value={assignForm.employeeId}
+                onValueChange={(value) => setAssignForm((current) => ({ ...current, employeeId: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNSET_SELECT_VALUE}>Select employee</SelectItem>
+                  {assignableEmployees.map((employee) => (
+                    <SelectItem key={employee.id} value={employee.id}>
+                      {employeeName(employee)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {assignableEmployees.length === 0 ? (
+                <p className="text-xs text-text-secondary">
+                  No active employees are available for this work order&apos;s property.
+                </p>
+              ) : null}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="work-order-assign-date">Date</Label>
+              <Input
+                id="work-order-assign-date"
+                type="date"
+                value={assignForm.date}
+                onChange={(event) => setAssignForm((current) => ({ ...current, date: event.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeAssignDialog} disabled={assignMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void assignWorkOrder()}
+              disabled={assignMutation.isPending || assignForm.employeeId === UNSET_SELECT_VALUE || !assignForm.date}
+            >
+              {assignMutation.isPending ? 'Assigning' : 'Assign'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeDialog())}>
         <DialogContent className="border-surface-border bg-surface-card text-text-primary sm:max-w-xl">

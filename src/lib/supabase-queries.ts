@@ -2242,6 +2242,11 @@ export type ReviewTaskWorkOrderPayload = {
   rejectedReason?: string | null;
 };
 
+export type BeginReviewTaskWorkOrderPayload = {
+  id: string;
+  reviewedBy: string;
+};
+
 export type AssignTaskWorkOrderPayload = {
   workOrder: TaskWorkOrder;
   employeeId: string;
@@ -2546,6 +2551,31 @@ export async function createTaskWorkOrder(payload: CreateTaskWorkOrderPayload): 
         source: payload.source?.trim() || 'internal',
         funnel_stage: 'new',
       })
+      .select(taskWorkOrderSelectColumns)
+      .single();
+    if (error) throw error;
+    return toTaskWorkOrder(data as DbTaskWorkOrder);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+export async function beginReviewTaskWorkOrder(payload: BeginReviewTaskWorkOrderPayload): Promise<TaskWorkOrder> {
+  const id = requiredUuid(payload.id, 'Task work order');
+  const reviewedBy = requiredUuid(payload.reviewedBy, 'Reviewer');
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Task work order review start timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('task_work_orders')
+      .update({
+        funnel_stage: 'in_review',
+        reviewed_by: reviewedBy,
+      })
+      .eq('id', id)
+      .eq('funnel_stage', 'new')
       .select(taskWorkOrderSelectColumns)
       .single();
     if (error) throw error;
@@ -3426,6 +3456,16 @@ export function useCreateTaskWorkOrder() {
     mutationFn: createTaskWorkOrder,
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['task-work-orders', variables.orgId] });
+    },
+  });
+}
+
+export function useBeginReviewTaskWorkOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: beginReviewTaskWorkOrder,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['task-work-orders'] });
     },
   });
 }
