@@ -9,16 +9,18 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Activity, AlertTriangle, ArrowRight, BarChart3,
-  Building2, CheckCircle, Clock, Loader2,
-  Shield, TrendingUp, Users, Wrench, Zap,
+  Building2, CheckCircle, ClipboardList, Clock, Loader2,
+  TrendingUp, Users, Wrench, Zap,
 } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
   useAssignments, useEmployees, useEquipmentUnits,
   useNotes, useProperties, useScheduleEntries,
-  useTasks, useWorkLocations,
+  useRevenueWorkOrders, useTasks, useWorkLocations,
 } from '@/lib/supabase-queries';
+
+const CLOSED_REVENUE_WORK_ORDER_STATUSES = new Set(['completed', 'closed']);
 
 export default function CommandCenterOperationalPage() {
   const router = useRouter();
@@ -38,6 +40,7 @@ export default function CommandCenterOperationalPage() {
   const { data: notes = [] } = useNotes(selectedPropertyId || undefined, orgId ?? undefined);
   const { data: workLocations = [] } = useWorkLocations(undefined, orgId ?? undefined);
   const { data: equipmentUnits = [] } = useEquipmentUnits(selectedPropertyId || undefined, orgId ?? undefined);
+  const { data: revenueWorkOrders = [] } = useRevenueWorkOrders(selectedPropertyId || undefined, orgId ?? undefined);
 
   const propertyStats = useMemo(() => {
     return properties.map((property) => {
@@ -58,10 +61,14 @@ export default function CommandCenterOperationalPage() {
         equipmentActive: equipAtProp.filter(u => u.status === 'available' || u.status === 'in-use').length,
         equipmentDown: equipDown,
         openWorkOrders: propAlerts.length,
-        complianceScore: Math.max(74, 100 - equipDown * 8 - propAlerts.length * 3),
       };
     });
   }, [assignments, employees, notes, properties, scheduleEntries, tasks, workLocations, equipmentUnits]);
+
+  const openRevenueWorkOrders = useMemo(() => revenueWorkOrders.filter((workOrder) => {
+    const status = String(workOrder.status ?? '').trim().toLowerCase();
+    return !CLOSED_REVENUE_WORK_ORDER_STATUSES.has(status);
+  }).length, [revenueWorkOrders]);
 
   const totals = useMemo(() => propertyStats.reduce(
     (acc, s) => ({
@@ -107,7 +114,7 @@ export default function CommandCenterOperationalPage() {
     { icon: CheckCircle, label: 'Tasks Done', value: totals.tasks, subtext: `of ${totals.tasksTotal}`, color: 'oklch(var(--success))' },
     { icon: Wrench, label: 'Equipment', value: totals.equipment, subtext: `${totals.equipmentDown} down`, color: 'oklch(var(--warning))' },
     { icon: AlertTriangle, label: 'Issues', value: totals.workOrders, subtext: 'open alerts', color: 'oklch(var(--destructive))' },
-    { icon: Shield, label: 'Compliance', value: `${propertyStats.length ? Math.round(propertyStats.reduce((s, p) => s + p.complianceScore, 0) / propertyStats.length) : 0}%`, color: 'oklch(var(--info))' },
+    { icon: ClipboardList, label: 'Open Work Orders', value: openRevenueWorkOrders, subtext: 'not completed/closed', color: 'oklch(var(--status-pending))' },
     { icon: Building2, label: 'Properties', value: properties.length, subtext: `${totals.alerts} alerts` },
   ];
 
