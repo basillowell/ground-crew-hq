@@ -212,6 +212,7 @@ export type TaskWorkOrder = {
   reviewedBy: string | null;
   acceptedAt: string | null;
   rejectedReason: string | null;
+  punchList: string | null;
   dueDate: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -431,6 +432,7 @@ type DbTaskWorkOrder = {
   reviewed_by: string | null;
   accepted_at: string | null;
   rejected_reason: string | null;
+  punch_list: string | null;
   due_date: string | null;
   created_at: string;
   completed_at: string | null;
@@ -1075,6 +1077,7 @@ function toTaskWorkOrder(row: DbTaskWorkOrder): TaskWorkOrder {
     reviewedBy: row.reviewed_by,
     acceptedAt: row.accepted_at,
     rejectedReason: row.rejected_reason,
+    punchList: row.punch_list,
     dueDate: row.due_date,
     createdAt: row.created_at,
     completedAt: row.completed_at,
@@ -2257,6 +2260,11 @@ export type CompleteTaskWorkOrderPayload = {
   id: string;
 };
 
+export type ReturnTaskWorkOrderPayload = {
+  id: string;
+  punchList: string;
+};
+
 const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, contract_id, period_start, period_end, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at, share_token';
 const estimateSelectColumns = 'id, org_id, client_id, property_id, estimate_number, status, subtotal, tax_rate, total, notes, valid_until, converted_invoice_id, created_at, sent_at, accepted_at, share_token';
 const estimateLineItemSelectColumns = 'id, org_id, estimate_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
@@ -2267,7 +2275,7 @@ const serviceContractLineItemSelectColumns = 'id, org_id, contract_id, catalog_i
 const contractInvoiceRunSelectColumns = 'id, org_id, run_at, as_of, triggered_by, contracts_processed, invoices_created, error';
 const paymentSelectColumns = 'id, org_id, invoice_id, amount, method, reference, paid_at, recorded_by, notes, created_at';
 const revenueWorkOrderSelectColumns = 'id, org_id, property_id, title, status, priority, cost, created_at, completed_at, wo_number';
-const taskWorkOrderSelectColumns = 'id, org_id, property_id, client_id, title, description, priority, source, funnel_stage, submitted_by, reviewed_by, accepted_at, rejected_reason, due_date, created_at, completed_at';
+const taskWorkOrderSelectColumns = 'id, org_id, property_id, client_id, title, description, priority, source, funnel_stage, submitted_by, reviewed_by, accepted_at, rejected_reason, punch_list, due_date, created_at, completed_at';
 const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
 
 function optionalUuid(value: string | null | undefined): string | null {
@@ -2659,6 +2667,28 @@ export async function completeTaskWorkOrder(payload: CompleteTaskWorkOrderPayloa
       .eq('id', id)
       .select(taskWorkOrderSelectColumns)
       .single();
+    if (error) throw error;
+    return toTaskWorkOrder(data as DbTaskWorkOrder);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+export async function returnTaskWorkOrder(payload: ReturnTaskWorkOrderPayload): Promise<TaskWorkOrder> {
+  const id = requiredUuid(payload.id, 'Task work order');
+  const punchList = payload.punchList.trim();
+  if (!punchList) throw new Error('Punch list is required.');
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Task work order return timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .rpc('return_task_work_order_for_rework', {
+        p_work_order_id: id,
+        p_punch_list: punchList,
+      });
     if (error) throw error;
     return toTaskWorkOrder(data as DbTaskWorkOrder);
   })();
@@ -3499,6 +3529,19 @@ export function useCompleteTaskWorkOrder() {
     mutationFn: completeTaskWorkOrder,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['task-work-orders'] });
+    },
+  });
+}
+
+export function useReturnTaskWorkOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: returnTaskWorkOrder,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['task-work-orders'] });
+      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      await queryClient.invalidateQueries({ queryKey: ['assignments-range'] });
+      await queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'] });
     },
   });
 }

@@ -31,6 +31,7 @@ import {
   useEmployees,
   useProperties,
   useReviewTaskWorkOrder,
+  useReturnTaskWorkOrder,
   useTaskWorkOrders,
 } from '@/lib/supabase-queries';
 import type { Employee, Property } from '@/data/seedData';
@@ -153,6 +154,7 @@ function WorkOrderCard({
   onOpenReject,
   onOpenAssign,
   onComplete,
+  onOpenReturn,
   pendingAction,
 }: {
   workOrder: TaskWorkOrder;
@@ -163,6 +165,7 @@ function WorkOrderCard({
   onOpenReject: (workOrder: TaskWorkOrder) => void;
   onOpenAssign: (workOrder: TaskWorkOrder) => void;
   onComplete: (workOrder: TaskWorkOrder) => void;
+  onOpenReturn: (workOrder: TaskWorkOrder) => void;
   pendingAction: string | null;
 }) {
   const clientName = findNameById(clients, workOrder.clientId);
@@ -221,6 +224,13 @@ function WorkOrderCard({
         </div>
       ) : null}
 
+      {workOrder.punchList ? (
+        <div className="rounded-lg border border-status-warning/25 bg-status-warning/10 p-2 text-xs leading-5 text-text-secondary">
+          <p className="font-medium text-status-warning">Punch list</p>
+          <p className="mt-1 whitespace-pre-line">{workOrder.punchList}</p>
+        </div>
+      ) : null}
+
       {workOrder.funnelStage === 'new' ? (
         <Button
           type="button"
@@ -274,15 +284,27 @@ function WorkOrderCard({
       ) : null}
 
       {workOrder.funnelStage === 'pending_verification' ? (
-        <Button
-          type="button"
-          size="sm"
-          className="w-full"
-          disabled={isPending}
-          onClick={() => onComplete(workOrder)}
-        >
-          {isPending ? 'Verifying' : 'Verify complete'}
-        </Button>
+        <div className="grid gap-2">
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            disabled={isPending}
+            onClick={() => onComplete(workOrder)}
+          >
+            {pendingAction === `complete:${workOrder.id}` ? 'Verifying' : 'Verify complete'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={isPending}
+            onClick={() => onOpenReturn(workOrder)}
+          >
+            Return with punch list
+          </Button>
+        </div>
       ) : null}
     </div>
   );
@@ -332,6 +354,8 @@ export default function WorkOrdersPage() {
   const [mobileStage, setMobileStage] = useState<TaskWorkOrderFunnelStage>('new');
   const [rejectDialogWorkOrder, setRejectDialogWorkOrder] = useState<TaskWorkOrder | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [returnDialogWorkOrder, setReturnDialogWorkOrder] = useState<TaskWorkOrder | null>(null);
+  const [punchList, setPunchList] = useState('');
   const [assignDialogWorkOrder, setAssignDialogWorkOrder] = useState<TaskWorkOrder | null>(null);
   const [assignForm, setAssignForm] = useState<AssignFormState>(() => emptyAssignForm());
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -342,6 +366,7 @@ export default function WorkOrdersPage() {
   const reviewMutation = useReviewTaskWorkOrder();
   const assignMutation = useAssignTaskWorkOrder();
   const completeMutation = useCompleteTaskWorkOrder();
+  const returnMutation = useReturnTaskWorkOrder();
   const workOrdersQuery = useTaskWorkOrders(queryOrgId);
   const clientsQuery = useClients(queryOrgId);
   const employeesQuery = useEmployees(undefined, queryOrgId);
@@ -449,6 +474,38 @@ export default function WorkOrdersPage() {
       closeRejectDialog();
     } catch (rejectError) {
       toast.error(getErrorMessage(rejectError, 'Unable to reject work order'));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const openReturnDialog = (workOrder: TaskWorkOrder) => {
+    setReturnDialogWorkOrder(workOrder);
+    setPunchList(workOrder.punchList ?? '');
+  };
+
+  const closeReturnDialog = () => {
+    setReturnDialogWorkOrder(null);
+    setPunchList('');
+  };
+
+  const returnWorkOrder = async () => {
+    if (!returnDialogWorkOrder) return;
+    const trimmedPunchList = punchList.trim();
+    if (!trimmedPunchList) {
+      toast.error('Punch list is required.');
+      return;
+    }
+    setPendingAction(`return:${returnDialogWorkOrder.id}`);
+    try {
+      await returnMutation.mutateAsync({
+        id: returnDialogWorkOrder.id,
+        punchList: trimmedPunchList,
+      });
+      toast.success('Work order returned for rework');
+      closeReturnDialog();
+    } catch (returnError) {
+      toast.error(getErrorMessage(returnError, 'Unable to return work order'));
     } finally {
       setPendingAction(null);
     }
@@ -610,6 +667,7 @@ export default function WorkOrdersPage() {
                           onOpenReject={openRejectDialog}
                           onOpenAssign={openAssignDialog}
                           onComplete={(targetWorkOrder) => void completeWorkOrder(targetWorkOrder)}
+                          onOpenReturn={openReturnDialog}
                           pendingAction={pendingAction}
                         />
                       ))
@@ -649,6 +707,7 @@ export default function WorkOrdersPage() {
                     onOpenReject={openRejectDialog}
                     onOpenAssign={openAssignDialog}
                     onComplete={(targetWorkOrder) => void completeWorkOrder(targetWorkOrder)}
+                    onOpenReturn={openReturnDialog}
                     pendingAction={pendingAction}
                   />
                 ))
@@ -687,6 +746,41 @@ export default function WorkOrdersPage() {
               disabled={reviewMutation.isPending}
             >
               {reviewMutation.isPending ? 'Rejecting' : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(returnDialogWorkOrder)} onOpenChange={(open) => (open ? undefined : closeReturnDialog())}>
+        <DialogContent className="border-surface-border bg-surface-card text-text-primary sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Return with punch list</DialogTitle>
+            <DialogDescription>
+              Tell the crew what needs correcting before this work order can be verified.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="work-order-punch-list">What needs correcting?</Label>
+            <Textarea
+              id="work-order-punch-list"
+              rows={5}
+              value={punchList}
+              onChange={(event) => setPunchList(event.target.value)}
+              placeholder="List the corrections needed before this is complete."
+              required
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeReturnDialog} disabled={returnMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void returnWorkOrder()}
+              disabled={returnMutation.isPending || !punchList.trim()}
+            >
+              {returnMutation.isPending ? 'Returning' : 'Return for rework'}
             </Button>
           </DialogFooter>
         </DialogContent>
