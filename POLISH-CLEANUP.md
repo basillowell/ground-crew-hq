@@ -59,14 +59,6 @@ _Started: 2026-08-10_
   work-order funnel (`task_work_orders`) is live, decide whether that tile should count task WOs
   instead, or show both equipment + task counts. _Surfaced in: funnel P0, 2026-08-11._
 
-- [ ] **`assignTaskWorkOrder` isn't atomic + no double-assign guard (funnel P1).**
-  `src/lib/supabase-queries.ts` → `assignTaskWorkOrder` does two sequential writes (insert assignment,
-  then update `task_work_orders.funnel_stage='assigned'`). A failure between them orphans the assignment
-  with the WO stuck at `accepted`. Client-side can't transact both — the clean fix is a Postgres RPC
-  (`assign_task_work_order`) doing both atomically. Also add a precondition so re-assigning an already-
-  `assigned` WO doesn't insert a duplicate assignment. Low frequency, recoverable; harden in/after P2.
-  _Surfaced in: funnel P1 (commit 4321ff6), 2026-08-11._
-
 - [ ] **Audit for dead status CSS vars after the migration.**
   `app/globals.css` still defines `--status-safe / --status-danger / --status-info /
   --status-muted` from the older system; the canonical Tailwind set is now
@@ -75,4 +67,11 @@ _Started: 2026-08-10_
 
 ## Resolved
 
-_(none yet)_
+- [x] **`assignTaskWorkOrder` atomicity + double-assign guard (funnel P1).**
+  Replaced the two-write helper with an atomic `SECURITY INVOKER` RPC
+  `assign_task_work_order(p_work_order_id, p_employee_id, p_date)` (migration
+  `assign_task_work_order_rpc`, 2026-08-11): inserts the assignment and sets
+  `funnel_stage='assigned'` in one transaction, and raises unless the WO is in the
+  caller's org, has a property, and is in stage `accepted` — so double-assign is
+  impossible at the DB layer. `assignTaskWorkOrder` now calls it (commit `0ae8a69`).
+  Resolved 2026-08-11.
