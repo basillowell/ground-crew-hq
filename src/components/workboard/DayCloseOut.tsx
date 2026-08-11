@@ -368,7 +368,7 @@ export function DayCloseOutReviewRows({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-10 w-10 shrink-0 text-status-danger hover:bg-status-danger/10 hover:text-status-danger"
+                    className="h-10 w-10 shrink-0 text-status-warning hover:bg-status-warning/10 hover:text-status-warning"
                     onClick={() => onDelete(assignmentId)}
                     disabled={deleteDisabled || isDeleting}
                     aria-label={`Delete ${getTaskName(row.assignment, tasks)}`}

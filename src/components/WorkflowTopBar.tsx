@@ -125,9 +125,9 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
   };
 
   const getNotificationIcon = (icon: AppNotification['icon']) => {
-    if (icon === 'task') return <ClipboardList className="h-3.5 w-3.5 text-blue-600" />;
-    if (icon === 'equipment') return <Wrench className="h-3.5 w-3.5 text-amber-600" />;
-    return <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />;
+    if (icon === 'task') return <ClipboardList className="h-3.5 w-3.5 text-status-complete" />;
+    if (icon === 'equipment') return <Wrench className="h-3.5 w-3.5 text-status-pending" />;
+    return <CalendarClock className="h-3.5 w-3.5 text-status-active" />;
   };
   const bellBadgeLabel = pendingSyncCount > 0 ? `${pendingSyncCount} pending syncs` : String(unreadNotificationCount);
 
@@ -199,7 +199,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                 <Bell className="h-4 w-4" />
                 <span
                   className={`absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
-                    syncFlashActive ? 'bg-brand text-text-inverse' : 'bg-red-500 text-text-primary'
+                    syncFlashActive ? 'bg-brand text-text-inverse' : 'bg-status-warning text-text-inverse'
                   } ${bellBadgeLabel === '0' ? 'hidden' : ''}`}
                 >
                   {bellBadgeLabel}
@@ -222,9 +222,9 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                   <div
                     className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
                       notification.severity === 'critical'
-                        ? 'bg-red-500'
+                        ? 'bg-status-warning'
                         : notification.severity === 'warning'
-                          ? 'bg-amber-500'
+                          ? 'bg-status-pending'
                           : 'bg-brand'
                     }`}
                   />

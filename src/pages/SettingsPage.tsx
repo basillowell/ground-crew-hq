@@ -16,6 +16,7 @@ import { formatTime } from '@/utils/formatTime';
 import { APP_VERSION } from '@/constants/version';
 import { applyFontTheme, COLOR_THEMES, type ColorTheme, type CustomThemeColors } from '@/lib/colorThemes';
 import { applyThemeSurfaces } from '@/lib/colorConversion';
+import { getContrastText } from '@/lib/colorContrast';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
@@ -872,6 +873,12 @@ function SortablePropertyCard({
             <GripVertical className="h-4 w-4" />
           </button>
         ) : null}
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${property.color ? '' : 'bg-brand text-text-inverse'}`}
+          style={property.color ? { background: property.color, color: getContrastText(property.color) } : undefined}
+        >
+          {property.logo_initials ?? property.name.slice(0, 2).toUpperCase()}
+        </div>
         <div className="min-w-0 flex-1 py-1">
           <p className="truncate text-sm font-medium text-text-primary">{property.name}</p>
           <p className="text-xs text-text-muted">

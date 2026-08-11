@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
+import { getContrastText } from '@/lib/colorContrast';
 import {
   useAssignments, useEmployees, useEquipmentUnits,
   useNotes, useProperties, useScheduleEntries,
@@ -61,7 +62,7 @@ export default function CommandCenterOperationalPage() {
         tasksTotal: Math.max(tasks.filter(t => t.status === 'active').length, propAssignments.length),
         equipmentActive: equipAtProp.filter(u => u.status === 'available' || u.status === 'in-use').length,
         equipmentDown: equipDown,
-        openWorkOrders: propAlerts.length,
+        openAlerts: propAlerts.length,
       };
     });
   }, [assignments, employees, notes, properties, scheduleEntries, tasks, workLocations, equipmentUnits]);
@@ -78,10 +79,9 @@ export default function CommandCenterOperationalPage() {
       tasksTotal: acc.tasksTotal + s.tasksTotal,
       equipment: acc.equipment + s.equipmentActive,
       equipmentDown: acc.equipmentDown + s.equipmentDown,
-      workOrders: acc.workOrders + s.openWorkOrders,
-      alerts: acc.alerts,
+      openAlerts: acc.openAlerts + s.openAlerts,
     }),
-    { crew: 0, tasks: 0, tasksTotal: 0, equipment: 0, equipmentDown: 0, workOrders: 0, alerts: 0 }
+    { crew: 0, tasks: 0, tasksTotal: 0, equipment: 0, equipmentDown: 0, openAlerts: 0 }
   ), [propertyStats]);
 
   const liveCrew = useMemo(() => employees
@@ -176,11 +176,11 @@ export default function CommandCenterOperationalPage() {
 
   const metrics = [
     { icon: Users, label: 'Total Crew', value: totals.crew, subtext: 'active today' },
-    { icon: CheckCircle, label: 'Tasks Done', value: totals.tasks, subtext: `of ${totals.tasksTotal}`, color: 'oklch(var(--success))' },
-    { icon: Wrench, label: 'Equipment', value: totals.equipment, subtext: `${totals.equipmentDown} down`, color: 'oklch(var(--warning))' },
-    { icon: AlertTriangle, label: 'Issues', value: totals.workOrders, subtext: 'open alerts', color: 'oklch(var(--destructive))' },
+    { icon: CheckCircle, label: 'Tasks Done', value: totals.tasks, subtext: `of ${totals.tasksTotal}`, color: 'oklch(var(--status-active))' },
+    { icon: Wrench, label: 'Equipment', value: totals.equipment, subtext: `${totals.equipmentDown} down`, color: 'oklch(var(--status-pending))' },
+    { icon: AlertTriangle, label: 'Issues', value: totals.openAlerts, subtext: 'open alerts', color: 'oklch(var(--status-warning))' },
     { icon: ClipboardList, label: 'Open Work Orders', value: openTaskWorkOrders, subtext: 'not completed/rejected', color: 'oklch(var(--status-pending))' },
-    { icon: Building2, label: 'Properties', value: properties.length, subtext: `${totals.alerts} alerts` },
+    { icon: Building2, label: 'Properties', value: properties.length, subtext: `${totals.openAlerts} alerts` },
   ];
 
   return (
@@ -244,8 +244,10 @@ export default function CommandCenterOperationalPage() {
                     <div className="space-y-4 p-5">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand text-sm font-bold text-text-inverse"
-                            style={property.color ? { background: property.color } : undefined}>
+                          <div
+                            className={`flex h-11 w-11 items-center justify-center rounded-xl bg-brand text-sm font-bold ${property.color ? '' : 'text-text-inverse'}`}
+                            style={property.color ? { background: property.color, color: getContrastText(property.color) } : undefined}
+                          >
                             {property.logoInitials ?? property.name?.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
@@ -262,7 +264,7 @@ export default function CommandCenterOperationalPage() {
                           { label: 'Crew', value: stats.crewActive },
                           { label: 'Tasks', value: `${taskPct}%` },
                           { label: 'Equip', value: stats.equipmentActive },
-                          { label: 'Issues', value: stats.openWorkOrders },
+                          { label: 'Issues', value: stats.openAlerts },
                         ].map(item => (
                           <div key={item.label}>
                             <div className="text-lg font-bold">{item.value}</div>
@@ -284,8 +286,10 @@ export default function CommandCenterOperationalPage() {
                 return (
                   <div key={property.id} className="flex cursor-pointer items-center gap-4 p-4 hover:bg-muted/30 transition-colors"
                     onClick={() => router.push(`/app/workboard?property=${encodeURIComponent(property.id)}`)}>
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-xs font-bold text-text-inverse"
-                      style={property.color ? { background: property.color } : undefined}>
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-xs font-bold ${property.color ? '' : 'text-text-inverse'}`}
+                      style={property.color ? { background: property.color, color: getContrastText(property.color) } : undefined}
+                    >
                       {property.logoInitials ?? property.name?.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">

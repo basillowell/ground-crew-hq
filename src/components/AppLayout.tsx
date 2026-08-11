@@ -662,7 +662,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           />
             <main className="flex flex-1 flex-col h-full min-h-0 bg-surface-base pb-20 page-enter md:pb-0">
               {isOffline ? (
-                <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-900">
+                <div className="border-b border-status-pending/30 bg-status-pending/10 px-4 py-2 text-sm text-status-pending">
                   ⚡ You're offline — changes will sync when connected
                 </div>
               ) : null}

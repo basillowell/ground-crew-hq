@@ -14,9 +14,9 @@ type EscalationRule = {
 };
 
 const severityConfig = {
-  critical: { icon: AlertCircle, color: 'text-destructive', bg: 'bg-destructive/10 border-destructive/20', badge: 'destructive' as const },
-  warning: { icon: AlertTriangle, color: 'text-warning', bg: 'bg-amber-50 border-amber-200', badge: 'outline' as const },
-  info: { icon: Info, color: 'text-info', bg: 'bg-blue-50 border-blue-200', badge: 'secondary' as const },
+  critical: { icon: AlertCircle, color: 'text-status-warning', bg: 'bg-status-warning/10 border-status-warning/30', badge: 'warning' as const },
+  warning: { icon: AlertTriangle, color: 'text-status-pending', bg: 'bg-status-pending/10 border-status-pending/30', badge: 'pending' as const },
+  info: { icon: Info, color: 'text-status-complete', bg: 'bg-status-complete/10 border-status-complete/30', badge: 'complete' as const },
 };
 
 interface LiveAlert {
@@ -84,7 +84,7 @@ export function EscalationCenter({ onNavigate }: { onNavigate?: (route: string) 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
-            <Zap className="h-4 w-4 text-warning" />
+            <Zap className="h-4 w-4 text-status-pending" />
             Escalation Center
           </h3>
           {criticalCount > 0 && (
