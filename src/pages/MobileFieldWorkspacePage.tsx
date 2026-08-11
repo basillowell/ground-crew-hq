@@ -41,6 +41,7 @@ type FieldTab = 'today' | 'team' | 'more';
 type FieldAssignment = {
   id: string;
   taskId: string | null;
+  taskWorkOrderId: string | null;
   propertyId?: string | null;
   sopId?: string | null;
   title: string;
@@ -580,7 +581,7 @@ export default function MobileFieldWorkspacePage() {
         .limit(1),
       supabase
         .from('assignments')
-        .select('id, property_id, employee_id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at, actual_start_at, actual_completed_at')
+        .select('id, property_id, employee_id, task_id, task_work_order_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at, actual_start_at, actual_completed_at')
         .eq('org_id', orgId)
         .eq('employee_id', employeeId)
         .eq('date', boardDate)
@@ -652,6 +653,7 @@ export default function MobileFieldWorkspacePage() {
         propertyId: row.property_id ? String(row.property_id) : null,
         employeeId: row.employee_id ? String(row.employee_id) : employeeId,
         taskId,
+        taskWorkOrderId: row.task_work_order_id ? String(row.task_work_order_id) : null,
         sopId: taskId ? taskSopById.get(taskId) ?? null : null,
         title: String(row.title ?? 'Task'),
         location: row.location ? String(row.location) : null,
@@ -832,6 +834,7 @@ export default function MobileFieldWorkspacePage() {
         id: String(row.id),
         employeeId: teammateId,
         taskId: row.task_id ? String(row.task_id) : null,
+        taskWorkOrderId: null,
         title: String(row.title ?? 'Task'),
         location: row.location ? String(row.location) : null,
         notes: row.notes ? String(row.notes) : null,
@@ -1596,23 +1599,23 @@ export default function MobileFieldWorkspacePage() {
     >
       {/* Offline sync banner */}
       {isOfflineData && (
-        <div className="mb-3 flex items-center gap-2 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
-          <WifiOff className="h-4 w-4 shrink-0 text-yellow-400" />
-          <span className="text-sm text-yellow-300">{offlineDataMessage ?? 'Offline changes queued. Live data refreshes from Supabase when online.'}</span>
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-status-pending/30 bg-status-pending/10 px-4 py-3">
+          <WifiOff className="h-4 w-4 shrink-0 text-status-pending" />
+          <span className="text-sm text-status-pending">{offlineDataMessage ?? 'Offline changes queued. Live data refreshes from Supabase when online.'}</span>
         </div>
       )}
 
       {/* Pending sync badge */}
       {syncQueueCount > 0 && (
-        <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-          <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
-          <span className="text-sm font-medium text-amber-300">
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-status-pending/30 bg-status-pending/10 px-4 py-3">
+          <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-status-pending" />
+          <span className="text-sm font-medium text-status-pending">
             {syncQueueCount} action{syncQueueCount !== 1 ? 's' : ''} pending sync
           </span>
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event('online'))}
-            className="ml-auto text-xs text-amber-400 underline"
+            className="ml-auto text-xs text-status-pending underline"
           >
             Sync now
           </button>
@@ -1683,6 +1686,11 @@ export default function MobileFieldWorkspacePage() {
                     <div key={assignment.id} className="rounded-xl border border-surface-border bg-surface-elevated/30 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">{assignment.title}</span>
+                        {assignment.taskWorkOrderId ? (
+                          <Badge variant="active" className="shrink-0 px-1.5 py-0.5 text-[10px]">
+                            Work Order
+                          </Badge>
+                        ) : null}
                         <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{assignment.location || 'Area'}</span>
                         <span className="shrink-0 text-xs text-text-muted">{assignment.estimatedHours.toFixed(1)}h</span>
                         <Badge variant={statusBadgeVariant(assignment.status)} className="shrink-0 px-1.5 py-0.5 text-[10px]">{statusBadgeLabel(assignment.status)}</Badge>

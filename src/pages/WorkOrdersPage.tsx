@@ -82,6 +82,7 @@ const desktopLanes: LaneConfig[] = [
   { key: 'in_review', label: 'In Review', stages: ['in_review'], variant: 'pending' },
   { key: 'accepted', label: 'Accepted', stages: ['accepted'], variant: 'active' },
   { key: 'assigned', label: 'Assigned', stages: ['assigned'], variant: 'active' },
+  { key: 'pending_verification', label: 'Pending Verification', stages: ['pending_verification'], variant: 'pending' },
   { key: 'completed', label: 'Completed', stages: ['completed', 'rejected'], variant: 'complete' },
 ];
 
@@ -90,6 +91,7 @@ const mobileStages: Array<{ key: TaskWorkOrderFunnelStage; label: string }> = [
   { key: 'in_review', label: 'Review' },
   { key: 'accepted', label: 'Accepted' },
   { key: 'assigned', label: 'Assigned' },
+  { key: 'pending_verification', label: 'Pending Verification' },
   { key: 'completed', label: 'Done' },
   { key: 'rejected', label: 'Rejected' },
 ];
@@ -100,6 +102,7 @@ const stageLabels: Record<TaskWorkOrderFunnelStage, string> = {
   accepted: 'Accepted',
   rejected: 'Rejected',
   assigned: 'Assigned',
+  pending_verification: 'Pending Verification',
   completed: 'Completed',
 };
 
@@ -109,6 +112,7 @@ const stageVariants: Record<TaskWorkOrderFunnelStage, BadgeVariant> = {
   accepted: 'active',
   rejected: 'warning',
   assigned: 'active',
+  pending_verification: 'pending',
   completed: 'complete',
 };
 
@@ -264,15 +268,20 @@ function WorkOrderCard({
       ) : null}
 
       {workOrder.funnelStage === 'assigned' ? (
+        <p className="rounded-lg border border-surface-border bg-surface-elevated/50 px-3 py-2 text-xs text-text-muted">
+          Awaiting field completion
+        </p>
+      ) : null}
+
+      {workOrder.funnelStage === 'pending_verification' ? (
         <Button
           type="button"
-          variant="outline"
           size="sm"
           className="w-full"
           disabled={isPending}
           onClick={() => onComplete(workOrder)}
         >
-          {isPending ? 'Completing' : 'Mark complete'}
+          {isPending ? 'Verifying' : 'Verify complete'}
         </Button>
       ) : null}
     </div>
@@ -290,8 +299,8 @@ function LaneEmptyState({ label }: { label: string }) {
 
 function LoadingBoard() {
   return (
-    <div className="grid gap-4 md:grid-cols-5">
-      {Array.from({ length: 5 }).map((_, laneIndex) => (
+    <div className="grid gap-4 md:grid-cols-6">
+      {Array.from({ length: 6 }).map((_, laneIndex) => (
         <div key={`work-order-lane-skeleton-${laneIndex}`} className="space-y-3">
           <div className="flex items-center justify-between">
             <Skeleton className="h-5 w-24 bg-surface-elevated" />
@@ -365,6 +374,7 @@ export default function WorkOrdersPage() {
         accepted: [],
         rejected: [],
         assigned: [],
+        pending_verification: [],
         completed: [],
       },
     );
@@ -574,7 +584,7 @@ export default function WorkOrdersPage() {
         <LoadingBoard />
       ) : (
         <>
-          <div className="hidden gap-4 md:grid md:grid-cols-5">
+          <div className="hidden gap-4 md:grid md:grid-cols-6">
             {desktopLanes.map((lane) => {
               const laneOrders = lane.stages.flatMap((stage) => workOrdersByStage[stage]);
               return (

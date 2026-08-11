@@ -196,7 +196,7 @@ export type RevenueWorkOrder = {
   completedAt: string | null;
 };
 
-export type TaskWorkOrderFunnelStage = 'new' | 'in_review' | 'accepted' | 'rejected' | 'assigned' | 'completed';
+export type TaskWorkOrderFunnelStage = 'new' | 'in_review' | 'accepted' | 'rejected' | 'assigned' | 'pending_verification' | 'completed';
 
 export type TaskWorkOrder = {
   id: string;
