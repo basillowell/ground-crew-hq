@@ -85,6 +85,12 @@ This is a **task** work order (service/property work), NOT equipment maintenance
 instead (or both). Logged in POLISH-CLEANUP.md.
 
 ## Backlog — deferred features
+- **Equipment-due → task work order bridge.** When an equipment `work_orders` maintenance
+  entry comes due (interval_hours/days / due_at_*, category='preventative'/'repair' — e.g. "oil &
+  filter change due"), auto-generate a `task_work_orders` row (a repair task) so equipment
+  maintenance flows through the SAME review → accept → assign → verify funnel as client requests.
+  Bridges the equipment table into the task funnel. Idea raised 2026-08-11 alongside pointing the
+  Command Center tile at task work orders.
 - **Payroll / Timesheet Review (bi-weekly pay-period approval).** Need: one screen to review, PER EMPLOYEE across a pay period, their tasks (assignments + hours), breaks (clock_events), and total logged time, so a supervisor can verify/correct and APPROVE before running payroll. Building blocks already exist: `assignments.approved_by`/`approved_at` (row-level approval audit), the day-level `OpenTaskDayReviewPanel`, and `clock_events` (clock in/out + breaks). Gap: review today is per-DAY, not aggregated per pay-period. Likely home: extend `ReportsPage` or a new `/app/payroll` (or timesheet) view. Shelved 2026-08-11 to finish the work-order funnel first.
 
 ## Immediate next steps (suggested)
