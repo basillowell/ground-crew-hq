@@ -54,6 +54,11 @@ _Started: 2026-08-10_
   (warning/pending) when convenient. Low priority — edge indicators, not core UI.
   _Surfaced in: Move 7b, 2026-08-10._
 
+- [ ] **Command Center "Open Work Orders" tile counts the wrong table (revisit after funnel P2).**
+  The Move 4 tile uses `useRevenueWorkOrders` → the **equipment** `work_orders` table. Once the task
+  work-order funnel (`task_work_orders`) is live, decide whether that tile should count task WOs
+  instead, or show both equipment + task counts. _Surfaced in: funnel P0, 2026-08-11._
+
 - [ ] **Audit for dead status CSS vars after the migration.**
   `app/globals.css` still defines `--status-safe / --status-danger / --status-info /
   --status-muted` from the older system; the canonical Tailwind set is now

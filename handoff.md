@@ -43,32 +43,46 @@ Addressed user feedback that the tab was cramped/clumsy and the map "wandered."
 - `src/components/map/ProjectGantt.tsx` — the new calendar Gantt.
 - `src/lib/supabase-queries.ts` — data layer (projects, timeline events, photos, areas; the type gate lives against this).
 
-## Task Work Order Funnel — plan (agreed direction 2026-08-10, not yet built)
+## Task Work Order Funnel (design 2026-08-10; **P0 schema SHIPPED to DB 2026-08-11**)
 A **client-originated to-do** that a supervisor vets and hands to an employee to complete.
-Flow: **client → supervisor (review/accept) → employee (assigned task) → completed.**
+Flow: **client → supervisor (review/accept) → employee (assigned via assignment) → completed.**
 This is a **task** work order (service/property work), NOT equipment maintenance.
 
-**Grounding / gotchas:**
-- Build on the **real `work_orders` table** (`useRevenueWorkOrders`, `fetchRevenueWorkOrders`,
-  cols today: `id, org_id, property_id, title, status, priority, cost, created_at, completed_at, wo_number`).
-- Do NOT extend `src/components/equipment/WorkOrderKanban.tsx` — that is **mock-only**
-  (seeds from `seedWorkOrders`, `useState`, no persistence) and is equipment-oriented. Separate concept.
-- Command Center's current "openWorkOrders" = `notes.filter(type==='alert')` — unrelated; being replaced (Move 4 tile).
+**Grounding / gotchas (IMPORTANT — corrected after schema inspection):**
+- The existing **`work_orders` table is EQUIPMENT MAINTENANCE**, not generic tasks. Its full schema
+  (hidden by the app's `RevenueWorkOrder` type) includes `equipment_unit_id`, `category` (default
+  `'preventative'`), `interval_hours/days`, `due_at_hours/date`, `planned_status`. **Do NOT extend it**
+  for the task funnel — that would re-conflate the concepts. `useRevenueWorkOrders` only surfaces a
+  subset of it for job-costing rollups.
+- The mock `src/components/equipment/WorkOrderKanban.tsx` is the same equipment concept, mock-only.
+- Decision: the task funnel gets its **own `task_work_orders` table**. **Assign model = Plan B**:
+  assigning creates an `assignments` row linked via the new `assignments.task_work_order_id` — so it
+  rides the existing workboard + job-costing rollups. (`assignments` already carries `work_order_id`,
+  `task_id`, `equipment_unit_id`; we added `task_work_order_id`.)
+- `clients` already has a `client_token` column → a foundation for P4 client-facing links exists.
 
 **Phases:**
-- **P0 — Schema.** Extend `work_orders` (snake_case, RLS mirroring existing policies): add
-  `description`, `client_id` (FK clients, null), `source` ('client'|'internal', default 'internal'),
-  `assignee_id` (FK employees, null), `reviewed_by` (null), `accepted_at` (null), `rejected_reason` (null),
-  `due_date` (null). Define/confirm `status` enum: `new → in_review → accepted | rejected → assigned → in_progress → completed`.
-- **P1 — Data layer.** Mutations: create, review (accept/reject + reason), assign (employee + due_date), advance status; list-by-status query.
-- **P2 — Supervisor funnel UI.** A Work Orders inbox (lanes New → In Review → Accepted/Assigned → In Progress → Completed), accept/reject/assign actions. Reuse `StatusChip` + status tokens.
-- **P3 — Employee side.** Assigned WOs surface in field/task view; employee marks complete.
-- **P4 (later) — real client intake.** True client submission needs client auth/portal (does not exist today).
+- **P0 — Schema. ✅ DONE (migration `task_work_order_funnel_p0`, applied to prod 2026-08-11).**
+  New table `public.task_work_orders`: `id, org_id, property_id (FK properties), client_id (FK clients),
+  title, description, priority (default 'medium'), source (default 'internal'), funnel_stage
+  (default 'new'), submitted_by, reviewed_by, accepted_at, rejected_reason, due_date, created_at,
+  completed_at`. RLS **mirrors `work_orders`**: `select` = `org_id = current_org_id()`; `manage` (ALL)
+  = org + `current_user_role() in ('admin','manager')`. Added `assignments.task_work_order_id`
+  (uuid FK → task_work_orders, on delete set null). Security advisor: no new findings.
+  `funnel_stage` is deliberately separate from any operational `status`. Stages:
+  `new → in_review → accepted | rejected → assigned → completed`.
+- **P1 — Data layer.** Types + queries/mutations in `src/lib/supabase-queries.ts`: create,
+  review (accept/reject + reason), assign (creates an assignment with `task_work_order_id` + employee + date),
+  advance/complete, list-by-`funnel_stage`. Generate TS types after.
+- **P2 — Supervisor funnel UI.** A Work Orders inbox (lanes New → In Review → Accepted → Assigned →
+  Completed; reject with reason). Use `Badge` status variants (active/pending/warning/complete/hold — Move 7).
+- **P3 — Employee side.** Assignments carrying a `task_work_order_id` surface in the field/task view; employee marks complete.
+- **P4 (later) — real client intake.** True client submission portal (leverage `clients.client_token`).
   v1 = supervisor enters client-originated WOs (`source='client'`, `client_id`). Defer the portal.
 
-**Open integration choice (decide before P1):** on assign, does the WO stay **self-contained**
-(`assignee_id` + `due_date` on the row, surfaced via a new employee query — simplest, recommended v1),
-or does it **spawn a `tasks`/`assignments` row** so it rides the existing workboard/scheduler? Recommend self-contained for v1, link to assignments later.
+**Follow-up:** Command Center "Open Work Orders" tile (Move 4) currently counts the equipment
+`work_orders` table. Once the funnel is live, decide whether that tile should count `task_work_orders`
+instead (or both). Logged in POLISH-CLEANUP.md.
 
 ## Immediate next steps (suggested)
 1. Eyeball the live Properties workspace (v7.19.11) — layout, the Gantt, no regressions.

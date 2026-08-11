@@ -111,6 +111,7 @@
 | deleted_at          | timestamptz | YES      |            |
 | deleted_by          | uuid        | YES      |            |
 | work_order_id       | uuid        | YES      |            |
+| task_work_order_id  | uuid        | YES      |            |
 
 > approved_by: nullable FK -> employees.id. Supervisor who reviewed/approved
 > this assignment's logged times. NULL = not yet approved. approved_at is the
@@ -126,6 +127,11 @@
 > compute revenue-vs-cost per job. Nullable with no backfill: historical
 > assignments stay NULL and simply don't roll up per-job until edited. Index
 > assignments_work_order_id_idx.
+>
+> task_work_order_id (migration task_work_order_funnel_p0, 2026-08-11): nullable
+> FK -> task_work_orders.id (on delete set null). Plan B link — assigning a task
+> work order to an employee creates an assignment carrying this id, so it rides
+> the workboard + job costing. DISTINCT from work_order_id (equipment).
 
 ---
 
@@ -1056,6 +1062,46 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 > (relevant for general/crew-submitted category, optional for equipment
 > maintenance entries created by the system/admin).
 > planned_status CHECK: ('not_started','in_progress','completed','skipped')
+
+---
+
+## task_work_orders
+| column          | type        | nullable | default           |
+|-----------------|-------------|----------|-------------------|
+| id              | uuid        | NO       | gen_random_uuid() |
+| org_id          | uuid        | NO       |                   |
+| property_id     | uuid        | YES      |                   |
+| client_id       | uuid        | YES      |                   |
+| title           | text        | NO       |                   |
+| description     | text        | YES      |                   |
+| priority        | text        | NO       | 'medium'          |
+| source          | text        | NO       | 'internal'        |
+| funnel_stage    | text        | NO       | 'new'             |
+| submitted_by    | uuid        | YES      |                   |
+| reviewed_by     | uuid        | YES      |                   |
+| accepted_at     | timestamptz | YES      |                   |
+| rejected_reason | text        | YES      |                   |
+| due_date        | date        | YES      |                   |
+| created_at      | timestamptz | NO       | now()             |
+| completed_at    | timestamptz | YES      |                   |
+
+> migration task_work_order_funnel_p0 (2026-08-11). The CLIENT-REQUEST TASK work
+> order funnel — DISTINCT from work_orders (which is equipment maintenance). A
+> client-originated to-do a supervisor reviews/accepts, then assigns to an
+> employee. Do NOT conflate the two tables.
+> property_id: nullable FK -> properties.id (on delete set null). Must be set
+> before assignment (assignments.property_id is NOT NULL).
+> client_id: nullable FK -> clients.id (on delete set null). The requesting client.
+> source: 'client' | 'internal' (app-enforced, no CHECK).
+> funnel_stage: new -> in_review -> accepted | rejected -> assigned -> completed
+> (app-enforced, no CHECK). Deliberately separate from any operational status.
+> submitted_by / reviewed_by: uuid, no hard FK (mirrors work_orders.submitted_by).
+> Indexes: task_work_orders_org_stage_idx (org_id, funnel_stage),
+> task_work_orders_property_idx (property_id).
+> RLS mirrors work_orders: "task_work_orders select" = org_id = current_org_id();
+> "task_work_orders manage" (ALL) = org_id = current_org_id() AND
+> current_user_role() IN ('admin','manager').
+> Plan B assign link: assignments.task_work_order_id -> task_work_orders.id.
 
 ---
 
