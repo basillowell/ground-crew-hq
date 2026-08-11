@@ -18,10 +18,10 @@ import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
   useAssignments, useEmployees, useEquipmentUnits,
   useNotes, useProperties, useScheduleEntries,
-  useRevenueWorkOrders, useTasks, useWorkLocations,
+  useTaskWorkOrders, useTasks, useWorkLocations,
 } from '@/lib/supabase-queries';
 
-const CLOSED_REVENUE_WORK_ORDER_STATUSES = new Set(['completed', 'closed']);
+const CLOSED_TASK_WORK_ORDER_STAGES = new Set(['completed', 'rejected']);
 
 export default function CommandCenterOperationalPage() {
   const router = useRouter();
@@ -41,7 +41,7 @@ export default function CommandCenterOperationalPage() {
   const { data: notes = [] } = useNotes(selectedPropertyId || undefined, orgId ?? undefined);
   const { data: workLocations = [] } = useWorkLocations(undefined, orgId ?? undefined);
   const { data: equipmentUnits = [] } = useEquipmentUnits(selectedPropertyId || undefined, orgId ?? undefined);
-  const { data: revenueWorkOrders = [] } = useRevenueWorkOrders(selectedPropertyId || undefined, orgId ?? undefined);
+  const { data: taskWorkOrders = [] } = useTaskWorkOrders(orgId ?? undefined);
 
   const propertyStats = useMemo(() => {
     return properties.map((property) => {
@@ -66,10 +66,10 @@ export default function CommandCenterOperationalPage() {
     });
   }, [assignments, employees, notes, properties, scheduleEntries, tasks, workLocations, equipmentUnits]);
 
-  const openRevenueWorkOrders = useMemo(() => revenueWorkOrders.filter((workOrder) => {
-    const status = String(workOrder.status ?? '').trim().toLowerCase();
-    return !CLOSED_REVENUE_WORK_ORDER_STATUSES.has(status);
-  }).length, [revenueWorkOrders]);
+  const openTaskWorkOrders = useMemo(() => taskWorkOrders.filter((workOrder) => {
+    const stage = String(workOrder.funnelStage ?? '').trim().toLowerCase();
+    return !CLOSED_TASK_WORK_ORDER_STAGES.has(stage);
+  }).length, [taskWorkOrders]);
 
   const totals = useMemo(() => propertyStats.reduce(
     (acc, s) => ({
@@ -179,7 +179,7 @@ export default function CommandCenterOperationalPage() {
     { icon: CheckCircle, label: 'Tasks Done', value: totals.tasks, subtext: `of ${totals.tasksTotal}`, color: 'oklch(var(--success))' },
     { icon: Wrench, label: 'Equipment', value: totals.equipment, subtext: `${totals.equipmentDown} down`, color: 'oklch(var(--warning))' },
     { icon: AlertTriangle, label: 'Issues', value: totals.workOrders, subtext: 'open alerts', color: 'oklch(var(--destructive))' },
-    { icon: ClipboardList, label: 'Open Work Orders', value: openRevenueWorkOrders, subtext: 'not completed/closed', color: 'oklch(var(--status-pending))' },
+    { icon: ClipboardList, label: 'Open Work Orders', value: openTaskWorkOrders, subtext: 'not completed/rejected', color: 'oklch(var(--status-pending))' },
     { icon: Building2, label: 'Properties', value: properties.length, subtext: `${totals.alerts} alerts` },
   ];
 
