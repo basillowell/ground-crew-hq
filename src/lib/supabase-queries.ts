@@ -2590,9 +2590,9 @@ export async function reviewTaskWorkOrder(payload: ReviewTaskWorkOrderPayload): 
 
 export async function assignTaskWorkOrder(payload: AssignTaskWorkOrderPayload): Promise<TaskWorkOrder> {
   const workOrderId = requiredUuid(payload.workOrder.id, 'Task work order');
-  const orgId = requiredUuid(payload.workOrder.orgId, 'Organization');
+  requiredUuid(payload.workOrder.orgId, 'Organization');
   const employeeId = requiredUuid(payload.employeeId, 'Employee');
-  const propertyId = requiredUuid(payload.workOrder.propertyId, 'Task work order property');
+  requiredUuid(payload.workOrder.propertyId, 'Task work order property');
   if (!payload.date) throw new Error('Assignment date is required.');
 
   const client = ensureSupabase();
@@ -2600,27 +2600,12 @@ export async function assignTaskWorkOrder(payload: AssignTaskWorkOrderPayload): 
     window.setTimeout(() => reject(new Error('Task work order assignment timed out.')), 15_000);
   });
   const savePromise = (async () => {
-    const { error: assignmentError } = await client
-      .from('assignments')
-      .insert({
-        org_id: orgId,
-        employee_id: employeeId,
-        property_id: propertyId,
-        date: payload.date,
-        status: 'planned',
-        title: payload.workOrder.title,
-        task_id: null,
-        task_work_order_id: workOrderId,
-      });
-    if (assignmentError) throw assignmentError;
-
     const { data, error } = await client
-      .from('task_work_orders')
-      .update({ funnel_stage: 'assigned' })
-      .eq('id', workOrderId)
-      .eq('org_id', orgId)
-      .select(taskWorkOrderSelectColumns)
-      .single();
+      .rpc('assign_task_work_order', {
+        p_work_order_id: workOrderId,
+        p_employee_id: employeeId,
+        p_date: payload.date,
+      });
     if (error) throw error;
     return toTaskWorkOrder(data as DbTaskWorkOrder);
   })();
