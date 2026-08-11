@@ -1105,6 +1105,19 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 
 ---
 
+## DB function: assign_task_work_order(p_work_order_id uuid, p_employee_id uuid, p_date date) -> task_work_orders
+> migration assign_task_work_order_rpc (2026-08-11). SECURITY INVOKER. Atomically
+> assigns a task work order to an employee (Plan B): inserts an assignments row
+> (status 'planned', task_work_order_id set; org_id/property_id/title copied from
+> the WO) AND sets the WO funnel_stage='assigned', in one transaction. Guards: the
+> WO must exist in the caller's org, have a non-null property_id, and be in
+> funnel_stage 'accepted' — raises otherwise, which also prevents double-assign.
+> Returns the updated task_work_orders row (single composite, not a set). Call via
+> `.rpc('assign_task_work_order', { p_work_order_id, p_employee_id, p_date })`.
+> RLS enforced as the caller: assignments 'manage' + task_work_orders 'manage'.
+
+---
+
 ## equipment_specs
 | column     | type        | nullable | default           |
 |------------|-------------|----------|-------------------|
