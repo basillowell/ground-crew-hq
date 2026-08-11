@@ -191,12 +191,12 @@ function emptyAddDraft(): AddEmployeeDraft {
 function statusBadge(status: string | null) {
   const normalized = String(status).toLowerCase();
   if (normalized === 'active') {
-    return <Badge className="rounded-full border border-status-active/20 bg-status-active/10 px-2 py-0.5 text-xs text-status-active">Active</Badge>;
+    return <Badge variant="active">Active</Badge>;
   }
   if (normalized === 'archived') {
-    return <Badge className="rounded-full border border-surface-border bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">Archived</Badge>;
+    return <Badge variant="hold">Archived</Badge>;
   }
-  return <Badge className="rounded-full border border-status-warning/20 bg-status-warning/10 px-2 py-0.5 text-xs text-status-warning">Inactive</Badge>;
+  return <Badge variant="hold">Inactive</Badge>;
 }
 
 function formatHourlyRate(value: number | null) {

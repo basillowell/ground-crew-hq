@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Edit3, Plus, Trash2 } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -160,9 +161,9 @@ export function ServiceCatalogSettings({ orgId }: { orgId: string | null }) {
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium text-text-primary">{item.name}</p>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${item.active ? 'bg-status-active/10 text-status-active' : 'bg-surface-elevated text-text-muted'}`}>
+                    <Badge variant={item.active ? 'active' : 'hold'} className="px-2 py-0.5">
                       {item.active ? 'Active' : 'Paused'}
-                    </span>
+                    </Badge>
                   </div>
                   <p className="mt-1 text-sm text-text-secondary">{item.description || 'No description'}</p>
                 </div>

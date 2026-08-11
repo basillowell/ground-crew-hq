@@ -109,12 +109,12 @@ function getAssignmentIds(assignments: EnrichedBacklogAssignment[]) {
   return assignments.map((assignment) => assignment.id).filter((id): id is string => Boolean(id));
 }
 
-function statusBadgeClass(status?: string | null) {
+function statusBadgeVariant(status?: string | null) {
   const normalized = String(status ?? '').toLowerCase();
   if (normalized === 'in_progress' || normalized === 'in-progress' || normalized === 'started' || normalized === 'active') {
-    return 'border-sky-400/30 bg-sky-400/10 text-sky-300';
+    return 'active';
   }
-  return 'border-amber-400/30 bg-amber-400/10 text-amber-300';
+  return 'pending';
 }
 
 export default function OpenTasksBacklogPage() {
@@ -367,7 +367,7 @@ export default function OpenTasksBacklogPage() {
             Approve
           </Button>
         ) : (
-          <Badge variant="outline" className="border-status-pending/30 bg-status-pending/10 text-status-pending">
+          <Badge variant="pending">
             Needs review
           </Badge>
         )}
@@ -468,7 +468,7 @@ export default function OpenTasksBacklogPage() {
             </p>
           </div>
           {totals.assignments > 0 ? (
-            <Badge variant="outline" className="border-status-pending/30 bg-status-pending/10 text-status-pending">
+            <Badge variant="pending">
               {totals.assignments} needs review
             </Badge>
           ) : null}
@@ -568,7 +568,7 @@ export default function OpenTasksBacklogPage() {
                                       <td className="px-4 py-3 text-text-secondary">{formatDisplayDate(assignment.date)}</td>
                                       <td className="px-4 py-3 text-text-secondary">{Number(assignment.estimatedHours ?? 0).toFixed(1)}h</td>
                                       <td className="px-4 py-3">
-                                        <Badge variant="outline" className={statusBadgeClass(assignment.status)}>
+                                        <Badge variant={statusBadgeVariant(assignment.status)}>
                                           {normalizeStatusLabel(assignment.status)}
                                         </Badge>
                                       </td>
@@ -659,7 +659,7 @@ export default function OpenTasksBacklogPage() {
                                 </td>
                                 <td className="px-4 py-3 text-text-secondary">{Number(assignment.estimatedHours ?? 0).toFixed(1)}h</td>
                                 <td className="px-4 py-3">
-                                  <Badge variant="outline" className={statusBadgeClass(assignment.status)}>
+                                  <Badge variant={statusBadgeVariant(assignment.status)}>
                                     {normalizeStatusLabel(assignment.status)}
                                   </Badge>
                                 </td>

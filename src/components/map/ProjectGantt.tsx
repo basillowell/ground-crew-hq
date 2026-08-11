@@ -95,13 +95,25 @@ function statusTone(status: string) {
   if (normalized === 'completed' || normalized === 'done' || normalized === 'complete') {
     return 'border-status-complete/30 bg-status-complete/15 text-status-complete';
   }
-  if (normalized === 'paused' || normalized === 'delay' || normalized === 'on_hold') {
+  if (normalized === 'delay') {
     return 'border-status-warning/30 bg-status-warning/15 text-status-warning';
+  }
+  if (normalized === 'paused' || normalized === 'on_hold') {
+    return 'border-status-hold/30 bg-status-hold/15 text-status-hold';
   }
   if (normalized === 'planned' || normalized === 'pending') {
     return 'border-status-pending/30 bg-status-pending/15 text-status-pending';
   }
   return 'border-status-active/30 bg-status-active/15 text-status-active';
+}
+
+function statusVariant(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized === 'completed' || normalized === 'done' || normalized === 'complete') return 'complete';
+  if (normalized === 'delay') return 'warning';
+  if (normalized === 'paused' || normalized === 'on_hold') return 'hold';
+  if (normalized === 'planned' || normalized === 'pending') return 'pending';
+  return 'active';
 }
 
 function projectDateLabel(project: PropertyProject) {
@@ -164,7 +176,7 @@ function ProjectGanttRow({
           <div className="truncate text-sm font-semibold text-text-primary">{project.name}</div>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className={statusTone(project.status)}>{project.status}</Badge>
+          <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
           {!hasExplicitDates ? (
             <span className="text-[11px] font-medium text-text-muted">No dates set</span>
           ) : null}

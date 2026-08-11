@@ -47,12 +47,13 @@ function formatDate(value: string | null | undefined) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function statusClassName(status: string) {
+function statusVariant(status: string) {
   const normalized = status.toLowerCase();
-  if (normalized === 'completed') return 'border-status-complete/40 bg-status-complete/15 text-status-complete';
-  if (normalized === 'paused' || normalized === 'delay') return 'border-status-warning/40 bg-status-warning/15 text-status-warning';
-  if (normalized === 'planned') return 'border-status-pending/40 bg-status-pending/15 text-status-pending';
-  return 'border-status-active/40 bg-status-active/15 text-status-active';
+  if (normalized === 'completed') return 'complete';
+  if (normalized === 'delay') return 'warning';
+  if (normalized === 'paused' || normalized === 'on_hold') return 'hold';
+  if (normalized === 'planned') return 'pending';
+  return 'active';
 }
 
 function ProjectTimeline({
@@ -145,7 +146,7 @@ function ProjectTimeline({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className={statusClassName(event.eventType)}>{event.eventType}</Badge>
+                      <Badge variant={statusVariant(event.eventType)}>{event.eventType}</Badge>
                       <span className="text-xs text-text-muted">{formatDate(event.eventDate)}</span>
                     </div>
                     <div className="mt-2 font-medium text-text-primary">{event.title}</div>
@@ -325,7 +326,7 @@ export function PropertyDetailPanel({
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: project.color ?? property.color }} />
                               <h3 className="truncate font-bold text-text-primary">{project.name}</h3>
-                              <Badge variant="outline" className={statusClassName(project.status)}>{project.status}</Badge>
+                              <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-3 text-xs text-text-muted">
                               <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />{formatDate(project.startDate)}</span>
@@ -392,7 +393,7 @@ export function PropertyDetailPanel({
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: expandedProject.color ?? property.color }} />
                           <h3 className="truncate text-xl font-bold text-text-primary">{expandedProject.name}</h3>
-                          <Badge variant="outline" className={statusClassName(expandedProject.status)}>{expandedProject.status}</Badge>
+                          <Badge variant={statusVariant(expandedProject.status)}>{expandedProject.status}</Badge>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-3 text-sm text-text-muted">
                           <span className="inline-flex items-center gap-1"><CalendarDays className="h-4 w-4" />{formatDate(expandedProject.startDate)}</span>

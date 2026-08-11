@@ -5,6 +5,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { LineItemEditor, calculateLineItemTotals, createEmptyLineItem, normalizeLineItemDrafts, type LineItemDraft } from '@/components/revenue/LineItemEditor';
 import { RecordPaymentDialog } from '@/components/revenue/RecordPaymentDialog';
 import { PropertySelector } from '@/components/shared/PropertySelector';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -50,11 +51,11 @@ type InvoiceFormState = {
   items: LineItemDraft[];
 };
 
-const statusStyles: Record<RevenueInvoice['status'], string> = {
-  draft: 'bg-status-hold/10 text-status-hold border-status-hold/20',
-  sent: 'bg-status-pending/10 text-status-pending border-status-pending/20',
-  paid: 'bg-status-active/10 text-status-active border-status-active/20',
-  void: 'bg-status-warning/10 text-status-warning border-status-warning/20',
+const statusVariants: Record<RevenueInvoice['status'], 'hold' | 'pending' | 'complete' | 'warning'> = {
+  draft: 'hold',
+  sent: 'pending',
+  paid: 'complete',
+  void: 'warning',
 };
 
 function emptyInvoiceForm(): InvoiceFormState {
@@ -466,9 +467,9 @@ export default function InvoicingPage() {
                     </td>
                     <td className="hidden px-4 py-3 text-text-secondary md:table-cell">{getPropertyName(invoice.propertyId)}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${statusStyles[paymentState.displayStatus]}`}>
+                      <Badge variant={statusVariants[paymentState.displayStatus]} className="capitalize">
                         {paymentState.displayStatus}
-                      </span>
+                      </Badge>
                       {paymentState.paidAmount > 0 && paymentState.displayStatus !== 'paid' ? (
                         <div className="mt-1 text-xs text-text-secondary">Partial payment</div>
                       ) : null}

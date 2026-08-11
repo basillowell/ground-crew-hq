@@ -99,11 +99,11 @@ function normalizeStatus(raw: string | null | undefined): EquipmentStatus {
   return 'retired';
 }
 
-function statusBadgeClass(status: EquipmentStatus) {
-  if (status === 'available') return 'border-status-active/20 bg-status-active/10 text-status-active';
-  if (status === 'in_use') return 'border-status-complete/20 bg-status-complete/10 text-status-complete';
-  if (status === 'maintenance') return 'border-status-pending/20 bg-status-pending/10 text-status-pending';
-  return 'border-surface-border bg-surface-elevated text-text-muted';
+function statusBadgeVariant(status: EquipmentStatus) {
+  if (status === 'available') return 'active';
+  if (status === 'in_use') return 'active';
+  if (status === 'maintenance') return 'pending';
+  return 'hold';
 }
 
 function statusLaneClass(status: EquipmentStatus) {
@@ -637,7 +637,7 @@ export default function EquipmentPage() {
                           ))}
                         </select>
                       ) : (
-                        <Badge variant="outline" className={statusBadgeClass(row.normalizedStatus)}>
+                        <Badge variant={statusBadgeVariant(row.normalizedStatus)}>
                           {statusLabel(row.normalizedStatus)}
                         </Badge>
                       )}
@@ -763,7 +763,7 @@ export default function EquipmentPage() {
                 <div className="mb-2 flex items-center justify-between">
                   <p className="font-medium text-text-primary">{row.displayName}</p>
                   {isEditing ? null : (
-                    <Badge variant="outline" className={statusBadgeClass(row.normalizedStatus)}>{statusLabel(row.normalizedStatus)}</Badge>
+                    <Badge variant={statusBadgeVariant(row.normalizedStatus)}>{statusLabel(row.normalizedStatus)}</Badge>
                   )}
                 </div>
                 {isEditing ? (
@@ -1028,7 +1028,7 @@ export default function EquipmentPage() {
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border border-surface-border bg-surface-elevated p-3">
                     <p className="text-xs uppercase tracking-[0.14em] text-text-muted">Status</p>
-                    <Badge variant="outline" className={statusBadgeClass(selectedDetailRow.normalizedStatus)}>
+                    <Badge variant={statusBadgeVariant(selectedDetailRow.normalizedStatus)}>
                       {statusLabel(selectedDetailRow.normalizedStatus)}
                     </Badge>
                   </div>

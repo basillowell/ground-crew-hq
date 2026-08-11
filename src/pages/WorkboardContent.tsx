@@ -5366,20 +5366,20 @@ export default function WorkboardContent() {
                                 <span className="flex min-w-0 items-center gap-2 text-sm">
                                   <span className="truncate">{a.title}</span>
                                   {isDraft ? (
-                                    <Badge variant="outline" className="shrink-0 border-status-pending/50 bg-status-pending/15 text-[10px] font-semibold uppercase tracking-wide text-status-pending">Draft</Badge>
+                                    <Badge variant="pending" className="shrink-0 text-[10px] uppercase tracking-wide">Draft</Badge>
                                   ) : (
-                                    <Badge variant="outline" className="shrink-0 border-status-active/30 bg-status-active/10 text-[10px] font-semibold uppercase tracking-wide text-status-active">Published</Badge>
+                                    <Badge variant="active" className="shrink-0 text-[10px] uppercase tracking-wide">Published</Badge>
                                   )}
                                 </span>
-                                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                <Badge variant={
                                   ns === 'done'
-                                    ? 'bg-status-active/10 text-status-active'
+                                    ? 'complete'
                                     : ns === 'in-progress'
-                                      ? 'bg-status-complete/10 text-status-complete'
-                                      : 'bg-muted text-muted-foreground'
-                                }`}>
+                                      ? 'active'
+                                      : 'pending'
+                                }>
                                   {ns}
-                                </span>
+                                </Badge>
                               </div>
                             );
                           })}
@@ -5718,9 +5718,9 @@ export default function WorkboardContent() {
                                       <div className="flex flex-wrap items-center gap-2">
                                         <p className="text-sm font-medium">{assignment.title || task?.name || 'Untitled task'}</p>
                                         {isDraft ? (
-                                          <Badge variant="outline" className="border-status-pending/50 bg-status-pending/15 text-[10px] font-semibold uppercase tracking-wide text-status-pending">Draft</Badge>
+                                          <Badge variant="pending" className="text-[10px] uppercase tracking-wide">Draft</Badge>
                                         ) : (
-                                          <Badge variant="outline" className="border-status-active/30 bg-status-active/10 text-[10px] font-semibold uppercase tracking-wide text-status-active">Published</Badge>
+                                          <Badge variant="active" className="text-[10px] uppercase tracking-wide">Published</Badge>
                                         )}
                                       </div>
                                       <p className="text-xs text-muted-foreground">

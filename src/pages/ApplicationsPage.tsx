@@ -1597,7 +1597,7 @@ export default function ApplicationsPage() {
           />
           <div className="flex items-center gap-2">
           <Badge variant="secondary">{applicationMode === 'chemical' ? totalApplications : totalFertilizerApplications} logs</Badge>
-          <Badge className="bg-status-active/10 text-status-active border-status-active/20">
+          <Badge variant="active">
             {applicationMode === 'chemical' ? 'EPA-Compliant Record Keeping' : 'Fertilizer Application Records'}
           </Badge>
         </div>

@@ -4,6 +4,7 @@ import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { LineItemEditor, calculateLineItemTotals, createEmptyLineItem, normalizeLineItemDrafts, type LineItemDraft } from '@/components/revenue/LineItemEditor';
 import { PropertySelector } from '@/components/shared/PropertySelector';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -51,12 +52,12 @@ type EstimateFormState = {
   items: LineItemDraft[];
 };
 
-const statusStyles: Record<EstimateStatus, string> = {
-  draft: 'bg-status-hold/10 text-status-hold border-status-hold/20',
-  sent: 'bg-status-pending/10 text-status-pending border-status-pending/20',
-  accepted: 'bg-status-active/10 text-status-active border-status-active/20',
-  declined: 'bg-status-warning/10 text-status-warning border-status-warning/20',
-  expired: 'bg-surface-elevated text-text-muted border-surface-border',
+const statusVariants: Record<EstimateStatus, 'hold' | 'pending' | 'complete' | 'warning'> = {
+  draft: 'hold',
+  sent: 'pending',
+  accepted: 'complete',
+  declined: 'warning',
+  expired: 'hold',
 };
 
 function emptyEstimateForm(): EstimateFormState {
@@ -425,9 +426,9 @@ export default function EstimatesPage() {
                 <tr key={estimate.id} className="transition-colors hover:bg-surface-hover">
                   <td className="px-4 py-3">
                     <div className="font-medium text-text-primary">#{estimate.estimateNumber}</div>
-                    <span className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${statusStyles[estimate.status]}`}>
+                    <Badge variant={statusVariants[estimate.status]} className="mt-1 capitalize">
                       {estimate.status}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="px-4 py-3 text-text-primary">
                     <div className="font-medium">{getClientName(estimate.clientId)}</div>

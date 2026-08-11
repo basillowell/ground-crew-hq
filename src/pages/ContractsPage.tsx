@@ -3,6 +3,7 @@ import { CalendarClock, Edit3, FileClock, PauseCircle, PlayCircle, Plus, Refresh
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { LineItemEditor, calculateLineItemTotals, createEmptyLineItem, normalizeLineItemDrafts, type LineItemDraft } from '@/components/revenue/LineItemEditor';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -61,10 +62,10 @@ type ContractFormState = {
   items: LineItemDraft[];
 };
 
-const statusStyles: Record<ServiceContractStatus, string> = {
-  active: 'bg-status-active/10 text-status-active border-status-active/20',
-  paused: 'bg-status-pending/10 text-status-pending border-status-pending/20',
-  ended: 'bg-surface-elevated text-text-muted border-surface-border',
+const statusVariants: Record<ServiceContractStatus, 'active' | 'hold'> = {
+  active: 'active',
+  paused: 'hold',
+  ended: 'hold',
 };
 
 function todayIso() {
@@ -485,9 +486,9 @@ export default function ContractsPage() {
                   <tr key={contract.id} className="transition-colors hover:bg-surface-hover">
                     <td className="px-4 py-3">
                       <div className="font-medium text-text-primary">{contract.name}</div>
-                      <span className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${statusStyles[contract.status]}`}>
+                      <Badge variant={statusVariants[contract.status]} className="mt-1 capitalize">
                         {contract.status}
-                      </span>
+                      </Badge>
                       <div className="mt-1 text-xs text-text-secondary lg:hidden">{titleCase(contract.frequency)}</div>
                     </td>
                     <td className="px-4 py-3 text-text-primary">

@@ -209,12 +209,10 @@ export function TaskBlock({
           >
             {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned'}
           </Badge>
-          <Badge
-            variant="outline"
-            className={isPublished
-              ? 'shrink-0 border-status-active/30 bg-status-active/10 text-[10px] font-semibold uppercase tracking-wide text-status-active'
-              : 'shrink-0 border-status-pending/50 bg-status-pending/15 text-[10px] font-semibold uppercase tracking-wide text-status-pending'}
-          >
+            <Badge
+              variant={isPublished ? 'active' : 'pending'}
+              className="shrink-0 text-[10px] uppercase tracking-wide"
+            >
             {isPublished ? 'Published' : 'Draft'}
           </Badge>
         </div>

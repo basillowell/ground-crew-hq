@@ -215,11 +215,11 @@ function statusBadgeLabel(status: AssignmentStatus) {
   return 'Planned';
 }
 
-function statusBadgeClass(status: AssignmentStatus) {
+function statusBadgeVariant(status: AssignmentStatus) {
   const normalized = displayStatus(status);
-  if (normalized === 'done') return 'bg-brand/10 text-brand';
-  if (normalized === 'in_progress') return 'bg-sky-400/10 text-sky-400';
-  return 'bg-surface-elevated text-text-secondary';
+  if (normalized === 'done') return 'complete';
+  if (normalized === 'in_progress') return 'active';
+  return 'pending';
 }
 
 const QUICK_HOURS_OPTIONS = ['1', '1.5', '2', '2.5', '3', '4'];
@@ -1685,7 +1685,7 @@ export default function MobileFieldWorkspacePage() {
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">{assignment.title}</span>
                         <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{assignment.location || 'Area'}</span>
                         <span className="shrink-0 text-xs text-text-muted">{assignment.estimatedHours.toFixed(1)}h</span>
-                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(assignment.status)}`}>{statusBadgeLabel(assignment.status)}</span>
+                        <Badge variant={statusBadgeVariant(assignment.status)} className="shrink-0 px-1.5 py-0.5 text-[10px]">{statusBadgeLabel(assignment.status)}</Badge>
                       </div>
                       {renderSopChecklist(assignment)}
                       {displayStatus(assignment.status) === 'done' || activeDonePromptId === assignment.id ? (
@@ -1840,7 +1840,7 @@ export default function MobileFieldWorkspacePage() {
                             <span className="truncate text-sm font-medium text-text-secondary">{task.title}</span>
                             <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{task.location || 'Area'}</span>
                             <span className="shrink-0 text-xs text-text-muted">{task.estimatedHours.toFixed(1)}h</span>
-                            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(task.status)}`}>{statusBadgeLabel(task.status)}</span>
+                            <Badge variant={statusBadgeVariant(task.status)} className="shrink-0 px-1.5 py-0.5 text-[10px]">{statusBadgeLabel(task.status)}</Badge>
                           </div>
                         ))
                       )}

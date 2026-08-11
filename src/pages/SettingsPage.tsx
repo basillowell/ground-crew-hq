@@ -21,6 +21,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PropertySelector } from '@/components/shared/PropertySelector';
+import { Badge } from '@/components/ui/badge';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { TimeInput } from '@/components/ui/date-input';
@@ -2936,7 +2937,7 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
                 ) : (
                   <>
                     <span className="flex-1 text-sm font-medium text-text-primary">{department.name}</span>
-                    <span className="rounded-full bg-status-active/10 px-2.5 py-1 text-xs text-status-active">Active</span>
+                    <Badge variant="active">Active</Badge>
                     <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingDepartmentId(department.id); setEditingDepartmentName(department.name); }} aria-label={`Edit ${department.name}`}><Pencil className="h-4 w-4" /></button>
                     <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivateDepartment(department.id, department.name)} aria-label={`Deactivate ${department.name}`}><Trash2 className="h-4 w-4" /></button>
                   </>
@@ -2967,7 +2968,7 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
                 ) : (
                   <>
                     <span className="flex-1 text-sm font-medium text-text-primary">{role.name}</span>
-                    <span className="rounded-full bg-status-active/10 px-2.5 py-1 text-xs text-status-active">Active</span>
+                    <Badge variant="active">Active</Badge>
                     <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingRoleId(role.id); setEditingRoleName(role.name); }} aria-label={`Edit ${role.name}`}><Pencil className="h-4 w-4" /></button>
                     <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivateRole(role.id, role.name)} aria-label={`Deactivate ${role.name}`}><Trash2 className="h-4 w-4" /></button>
                   </>
@@ -2998,7 +2999,7 @@ function WorkforceTab({ orgId }: { orgId: string | null }) {
                 ) : (
                   <>
                     <span className="flex-1 text-sm font-medium text-text-primary">{workerType.name}</span>
-                    <span className="rounded-full bg-status-active/10 px-2.5 py-1 text-xs text-status-active">Active</span>
+                    <Badge variant="active">Active</Badge>
                     <button className="rounded-lg p-2 text-text-muted hover:bg-surface-elevated hover:text-text-primary" onClick={() => { setEditingWorkerTypeId(workerType.id); setEditingWorkerTypeName(workerType.name); }} aria-label={`Edit ${workerType.name}`}><Pencil className="h-4 w-4" /></button>
                     <button className="rounded-lg p-2 text-text-muted hover:bg-status-warning/10 hover:text-status-warning" onClick={() => void deactivateWorkerType(workerType.id, workerType.name)} aria-label={`Delete ${workerType.name}`}><Trash2 className="h-4 w-4" /></button>
                   </>
@@ -3409,9 +3410,9 @@ Your role: ${inviteRole}
                   <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium ${roleClass}`}>
                     {appUser.role}
                   </span>
-                  <span className="w-fit rounded-full bg-status-active/10 px-2.5 py-1 text-xs font-medium text-status-active">
+                  <Badge variant="active" className="w-fit">
                     {appUser.status}
-                  </span>
+                  </Badge>
                   <select
                     className={settingsInputClass}
                     value={appUser.role}
@@ -4061,7 +4062,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
         {Number(task.estimated_hours ?? 0).toFixed(1)}h
       </span>
       {recurringDrafts[task.id]?.enabled ? (
-        <span className="shrink-0 rounded-full bg-status-active/10 px-1.5 py-0.5 text-xs text-status-active">Rec</span>
+        <Badge variant="active" className="shrink-0 px-1.5 py-0.5">Rec</Badge>
       ) : null}
       <button
         type="button"
