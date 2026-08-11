@@ -196,6 +196,27 @@ export type RevenueWorkOrder = {
   completedAt: string | null;
 };
 
+export type TaskWorkOrderFunnelStage = 'new' | 'in_review' | 'accepted' | 'rejected' | 'assigned' | 'completed';
+
+export type TaskWorkOrder = {
+  id: string;
+  orgId: string;
+  propertyId: string | null;
+  clientId: string | null;
+  title: string;
+  description: string | null;
+  priority: string;
+  source: string;
+  funnelStage: TaskWorkOrderFunnelStage;
+  submittedBy: string | null;
+  reviewedBy: string | null;
+  acceptedAt: string | null;
+  rejectedReason: string | null;
+  dueDate: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+
 export type JobCostingAssignment = {
   id: string;
   employeeId: string;
@@ -392,6 +413,25 @@ type DbRevenueWorkOrder = {
   priority: string;
   wo_number: number | string | null;
   cost: number | string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+type DbTaskWorkOrder = {
+  id: string;
+  org_id: string;
+  property_id: string | null;
+  client_id: string | null;
+  title: string;
+  description: string | null;
+  priority: string;
+  source: string;
+  funnel_stage: TaskWorkOrderFunnelStage;
+  submitted_by: string | null;
+  reviewed_by: string | null;
+  accepted_at: string | null;
+  rejected_reason: string | null;
+  due_date: string | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -1015,6 +1055,27 @@ function toRevenueWorkOrder(row: DbRevenueWorkOrder): RevenueWorkOrder {
     priority: row.priority,
     woNumber: Number(row.wo_number ?? 0),
     cost: Number(row.cost ?? 0),
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  };
+}
+
+function toTaskWorkOrder(row: DbTaskWorkOrder): TaskWorkOrder {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    propertyId: row.property_id,
+    clientId: row.client_id,
+    title: row.title,
+    description: row.description,
+    priority: row.priority,
+    source: row.source,
+    funnelStage: row.funnel_stage,
+    submittedBy: row.submitted_by,
+    reviewedBy: row.reviewed_by,
+    acceptedAt: row.accepted_at,
+    rejectedReason: row.rejected_reason,
+    dueDate: row.due_date,
     createdAt: row.created_at,
     completedAt: row.completed_at,
   };
@@ -2164,6 +2225,33 @@ export type RecordPaymentPayload = {
   notes?: string | null;
 };
 
+export type CreateTaskWorkOrderPayload = {
+  orgId: string;
+  propertyId: string | null;
+  clientId?: string | null;
+  title: string;
+  description?: string | null;
+  priority?: string | null;
+  source?: string | null;
+};
+
+export type ReviewTaskWorkOrderPayload = {
+  id: string;
+  decision: 'accept' | 'reject';
+  reviewedBy: string;
+  rejectedReason?: string | null;
+};
+
+export type AssignTaskWorkOrderPayload = {
+  workOrder: TaskWorkOrder;
+  employeeId: string;
+  date: string;
+};
+
+export type CompleteTaskWorkOrderPayload = {
+  id: string;
+};
+
 const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, contract_id, period_start, period_end, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at, share_token';
 const estimateSelectColumns = 'id, org_id, client_id, property_id, estimate_number, status, subtotal, tax_rate, total, notes, valid_until, converted_invoice_id, created_at, sent_at, accepted_at, share_token';
 const estimateLineItemSelectColumns = 'id, org_id, estimate_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
@@ -2174,7 +2262,17 @@ const serviceContractLineItemSelectColumns = 'id, org_id, contract_id, catalog_i
 const contractInvoiceRunSelectColumns = 'id, org_id, run_at, as_of, triggered_by, contracts_processed, invoices_created, error';
 const paymentSelectColumns = 'id, org_id, invoice_id, amount, method, reference, paid_at, recorded_by, notes, created_at';
 const revenueWorkOrderSelectColumns = 'id, org_id, property_id, title, status, priority, cost, created_at, completed_at, wo_number';
+const taskWorkOrderSelectColumns = 'id, org_id, property_id, client_id, title, description, priority, source, funnel_stage, submitted_by, reviewed_by, accepted_at, rejected_reason, due_date, created_at, completed_at';
 const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
+
+function optionalUuid(value: string | null | undefined): string | null {
+  return value && value !== 'all' ? value : null;
+}
+
+function requiredUuid(value: string | null | undefined, label: string): string {
+  if (!value || value === 'all') throw new Error(`${label} is required.`);
+  return value;
+}
 
 async function fetchClients(orgId: string): Promise<BillingClient[]> {
   const client = ensureSupabase();
@@ -2248,6 +2346,27 @@ async function fetchRevenueWorkOrders(propertyId: string | undefined, orgId: str
     const { data, error } = await query;
     if (error) throw error;
     return ((data ?? []) as DbRevenueWorkOrder[]).map(toRevenueWorkOrder);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchTaskWorkOrders(orgId: string, funnelStage?: TaskWorkOrderFunnelStage | 'all'): Promise<TaskWorkOrder[]> {
+  const client = ensureSupabase();
+  const scopedStage = funnelStage && funnelStage !== 'all' ? funnelStage : undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Task work orders request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('task_work_orders')
+      .select(taskWorkOrderSelectColumns)
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false });
+    if (scopedStage) query = query.eq('funnel_stage', scopedStage);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbTaskWorkOrder[]).map(toTaskWorkOrder);
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -2403,6 +2522,133 @@ async function fetchContractInvoiceRuns(orgId: string): Promise<ContractInvoiceR
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+export async function createTaskWorkOrder(payload: CreateTaskWorkOrderPayload): Promise<TaskWorkOrder> {
+  const orgId = requiredUuid(payload.orgId, 'Organization');
+  const title = payload.title.trim();
+  if (!title) throw new Error('Task work order title is required.');
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Task work order save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('task_work_orders')
+      .insert({
+        org_id: orgId,
+        property_id: optionalUuid(payload.propertyId),
+        client_id: optionalUuid(payload.clientId),
+        title,
+        description: payload.description?.trim() || null,
+        priority: payload.priority?.trim() || 'medium',
+        source: payload.source?.trim() || 'internal',
+        funnel_stage: 'new',
+      })
+      .select(taskWorkOrderSelectColumns)
+      .single();
+    if (error) throw error;
+    return toTaskWorkOrder(data as DbTaskWorkOrder);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+export async function reviewTaskWorkOrder(payload: ReviewTaskWorkOrderPayload): Promise<TaskWorkOrder> {
+  const id = requiredUuid(payload.id, 'Task work order');
+  const reviewedBy = requiredUuid(payload.reviewedBy, 'Reviewer');
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Task work order review timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const updatePayload = payload.decision === 'accept'
+      ? {
+          funnel_stage: 'accepted' as const,
+          accepted_at: new Date().toISOString(),
+          reviewed_by: reviewedBy,
+          rejected_reason: null,
+        }
+      : {
+          funnel_stage: 'rejected' as const,
+          reviewed_by: reviewedBy,
+          rejected_reason: payload.rejectedReason?.trim() || null,
+        };
+    const { data, error } = await client
+      .from('task_work_orders')
+      .update(updatePayload)
+      .eq('id', id)
+      .select(taskWorkOrderSelectColumns)
+      .single();
+    if (error) throw error;
+    return toTaskWorkOrder(data as DbTaskWorkOrder);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+export async function assignTaskWorkOrder(payload: AssignTaskWorkOrderPayload): Promise<TaskWorkOrder> {
+  const workOrderId = requiredUuid(payload.workOrder.id, 'Task work order');
+  const orgId = requiredUuid(payload.workOrder.orgId, 'Organization');
+  const employeeId = requiredUuid(payload.employeeId, 'Employee');
+  const propertyId = requiredUuid(payload.workOrder.propertyId, 'Task work order property');
+  if (!payload.date) throw new Error('Assignment date is required.');
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Task work order assignment timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { error: assignmentError } = await client
+      .from('assignments')
+      .insert({
+        org_id: orgId,
+        employee_id: employeeId,
+        property_id: propertyId,
+        date: payload.date,
+        status: 'planned',
+        title: payload.workOrder.title,
+        task_id: null,
+        task_work_order_id: workOrderId,
+      });
+    if (assignmentError) throw assignmentError;
+
+    const { data, error } = await client
+      .from('task_work_orders')
+      .update({ funnel_stage: 'assigned' })
+      .eq('id', workOrderId)
+      .eq('org_id', orgId)
+      .select(taskWorkOrderSelectColumns)
+      .single();
+    if (error) throw error;
+    return toTaskWorkOrder(data as DbTaskWorkOrder);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+export async function completeTaskWorkOrder(payload: CompleteTaskWorkOrderPayload): Promise<TaskWorkOrder> {
+  const id = requiredUuid(payload.id, 'Task work order');
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Task work order completion timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('task_work_orders')
+      .update({
+        funnel_stage: 'completed',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select(taskWorkOrderSelectColumns)
+      .single();
+    if (error) throw error;
+    return toTaskWorkOrder(data as DbTaskWorkOrder);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
 }
 
 async function createBillingClient(orgId: string, payload: ClientMutationPayload): Promise<BillingClient> {
@@ -3081,6 +3327,18 @@ export function useRevenueWorkOrders(propertyId?: string, orgId?: string, enable
   });
 }
 
+export function useTaskWorkOrders(orgId?: string, funnelStage?: TaskWorkOrderFunnelStage | 'all', enabled = true) {
+  return useQuery({
+    queryKey: ['task-work-orders', orgId ?? 'all-orgs', funnelStage ?? 'all-stages'],
+    queryFn: () => fetchTaskWorkOrders(orgId!, funnelStage),
+    enabled: Boolean(orgId) && enabled,
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
 export function useJobCostingAssignments(orgId?: string) {
   return useQuery({
     queryKey: ['job-costing-assignments', orgId ?? 'all-orgs'],
@@ -3174,6 +3432,49 @@ export function useContractInvoiceRuns(orgId?: string) {
     placeholderData: (prev) => prev,
     retry: 2,
     retryDelay: 1000,
+  });
+}
+
+export function useCreateTaskWorkOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createTaskWorkOrder,
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['task-work-orders', variables.orgId] });
+    },
+  });
+}
+
+export function useReviewTaskWorkOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: reviewTaskWorkOrder,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['task-work-orders'] });
+    },
+  });
+}
+
+export function useAssignTaskWorkOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: assignTaskWorkOrder,
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['task-work-orders', variables.workOrder.orgId] });
+      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      await queryClient.invalidateQueries({ queryKey: ['assignments-range'] });
+      await queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'] });
+    },
+  });
+}
+
+export function useCompleteTaskWorkOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: completeTaskWorkOrder,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['task-work-orders'] });
+    },
   });
 }
 
@@ -4626,5 +4927,3 @@ export function useClockEventsRange(startDate: string, endDate: string, property
     retryDelay: 1000,
   });
 }
-
-
