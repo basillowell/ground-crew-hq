@@ -1,7 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
-import { EmptyState } from '@/components/shared';
 import type { Note } from '@/data/seedData';
 
 interface NotesPanelProps {
