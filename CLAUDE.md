@@ -20,9 +20,12 @@
 
 ## Design System (2026 Overhaul)
 
-* Dark-first. Base: #0f1a14. Card: #1a2d1f. Elevated: #243828
-* Primary accent: #a3e635 (electric lime)
-* Text: #f8fafc primary, #94a3b8 muted, #64748b placeholder
+* Dark-first. Base: #111413. Card: #181e1a. Elevated: #202823
+* Primary accent: #4ab86e (emerald/moss); bright CTA variant: #6ed391
+* Text: #f1f5f1 primary, #94a3b8 secondary, #475569 muted
+* The four approved token families are the ONLY color sources: surface.*, brand.*, text.*, status.*
+* Token families are wired to CSS variables in tailwind.config.ts and are theme-aware across dark/light modes
+* Status tokens: status.active = green, status.pending = amber, status.warning = red, status.complete = blue, status.hold = slate
 * Tailwind only — no new CSS frameworks or component libraries
 * Glassmorphism on modals and cards only — never on dense data tables
 * Mobile-first at 375px breakpoint
@@ -66,4 +69,3 @@
 * No pastel gradients
 * No new route guards without discussion
 * Never empty the trash or permanently delete files
-

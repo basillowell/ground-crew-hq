@@ -167,6 +167,12 @@ already established in EmployeesPage.tsx and SchedulerPage.tsx. This
 applies to all new queries going forward, not just the ones already
 fixed.
 
+**Rule 23 - Colors use design tokens only**
+Never use raw Tailwind palette colors (`bg-green-500`, `text-white`, etc.)
+or hex literals in components. Use the `surface`, `brand`, `text`, and
+`status` token families only. Exception: user-data colors such as a
+per-property `property.color` are allowed as inline styles.
+
 ---
 
 ## Coding Rules
