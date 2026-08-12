@@ -1150,7 +1150,123 @@ function OperationsTab({
       <div className="border-t border-dashed border-surface-border pt-6">
         <SchedulerTab orgId={orgId} userRole={userRole} />
       </div>
+      <div className="border-t border-dashed border-surface-border pt-6">
+        <PayrollSettingsSection orgId={orgId} userRole={userRole} />
+      </div>
     </div>
+  );
+}
+
+function PayrollSettingsSection({ orgId, userRole }: { orgId: string | null; userRole: string | null }) {
+  const queryClient = useQueryClient();
+  const programSettingsQuery = useProgramSettings(orgId ?? undefined);
+  const canManagePayrollSettings = ['admin', 'manager'].includes(String(userRole ?? '').toLowerCase());
+  const [payPeriodLengthDays, setPayPeriodLengthDays] = useState(14);
+  const [payPeriodAnchorDate, setPayPeriodAnchorDate] = useState('2024-01-01');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!programSettingsQuery.data) return;
+    setPayPeriodLengthDays(Number(programSettingsQuery.data.payPeriodLengthDays ?? 14));
+    setPayPeriodAnchorDate(programSettingsQuery.data.payPeriodAnchorDate ?? '2024-01-01');
+  }, [programSettingsQuery.data]);
+
+  const savePayrollSettings = async () => {
+    if (!supabase || !orgId || !canManagePayrollSettings) return;
+    const nextLengthDays = Math.max(1, Math.round(Number(payPeriodLengthDays || 14)));
+    const nextAnchorDate = payPeriodAnchorDate || '2024-01-01';
+    setSaving(true);
+    setError(null);
+    let saveError: Error | null = null;
+    try {
+      const result = await withSettingsAbortControllerTimeout(
+        supabase
+          .from('program_settings')
+          .update({
+            pay_period_length_days: nextLengthDays,
+            pay_period_anchor_date: nextAnchorDate,
+          })
+          .eq('org_id', orgId),
+      );
+      saveError = result.error ?? null;
+    } catch (caughtError) {
+      saveError = caughtError instanceof Error ? caughtError : new Error('Payroll settings could not be saved.');
+    }
+    setSaving(false);
+    if (saveError) {
+      setError(saveError.message);
+      toast.error(`Failed to save payroll settings: ${saveError.message}`);
+      return;
+    }
+    setPayPeriodLengthDays(nextLengthDays);
+    setPayPeriodAnchorDate(nextAnchorDate);
+    await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
+    await queryClient.refetchQueries({ queryKey: ['program-settings', orgId] });
+    setSaved(true);
+    toast.success('Payroll settings saved');
+    window.setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <SettingsCard title="Payroll" subtitle="Set the pay-period cadence used by payroll review.">
+      {!canManagePayrollSettings ? (
+        <div className="mb-4 rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+          Admin or manager access is required to change payroll settings.
+        </div>
+      ) : null}
+
+      {programSettingsQuery.isLoading ? (
+        <PageSkeleton />
+      ) : programSettingsQuery.error || error ? (
+        <ErrorRetry
+          message={`Failed to load: ${
+            error ?? (programSettingsQuery.error instanceof Error ? programSettingsQuery.error.message : 'Payroll settings could not be loaded.')
+          }`}
+          onRetry={() => {
+            setError(null);
+            void programSettingsQuery.refetch();
+          }}
+        />
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
+              Pay period length (days)
+              <input
+                className={`${settingsInputClass} mt-1.5`}
+                type="number"
+                min={1}
+                disabled={!canManagePayrollSettings}
+                value={payPeriodLengthDays}
+                onChange={(event) => setPayPeriodLengthDays(Math.max(1, Number(event.target.value || '1')))}
+              />
+            </label>
+            <label className="text-xs font-medium uppercase tracking-widest text-text-muted">
+              Pay period anchor date
+              <input
+                className={`${settingsInputClass} mt-1.5`}
+                type="date"
+                disabled={!canManagePayrollSettings}
+                value={payPeriodAnchorDate}
+                onChange={(event) => setPayPeriodAnchorDate(event.target.value)}
+              />
+            </label>
+          </div>
+          <p className="text-xs text-text-muted">
+            periods are computed from this date - set it to any real period's start to align with your pay calendar
+          </p>
+          <button
+            onClick={() => void savePayrollSettings()}
+            disabled={saving || !canManagePayrollSettings}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-brand-bright disabled:opacity-60"
+          >
+            {saving ? 'Saving...' : saved ? 'Saved' : 'Save payroll'}
+          </button>
+        </div>
+      )}
+    </SettingsCard>
   );
 }
 

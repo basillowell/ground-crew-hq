@@ -262,6 +262,8 @@ export interface ProgramSettings {
   defaultDepartment: string;
   timeZone: string;
   fiscalYearStart: string;
+  payPeriodLengthDays: number;
+  payPeriodAnchorDate: string;
   enableMobileApp: boolean;
   overtimeTracking: boolean;
   equipmentQrCodes: boolean;
@@ -477,6 +479,8 @@ export const programSettings: ProgramSettings[] = [
     defaultDepartment: 'Maintenance',
     timeZone: 'Eastern Time (ET)',
     fiscalYearStart: 'January',
+    payPeriodLengthDays: 14,
+    payPeriodAnchorDate: '2024-01-01',
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,

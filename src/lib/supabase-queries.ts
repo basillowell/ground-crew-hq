@@ -700,6 +700,8 @@ type DbProgramSettings = {
   theme_darkness: unknown;
   logo_url: string | null;
   default_department: string;
+  pay_period_length_days?: number | null;
+  pay_period_anchor_date?: string | null;
   created_at: string;
 };
 
@@ -1400,6 +1402,8 @@ function toProgramSettings(row: DbProgramSettings): ProgramSettings {
     defaultDepartment: row.default_department,
     timeZone: 'America/New_York',
     fiscalYearStart: '01-01',
+    payPeriodLengthDays: Number(row.pay_period_length_days ?? 14),
+    payPeriodAnchorDate: row.pay_period_anchor_date ?? '2024-01-01',
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,

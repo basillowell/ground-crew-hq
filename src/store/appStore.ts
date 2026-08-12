@@ -95,6 +95,8 @@ export type ProgramSettings = {
   font_theme_preset: string;
   logo_url: string | null;
   default_department: string;
+  pay_period_length_days?: number | null;
+  pay_period_anchor_date?: string | null;
   created_at: string;
   org_id: string | null;
   theme_preference?: string | null;

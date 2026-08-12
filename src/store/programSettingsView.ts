@@ -26,6 +26,8 @@ export function toProgramSettingsView(
     defaultDepartment: settings.default_department,
     timeZone: '',
     fiscalYearStart: '',
+    payPeriodLengthDays: Number(settings.pay_period_length_days ?? 14),
+    payPeriodAnchorDate: settings.pay_period_anchor_date ?? '2024-01-01',
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,

@@ -191,6 +191,8 @@ function normalizeProgramSettings(row: any): ProgramSettings {
     defaultDepartment: String(row.default_department ?? 'Operations'),
     timeZone: String(row.time_zone ?? 'America/New_York'),
     fiscalYearStart: String(row.fiscal_year_start ?? '01-01'),
+    payPeriodLengthDays: Number(row.pay_period_length_days ?? 14),
+    payPeriodAnchorDate: String(row.pay_period_anchor_date ?? '2024-01-01'),
     enableMobileApp: Boolean(row.enable_mobile_app ?? true),
     overtimeTracking: Boolean(row.overtime_tracking ?? true),
     equipmentQrCodes: Boolean(row.equipment_qr_codes ?? true),
