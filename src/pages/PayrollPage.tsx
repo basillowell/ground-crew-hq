@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
+import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { createClient } from '@/lib/supabase';
 import { computeTimesheet, type TimesheetAssignmentInput, type TimesheetClockEventInput } from '@/lib/timesheets';
@@ -18,6 +19,33 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 type PayrollTimesheetData = {
   assignments: TimesheetAssignmentInput[];
   clockEvents: TimesheetClockEventInput[];
+};
+
+type ApprovalStatus = 'submitted' | 'partial' | 'pending';
+
+type ApprovalSummary = {
+  status: ApprovalStatus;
+  assignmentCount: number;
+  approvedCount: number;
+};
+
+type SupabaseResult<T> = {
+  data: T | null;
+  error: Error | null;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const approvalBadgeVariants: Record<ApprovalStatus, 'complete' | 'pending' | 'hold'> = {
+  submitted: 'complete',
+  partial: 'pending',
+  pending: 'hold',
+};
+
+const approvalLabels: Record<ApprovalStatus, string> = {
+  submitted: 'Submitted',
+  partial: 'Partial',
+  pending: 'Pending',
 };
 
 function pad2(value: number) {
@@ -89,6 +117,27 @@ function formatHours(value: number) {
   return value.toFixed(2);
 }
 
+function getEmployeeId(value: TimesheetAssignmentInput) {
+  return value.employee_id ?? value.employeeId ?? '';
+}
+
+function isUuid(value: string | null) {
+  return Boolean(value && UUID_PATTERN.test(value));
+}
+
+function getApprovalSummary(assignments: TimesheetAssignmentInput[], employeeId: string): ApprovalSummary {
+  const employeeAssignments = assignments.filter((assignment) => getEmployeeId(assignment) === employeeId);
+  const approvedCount = employeeAssignments.filter((assignment) => Boolean(assignment.approved_at)).length;
+  const assignmentCount = employeeAssignments.length;
+  const status: ApprovalStatus =
+    assignmentCount > 0 && approvedCount === assignmentCount
+      ? 'submitted'
+      : approvedCount > 0
+        ? 'partial'
+        : 'pending';
+  return { status, assignmentCount, approvedCount };
+}
+
 export default function PayrollPage() {
   const { orgId, currentRole } = useOrgProfile();
   const canManage = currentRole === 'admin' || currentRole === 'manager';
@@ -97,6 +146,7 @@ export default function PayrollPage() {
   const employeesQuery = useEmployees(undefined, queryOrgId, 'all');
   const tasksQuery = useTasks(undefined, queryOrgId);
   const [periodCursorDate, setPeriodCursorDate] = useState(() => toLocalDateKey(new Date()));
+  const [approvingEmployeeId, setApprovingEmployeeId] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = 'Payroll - Ground Crew HQ';
@@ -120,7 +170,7 @@ export default function PayrollPage() {
       if (!supabase || !queryOrgId) return { assignments: [], clockEvents: [] };
       const assignmentsQuery = supabase
         .from('assignments')
-        .select('id, employee_id, task_id, property_id, date, actual_hours')
+        .select('id, employee_id, task_id, property_id, date, actual_hours, approved_by, approved_at')
         .eq('org_id', queryOrgId)
         .gte('date', payPeriod.start)
         .lt('date', payPeriod.endExclusive)
@@ -184,6 +234,40 @@ export default function PayrollPage() {
 
   const loading = programSettingsQuery.isLoading || employeesQuery.isLoading || tasksQuery.isLoading || payrollQuery.isLoading;
   const error = programSettingsQuery.error ?? employeesQuery.error ?? tasksQuery.error ?? payrollQuery.error;
+
+  const approveEmployeeForPeriod = async (employeeId: string, employeeName: string) => {
+    if (!supabase || !queryOrgId) return;
+    setApprovingEmployeeId(employeeId);
+    try {
+      const reviewerResult = await withPayrollTimeout(
+        supabase.rpc('current_employee_id'),
+        'Reviewer lookup',
+      ) as SupabaseResult<string>;
+      if (reviewerResult.error) throw reviewerResult.error;
+      const reviewerEmployeeId = reviewerResult.data ? String(reviewerResult.data) : '';
+      if (!isUuid(reviewerEmployeeId)) throw new Error('Could not identify the approving employee. Try again after reconnecting.');
+
+      const approvalResult = await withPayrollTimeout(
+        supabase
+          .from('assignments')
+          .update({ approved_by: reviewerEmployeeId, approved_at: 'now' })
+          .eq('org_id', queryOrgId)
+          .eq('employee_id', employeeId)
+          .gte('date', payPeriod.start)
+          .lt('date', payPeriod.endExclusive)
+          .is('deleted_at', null),
+        'Payroll submission',
+      ) as SupabaseResult<null>;
+      if (approvalResult.error) throw approvalResult.error;
+
+      await payrollQuery.refetch();
+      toast.success(`Submitted ${employeeName} to payroll for this period`);
+    } catch (approvalError) {
+      toast.error(approvalError instanceof Error ? approvalError.message : 'Unable to submit payroll for this employee.');
+    } finally {
+      setApprovingEmployeeId(null);
+    }
+  };
 
   if (!canManage) {
     return (
@@ -253,32 +337,63 @@ export default function PayrollPage() {
           <EmptyState icon={CalendarClock} title="No payroll rows for this period" description="Clock events or reviewed assignment hours will appear here once crew activity is logged." />
         ) : (
           <div className="overflow-x-auto rounded-xl border border-surface-border">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
+            <table className="w-full min-w-[900px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-surface-border bg-surface-elevated text-left text-xs uppercase tracking-widest text-text-muted">
                   <th className="px-4 py-3 font-medium">Employee</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 text-right font-medium">Paid hours</th>
                   <th className="px-4 py-3 text-right font-medium">Unpaid/breaks</th>
                   <th className="px-4 py-3 text-right font-medium">Worked days</th>
                   <th className="px-4 py-3 text-right font-medium">Total</th>
+                  <th className="px-4 py-3 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {computedTimesheet.rows.map((row) => (
-                  <tr key={row.employeeId} className="border-b border-surface-border last:border-0 hover:bg-surface-hover">
-                    <td className="px-4 py-3 font-medium text-text-primary">{row.employeeName}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-text-primary">{formatHours(row.paidHours)}h</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{formatHours(row.unpaidHours)}h</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{row.workedDays}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-text-primary">{formatHours(row.totalHours)}h</td>
-                  </tr>
-                ))}
+                {computedTimesheet.rows.map((row) => {
+                  const approval = getApprovalSummary(payrollQuery.data?.assignments ?? [], row.employeeId);
+                  const canApprove = approval.status !== 'submitted' && approval.assignmentCount > 0;
+                  const isApproving = approvingEmployeeId === row.employeeId;
+                  return (
+                    <tr key={row.employeeId} className="border-b border-surface-border last:border-0 hover:bg-surface-hover">
+                      <td className="px-4 py-3 font-medium text-text-primary">{row.employeeName}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={approvalBadgeVariants[approval.status]} className="rounded-full">
+                          {approvalLabels[approval.status]}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-text-primary">{formatHours(row.paidHours)}h</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{formatHours(row.unpaidHours)}h</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{row.workedDays}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-text-primary">{formatHours(row.totalHours)}h</td>
+                      <td className="px-4 py-3 text-right">
+                        {canApprove ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-brand text-text-inverse hover:bg-brand-bright"
+                            disabled={isApproving}
+                            onClick={() => void approveEmployeeForPeriod(row.employeeId, row.employeeName)}
+                          >
+                            {isApproving ? 'Submitting...' : 'Approve'}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-text-muted">
+                            {approval.status === 'submitted' ? 'Review only' : 'No assignments'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
                 <tr className="border-t-2 border-surface-border bg-surface-elevated font-semibold text-text-primary">
                   <td className="px-4 py-3">Totals</td>
+                  <td className="px-4 py-3" />
                   <td className="px-4 py-3 text-right tabular-nums">{formatHours(computedTimesheet.totals.paidHours)}h</td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatHours(computedTimesheet.totals.unpaidHours)}h</td>
                   <td className="px-4 py-3 text-right tabular-nums">{computedTimesheet.totals.workedDays}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatHours(computedTimesheet.totals.totalHours)}h</td>
+                  <td className="px-4 py-3" />
                 </tr>
               </tbody>
             </table>

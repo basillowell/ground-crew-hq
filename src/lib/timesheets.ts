@@ -19,6 +19,8 @@ export type TimesheetAssignmentInput = {
   date: string;
   actual_hours?: number | null;
   actualHours?: number | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
 };
 
 export type TimesheetClockEventInput = {
