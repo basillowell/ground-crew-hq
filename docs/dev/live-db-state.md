@@ -539,7 +539,14 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 | weather_preferred_provider    | text        | YES      | 'open-meteo'               |
 | weather_enabled_panels        | text[]      | YES      | ['current-conditions', ...] |
 | theme_darkness                | numeric     | YES      |                            |
+| pay_period_length_days        | integer     | NO       | 14                         |
+| pay_period_anchor_date        | date        | NO       | '2024-01-01'               |
 
+> pay_period_length_days / pay_period_anchor_date (migration program_settings_pay_period_config,
+> 2026-08-11): org-configurable payroll period. length in days (14 = bi-weekly), and an anchor
+> date (default 2024-01-01, a Monday) from which periods are computed deterministically — the org
+> shifts the anchor to align to their real pay calendar. Consumed by the /app/payroll review page.
+>
 > theme_darkness: nullable numeric, 0-100 scale. Controls theme surface/card
 > darkness at the org level. null = default 50.
 >
