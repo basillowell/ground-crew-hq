@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Calendar,
+  CalendarClock,
   CalendarDays,
   ChevronDown,
   ClipboardList,
@@ -100,6 +101,7 @@ const management: NavItemConfig[] = [
   { label: 'Invoicing', href: '/app/invoicing', icon: Receipt, moduleId: 'workflow' },
   { label: 'Contracts', href: '/app/contracts', icon: Repeat, moduleId: 'workflow' },
   { label: 'Reports', href: '/app/reports', icon: BarChart3, moduleId: 'reports' },
+  { label: 'Payroll', href: '/app/payroll', icon: CalendarClock, moduleId: 'reports' },
   { label: 'Job Costing', href: '/app/job-costing', icon: TrendingUp, moduleId: 'reports' },
 ];
 

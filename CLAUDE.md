@@ -1,4 +1,4 @@
-# App version: v7.19.19 (source of truth: package.json → \_\_APP\_VERSION\_\_)
+# App version: v7.19.20 (source of truth: package.json → \_\_APP\_VERSION\_\_)
 
 # Ground Crew HQ — Claude Code Instructions
 
