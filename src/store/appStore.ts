@@ -97,6 +97,7 @@ export type ProgramSettings = {
   default_department: string;
   pay_period_length_days?: number | null;
   pay_period_anchor_date?: string | null;
+  onboarding_dismissed?: boolean | null;
   created_at: string;
   org_id: string | null;
   theme_preference?: string | null;

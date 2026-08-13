@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { PropertySelector } from '@/components/shared/PropertySelector';
+import { GettingStartedPanel } from '@/components/onboarding/GettingStartedPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -19,7 +20,7 @@ import { getContrastText } from '@/lib/colorContrast';
 import {
   useAssignments, useEmployees, useEquipmentUnits,
   useNotes, useProperties, useScheduleEntries,
-  useTaskWorkOrders, useTasks, useWorkLocations,
+  useProgramSettings, useTaskWorkOrders, useTasks, useWorkLocations,
 } from '@/lib/supabase-queries';
 
 const CLOSED_TASK_WORK_ORDER_STAGES = new Set(['completed', 'rejected']);
@@ -27,8 +28,9 @@ const CLOSED_TASK_WORK_ORDER_STAGES = new Set(['completed', 'rejected']);
 export default function CommandCenterOperationalPage() {
   const router = useRouter();
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const { currentUser, orgId } = useOrgProfile();
+  const { currentUser, orgId, userRole } = useOrgProfile();
   const todayKey = new Date().toISOString().slice(0, 10);
+  const canManageOnboarding = userRole === 'admin' || userRole === 'manager';
 
   const { data: properties = [], isLoading: propsLoading } = useProperties(orgId ?? undefined);
   const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
@@ -43,6 +45,7 @@ export default function CommandCenterOperationalPage() {
   const { data: workLocations = [] } = useWorkLocations(undefined, orgId ?? undefined);
   const { data: equipmentUnits = [] } = useEquipmentUnits(selectedPropertyId || undefined, orgId ?? undefined);
   const { data: taskWorkOrders = [] } = useTaskWorkOrders(orgId ?? undefined);
+  const { data: programSettings } = useProgramSettings(orgId ?? undefined);
 
   const propertyStats = useMemo(() => {
     return properties.map((property) => {
@@ -196,6 +199,15 @@ export default function CommandCenterOperationalPage() {
           <ArrowRight className="mr-1.5 h-3.5 w-3.5" /> Go to Workflow
         </Button>
       </PageHeader>
+
+      <GettingStartedPanel
+        orgId={orgId}
+        isVisible={canManageOnboarding && programSettings?.onboardingDismissed === false}
+        onboardingDismissed={programSettings?.onboardingDismissed ?? true}
+        properties={properties}
+        employees={employees}
+        equipment={equipmentUnits}
+      />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
         {metrics.map(m => (

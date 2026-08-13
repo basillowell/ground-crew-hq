@@ -268,6 +268,7 @@ export interface ProgramSettings {
   fiscalYearStart: string;
   payPeriodLengthDays: number;
   payPeriodAnchorDate: string;
+  onboardingDismissed: boolean;
   enableMobileApp: boolean;
   overtimeTracking: boolean;
   equipmentQrCodes: boolean;
@@ -485,6 +486,7 @@ export const programSettings: ProgramSettings[] = [
     fiscalYearStart: 'January',
     payPeriodLengthDays: 14,
     payPeriodAnchorDate: '2024-01-01',
+    onboardingDismissed: false,
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,

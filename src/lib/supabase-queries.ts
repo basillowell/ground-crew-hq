@@ -706,6 +706,7 @@ type DbProgramSettings = {
   default_department: string;
   pay_period_length_days?: number | null;
   pay_period_anchor_date?: string | null;
+  onboarding_dismissed?: boolean | null;
   created_at: string;
 };
 
@@ -1415,6 +1416,7 @@ function toProgramSettings(row: DbProgramSettings): ProgramSettings {
     fiscalYearStart: '01-01',
     payPeriodLengthDays: Number(row.pay_period_length_days ?? 14),
     payPeriodAnchorDate: row.pay_period_anchor_date ?? '2024-01-01',
+    onboardingDismissed: row.onboarding_dismissed ?? false,
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,
@@ -2088,6 +2090,26 @@ async function fetchProgramSettings(orgId: string): Promise<ProgramSettings | nu
     .maybeSingle();
   if (error || !data) return null;
   return toProgramSettings(data as DbProgramSettings);
+}
+
+export async function dismissOnboardingForOrg(orgId: string): Promise<ProgramSettings> {
+  const scopedOrgId = requiredUuid(orgId, 'Organization');
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Onboarding dismissal timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('program_settings')
+      .update({ onboarding_dismissed: true })
+      .eq('org_id', scopedOrgId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return toProgramSettings(data as DbProgramSettings);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
 }
 
 export function useEmployees(
@@ -4690,6 +4712,19 @@ export function useProgramSettings(orgId?: string) {
     placeholderData: (prev) => prev,
     retry: 3,
     retryDelay: 1000,
+  });
+}
+
+export function useDismissOnboarding(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => {
+      if (!orgId) throw new Error('Organization is required.');
+      return dismissOnboardingForOrg(orgId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId ?? 'all-orgs'] });
+    },
   });
 }
 
