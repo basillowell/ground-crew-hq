@@ -541,7 +541,12 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 | theme_darkness                | numeric     | YES      |                            |
 | pay_period_length_days        | integer     | NO       | 14                         |
 | pay_period_anchor_date        | date        | NO       | '2024-01-01'               |
+| onboarding_dismissed          | boolean     | NO       | false                      |
 
+> onboarding_dismissed (migration program_settings_onboarding_dismissed, 2026-08-11): org-level flag —
+> true once an admin/manager dismisses the "Getting Started" orientation panel or completes the basics.
+> When false, the dismissible panel + guided-tour option show on the Command Center for admin/manager.
+>
 > pay_period_length_days / pay_period_anchor_date (migration program_settings_pay_period_config,
 > 2026-08-11): org-configurable payroll period. length in days (14 = bi-weekly), and an anchor
 > date (default 2024-01-01, a Monday) from which periods are computed deterministically — the org
