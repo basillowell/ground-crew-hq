@@ -85,6 +85,11 @@ This is a **task** work order (service/property work), NOT equipment maintenance
 instead (or both). Logged in POLISH-CLEANUP.md.
 
 ## Backlog — deferred features
+- **Industry starter task packs (onboarding seed).** Optional pre-built task lists by vertical — golf
+  course, property management, landscaping/lawn care, facilities/grounds — that a NEW org can seed from
+  during onboarding (Getting Started panel), then edit. Per-org catalogs stay separate; this is just a
+  starting template, not a shared/global list. Replaces the old golf-only wizard seed. Raised 2026-08-11
+  alongside the shared-task-library change.
 - **Auto-accrue equipment usage hours from assignments.** The equipment-due bridge's "due by hours"
   test relies on `equipment_units.estimated_hours` being kept current — manual today. Assignments carry
   `equipment_unit_id` + `actual_hours`, so a unit's used-hours could be auto-derived (sum of actual_hours

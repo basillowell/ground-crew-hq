@@ -924,7 +924,7 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | column          | type        | nullable | default   |
 |-----------------|-------------|----------|-----------|
 | id              | uuid        | NO       | gen_random_uuid() |
-| property_id     | uuid        | NO       |           |
+| property_id     | uuid        | YES      |           |
 | name            | text        | NO       |           |
 | description     | text        | YES      |           |
 | category        | text        | NO       | 'General' |
@@ -938,6 +938,14 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | sop_id          | uuid        | YES      |           |
 | is_unpaid       | boolean     | NO       | false     |
 
+> property_id (MODEL, 2026-08-11): tasks are an ORG-LEVEL shared library — property_id NULL means
+> the task is available at EVERY property in the org. Do NOT create per-property task copies; the
+> property + hours are recorded on the ASSIGNMENT (assignments.property_id + actual_hours), not on the
+> task. A one-time migration consolidated duplicate name+category tasks (repointed assignments to the
+> canonical, archived the extras) and set all active tasks to property_id=NULL. Task pickers/queries
+> must be org-scoped (do NOT filter tasks by property_id — that would now return nothing). Per-org
+> isolation is unchanged (org_id + RLS); "shared" = across an org's properties, never across orgs.
+>
 > sop_id: nullable FK to sops.id. When set, this task has an associated
 > SOP that should be surfaced to the assigned employee (see
 > MobileFieldWorkspacePage.tsx) when they're working the task. null = no
