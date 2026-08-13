@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { BarChart3, CalendarDays, CheckCircle2, Clock, ClipboardList, Loader2, Repeat2, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
+import { BarChart3, CalendarDays, CheckCircle2, Clock, ClipboardList, DollarSign, Inbox, Loader2, Repeat2, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,59 +31,88 @@ type TestimonialItem = {
 
 const FEATURES: FeatureItem[] = [
   {
-    icon: CalendarDays,
-    title: 'Drag-Drop Dispatch Board',
+    icon: CheckCircle2,
+    title: 'Work orders, start to finish',
     description:
-      'Plan the entire week in minutes. Assign crew to properties, reorder on the fly, and see the full picture at a glance.',
+      "Client requests and equipment-due repairs flow through one funnel — review, accept, assign to a crew member, and verify the work before it's marked done.",
     size: 'large',
   },
   {
-    icon: Clock,
-    title: 'GPS-Verified Clock In/Out',
-    description: 'Verified labor tracking that eliminates buddy-punching. Location recorded on every punch.',
+    icon: Inbox,
+    title: 'Client request portal',
+    description:
+      'Give clients a link to submit work requests. Each one lands in your queue for review — no phone tag, no lost sticky notes.',
     size: 'medium',
+  },
+  {
+    icon: CalendarDays,
+    title: 'Drag-drop dispatch board',
+    description:
+      'Plan the entire week in minutes. Assign crews to properties, reorder on the fly, and see the full picture at a glance.',
+    size: 'medium',
+  },
+  {
+    icon: DollarSign,
+    title: 'Payroll review & sign-off',
+    description:
+      "Review each crew member's hours by pay period, submit to payroll in one click, and export a packet for your accountant. Approved time locks — no accidental edits.",
+    size: 'small',
+  },
+  {
+    icon: Wrench,
+    title: 'Equipment & maintenance',
+    description:
+      'Track every asset and its service intervals. When maintenance comes due, Ground Crew HQ generates the service work order for you.',
+    size: 'medium',
+  },
+  {
+    icon: Clock,
+    title: 'GPS-verified clock in/out',
+    description: 'Verified labor tracking that ends buddy-punching. Location recorded on every punch.',
+    size: 'small',
   },
   {
     icon: Smartphone,
-    title: 'Mobile Field View',
-    description: 'Built for crew members in the field. Works with gloves on. English + Spanish.',
-    size: 'medium',
-  },
-  {
-    icon: Repeat2,
-    title: 'Recurring Job Automation',
-    description: 'Set schedules once — lawn care runs on repeat. No more manual weekly entry.',
+    title: 'Mobile field view',
+    description:
+      "Built for crew members in the field. Today's tasks, clock in/out, photos and signatures. Works with gloves on — English and Spanish.",
     size: 'small',
   },
   {
     icon: BarChart3,
-    title: 'Job Costing Dashboard',
-    description: 'Know your margin per job. Actual vs. estimated hours, labor cost, gross margin.',
+    title: 'Job costing dashboard',
+    description: 'Know your margin per job — actual vs. estimated hours, labor cost, gross margin.',
+    size: 'small',
+  },
+  {
+    icon: Repeat2,
+    title: 'Recurring job automation',
+    description: 'Set schedules once — recurring work runs on repeat. No more manual weekly entry.',
     size: 'small',
   },
   {
     icon: ShieldCheck,
-    title: 'Chemical Compliance Logs',
-    description: 'EPA-ready application records. NWS spray window alerts built in — no extra setup.',
+    title: 'Chemical compliance logs',
+    description: 'EPA-ready application records. NWS spray-window alerts built in — no extra setup.',
     size: 'small',
   },
 ];
 
 const TESTIMONIALS: TestimonialItem[] = [
   {
-    quote: 'This replaced our whiteboard in week one. The spray window feature alone saves us hours.',
-    byline: 'Superintendent, Private Club',
-    initials: 'SP',
+    quote: 'Requests come in, get assigned, and nothing falls through the cracks anymore.',
+    byline: 'Property Manager, Commercial Portfolio',
+    initials: 'PM',
   },
   {
-    quote: 'My crew uses the mobile app every morning. In English and Spanish.',
-    byline: 'Head Groundskeeper, Municipal Course',
-    initials: 'HG',
+    quote: 'Payroll used to take a day. Now I review, approve, and export in about an hour.',
+    byline: 'Owner, Landscape & Lawn Care',
+    initials: 'OL',
   },
   {
-    quote: 'The dispatch board caught coverage gaps we would have missed. Saved hours every week.',
-    byline: 'Asst. Superintendent, Resort',
-    initials: 'AR',
+    quote: 'My crew clocks in from the field every morning, in English and Spanish. The spray-window alerts save us hours.',
+    byline: 'Superintendent, Golf & Sports Turf',
+    initials: 'ST',
   },
 ];
 
@@ -137,7 +166,7 @@ function DarkLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor: 
 
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-400">
+    <div className="rounded-xl border border-status-warning/30 bg-status-warning/10 px-3 py-3 text-xs text-status-warning">
       {message}
     </div>
   );
@@ -384,8 +413,7 @@ export default function LaunchPortalPage() {
               The Operations Brain for Your Grounds Crew
             </h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-text-secondary md:text-lg">
-              Scheduling. Dispatch. Payroll. One Platform. GPS clock-in, drag-drop dispatch,
-              and automated invoicing — built for golf course superintendents and grounds managers.
+              Scheduling, dispatch, work orders, equipment, and payroll — one platform for the teams who maintain properties, grounds, and facilities. From the first client request to a signed-off payroll.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               {currentUser ? (
@@ -424,9 +452,9 @@ export default function LaunchPortalPage() {
           {/* Dashboard mockup */}
           <div className="overflow-hidden rounded-2xl border border-surface-border bg-surface-card shadow-2xl">
             <div className="flex h-8 items-center gap-2 border-b border-surface-border bg-surface-elevated/50 px-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
-              <span className="h-2.5 w-2.5 rounded-full bg-lime-400/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-status-warning/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-status-pending/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-status-active/70" />
               <span className="ml-2 text-[11px] text-text-muted">ground-crew-hq.vercel.app/dashboard</span>
             </div>
             <div className="grid grid-cols-[80px_1fr]">
@@ -455,17 +483,17 @@ export default function LaunchPortalPage() {
                 <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
                   <div className="mb-2 text-[10px] text-text-muted">Schedule Grid</div>
                   <div className="space-y-1">
-                    <div className="h-5 rounded bg-lime-400/25" />
-                    <div className="h-5 rounded bg-sky-400/25" />
-                    <div className="h-5 rounded bg-amber-400/25" />
+                    <div className="h-5 rounded bg-status-active/25" />
+                    <div className="h-5 rounded bg-status-complete/25" />
+                    <div className="h-5 rounded bg-status-pending/25" />
                   </div>
                 </div>
                 <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
                   <div className="mb-2 text-[10px] text-text-muted">Task Timeline</div>
                   <div className="flex h-3 overflow-hidden rounded-full">
-                    <div className="w-1/2 bg-lime-400/60" />
-                    <div className="w-1/4 bg-amber-400/60" />
-                    <div className="w-1/4 bg-red-400/60" />
+                    <div className="w-1/2 bg-status-active/60" />
+                    <div className="w-1/4 bg-status-pending/60" />
+                    <div className="w-1/4 bg-status-warning/60" />
                   </div>
                 </div>
               </div>
@@ -479,7 +507,7 @@ export default function LaunchPortalPage() {
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
             {[
               { title: 'vs. Spreadsheets', desc: 'Real-time crew tracking, GPS verification, mobile access.' },
-              { title: 'vs. Generic FSM', desc: 'Turf-specific workflows, recurring jobs, EPA compliance.' },
+              { title: 'vs. Generic FSM', desc: 'Field-ready workflows for grounds & facilities, work orders, recurring jobs.' },
               { title: 'vs. Enterprise Tools', desc: 'Starts at $29/mo. No implementation fee. No contract.' },
             ].map((item) => (
               <div key={item.title} className="rounded-2xl border border-surface-border bg-surface-card p-5">
@@ -499,7 +527,7 @@ export default function LaunchPortalPage() {
               const sizeClass = feature.size === 'large' ? 'md:col-span-2' : '';
               return (
                 <ScrollReveal key={feature.title} className={sizeClass}>
-                  <div className="group h-full rounded-2xl border border-surface-border bg-surface-card p-6 transition-all duration-[250ms] hover:-translate-y-1 hover:border-brand/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] active:scale-[0.98]">
+                  <div className="group h-full rounded-2xl border border-surface-border bg-surface-card p-6 transition-all duration-[250ms] hover:-translate-y-1 hover:border-brand/20 hover:shadow-2xl active:scale-[0.98]">
                     <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated text-brand transition-colors duration-200 group-hover:bg-brand/10">
                       <Icon className="h-6 w-6" />
                     </div>
@@ -613,10 +641,9 @@ export default function LaunchPortalPage() {
         {/* ── About ── */}
         <section className="mt-16">
           <div className="rounded-2xl border border-surface-border bg-surface-card p-6 md:p-8">
-            <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Built by People Who Know the Course</h2>
+            <h2 className="text-2xl font-semibold tracking-tight text-text-primary">Built by people who&apos;ve run the crew</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
-              Ground Crew HQ was designed by turf professionals who&apos;ve walked the course at 5 AM, managed crews in
-              95° heat, and dealt with last-minute schedule changes. We built the tool we wished we had.
+              Ground Crew HQ was built by people who&apos;ve walked the property at 5 AM, managed crews in the heat, and dealt with last-minute schedule changes. We built the tool we wished we had.
             </p>
           </div>
         </section>
@@ -650,7 +677,7 @@ export default function LaunchPortalPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-text-muted md:flex-row md:px-6">
           <div>
             <div className="font-semibold text-text-secondary">Ground Crew HQ</div>
-            <div>© 2026 Ground Crew HQ · Built for the people who keep courses perfect.</div>
+            <div>© 2026 Ground Crew HQ · Built for the people who keep properties, grounds, and facilities moving.</div>
           </div>
           <div className="flex items-center gap-4">
             <a href="#" className="transition-colors hover:text-text-secondary">Features</a>
@@ -687,7 +714,7 @@ export default function LaunchPortalPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@club.com"
+                  placeholder="name@company.com"
                   autoComplete="email"
                 />
               </div>
@@ -710,7 +737,7 @@ export default function LaunchPortalPage() {
 
               {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
               {!errorMessage && authDebugMessage ? (
-                <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-3 text-xs text-amber-300">
+                <div className="rounded-xl border border-status-pending/30 bg-status-pending/10 px-3 py-3 text-xs text-status-pending">
                   {authDebugMessage}
                   {hasSession && (authState === 'profile-error' || authState === 'profile-missing') ? (
                     <div className="mt-2">
@@ -777,7 +804,7 @@ export default function LaunchPortalPage() {
                       type="email"
                       value={signUpEmail}
                       onChange={(e) => setSignUpEmail(e.target.value)}
-                      placeholder="name@club.com"
+                      placeholder="name@company.com"
                       autoComplete="email"
                     />
                   </div>
@@ -845,7 +872,7 @@ export default function LaunchPortalPage() {
                       type="email"
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
-                      placeholder="name@club.com"
+                      placeholder="name@company.com"
                       autoComplete="email"
                     />
                   </div>
