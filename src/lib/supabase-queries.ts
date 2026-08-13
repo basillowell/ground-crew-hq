@@ -653,7 +653,6 @@ type DbTask = {
   duration?: number | null;
   estimated_hours?: number | null;
   color?: string | null;
-  icon?: string | null;
   skillTags?: string[] | null;
   equipmentTags?: string[] | null;
   notes?: string | null;
@@ -1353,7 +1352,7 @@ function toTask(row: DbTask): Task {
     estimatedHours: Number(row.estimated_hours ?? 1),
     estimated_hours: Number(row.estimated_hours ?? 1),
     color: row.color ?? 'oklch(var(--primary))',
-    icon: row.icon ?? 'list-checks',
+    icon: 'list-checks',
     status: row.status as Task['status'],
     priority: row.priority,
     skillTags: row.skillTags ?? [],
