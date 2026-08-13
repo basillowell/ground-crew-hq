@@ -203,6 +203,7 @@ export type TaskWorkOrder = {
   id: string;
   orgId: string;
   propertyId: string | null;
+  equipmentUnitId: string | null;
   clientId: string | null;
   title: string;
   description: string | null;
@@ -424,6 +425,7 @@ type DbTaskWorkOrder = {
   id: string;
   org_id: string;
   property_id: string | null;
+  equipment_unit_id: string | null;
   client_id: string | null;
   title: string;
   description: string | null;
@@ -1074,6 +1076,7 @@ function toTaskWorkOrder(row: DbTaskWorkOrder): TaskWorkOrder {
     id: row.id,
     orgId: row.org_id,
     propertyId: row.property_id,
+    equipmentUnitId: row.equipment_unit_id,
     clientId: row.client_id,
     title: row.title,
     description: row.description,
@@ -2290,7 +2293,7 @@ const serviceContractLineItemSelectColumns = 'id, org_id, contract_id, catalog_i
 const contractInvoiceRunSelectColumns = 'id, org_id, run_at, as_of, triggered_by, contracts_processed, invoices_created, error';
 const paymentSelectColumns = 'id, org_id, invoice_id, amount, method, reference, paid_at, recorded_by, notes, created_at';
 const revenueWorkOrderSelectColumns = 'id, org_id, property_id, title, status, priority, cost, created_at, completed_at, wo_number';
-const taskWorkOrderSelectColumns = 'id, org_id, property_id, client_id, title, description, priority, source, funnel_stage, submitted_by, reviewed_by, accepted_at, rejected_reason, punch_list, due_date, created_at, completed_at';
+const taskWorkOrderSelectColumns = 'id, org_id, property_id, equipment_unit_id, client_id, title, description, priority, source, funnel_stage, submitted_by, reviewed_by, accepted_at, rejected_reason, punch_list, due_date, created_at, completed_at';
 const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
 const clientSelectColumns = 'id, org_id, name, email, phone, address, notes, active, client_token, created_at';
 
@@ -2710,6 +2713,20 @@ export async function returnTaskWorkOrder(payload: ReturnTaskWorkOrderPayload): 
   })();
 
   return Promise.race([savePromise, timeoutPromise]);
+}
+
+export async function generateDueEquipmentWorkOrders(): Promise<number> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Equipment service work order generation timed out.')), 15_000);
+  });
+  const generatePromise = (async () => {
+    const { data, error } = await client.rpc('generate_due_equipment_work_orders');
+    if (error) throw error;
+    return Number(data ?? 0);
+  })();
+
+  return Promise.race([generatePromise, timeoutPromise]);
 }
 
 async function createBillingClient(orgId: string, payload: ClientMutationPayload): Promise<BillingClient> {
@@ -3558,6 +3575,16 @@ export function useReturnTaskWorkOrder() {
       await queryClient.invalidateQueries({ queryKey: ['assignments'] });
       await queryClient.invalidateQueries({ queryKey: ['assignments-range'] });
       await queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'] });
+    },
+  });
+}
+
+export function useGenerateDueEquipmentWorkOrders() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: generateDueEquipmentWorkOrders,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['task-work-orders'] });
     },
   });
 }

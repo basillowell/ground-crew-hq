@@ -17,7 +17,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { toast } from '@/components/ui/sonner';
 import Link from 'next/link';
 import { EquipmentMaintenanceBadge, getEquipmentMaintenanceState } from '@/components/equipment/EquipmentMaintenanceBadge';
-import { useProperties } from '@/lib/supabase-queries';
+import { useGenerateDueEquipmentWorkOrders, useProperties } from '@/lib/supabase-queries';
 import { EquipmentQrCard } from '@/components/equipment/EquipmentQrCard';
 
 const supabase = createClient();
@@ -182,8 +182,10 @@ async function withEquipmentMutationTimeout<T extends PromiseLike<unknown>>(requ
 export default function EquipmentPage() {
   const { currentUser, userRole } = useOrgProfile();
   const isReadOnly = String(userRole ?? '') === 'viewer';
+  const canManageServiceWorkOrders = userRole === 'admin' || userRole === 'manager';
   const orgId = currentUser?.orgId ?? '';
   const queryClient = useQueryClient();
+  const generateServiceWorkOrders = useGenerateDueEquipmentWorkOrders();
   const { data: selectorProperties = [] } = useProperties(orgId || undefined);
   const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
     currentUser,
@@ -495,6 +497,20 @@ export default function EquipmentPage() {
     toast.success(`Service logged for ${row.displayName}`);
   }, [invalidateEquipmentData, isReadOnly, orgId]);
 
+  const handleGenerateServiceWorkOrders = useCallback(async () => {
+    if (!canManageServiceWorkOrders) return;
+    try {
+      const count = await generateServiceWorkOrders.mutateAsync();
+      if (count > 0) {
+        toast.success(`Created ${count} service work order${count === 1 ? '' : 's'} \u2014 review them in Work Orders`);
+      } else {
+        toast.success('No equipment is due for service');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not generate service work orders.');
+    }
+  }, [canManageServiceWorkOrders, generateServiceWorkOrders]);
+
   const removeRow = useCallback(async (id: string) => {
     if (isReadOnly) return;
     if (!supabase || !orgId) return;
@@ -531,7 +547,7 @@ export default function EquipmentPage() {
           value={selectedPagePropertyId}
           onChange={setSelectedPagePropertyId}
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="flex items-center rounded-lg border border-surface-border bg-surface-card p-0.5">
             <Button
               type="button"
@@ -556,6 +572,19 @@ export default function EquipmentPage() {
             <Button size="sm" className="h-9 gap-1.5" onClick={startAdd} disabled={!canAddEquipment}>
               <Plus className="mr-1.5 h-4 w-4" />
               Add Equipment
+            </Button>
+          ) : null}
+          {canManageServiceWorkOrders ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9 gap-1.5"
+              onClick={() => void handleGenerateServiceWorkOrders()}
+              disabled={generateServiceWorkOrders.isPending}
+            >
+              <Wrench className="mr-1.5 h-4 w-4" />
+              {generateServiceWorkOrders.isPending ? 'Generating...' : 'Generate service work orders'}
             </Button>
           ) : null}
         </div>
