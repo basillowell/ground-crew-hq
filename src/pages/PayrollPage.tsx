@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, Download } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -115,6 +115,11 @@ function buildPeriodDays(start: string, endExclusive: string) {
 
 function formatHours(value: number) {
   return value.toFixed(2);
+}
+
+function quoteCsv(value: string | number) {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function getEmployeeId(value: TimesheetAssignmentInput) {
@@ -250,7 +255,7 @@ export default function PayrollPage() {
       const approvalResult = await withPayrollTimeout(
         supabase
           .from('assignments')
-          .update({ approved_by: reviewerEmployeeId, approved_at: 'now' })
+          .update({ approved_by: reviewerEmployeeId, approved_at: new Date().toISOString() })
           .eq('org_id', queryOrgId)
           .eq('employee_id', employeeId)
           .gte('date', payPeriod.start)
@@ -267,6 +272,44 @@ export default function PayrollPage() {
     } finally {
       setApprovingEmployeeId(null);
     }
+  };
+
+  const exportAccountingCsv = () => {
+    if (computedTimesheet.rows.length === 0) return;
+    const periodEnd = addDaysToKey(payPeriod.endExclusive, -1);
+    const headers = [
+      'Employee',
+      'Paid hours',
+      'Unpaid (breaks) hours',
+      'Worked days',
+      'Total hours',
+      'Status',
+      'Period start',
+      'Period end',
+    ];
+    const rows = computedTimesheet.rows.map((row) => {
+      const approval = getApprovalSummary(payrollQuery.data?.assignments ?? [], row.employeeId);
+      return [
+        row.employeeName,
+        formatHours(row.paidHours),
+        formatHours(row.unpaidHours),
+        row.workedDays,
+        formatHours(row.totalHours),
+        approvalLabels[approval.status],
+        payPeriod.start,
+        periodEnd,
+      ];
+    });
+    const csv = [headers, ...rows].map((cells) => cells.map(quoteCsv).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `payroll_${payPeriod.start}_${periodEnd}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
   };
 
   if (!canManage) {
@@ -314,9 +357,22 @@ export default function PayrollPage() {
               {payPeriod.lengthDays}-day period aligned to {programSettingsQuery.data?.payPeriodAnchorDate ?? '2024-01-01'}.
             </p>
           </div>
-          <Badge variant="pending" className="rounded-full">
-            Read only
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="pending" className="rounded-full">
+              Read only
+            </Badge>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-2 border-surface-border text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+              disabled={loading || Boolean(error) || computedTimesheet.rows.length === 0}
+              onClick={exportAccountingCsv}
+            >
+              <Download className="h-4 w-4" />
+              Export for accounting
+            </Button>
+          </div>
         </div>
 
         {loading ? (
