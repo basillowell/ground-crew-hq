@@ -1092,7 +1092,11 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 | created_at      | timestamptz | NO       | now()             |
 | completed_at    | timestamptz | YES      |                   |
 | punch_list      | text        | YES      |                   |
+| equipment_unit_id | uuid      | YES      |                   |
 
+> equipment_unit_id (migration equipment_due_task_work_order_bridge, 2026-08-11): nullable FK ->
+> equipment_units.id (on delete set null). Set when a WO was auto-generated from a due equipment
+> maintenance item; used for dedup + traceability. Null for client/internal WOs.
 > migration task_work_order_funnel_p0 (2026-08-11). The CLIENT-REQUEST TASK work
 > order funnel — DISTINCT from work_orders (which is equipment maintenance). A
 > client-originated to-do a supervisor reviews/accepts, then assigns to an
@@ -1167,6 +1171,19 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 >   priority/property/assignee during review). title capped at 200 chars. Everything sensitive is
 >   server-derived — the client cannot set org/client/source. clients.client_token is NOT NULL
 >   DEFAULT gen_random_uuid(), so every client already has a shareable request link.
+
+---
+
+## DB function: generate_due_equipment_work_orders() -> integer
+> migration equipment_due_task_work_order_bridge (2026-08-11). SECURITY INVOKER. The equipment-due
+> → task-funnel bridge. Scans equipment_units in the caller's org where maintenance_interval_hours > 0
+> and (estimated_hours - hours_at_last_service) >= maintenance_interval_hours (same "due by usage
+> hours" rule as EquipmentMaintenanceBadge), and for each due unit with NO open task_work_order
+> (equipment_unit_id link, funnel_stage not in completed/rejected = dedup), inserts a task_work_order:
+> source='equipment', funnel_stage='new', equipment_unit_id set, property_id copied from the unit,
+> auto title "Service due — {name}". Returns the count created. Called MANUALLY (supervisor button) —
+> no scheduler yet. Caveat: "due by hours" depends on equipment_units.estimated_hours being kept
+> current (manual today; could be auto-accrued from assignments.actual_hours per equipment — backlog).
 
 ---
 

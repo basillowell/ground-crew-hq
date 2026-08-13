@@ -85,7 +85,13 @@ This is a **task** work order (service/property work), NOT equipment maintenance
 instead (or both). Logged in POLISH-CLEANUP.md.
 
 ## Backlog — deferred features
-- **Equipment-due → task work order bridge.** When an equipment `work_orders` maintenance
+- **Auto-accrue equipment usage hours from assignments.** The equipment-due bridge's "due by hours"
+  test relies on `equipment_units.estimated_hours` being kept current — manual today. Assignments carry
+  `equipment_unit_id` + `actual_hours`, so a unit's used-hours could be auto-derived (sum of actual_hours
+  on assignments that used it, since last service) instead of manual meter entry. Raised 2026-08-11 while
+  building the equipment-due bridge; decide later.
+- **Equipment-due → task work order bridge** (DB shipped 2026-08-11: `task_work_orders.equipment_unit_id`
+  + `generate_due_equipment_work_orders()` RPC; app "Generate service work orders" button pending). When an equipment `work_orders` maintenance
   entry comes due (interval_hours/days / due_at_*, category='preventative'/'repair' — e.g. "oil &
   filter change due"), auto-generate a `task_work_orders` row (a repair task) so equipment
   maintenance flows through the SAME review → accept → assign → verify funnel as client requests.
