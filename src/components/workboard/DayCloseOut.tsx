@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { TimeSelect } from '@/components/TimeSelect';
 import { CardSkeleton } from '@/components/CardSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
-import type { Assignment, Employee, Task } from '@/data/seedData';
+import type { Assignment, Employee, Property, Task } from '@/data/seedData';
 import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { storedIsoToWallClock } from '@/lib/timeWorkflow';
 
@@ -174,7 +174,9 @@ export function DayCloseOutReviewRows({
   disabled = false,
   readOnlyAssignmentIds,
   showScheduledHours = false,
+  properties = [],
   onTaskChange,
+  onPropertyChange,
   onStartChange,
   onEndChange,
   onDelete,
@@ -192,7 +194,9 @@ export function DayCloseOutReviewRows({
   disabled?: boolean;
   readOnlyAssignmentIds?: ReadonlySet<string>;
   showScheduledHours?: boolean;
+  properties?: Property[];
   onTaskChange?: (assignmentId: string, taskId: string) => void;
+  onPropertyChange?: (assignmentId: string, propertyId: string) => void;
   onStartChange?: (assignmentId: string, startTime: string) => void;
   onEndChange: (assignmentId: string, endTime: string) => void;
   onDelete?: (assignmentId: string) => void;
@@ -216,8 +220,8 @@ export function DayCloseOutReviewRows({
   }, [tasks]);
   const orderedTaskCategories = useMemo(() => Object.keys(groupedTasks).sort((a, b) => a.localeCompare(b)), [groupedTasks]);
   const templateClass = showScheduledHours
-    ? 'sm:grid-cols-[minmax(180px,1fr)_96px_176px_176px_116px]'
-    : 'sm:grid-cols-[minmax(180px,1fr)_176px_176px_116px]';
+    ? 'sm:grid-cols-[minmax(180px,1fr)_minmax(160px,0.8fr)_96px_176px_176px_116px]'
+    : 'sm:grid-cols-[minmax(180px,1fr)_minmax(160px,0.8fr)_176px_176px_116px]';
   const renderInsertActions = (insertIndex: number, breakLabel: string, taskLabel: string) => {
     if (!onInsertBreak && !onInsertTask) return null;
     const isInsertingBreak = insertingBreakIndex === insertIndex;
@@ -277,6 +281,7 @@ export function DayCloseOutReviewRows({
     <div className="overflow-hidden rounded-xl border border-surface-border">
       <div className={`grid grid-cols-1 gap-3 bg-surface-elevated px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted ${templateClass}`}>
         <span>Task</span>
+        <span>Property</span>
         {showScheduledHours ? <span>Scheduled</span> : null}
         <span>Start</span>
         <span>End</span>
@@ -342,6 +347,28 @@ export function DayCloseOutReviewRows({
                   ) : null}
                 </div>
               </div>
+              <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+                <span className="sm:hidden">Property</span>
+                {onPropertyChange ? (
+                  <select
+                    value={row.assignment.propertyId ?? ''}
+                    onChange={(event) => onPropertyChange(assignmentId, event.target.value)}
+                    disabled={isRowReadOnly || properties.length === 0}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    <option value="">Choose property</option>
+                    {properties.map((property) => (
+                      <option key={property.id} value={property.id}>
+                        {property.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="mt-1 truncate text-sm text-text-primary">
+                    {properties.find((property) => property.id === row.assignment.propertyId)?.name ?? row.assignment.area ?? 'Assigned property'}
+                  </p>
+                )}
+              </label>
               {showScheduledHours ? (
                 <div>
                   <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Scheduled</p>

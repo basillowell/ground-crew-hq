@@ -607,6 +607,7 @@ async function saveReviewedTimes({
   rows,
   timezone,
   taskOverrides,
+  propertyOverrides,
   tasks,
 }: {
   orgId: string;
@@ -615,6 +616,7 @@ async function saveReviewedTimes({
   rows: ReturnType<typeof getChainedAssignmentRows>;
   timezone: string;
   taskOverrides: Record<string, string>;
+  propertyOverrides: Record<string, string>;
   tasks: Task[];
 }) {
   for (const row of rows) {
@@ -633,6 +635,11 @@ async function saveReviewedTimes({
       const nextTask = nextTaskId ? tasks.find((task) => task.id === nextTaskId) ?? null : null;
       payload.task_id = nextTask?.id ?? null;
       payload.title = nextTask?.name ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(propertyOverrides, row.assignment.id)) {
+      const nextPropertyId = propertyOverrides[row.assignment.id] ?? '';
+      if (!isUuid(nextPropertyId)) throw new Error('Invalid property ID. Please reselect a property.');
+      payload.property_id = nextPropertyId;
     }
     const updateResult = await withReviewTimeout(
       supabase
@@ -716,6 +723,7 @@ export function OpenTaskDayReviewPanel({
   const [startOverrides, setStartOverrides] = useState<Record<string, string>>({});
   const [endOverrides, setEndOverrides] = useState<Record<string, string>>({});
   const [taskOverrides, setTaskOverrides] = useState<Record<string, string>>({});
+  const [propertyOverrides, setPropertyOverrides] = useState<Record<string, string>>({});
   const [deletingAssignmentId, setDeletingAssignmentId] = useState<string | null>(null);
   const [insertingBreakIndex, setInsertingBreakIndex] = useState<number | null>(null);
   const [insertingTaskIndex, setInsertingTaskIndex] = useState<number | null>(null);
@@ -728,6 +736,7 @@ export function OpenTaskDayReviewPanel({
     setStartOverrides({});
     setEndOverrides({});
     setTaskOverrides({});
+    setPropertyOverrides({});
     setInsertingBreakIndex(null);
     setInsertingTaskIndex(null);
     setSplitOpen(false);
@@ -758,6 +767,10 @@ export function OpenTaskDayReviewPanel({
     () => new Map((propertiesQuery.data ?? []).map((property) => [property.id, property])),
     [propertiesQuery.data],
   );
+  const propertyOptions = useMemo(
+    () => [...(propertiesQuery.data ?? [])].sort((first, second) => first.name.localeCompare(second.name)),
+    [propertiesQuery.data],
+  );
   const activeProperties = useMemo(
     () => (propertiesQuery.data ?? [])
       .filter((property) => String(property.status ?? 'active').toLowerCase() !== 'archived')
@@ -780,16 +793,19 @@ export function OpenTaskDayReviewPanel({
   const reviewAssignments = useMemo(
     () => (reviewData?.assignments ?? []).map((assignment) => {
       const assignmentId = assignment.id ?? '';
-      if (!Object.prototype.hasOwnProperty.call(taskOverrides, assignmentId)) return assignment;
-      const taskId = taskOverrides[assignmentId] ?? '';
+      const hasTaskOverride = Object.prototype.hasOwnProperty.call(taskOverrides, assignmentId);
+      const hasPropertyOverride = Object.prototype.hasOwnProperty.call(propertyOverrides, assignmentId);
+      if (!hasTaskOverride && !hasPropertyOverride) return assignment;
+      const taskId = hasTaskOverride ? taskOverrides[assignmentId] ?? '' : assignment.taskId ?? '';
       const selectedTask = taskId ? taskById.get(taskId) : null;
       return {
         ...assignment,
         taskId,
-        title: selectedTask?.name ?? undefined,
+        propertyId: hasPropertyOverride ? propertyOverrides[assignmentId] : assignment.propertyId,
+        title: hasTaskOverride ? selectedTask?.name ?? undefined : assignment.title,
       };
     }),
-    [reviewData?.assignments, taskById, taskOverrides],
+    [propertyOverrides, reviewData?.assignments, taskById, taskOverrides],
   );
 
   const propertyAssignmentGroups = useMemo<PropertyAssignmentGroup[]>(() => {
@@ -849,13 +865,14 @@ export function OpenTaskDayReviewPanel({
   const isApproved = assignmentIds.length > 0 && assignmentIdsToApprove.length === 0;
   const firstApproval = approvedRows[0] ?? null;
   const approver = firstApproval?.approvedBy ? reviewData?.employees.find((row) => row.id === firstApproval.approvedBy) : null;
-  const hasUnsavedEdits = Object.keys(startOverrides).length > 0 || Object.keys(endOverrides).length > 0 || Object.keys(taskOverrides).length > 0;
+  const hasUnsavedEdits = Object.keys(startOverrides).length > 0 || Object.keys(endOverrides).length > 0 || Object.keys(taskOverrides).length > 0 || Object.keys(propertyOverrides).length > 0;
   const saveMutation = useMutation({
-    mutationFn: () => saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] }),
+    mutationFn: () => saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, propertyOverrides, tasks: reviewData?.tasks ?? [] }),
     onSuccess: async () => {
       setStartOverrides({});
       setEndOverrides({});
       setTaskOverrides({});
+      setPropertyOverrides({});
       await Promise.all([
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
@@ -877,6 +894,7 @@ export function OpenTaskDayReviewPanel({
       setStartOverrides({});
       setEndOverrides({});
       setTaskOverrides({});
+      setPropertyOverrides({});
       await Promise.all([
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
@@ -895,7 +913,7 @@ export function OpenTaskDayReviewPanel({
   const insertBreakMutation = useMutation({
     mutationFn: async ({ insertIndex, rows: groupRows }: InsertBreakPayload) => {
       if (hasUnsavedEdits) {
-        await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
+        await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, propertyOverrides, tasks: reviewData?.tasks ?? [] });
       }
       return insertBreakAssignment({
         orgId: queryOrgId,
@@ -914,6 +932,7 @@ export function OpenTaskDayReviewPanel({
       setStartOverrides({});
       setEndOverrides({});
       setTaskOverrides({});
+      setPropertyOverrides({});
       await Promise.all([
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
@@ -932,7 +951,7 @@ export function OpenTaskDayReviewPanel({
   const insertTaskMutation = useMutation({
     mutationFn: async ({ insertIndex, rows: groupRows, shiftStart: groupShiftStart, task }: InsertTaskPayload) => {
       if (hasUnsavedEdits) {
-        await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
+        await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, propertyOverrides, tasks: reviewData?.tasks ?? [] });
       }
       return insertTaskAssignment({
         orgId: queryOrgId,
@@ -952,6 +971,7 @@ export function OpenTaskDayReviewPanel({
       setStartOverrides({});
       setEndOverrides({});
       setTaskOverrides({});
+      setPropertyOverrides({});
       await Promise.all([
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
@@ -983,7 +1003,7 @@ export function OpenTaskDayReviewPanel({
       }, 0);
       if (totalSplitHours <= 0) throw new Error('Choose start and end times for every selected property.');
       if (hasUnsavedEdits) {
-        await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
+        await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, propertyOverrides, tasks: reviewData?.tasks ?? [] });
       }
       const nextOrderIndex = rows.reduce((latest, row) => Math.max(latest, Number(row.assignment.order ?? 0)), 0) + 1;
       await insertSplitAssignments({
@@ -1001,6 +1021,7 @@ export function OpenTaskDayReviewPanel({
       setStartOverrides({});
       setEndOverrides({});
       setTaskOverrides({});
+      setPropertyOverrides({});
       setSplitOpen(false);
       setSplitTaskKey('');
       setSplitPropertyIds([]);
@@ -1034,13 +1055,14 @@ export function OpenTaskDayReviewPanel({
   });
   const saveAndApproveMutation = useMutation({
     mutationFn: async () => {
-      await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
+      await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, propertyOverrides, tasks: reviewData?.tasks ?? [] });
       await approveReviewedDay({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentIds: assignmentIdsToApprove });
     },
     onSuccess: async () => {
       setStartOverrides({});
       setEndOverrides({});
       setTaskOverrides({});
+      setPropertyOverrides({});
       await Promise.all([
         reviewQuery.refetch(),
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
@@ -1061,6 +1083,15 @@ export function OpenTaskDayReviewPanel({
       return;
     }
     setTaskOverrides((current) => ({ ...current, [assignmentId]: taskId }));
+  };
+
+  const handlePropertyChange = (assignmentId: string, propertyId: string) => {
+    if (isApproved || submittedAssignmentIds.has(assignmentId)) return;
+    if (!isUuid(propertyId)) {
+      toast.error('Invalid property ID. Please reselect a property.');
+      return;
+    }
+    setPropertyOverrides((current) => ({ ...current, [assignmentId]: propertyId }));
   };
 
   const handleStartChange = (assignmentId: string, startTime: string) => {
@@ -1498,10 +1529,12 @@ export function OpenTaskDayReviewPanel({
                         <DayCloseOutReviewRows
                           rows={group.rows}
                           tasks={reviewData.tasks}
+                          properties={propertyOptions}
                           disabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending}
                           readOnlyAssignmentIds={submittedAssignmentIds}
                           showScheduledHours
                           onTaskChange={handleTaskChange}
+                          onPropertyChange={handlePropertyChange}
                           onStartChange={handleStartChange}
                           onEndChange={handleEndChange}
                           onDelete={handleDeleteAssignment}
