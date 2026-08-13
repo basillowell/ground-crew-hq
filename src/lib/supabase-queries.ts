@@ -1365,7 +1365,7 @@ function toTask(row: DbTask): Task {
 }
 
 const TASK_SELECT_COLUMNS =
-  'id, org_id, property_id, name, description, category, status, priority, estimated_hours, color, icon, is_unpaid, created_at';
+  'id, org_id, property_id, name, description, category, status, priority, estimated_hours, color, is_unpaid, created_at';
 
 type FindOrCreateOrgTaskOptions = {
   estimatedHours?: number | null;
