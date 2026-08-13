@@ -167,10 +167,17 @@ function getTaskIsUnpaid(assignment: Assignment, tasks: Task[]) {
   return Boolean(task?.isUnpaid ?? task?.is_unpaid);
 }
 
+function getAssignmentApprovedAt(assignment: Assignment) {
+  const assignmentRecord = assignment as Assignment & Record<string, unknown>;
+  const approvedAt = assignmentRecord.approvedAt ?? assignmentRecord.approved_at;
+  return typeof approvedAt === 'string' && approvedAt.trim() ? approvedAt : null;
+}
+
 export function DayCloseOutReviewRows({
   rows,
   tasks,
   disabled = false,
+  readOnlyAssignmentIds,
   showScheduledHours = false,
   onTaskChange,
   onStartChange,
@@ -188,6 +195,7 @@ export function DayCloseOutReviewRows({
   rows: ChainedAssignmentRow[];
   tasks: Task[];
   disabled?: boolean;
+  readOnlyAssignmentIds?: ReadonlySet<string>;
   showScheduledHours?: boolean;
   onTaskChange?: (assignmentId: string, taskId: string) => void;
   onStartChange?: (assignmentId: string, startTime: string) => void;
@@ -286,6 +294,8 @@ export function DayCloseOutReviewRows({
           const status = normalizeStatus(row.assignment.status);
           const isDeleting = deletingAssignmentId === assignmentId;
           const isUnpaid = getTaskIsUnpaid(row.assignment, tasks);
+          const isSubmittedToPayroll = Boolean(getAssignmentApprovedAt(row.assignment) || readOnlyAssignmentIds?.has(assignmentId));
+          const isRowReadOnly = disabled || isSubmittedToPayroll;
           return (
             <Fragment key={assignmentId}>
             <div
@@ -298,7 +308,7 @@ export function DayCloseOutReviewRows({
                     <select
                       value={row.assignment.taskId ?? ''}
                       onChange={(event) => onTaskChange(assignmentId, event.target.value)}
-                      disabled={disabled}
+                      disabled={isRowReadOnly}
                       className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <option value="">General assignment</option>
@@ -330,6 +340,11 @@ export function DayCloseOutReviewRows({
                       Unpaid
                     </Badge>
                   ) : null}
+                  {isSubmittedToPayroll ? (
+                    <Badge variant="complete" className="text-[10px]">
+                      Submitted to payroll &mdash; review only
+                    </Badge>
+                  ) : null}
                 </div>
               </div>
               {showScheduledHours ? (
@@ -344,7 +359,7 @@ export function DayCloseOutReviewRows({
                   <TimeSelect
                     value={row.start}
                     onChange={(value) => onStartChange(assignmentId, value)}
-                    className={disabled ? 'pointer-events-none opacity-70' : ''}
+                    disabled={isRowReadOnly}
                   />
                 ) : (
                   <p className="font-mono text-sm text-text-primary">{row.start}</p>
@@ -355,7 +370,7 @@ export function DayCloseOutReviewRows({
                 <TimeSelect
                   value={row.end}
                   onChange={(value) => onEndChange(assignmentId, value)}
-                  className={disabled ? 'pointer-events-none opacity-70' : ''}
+                  disabled={isRowReadOnly}
                 />
               </label>
               <div className="flex items-center justify-between gap-2 sm:justify-end">
@@ -370,7 +385,7 @@ export function DayCloseOutReviewRows({
                     size="icon"
                     className="h-10 w-10 shrink-0 text-status-warning hover:bg-status-warning/10 hover:text-status-warning"
                     onClick={() => onDelete(assignmentId)}
-                    disabled={deleteDisabled || isDeleting}
+                    disabled={deleteDisabled || isDeleting || isSubmittedToPayroll}
                     aria-label={`Delete ${getTaskName(row.assignment, tasks)}`}
                     title="Delete assignment"
                   >

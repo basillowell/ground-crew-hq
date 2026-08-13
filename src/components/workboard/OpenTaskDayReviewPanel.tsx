@@ -230,6 +230,10 @@ function getAssignmentIsUnpaid(assignment: Assignment, tasks: Task[]) {
   return getTaskIsUnpaid(tasks.find((task) => task.id === assignment.taskId));
 }
 
+function getAssignmentApprovedAt(assignment: Assignment & { approvedAt?: string | null; approved_at?: string | null }) {
+  return assignment.approvedAt ?? assignment.approved_at ?? null;
+}
+
 function normalizeTaskMatchKey(name: string, category: string) {
   return `${name.trim().toLowerCase()}::${category.trim().toLowerCase()}`;
 }
@@ -747,6 +751,7 @@ async function saveReviewedTimes({
 }) {
   for (const row of rows) {
     if (!row.assignment.id) continue;
+    if (getAssignmentApprovedAt(row.assignment)) continue;
     const startIso = row.start ? wallClockToStoredIso(date, row.start, timezone) : null;
     const endIso = row.end ? wallClockToStoredIso(date, row.end, timezone) : null;
     const payload: Record<string, unknown> = {
@@ -987,8 +992,13 @@ export function OpenTaskDayReviewPanel({
   const totalActual = Math.max(0, totalLogged - totalUnpaid);
   const paidAssignmentCount = rows.filter((row) => !getAssignmentIsUnpaid(row.assignment, reviewTasks)).length;
   const assignmentIds = rows.map((row) => row.assignment.id).filter((id): id is string => Boolean(id));
-  const approvedRows = (reviewData?.assignments ?? []).filter((assignment) => assignment.approvedBy || assignment.approvedAt);
-  const isApproved = approvedRows.length > 0;
+  const submittedAssignmentIds = useMemo(
+    () => new Set((reviewData?.assignments ?? []).filter((assignment) => getAssignmentApprovedAt(assignment)).map((assignment) => assignment.id).filter((id): id is string => Boolean(id))),
+    [reviewData?.assignments],
+  );
+  const assignmentIdsToApprove = assignmentIds.filter((assignmentId) => !submittedAssignmentIds.has(assignmentId));
+  const approvedRows = (reviewData?.assignments ?? []).filter((assignment) => assignment.approvedBy || getAssignmentApprovedAt(assignment));
+  const isApproved = assignmentIds.length > 0 && assignmentIdsToApprove.length === 0;
   const firstApproval = approvedRows[0] ?? null;
   const approver = firstApproval?.approvedBy ? reviewData?.employees.find((row) => row.id === firstApproval.approvedBy) : null;
   const hasUnsavedEdits = Object.keys(startOverrides).length > 0 || Object.keys(endOverrides).length > 0 || Object.keys(taskOverrides).length > 0;
@@ -1162,7 +1172,7 @@ export function OpenTaskDayReviewPanel({
     },
   });
   const approveMutation = useMutation({
-    mutationFn: () => approveReviewedDay({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentIds }),
+    mutationFn: () => approveReviewedDay({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentIds: assignmentIdsToApprove }),
     onSuccess: async () => {
       await Promise.all([
         reviewQuery.refetch(),
@@ -1179,7 +1189,7 @@ export function OpenTaskDayReviewPanel({
   const saveAndApproveMutation = useMutation({
     mutationFn: async () => {
       await saveReviewedTimes({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, rows, timezone: operationalTimezone, taskOverrides, tasks: reviewData?.tasks ?? [] });
-      await approveReviewedDay({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentIds });
+      await approveReviewedDay({ orgId: queryOrgId, employeeId: validEmployeeId, date: validDate, assignmentIds: assignmentIdsToApprove });
     },
     onSuccess: async () => {
       setStartOverrides({});
@@ -1199,7 +1209,7 @@ export function OpenTaskDayReviewPanel({
   });
 
   const handleTaskChange = (assignmentId: string, taskId: string) => {
-    if (isApproved) return;
+    if (isApproved || submittedAssignmentIds.has(assignmentId)) return;
     if (taskId && !isUuid(taskId)) {
       toast.error('Invalid task ID. Please reselect a task.');
       return;
@@ -1208,12 +1218,12 @@ export function OpenTaskDayReviewPanel({
   };
 
   const handleStartChange = (assignmentId: string, startTime: string) => {
-    if (isApproved) return;
+    if (isApproved || submittedAssignmentIds.has(assignmentId)) return;
     setStartOverrides((current) => ({ ...current, [assignmentId]: startTime }));
   };
 
   const handleEndChange = (assignmentId: string, endTime: string) => {
-    if (isApproved) return;
+    if (isApproved || submittedAssignmentIds.has(assignmentId)) return;
     setEndOverrides((current) => ({ ...current, [assignmentId]: endTime }));
   };
 
@@ -1282,6 +1292,7 @@ export function OpenTaskDayReviewPanel({
 
   const handleDeleteAssignment = (assignmentId: string) => {
     if (deleteMutation.isPending || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending) return;
+    if (submittedAssignmentIds.has(assignmentId)) return;
     const row = rows.find((item) => item.assignment.id === assignmentId);
     const taskLabel = row?.assignment.title || reviewData?.tasks.find((task) => task.id === row?.assignment.taskId)?.name || 'this assignment';
     const confirmed = window.confirm(`Remove ${taskLabel} from this day review? This soft-deletes the assignment and removes it from Open Tasks.`);
@@ -1314,22 +1325,22 @@ export function OpenTaskDayReviewPanel({
       toast.info('Save reviewed times before approving the day.');
       return;
     }
-    if (assignmentIds.length === 0) {
+    if (assignmentIdsToApprove.length === 0) {
       toast.info('No assignments are available to approve.');
       return;
     }
-    const confirmed = window.confirm(`Approve ${assignmentIds.length} assignment${assignmentIds.length === 1 ? '' : 's'} for ${formatEmployeeName(employee)} on ${formatDisplayDate(validDate)}?`);
+    const confirmed = window.confirm(`Approve ${assignmentIdsToApprove.length} assignment${assignmentIdsToApprove.length === 1 ? '' : 's'} for ${formatEmployeeName(employee)} on ${formatDisplayDate(validDate)}?`);
     if (!confirmed) return;
     approveMutation.mutate();
   };
 
   const handleSaveAndApprove = () => {
     if (isApproved || saveAndApproveMutation.isPending || approveMutation.isPending || saveMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending) return;
-    if (assignmentIds.length === 0) {
+    if (assignmentIdsToApprove.length === 0) {
       toast.info('No assignments are available to approve.');
       return;
     }
-    const confirmed = window.confirm(`Save reviewed times and approve ${assignmentIds.length} assignment${assignmentIds.length === 1 ? '' : 's'} for ${formatEmployeeName(employee)} on ${formatDisplayDate(validDate)}?`);
+    const confirmed = window.confirm(`Save reviewed times and approve ${assignmentIdsToApprove.length} assignment${assignmentIdsToApprove.length === 1 ? '' : 's'} for ${formatEmployeeName(employee)} on ${formatDisplayDate(validDate)}?`);
     if (!confirmed) return;
     saveAndApproveMutation.mutate();
   };
@@ -1642,6 +1653,7 @@ export function OpenTaskDayReviewPanel({
                           rows={group.rows}
                           tasks={reviewData.tasks}
                           disabled={isApproved || saveMutation.isPending || saveAndApproveMutation.isPending || approveMutation.isPending || deleteMutation.isPending || insertBreakMutation.isPending || insertTaskMutation.isPending || splitAcrossPropertiesMutation.isPending}
+                          readOnlyAssignmentIds={submittedAssignmentIds}
                           showScheduledHours
                           onTaskChange={handleTaskChange}
                           onStartChange={handleStartChange}

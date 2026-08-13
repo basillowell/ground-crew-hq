@@ -30,10 +30,12 @@ export function TimeSelect({
   value,
   onChange,
   className = '',
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  disabled?: boolean;
 }) {
   const parts = parseTimeSelectValue(value);
   const updatePart = (next: Partial<typeof parts>) => {
@@ -46,7 +48,8 @@ export function TimeSelect({
       <select
         value={parts.hour}
         onChange={(event) => updatePart({ hour: event.target.value })}
-        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+        disabled={disabled}
+        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
         aria-label="Hour"
       >
         {TIME_HOURS.map((hour) => (
@@ -56,7 +59,8 @@ export function TimeSelect({
       <select
         value={parts.minute}
         onChange={(event) => updatePart({ minute: event.target.value })}
-        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+        disabled={disabled}
+        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
         aria-label="Minute"
       >
         {TIME_MINUTES.map((minute) => (
@@ -66,7 +70,8 @@ export function TimeSelect({
       <select
         value={parts.period}
         onChange={(event) => updatePart({ period: event.target.value })}
-        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+        disabled={disabled}
+        className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
         aria-label="AM or PM"
       >
         <option value="AM">AM</option>
