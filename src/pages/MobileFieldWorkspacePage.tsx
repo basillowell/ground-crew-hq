@@ -15,6 +15,7 @@ import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations
 import { createEvents, type EventAttributes } from 'ics';
 import { Clock3, Coffee, Loader2, LogIn, LogOut, MapPin, MoreHorizontal, Users, WifiOff } from 'lucide-react';
 import { useEmployees, useProperties } from '@/lib/supabase-queries';
+import { PAYROLL_SUBMITTED_LOCK_MESSAGE, getAssignmentApprovedAt } from '@/lib/assignments';
 import { PageHeader } from '@/components/shared';
 import { FieldPhotoCapture } from '@/components/field/FieldPhotoCapture';
 import { AssignmentSignature } from '@/components/field/AssignmentSignature';
@@ -53,6 +54,7 @@ type FieldAssignment = {
   actualHours: number | null;
   startTime: string | null;
   completedAt: string | null;
+  approvedAt?: string | null;
   actualStartAt?: string | null;
   actualCompletedAt?: string | null;
   employeeId?: string;
@@ -501,11 +503,18 @@ export default function MobileFieldWorkspacePage() {
     for (const item of items) {
       let ok = false;
       if (item.type === 'assignment_status') {
+        const queuedAssignment = assignments.find((assignment) => assignment.id === item.assignmentId);
+        if (getAssignmentApprovedAt(queuedAssignment)) {
+          persisted = persisted.filter((entry) => entry.queueId !== item.queueId);
+          saveSyncQueue(persisted);
+          continue;
+        }
         const { error } = await supabase
           .from('assignments')
           .update(item.payload)
           .eq('id', item.assignmentId)
-          .eq('org_id', orgId);
+          .eq('org_id', orgId)
+          .is('approved_at', null);
         ok = !error;
       } else if (item.type === 'clock_event') {
         // Idempotent: replaying the same client id upserts to the one row
@@ -534,7 +543,7 @@ export default function MobileFieldWorkspacePage() {
       setIsOfflineData(false);
       setOfflineDataMessage(null);
     }
-  }, [employeeId, loadSyncQueue, orgId, queryClient, saveSyncQueue]);
+  }, [assignments, employeeId, loadSyncQueue, orgId, queryClient, saveSyncQueue]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -581,7 +590,7 @@ export default function MobileFieldWorkspacePage() {
         .limit(1),
       supabase
         .from('assignments')
-        .select('id, property_id, employee_id, task_id, task_work_order_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at, actual_start_at, actual_completed_at')
+        .select('id, property_id, employee_id, task_id, task_work_order_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at, approved_at, actual_start_at, actual_completed_at')
         .eq('org_id', orgId)
         .eq('employee_id', employeeId)
         .eq('date', boardDate)
@@ -664,6 +673,7 @@ export default function MobileFieldWorkspacePage() {
         actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
         startTime: row.start_time ? String(row.start_time).slice(0, 5) : null,
         completedAt: row.completed_at ? String(row.completed_at) : null,
+        approvedAt: row.approved_at ? String(row.approved_at) : null,
         actualStartAt: row.actual_start_at ? String(row.actual_start_at) : null,
         actualCompletedAt: row.actual_completed_at ? String(row.actual_completed_at) : null,
       };
@@ -770,7 +780,7 @@ export default function MobileFieldWorkspacePage() {
       .eq('date', boardDate);
     const teammateAssignmentsQuery = supabase
       .from('assignments')
-      .select('id, employee_id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at')
+      .select('id, employee_id, task_id, title, location, notes, status, order_index, estimated_hours, actual_hours, start_time, completed_at, approved_at')
       .eq('org_id', orgId)
       .eq('date', boardDate)
       .eq('is_published', true)
@@ -844,6 +854,7 @@ export default function MobileFieldWorkspacePage() {
         actualHours: row.actual_hours == null ? null : Number(row.actual_hours),
         startTime: row.start_time ? String(row.start_time).slice(0, 5) : null,
         completedAt: row.completed_at ? String(row.completed_at) : null,
+        approvedAt: row.approved_at ? String(row.approved_at) : null,
       });
       groupedTeammateTasks.set(teammateId, list);
     });
@@ -943,6 +954,11 @@ export default function MobileFieldWorkspacePage() {
     actualHours?: number,
   ) => {
     if (!supabase) return;
+    if (getAssignmentApprovedAt(assignment)) {
+      toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+      return;
+    }
+    const previous = { ...assignment };
     const nextCompletedAt = nextStatus === 'done' ? new Date().toISOString() : null;
     const nextActualHours = nextStatus === 'done' ? actualHours ?? assignment.estimatedHours : assignment.actualHours;
 
@@ -975,11 +991,14 @@ export default function MobileFieldWorkspacePage() {
       return;
     }
 
-    const { error: updateError } = await supabase
+    const { data: updatedAssignment, error: updateError } = await supabase
       .from('assignments')
       .update(payload)
       .eq('id', assignment.id)
-      .eq('org_id', orgId);
+      .eq('org_id', orgId)
+      .is('approved_at', null)
+      .select('id')
+      .maybeSingle();
     setSaving(assignment.id, false);
 
     if (updateError) {
@@ -992,6 +1011,11 @@ export default function MobileFieldWorkspacePage() {
       setOfflineDataMessage(null);
       return;
     }
+    if (!updatedAssignment) {
+      setAssignments((current) => current.map((item) => (item.id === previous.id ? previous : item)));
+      toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+      return;
+    }
 
     if (nextStatus === 'done') {
       toast.success(`Task completed: ${assignment.title}`);
@@ -1001,6 +1025,10 @@ export default function MobileFieldWorkspacePage() {
   };
 
   const completeTaskWithHours = async (assignment: FieldAssignment) => {
+    if (getAssignmentApprovedAt(assignment)) {
+      toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+      return;
+    }
     const assignmentId = assignment.id;
     const rawValue = actualHoursDraft[assignmentId] ?? '0';
     const parsed = Number(rawValue);
@@ -1429,6 +1457,10 @@ export default function MobileFieldWorkspacePage() {
   const handleMyTaskStatusAction = useCallback(
     async (assignment: FieldAssignment, action: 'start' | 'complete') => {
       if (!supabase || !orgId || !employeeId || !assignment.id) return;
+      if (getAssignmentApprovedAt(assignment)) {
+        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+        return;
+      }
       const propertyIdRaw = shift?.propertyId ?? currentUser?.propertyId ?? null;
       const actingEmployeeId = employee?.id ?? assignment.employeeId ?? employeeId;
       if (!isUuid(propertyIdRaw) || !isUuid(actingEmployeeId)) {
@@ -1469,15 +1501,24 @@ export default function MobileFieldWorkspacePage() {
 
       const assignmentPayload: Record<string, unknown> = { status: 'in_progress', actual_start_at: nowIso };
 
-      const { error: assignmentError } = await supabase
+      const { data: updatedAssignment, error: assignmentError } = await supabase
         .from('assignments')
         .update(assignmentPayload)
         .eq('id', assignment.id)
-        .eq('org_id', orgId);
+        .eq('org_id', orgId)
+        .is('approved_at', null)
+        .select('id')
+        .maybeSingle();
       if (assignmentError) {
         setAssignments((current) => current.map((row) => (row.id === previous.id ? previous : row)));
         setSavingIds((current) => ({ ...current, [assignment.id]: false }));
         toast.error(`Start failed: ${assignmentError.message}`);
+        return;
+      }
+      if (!updatedAssignment) {
+        setAssignments((current) => current.map((row) => (row.id === previous.id ? previous : row)));
+        setSavingIds((current) => ({ ...current, [assignment.id]: false }));
+        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
         return;
       }
 
@@ -1497,7 +1538,8 @@ export default function MobileFieldWorkspacePage() {
             actual_hours: previous.actualHours,
           })
           .eq('id', assignment.id)
-          .eq('org_id', orgId);
+          .eq('org_id', orgId)
+          .is('approved_at', null);
         if (rollbackError) {
           toast.error(`Assignment rollback failed: ${rollbackError.message}`);
         }
@@ -1682,13 +1724,20 @@ export default function MobileFieldWorkspacePage() {
               ? <p className="text-sm text-text-muted">{t.noTasks}.</p>
               : assignments
                   .sort((a, b) => a.orderIndex - b.orderIndex)
-                  .map((assignment) => (
+                  .map((assignment) => {
+                    const isSubmittedToPayroll = Boolean(getAssignmentApprovedAt(assignment));
+                    return (
                     <div key={assignment.id} className="rounded-xl border border-surface-border bg-surface-elevated/30 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">{assignment.title}</span>
                         {assignment.taskWorkOrderId ? (
                           <Badge variant="active" className="shrink-0 px-1.5 py-0.5 text-[10px]">
                             Work Order
+                          </Badge>
+                        ) : null}
+                        {isSubmittedToPayroll ? (
+                          <Badge variant="complete" className="shrink-0 px-1.5 py-0.5 text-[10px]">
+                            Submitted to payroll &mdash; review only
                           </Badge>
                         ) : null}
                         <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{assignment.location || 'Area'}</span>
@@ -1713,7 +1762,8 @@ export default function MobileFieldWorkspacePage() {
                           <button
                             type="button"
                             className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-lg border border-surface-border px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-50"
-                            disabled={Boolean(savingIds[assignment.id])}
+                            disabled={Boolean(savingIds[assignment.id]) || isSubmittedToPayroll}
+                            title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : undefined}
                             onClick={() => void handleMyTaskStatusAction(assignment, displayStatus(assignment.status) === 'planned' ? 'start' : 'complete')}
                           >
                             {savingIds[assignment.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -1721,7 +1771,7 @@ export default function MobileFieldWorkspacePage() {
                           </button>
                         )}
                       </div>
-                      {activeDonePromptId === assignment.id ? (
+                      {activeDonePromptId === assignment.id && !isSubmittedToPayroll ? (
                         <div className="mt-3 rounded-xl border border-surface-border bg-surface-card p-3">
                           <p className="text-sm font-semibold text-text-primary">Confirm actual hours</p>
                           <p className="mt-1 text-xs text-text-muted">Adjust the total before marking this task done.</p>
@@ -1792,7 +1842,8 @@ export default function MobileFieldWorkspacePage() {
                         </div>
                       ) : null}
                     </div>
-                  ))}
+                  );
+                })}
         </div>
       </div>
         </>
@@ -1846,6 +1897,11 @@ export default function MobileFieldWorkspacePage() {
                         teammate.tasks.map((task) => (
                           <div key={task.id} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-surface-border px-3">
                             <span className="truncate text-sm font-medium text-text-secondary">{task.title}</span>
+                            {getAssignmentApprovedAt(task) ? (
+                              <Badge variant="complete" className="shrink-0 px-1.5 py-0.5 text-[10px]">
+                                Submitted to payroll
+                              </Badge>
+                            ) : null}
                             <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{task.location || 'Area'}</span>
                             <span className="shrink-0 text-xs text-text-muted">{task.estimatedHours.toFixed(1)}h</span>
                             <Badge variant={statusBadgeVariant(task.status)} className="shrink-0 px-1.5 py-0.5 text-[10px]">{statusBadgeLabel(task.status)}</Badge>
