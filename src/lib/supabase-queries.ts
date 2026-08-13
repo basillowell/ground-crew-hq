@@ -621,6 +621,8 @@ type DbAssignment = {
   completed_at?: string | null;
   actual_start_at?: string | null;
   actual_completed_at?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
   start_time?: string | null;
   title?: string | null;
   equipment_unit_id?: string | null;
@@ -1300,9 +1302,13 @@ function toAssignment(row: DbAssignment): Assignment {
     actualStartAt: row.actual_start_at ?? null,
     actualCompletedAt: row.actual_completed_at ?? null,
     completedAt: row.completed_at ?? null,
+    approvedBy: row.approved_by ?? null,
+    approvedAt: row.approved_at ?? null,
     actual_start_at: row.actual_start_at ?? null,
     actual_completed_at: row.actual_completed_at ?? null,
     completed_at: row.completed_at ?? null,
+    approved_by: row.approved_by ?? null,
+    approved_at: row.approved_at ?? null,
     status: (row.status as Assignment['status']) ?? 'planned',
   };
 }
@@ -1320,6 +1326,8 @@ const ASSIGNMENTS_SELECT_COLUMNS =
   order_index,
   actual_start_at,
   actual_completed_at,
+  approved_by,
+  approved_at,
   title,
   notes,
   equipment_unit_id,

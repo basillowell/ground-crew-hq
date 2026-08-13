@@ -6,6 +6,7 @@ import { AlertTriangle, CircleAlert, Pencil, X } from 'lucide-react';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { formatTime } from '@/utils/formatTime';
+import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { wallClockToStoredIso } from '@/lib/timeWorkflow';
 
 interface TaskBlockProps {
@@ -93,6 +94,7 @@ export function TaskBlock({
   }, [equipment?.lastService, equipmentOverdueThresholdDays]);
   const isEquipmentDoubleBooked = assignment.id ? Boolean(doubleBookedAssignmentIds?.has(assignment.id)) : false;
   const isSelected = assignment.id ? Boolean(selectedAssignmentIds?.has(assignment.id)) : false;
+  const isSubmittedToPayroll = Boolean(getAssignmentApprovedAt(assignment));
   const canSelect = Boolean(assignment.id && onToggleSelect);
   const status = normalizeStatus(assignment.status);
   const assignmentRecord = assignment as Assignment & Record<string, unknown>;
@@ -173,20 +175,21 @@ export function TaskBlock({
   return (
     <div
       className={`grid min-h-[58px] grid-cols-[auto_1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)} ${isPublished ? 'border-status-active/20 shadow-[inset_3px_0_0_oklch(var(--status-active))]' : 'border-dashed border-status-pending/60 bg-status-pending/10 shadow-[inset_3px_0_0_oklch(var(--status-pending))]'} ${isSelected ? 'ring-1 ring-primary/40 bg-primary/5' : ''}`}
-      draggable={Boolean(draggable)}
-      onDragStart={draggable ? onDragStart : undefined}
-      onDragEnter={draggable ? onDragEnter : undefined}
-      onDragOver={draggable ? (event) => event.preventDefault() : undefined}
-      onDrop={draggable ? onDrop : undefined}
+      draggable={Boolean(draggable && !isSubmittedToPayroll)}
+      onDragStart={draggable && !isSubmittedToPayroll ? onDragStart : undefined}
+      onDragEnter={draggable && !isSubmittedToPayroll ? onDragEnter : undefined}
+      onDragOver={draggable && !isSubmittedToPayroll ? (event) => event.preventDefault() : undefined}
+      onDrop={draggable && !isSubmittedToPayroll ? onDrop : undefined}
     >
       {canSelect ? (
         <input
           type="checkbox"
           aria-label={`Select ${task.name}`}
           checked={isSelected}
-          onChange={() => assignment.id && onToggleSelect?.(assignment.id)}
+          onChange={() => assignment.id && !isSubmittedToPayroll && onToggleSelect?.(assignment.id)}
           onClick={(event) => event.stopPropagation()}
-          className="mt-1 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary"
+          disabled={isSubmittedToPayroll}
+          className="mt-1 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary disabled:cursor-not-allowed disabled:opacity-50"
         />
       ) : (
         <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -197,6 +200,11 @@ export function TaskBlock({
             {task.name}
           </span>
           <Badge variant="outline" className="shrink-0 text-[10px]">{propertyLabel}</Badge>
+          {isSubmittedToPayroll ? (
+            <Badge variant="complete" className="shrink-0 text-[10px]">
+              Submitted to payroll
+            </Badge>
+          ) : null}
           <Badge
             variant="outline"
             className={
@@ -257,12 +265,30 @@ export function TaskBlock({
 
       <div className="flex items-start gap-1 pt-0.5">
         {onEdit ? (
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full p-2" onClick={onEdit} aria-label="Edit task">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-full p-2"
+            onClick={onEdit}
+            disabled={isSubmittedToPayroll}
+            aria-label="Edit task"
+            title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Edit task'}
+          >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         ) : null}
         {onRemove ? (
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full p-2" onClick={onRemove} aria-label="Remove task">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-full p-2"
+            onClick={onRemove}
+            disabled={isSubmittedToPayroll}
+            aria-label="Remove task"
+            title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Remove task'}
+          >
             <X className="h-3.5 w-3.5" />
           </Button>
         ) : null}

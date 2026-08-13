@@ -149,9 +149,13 @@ export interface Assignment {
   actualStartAt?: string | null;
   actualCompletedAt?: string | null;
   completedAt?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
   actual_start_at?: string | null;
   actual_completed_at?: string | null;
   completed_at?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
   actual_hours?: number | null;
   status?: 'planned' | 'in-progress' | 'completed' | 'done';
 }

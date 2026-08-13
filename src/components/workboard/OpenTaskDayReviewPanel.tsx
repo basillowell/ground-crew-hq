@@ -19,6 +19,7 @@ import type { Assignment, Employee, Task } from '@/data/seedData';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { useProperties } from '@/lib/supabase-queries';
 import { createClient } from '@/lib/supabase';
+import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { getOperationalTimezone, wallClockToStoredIso } from '@/lib/timeWorkflow';
 
 const supabase = createClient();
@@ -228,10 +229,6 @@ function getTaskIsUnpaid(task?: Task | null) {
 
 function getAssignmentIsUnpaid(assignment: Assignment, tasks: Task[]) {
   return getTaskIsUnpaid(tasks.find((task) => task.id === assignment.taskId));
-}
-
-function getAssignmentApprovedAt(assignment: Assignment & { approvedAt?: string | null; approved_at?: string | null }) {
-  return assignment.approvedAt ?? assignment.approved_at ?? null;
 }
 
 function normalizeTaskMatchKey(name: string, category: string) {

@@ -7,6 +7,7 @@ import { TaskBlock } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Loader2, Pencil, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Employee, Assignment, Task, Property } from '@/data/seedData';
+import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { storedIsoToWallClock, storedIsoToWallClockLabel } from '@/lib/timeWorkflow';
 
 type EmployeeBreakChip = {
@@ -319,6 +320,7 @@ export function EmployeeRow({
                 const estimatedHours = getEstimatedHours(assignment);
                 const actualHours = getActualHours(assignment, actualStartSource, actualCompletedSource);
                 const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
+                const isSubmittedToPayroll = Boolean(getAssignmentApprovedAt(assignment));
                 return (
                   <div key={assignment.id} className="min-h-[44px] space-y-1">
                     <TaskBlock
@@ -346,9 +348,9 @@ export function EmployeeRow({
                       onToggleSelect={onToggleSelect}
                       operationalTimezone={operationalTimezone}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
-                      draggable
-                      onDragStart={onTaskDragStart ? () => onTaskDragStart(employee.id, assignment.id ?? '') : undefined}
-                      onDrop={onTaskDropOnTask ? () => onTaskDropOnTask(employee.id, assignment.id ?? '') : undefined}
+                      draggable={!isSubmittedToPayroll}
+                      onDragStart={onTaskDragStart && !isSubmittedToPayroll ? () => onTaskDragStart(employee.id, assignment.id ?? '') : undefined}
+                      onDrop={onTaskDropOnTask && !isSubmittedToPayroll ? () => onTaskDropOnTask(employee.id, assignment.id ?? '') : undefined}
                       onEdit={onEditAssignment ? () => onEditAssignment(assignment) : undefined}
                       onRemove={onRemoveAssignment ? () => onRemoveAssignment(assignment.id) : undefined}
                     />
@@ -360,7 +362,8 @@ export function EmployeeRow({
                           size="sm"
                           className="min-h-11 w-full rounded-full px-3 text-sm sm:min-h-8 sm:w-auto sm:px-2 sm:text-[11px]"
                           onClick={() => void onStartAssignment(assignment)}
-                          disabled={savingTimelineAssignmentId === assignment.id}
+                          disabled={savingTimelineAssignmentId === assignment.id || isSubmittedToPayroll}
+                          title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Start task'}
                         >
                           {savingTimelineAssignmentId === assignment.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Play className="mr-1 h-3 w-3" />} Start
                         </Button>
@@ -372,7 +375,8 @@ export function EmployeeRow({
                           size="sm"
                           className="min-h-11 w-full rounded-full px-3 text-sm sm:min-h-8 sm:w-auto sm:px-2 sm:text-[11px]"
                           onClick={() => void onCompleteAssignment(assignment, sortedAssignments)}
-                          disabled={savingTimelineAssignmentId === assignment.id}
+                          disabled={savingTimelineAssignmentId === assignment.id || isSubmittedToPayroll}
+                          title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Complete task'}
                         >
                           {savingTimelineAssignmentId === assignment.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />} Complete
                         </Button>
@@ -398,6 +402,7 @@ export function EmployeeRow({
                           className="h-7 rounded-full px-2 text-[11px]"
                           onClick={(event) => {
                             event.stopPropagation();
+                            if (isSubmittedToPayroll) return;
                             if (editingTimelineAssignmentId === assignment.id) {
                               setEditingTimelineAssignmentId(null);
                               return;
@@ -406,6 +411,8 @@ export function EmployeeRow({
                             setTimelineStartInput(toInputValue(actualStartSource));
                             setTimelineEndInput(toInputValue(actualCompletedSource));
                           }}
+                          disabled={isSubmittedToPayroll}
+                          title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Edit times'}
                         >
                           <Pencil className="mr-1 h-3 w-3" /> Edit times
                         </Button>
@@ -415,11 +422,11 @@ export function EmployeeRow({
                       <div className="relative z-20 mx-2 mb-1 flex flex-wrap items-end gap-2 rounded-lg border bg-muted/20 p-2 pointer-events-auto">
                         <div className="w-40">
                           <span className="text-[10px] text-muted-foreground">Start</span>
-                          <TimeSelect value={timelineStartInput} onChange={setTimelineStartInput} />
+                          <TimeSelect value={timelineStartInput} onChange={setTimelineStartInput} disabled={isSubmittedToPayroll} />
                         </div>
                         <div className="w-40">
                           <span className="text-[10px] text-muted-foreground">Complete</span>
-                          <TimeSelect value={timelineEndInput} onChange={setTimelineEndInput} />
+                          <TimeSelect value={timelineEndInput} onChange={setTimelineEndInput} disabled={isSubmittedToPayroll} />
                         </div>
                         <Button
                           type="button"
@@ -430,7 +437,7 @@ export function EmployeeRow({
                             onSaveAssignmentTimes(assignment, sortedAssignments, timelineStartInput, timelineEndInput);
                             setEditingTimelineAssignmentId(null);
                           }}
-                          disabled={savingTimelineAssignmentId === assignment.id}
+                          disabled={savingTimelineAssignmentId === assignment.id || isSubmittedToPayroll}
                         >
                           <Clock3 className="mr-1 h-3 w-3" /> Save
                         </Button>

@@ -56,6 +56,7 @@ import { createClient } from '@/lib/supabase';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProperties, useRevenueWorkOrders, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { PAYROLL_SUBMITTED_LOCK_MESSAGE, getAssignmentApprovedAt } from '@/lib/assignments';
 import {
   getOperationalTimezone,
   getNowHHMMInTimezone,
@@ -277,6 +278,10 @@ function isAssignmentPublished(assignment: Assignment) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') return value.toLowerCase() === 'true';
   return true;
+}
+
+function isAssignmentSubmittedToPayroll(assignment: Assignment | null | undefined) {
+  return Boolean(getAssignmentApprovedAt(assignment));
 }
 
 function markAssignmentPublishState(
@@ -1263,9 +1268,9 @@ export default function WorkboardContent() {
     return assignmentList.filter((assignment) => assignment.date === boardDate);
   }, [assignmentList, boardDate]);
   useEffect(() => {
-    const visibleAssignmentIds = new Set(dayAssignments.map((assignment) => assignment.id).filter(Boolean));
+    const selectableAssignmentIds = new Set(dayAssignments.filter((assignment) => !isAssignmentSubmittedToPayroll(assignment)).map((assignment) => assignment.id).filter(Boolean));
     setSelectedAssignmentIds((current) => {
-      const next = new Set(Array.from(current).filter((id) => visibleAssignmentIds.has(id)));
+      const next = new Set(Array.from(current).filter((id) => selectableAssignmentIds.has(id)));
       return next.size === current.size ? current : next;
     });
   }, [dayAssignments]);
@@ -1475,6 +1480,11 @@ export default function WorkboardContent() {
 
   const toggleAssignmentSelection = useCallback((assignmentId: string) => {
     if (!assignmentId) return;
+    const assignment = dayAssignments.find((row) => row.id === assignmentId);
+    if (isAssignmentSubmittedToPayroll(assignment)) {
+      toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+      return;
+    }
     setSelectedAssignmentIds((current) => {
       const next = new Set(current);
       if (next.has(assignmentId)) {
@@ -1484,7 +1494,7 @@ export default function WorkboardContent() {
       }
       return next;
     });
-  }, []);
+  }, [dayAssignments]);
 
   const clearAssignmentSelection = useCallback(() => {
     setSelectedAssignmentIds(new Set());
@@ -2149,6 +2159,10 @@ export default function WorkboardContent() {
   const setAssignmentActualHours = useCallback(
     async (assignment: Assignment, hours: number) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      if (isAssignmentSubmittedToPayroll(assignment)) {
+        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+        return;
+      }
       const nextHours = Math.max(0, Number(hours));
       const previousActualHours = Number(assignment.actualHours ?? 0);
 
@@ -2339,6 +2353,10 @@ export default function WorkboardContent() {
   const startAssignmentTimeline = useCallback(
     async (assignment: Assignment) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      if (isAssignmentSubmittedToPayroll(assignment)) {
+        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+        return;
+      }
       setSavingTimelineAssignmentId(assignment.id);
       const nowHHMM = getNowHHMMInTimezone(operationalTimezone);
       const nowIso = wallClockToStoredIso(boardDate, nowHHMM, operationalTimezone);
@@ -2408,6 +2426,10 @@ export default function WorkboardContent() {
   const completeAssignmentTimeline = useCallback(
     async (assignment: Assignment, employeeAssignments: Assignment[]) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return;
+      if (isAssignmentSubmittedToPayroll(assignment)) {
+        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+        return;
+      }
       setSavingTimelineAssignmentId(assignment.id);
       const nowHHMM = getNowHHMMInTimezone(operationalTimezone);
       const nowIso = wallClockToStoredIso(boardDate, nowHHMM, operationalTimezone);
@@ -2527,7 +2549,7 @@ export default function WorkboardContent() {
         return rowOrder > currentOrder && normalizeAssignmentStatus(row.status) === 'planned';
       });
 
-      if (nextTask?.id) {
+      if (nextTask?.id && !isAssignmentSubmittedToPayroll(nextTask)) {
         const nextResult = await withWorkboardMutationTimeout(supabase
           .from('assignments')
           .update({ status: 'in_progress', actual_start_at: nowIso })
@@ -2554,6 +2576,10 @@ export default function WorkboardContent() {
       options?: DayCloseOutSaveOptions,
     ) => {
       if (!supabase || !currentUser?.orgId || !assignment.id) return false;
+      if (isAssignmentSubmittedToPayroll(assignment)) {
+        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+        return false;
+      }
       if (process.env.NODE_ENV === 'development') {
         const now = Date.now();
         const lastRun = timelineSaveGuardRef.current[assignment.id] ?? 0;
@@ -2641,7 +2667,7 @@ export default function WorkboardContent() {
           const rowOrder = getCanonicalActualTimes(row).timelineMeta.orderIndex;
           return rowOrder > currentOrder && normalizeAssignmentStatus(row.status) !== 'done';
         });
-        if (nextTask?.id) {
+        if (nextTask?.id && !isAssignmentSubmittedToPayroll(nextTask)) {
           const nextMeta = getCanonicalActualTimes(nextTask).timelineMeta;
           const nextStartHHMM = nextMeta.actualStartAt
             ? storedIsoToWallClock(nextMeta.actualStartAt, operationalTimezone)
@@ -3218,6 +3244,7 @@ export default function WorkboardContent() {
         })
         .eq('org_id', resolvedOrgId)
         .eq('is_published', false)
+        .is('approved_at', null)
         .gte('date', rangeStart)
         .lte('date', rangeEnd);
       if (effectivePropertyId && effectivePropertyId !== 'all') {
@@ -3923,6 +3950,10 @@ export default function WorkboardContent() {
   }
 
   function openEditAssignmentDialog(assignment: Assignment) {
+    if (isAssignmentSubmittedToPayroll(assignment)) {
+      toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+      return;
+    }
     lastAssignmentModalTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const currentEstimatedHours = getEstimatedHoursForAssignment(assignment);
     setQuickMode(false);
@@ -4048,6 +4079,13 @@ export default function WorkboardContent() {
     if (!isValidAssignmentDate(boardDate)) {
       toast.error('Invalid assignment date.');
       return;
+    }
+    if (editingAssignmentId) {
+      const editingAssignment = dayAssignments.find((assignment) => assignment.id === editingAssignmentId);
+      if (isAssignmentSubmittedToPayroll(editingAssignment)) {
+        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+        return;
+      }
     }
     const resolvedPropertyId = editingAssignmentId
       ? (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : null) ?? assignmentDraft.propertyId ?? null
@@ -4378,9 +4416,16 @@ export default function WorkboardContent() {
       toast.error('Session is reconnecting - please try again in a moment.');
       return;
     }
-    const assignmentIds = Array.from(selectedAssignmentIds).filter(Boolean);
+    const submittedSelectedCount = Array.from(selectedAssignmentIds).filter((assignmentId) => {
+      const assignment = dayAssignments.find((row) => row.id === assignmentId);
+      return isAssignmentSubmittedToPayroll(assignment);
+    }).length;
+    const assignmentIds = Array.from(selectedAssignmentIds).filter((assignmentId) => {
+      const assignment = dayAssignments.find((row) => row.id === assignmentId);
+      return Boolean(assignmentId) && !isAssignmentSubmittedToPayroll(assignment);
+    });
     if (assignmentIds.length === 0) {
-      toast.info('Select at least one assignment.');
+      toast.info(submittedSelectedCount > 0 ? PAYROLL_SUBMITTED_LOCK_MESSAGE : 'Select at least one assignment.');
       return;
     }
 
@@ -4426,6 +4471,10 @@ export default function WorkboardContent() {
     if (!supabase) return;
     const assignmentToRemove = dayAssignments.find((assignment) => assignment.id === assignmentId);
     if (!assignmentToRemove) return;
+    if (isAssignmentSubmittedToPayroll(assignmentToRemove)) {
+      toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+      return;
+    }
     const confirmed = window.confirm('Remove this task assignment?');
     if (!confirmed) return;
 
@@ -4507,6 +4556,11 @@ export default function WorkboardContent() {
 
     const dragged = sourceAssignments[fromIndex];
     if (!dragged?.id) return;
+    const targetAssignment = targetAssignments[toIndex];
+    if (isAssignmentSubmittedToPayroll(dragged) || isAssignmentSubmittedToPayroll(targetAssignment)) {
+      toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+      return;
+    }
     const nextSource = [...sourceAssignments];
     nextSource.splice(fromIndex, 1);
     const nextTarget = [...targetAssignments];
@@ -4574,6 +4628,10 @@ export default function WorkboardContent() {
     const targetAssignments = dayAssignments.filter((assignment) => assignment.employeeId === targetEmployeeId);
     const dragged = sourceAssignments.find((assignment) => assignment.id === draggedAssignmentId);
     if (!dragged?.id) return;
+    if (isAssignmentSubmittedToPayroll(dragged)) {
+      toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+      return;
+    }
     const nextSource = sourceAssignments.filter((assignment) => assignment.id !== draggedAssignmentId);
     const nextTarget = [...targetAssignments, { ...dragged, employeeId: targetEmployeeId }];
 
@@ -5358,6 +5416,7 @@ export default function WorkboardContent() {
                           {empAssignments.map((a) => {
                             const ns = normalizeAssignmentStatus(a.status);
                             const isDraft = !isAssignmentPublished(a);
+                            const isSubmittedToPayroll = isAssignmentSubmittedToPayroll(a);
                             return (
                               <div
                                 key={a.id}
@@ -5370,6 +5429,9 @@ export default function WorkboardContent() {
                                   ) : (
                                     <Badge variant="active" className="shrink-0 text-[10px] uppercase tracking-wide">Published</Badge>
                                   )}
+                                  {isSubmittedToPayroll ? (
+                                    <Badge variant="complete" className="shrink-0 text-[10px]">Submitted to payroll</Badge>
+                                  ) : null}
                                 </span>
                                 <Badge variant={
                                   ns === 'done'
@@ -5699,6 +5761,7 @@ export default function WorkboardContent() {
                               const actualHours = Math.max(0, Number(assignment.actualHours ?? timelineActualHours ?? 0));
                               const actualHoursTone = getActualHoursTone(actualHours, estimatedHours);
                               const statusNormalized = normalizeAssignmentStatus(assignment.status);
+                              const isSubmittedToPayroll = isAssignmentSubmittedToPayroll(assignment);
                               const canStartTask = statusNormalized === 'planned';
                               const timeSummary =
                                 canonicalStartAt && canonicalCompletedAt
@@ -5722,6 +5785,9 @@ export default function WorkboardContent() {
                                         ) : (
                                           <Badge variant="active" className="text-[10px] uppercase tracking-wide">Published</Badge>
                                         )}
+                                        {isSubmittedToPayroll ? (
+                                          <Badge variant="complete" className="text-[10px]">Submitted to payroll</Badge>
+                                        ) : null}
                                       </div>
                                       <p className="text-xs text-muted-foreground">
                                         {formatMinutesAsHoursAndMinutes(assignment.duration)} · {assignment.status}
@@ -5733,8 +5799,9 @@ export default function WorkboardContent() {
                                           type="button"
                                           aria-label="Start task"
                                           onClick={() => void startAssignmentTimeline(assignment)}
-                                          disabled={savingTimelineAssignmentId === assignment.id}
+                                          disabled={savingTimelineAssignmentId === assignment.id || isSubmittedToPayroll}
                                           className="min-h-11 rounded-md border px-2 text-xs font-medium"
+                                          title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Start task'}
                                         >
                                           Start
                                         </button>
@@ -5744,8 +5811,9 @@ export default function WorkboardContent() {
                                           type="button"
                                           aria-label="Complete task"
                                           onClick={() => void completeAssignmentTimeline(assignment, laneOrderedAssignments)}
-                                          disabled={savingTimelineAssignmentId === assignment.id}
+                                          disabled={savingTimelineAssignmentId === assignment.id || isSubmittedToPayroll}
                                           className="min-h-11 rounded-md border px-2 text-xs font-medium"
+                                          title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Complete task'}
                                         >
                                           Complete
                                         </button>
@@ -5754,18 +5822,25 @@ export default function WorkboardContent() {
                                         type="button"
                                         aria-label="Set actual hours"
                                         onClick={() =>
+                                          isSubmittedToPayroll
+                                            ? toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE)
+                                            :
                                           setActualHoursMenuAssignmentId((current) =>
                                             current === assignment.id ? null : assignment.id,
                                           )
                                         }
+                                        disabled={isSubmittedToPayroll}
                                         className="min-h-11 min-w-11 rounded-md border px-2 text-xs font-medium"
+                                        title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Set actual hours'}
                                       >
                                         <Clock className="h-4 w-4" />
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => openEditAssignmentDialog(assignment)}
+                                        disabled={isSubmittedToPayroll}
                                         className="min-h-11 min-w-11 rounded-md border px-2 text-xs font-medium"
+                                        title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Edit assignment'}
                                       >
                                         Edit
                                       </button>
@@ -5776,6 +5851,10 @@ export default function WorkboardContent() {
                                     type="button"
                                     className="mt-1 inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
                                     onClick={() => {
+                                      if (isSubmittedToPayroll) {
+                                        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+                                        return;
+                                      }
                                       if (timelineEditAssignmentId === assignment.id) {
                                         setTimelineEditAssignmentId(null);
                                         return;
@@ -5794,6 +5873,7 @@ export default function WorkboardContent() {
                                       setTimelineEditStart(startInputValue);
                                       setTimelineEditEnd(endInputValue);
                                     }}
+                                    disabled={isSubmittedToPayroll}
                                   >
                                     <Pencil className="h-3 w-3" /> Edit times
                                   </button>
@@ -5805,6 +5885,7 @@ export default function WorkboardContent() {
                                           value={timelineEditStart}
                                           onChange={setTimelineEditStart}
                                           className="ml-1 w-36"
+                                          disabled={isSubmittedToPayroll}
                                         />
                                       </label>
                                       <label className="text-[10px] text-muted-foreground">
@@ -5813,6 +5894,7 @@ export default function WorkboardContent() {
                                           value={timelineEditEnd}
                                           onChange={setTimelineEditEnd}
                                           className="ml-1 w-36"
+                                          disabled={isSubmittedToPayroll}
                                         />
                                       </label>
                                       <button
@@ -5829,7 +5911,7 @@ export default function WorkboardContent() {
                                             setTimelineEditAssignmentId(null);
                                           }
                                         }}
-                                        disabled={savingTimelineAssignmentId === assignment.id}
+                                        disabled={savingTimelineAssignmentId === assignment.id || isSubmittedToPayroll}
                                       >
                                         {savingTimelineAssignmentId === assignment.id ? 'Saving...' : 'Save'}
                                       </button>
@@ -5838,9 +5920,11 @@ export default function WorkboardContent() {
                                   <div
                                     className="mt-2 cursor-pointer rounded-md p-1 hover:bg-muted/40"
                                     onClick={() =>
-                                      setActualHoursMenuAssignmentId((current) =>
-                                        current === assignment.id ? null : assignment.id,
-                                      )
+                                      isSubmittedToPayroll
+                                        ? toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE)
+                                        : setActualHoursMenuAssignmentId((current) =>
+                                            current === assignment.id ? null : assignment.id,
+                                          )
                                     }
                                   >
                                     {actualHours <= 0 ? (
@@ -5898,7 +5982,7 @@ export default function WorkboardContent() {
                                       </div>
                                     )}
                                   </div>
-                                  {actualHoursMenuAssignmentId === assignment.id ? (
+                                  {actualHoursMenuAssignmentId === assignment.id && !isSubmittedToPayroll ? (
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                       {[0.5, 1, 1.5, 2, 3, 4].map((value) => (
                                         <button

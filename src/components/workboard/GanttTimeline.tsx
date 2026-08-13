@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Assignment, Employee, EquipmentUnit, ScheduleEntry, Task } from '@/data/seedData';
+import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { formatTime } from '@/utils/formatTime';
 
 interface GanttTimelineProps {
@@ -65,6 +67,7 @@ type AssignmentBar = {
   leftPct: number;
   widthPct: number;
   status: 'planned' | 'in_progress' | 'done';
+  isSubmittedToPayroll: boolean;
 };
 
 export function GanttTimeline({
@@ -153,6 +156,7 @@ export function GanttTimeline({
                     leftPct,
                     widthPct,
                     status,
+                    isSubmittedToPayroll: Boolean(getAssignmentApprovedAt(assignment)),
                   };
                 });
 
@@ -194,17 +198,24 @@ export function GanttTimeline({
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              className={`absolute top-2 h-[calc(100%-16px)] rounded-md border px-2 text-left text-[11px] font-semibold shadow-sm transition hover:brightness-105 ${tone}`}
+                              className={`absolute top-2 h-[calc(100%-16px)] rounded-md border px-2 text-left text-[11px] font-semibold shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70 ${tone}`}
                               style={{
                                 left: `${bar.leftPct}%`,
                                 width: `${bar.widthPct}%`,
                                 opacity,
                               }}
+                              disabled={bar.isSubmittedToPayroll}
                               onClick={() => onAssignmentClick?.(bar.assignment)}
+                              title={bar.isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Edit assignment'}
                             >
                               <span className="block truncate">
                                 {bar.status === 'done' ? '✓ ' : ''}{bar.taskName}
                               </span>
+                              {bar.isSubmittedToPayroll ? (
+                                <Badge variant="complete" className="mt-1 max-w-full truncate px-1 py-0 text-[9px]">
+                                  Submitted
+                                </Badge>
+                              ) : null}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[280px] text-xs">
@@ -217,6 +228,7 @@ export function GanttTimeline({
                             </p>
                             <p className="text-muted-foreground">Duration: {(bar.durationMinute / 60).toFixed(1)}h</p>
                             <p className="text-muted-foreground">Status: {bar.status === 'in_progress' ? 'In Progress' : bar.status === 'done' ? 'Done' : 'Planned'}</p>
+                            {bar.isSubmittedToPayroll ? <p className="text-status-complete">Submitted to payroll - review only</p> : null}
                             {bar.equipmentName ? <p className="text-muted-foreground">Equipment: {bar.equipmentName}</p> : null}
                             {bar.assignment.area ? <p className="text-muted-foreground">Area: {bar.assignment.area}</p> : null}
                           </TooltipContent>

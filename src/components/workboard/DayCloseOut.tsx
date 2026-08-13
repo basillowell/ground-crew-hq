@@ -7,6 +7,7 @@ import { TimeSelect } from '@/components/TimeSelect';
 import { CardSkeleton } from '@/components/CardSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import type { Assignment, Employee, Task } from '@/data/seedData';
+import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { storedIsoToWallClock } from '@/lib/timeWorkflow';
 
 export type DayCloseOutSaveOptions = {
@@ -165,12 +166,6 @@ function getTaskCategory(assignment: Assignment, tasks: Task[]) {
 function getTaskIsUnpaid(assignment: Assignment, tasks: Task[]) {
   const task = tasks.find((taskItem) => taskItem.id === assignment.taskId);
   return Boolean(task?.isUnpaid ?? task?.is_unpaid);
-}
-
-function getAssignmentApprovedAt(assignment: Assignment) {
-  const assignmentRecord = assignment as Assignment & Record<string, unknown>;
-  const approvedAt = assignmentRecord.approvedAt ?? assignmentRecord.approved_at;
-  return typeof approvedAt === 'string' && approvedAt.trim() ? approvedAt : null;
 }
 
 export function DayCloseOutReviewRows({
