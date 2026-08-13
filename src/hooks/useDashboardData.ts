@@ -247,7 +247,7 @@ export function useDashboardData(params: UseDashboardDataParams) {
           ),
         ),
         withProperty<any>(withOrg<any>(supabase.from('equipment_units').select('*').order('name'))),
-        withProperty<any>(withOrg<any>(supabase.from('tasks').select('*').order('name'))),
+        withOrg<any>(supabase.from('tasks').select('*').order('name')),
         withProperty<any>(withOrg<any>(supabase.from('notes').select('*').order('created_at', { ascending: false }))),
         withProperty<any>(withOrg<any>(supabase.from('clock_events').select('*').order('timestamp', { ascending: false }))),
       ]);

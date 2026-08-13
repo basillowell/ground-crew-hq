@@ -17,7 +17,7 @@ import {
 } from '@/components/workboard/DayCloseOut';
 import type { Assignment, Employee, Task } from '@/data/seedData';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { useProperties } from '@/lib/supabase-queries';
+import { findOrCreateOrgTask, useProperties } from '@/lib/supabase-queries';
 import { createClient } from '@/lib/supabase';
 import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { getOperationalTimezone, wallClockToStoredIso } from '@/lib/timeWorkflow';
@@ -111,10 +111,7 @@ type PropertyAssignmentGroup = {
 
 type SplitTaskOption = {
   key: string;
-  name: string;
-  category: string;
-  estimatedHours: number;
-  taskByPropertyId: Map<string, Task>;
+  task: Task;
 };
 
 type InsertBreakPayload = {
@@ -229,10 +226,6 @@ function getTaskIsUnpaid(task?: Task | null) {
 
 function getAssignmentIsUnpaid(assignment: Assignment, tasks: Task[]) {
   return getTaskIsUnpaid(tasks.find((task) => task.id === assignment.taskId));
-}
-
-function normalizeTaskMatchKey(name: string, category: string) {
-  return `${name.trim().toLowerCase()}::${category.trim().toLowerCase()}`;
 }
 
 function calculateSplitHours(start: string, end: string) {
@@ -393,122 +386,19 @@ async function fetchReviewData(orgId: string, employeeId: string, date: string):
 
 async function ensureBreakTask({
   orgId,
-  propertyId,
   durationHours,
   isUnpaid,
 }: {
   orgId: string;
-  propertyId: string;
   durationHours: number;
   isUnpaid: boolean;
 }): Promise<Task> {
-  const taskSelect = 'id, property_id, name, category, estimated_hours, is_unpaid';
-  const existingResult = await withReviewTimeout(
-    supabase
-      .from('tasks')
-      .select(taskSelect)
-      .eq('org_id', orgId)
-      .eq('property_id', propertyId)
-      .eq('name', 'Lunch Break')
-      .limit(1)
-      .maybeSingle(),
-    'Break task lookup',
-  ) as SupabaseResult<TaskReviewRow>;
-  if (existingResult.error) throw existingResult.error;
-
-  const updatePayload = {
-    category: 'Break',
-    estimated_hours: durationHours,
-    is_unpaid: isUnpaid,
-    status: 'active',
-  };
-  if (existingResult.data) {
-    const updateResult = await withReviewTimeout(
-      supabase
-        .from('tasks')
-        .update(updatePayload)
-        .eq('id', existingResult.data.id)
-        .eq('org_id', orgId)
-        .select(taskSelect)
-        .single(),
-      'Break task update',
-    ) as SupabaseResult<TaskReviewRow>;
-    if (updateResult.error) throw updateResult.error;
-    if (!updateResult.data) throw new Error('Break task could not be loaded after update.');
-    return toTask(updateResult.data);
-  }
-
-  const insertResult = await withReviewTimeout(
-    supabase
-      .from('tasks')
-      .insert({
-        org_id: orgId,
-        property_id: propertyId,
-        name: 'Lunch Break',
-        category: 'Break',
-        estimated_hours: durationHours,
-        is_unpaid: isUnpaid,
-        status: 'active',
-        priority: 5,
-      })
-      .select(taskSelect)
-      .single(),
-    'Break task create',
-  ) as SupabaseResult<TaskReviewRow>;
-  if (insertResult.error) throw insertResult.error;
-  if (!insertResult.data) throw new Error('Break task could not be created.');
-  return toTask(insertResult.data);
-}
-
-async function ensurePropertyTask({
-  orgId,
-  propertyId,
-  taskName,
-  category,
-  estimatedHours,
-}: {
-  orgId: string;
-  propertyId: string;
-  taskName: string;
-  category: string;
-  estimatedHours: number;
-}): Promise<Task> {
-  const taskSelect = 'id, property_id, name, category, estimated_hours, is_unpaid';
-  const existingResult = await withReviewTimeout(
-    supabase
-      .from('tasks')
-      .select(taskSelect)
-      .eq('org_id', orgId)
-      .eq('property_id', propertyId)
-      .eq('name', taskName)
-      .eq('category', category)
-      .limit(1)
-      .maybeSingle(),
-    'Property task lookup',
-  ) as SupabaseResult<TaskReviewRow>;
-  if (existingResult.error) throw existingResult.error;
-  if (existingResult.data) return toTask(existingResult.data);
-
-  const insertResult = await withReviewTimeout(
-    supabase
-      .from('tasks')
-      .insert({
-        org_id: orgId,
-        property_id: propertyId,
-        name: taskName,
-        category,
-        estimated_hours: estimatedHours,
-        is_unpaid: false,
-        status: 'active',
-        priority: 1,
-      })
-      .select(taskSelect)
-      .single(),
-    'Property task create',
-  ) as SupabaseResult<TaskReviewRow>;
-  if (insertResult.error) throw insertResult.error;
-  if (!insertResult.data) throw new Error('Task could not be created for the selected property.');
-  return toTask(insertResult.data);
+  return findOrCreateOrgTask(orgId, 'Lunch Break', 'Break', {
+    estimatedHours: durationHours,
+    isUnpaid,
+    priority: 5,
+    updateExisting: true,
+  });
 }
 
 async function insertBreakAssignment({
@@ -541,7 +431,6 @@ async function insertBreakAssignment({
   const breakEnd = addMinutesToTime(breakStart, breakMinutes);
   const breakTask = await ensureBreakTask({
     orgId,
-    propertyId,
     durationHours,
     isUnpaid,
   });
@@ -611,16 +500,7 @@ async function insertTaskAssignment({
   const nextRow = rows[insertIndex] ?? null;
   const propertyId = nextRow?.assignment.propertyId ?? previousRow?.assignment.propertyId ?? null;
   if (!propertyId || !isUuid(propertyId)) throw new Error('Could not identify the property for this task. Refresh the review and try again.');
-  const propertyTask = task.propertyId === propertyId
-    ? task
-    : await ensurePropertyTask({
-        orgId,
-        propertyId,
-        taskName: task.name,
-        category: task.category ?? 'General',
-        estimatedHours: Number(task.estimatedHours ?? task.estimated_hours ?? 0) || 0,
-      });
-  const taskDurationHours = Number(propertyTask.estimatedHours ?? propertyTask.estimated_hours ?? 0);
+  const taskDurationHours = Number(task.estimatedHours ?? task.estimated_hours ?? 0);
   const durationHours = Number.isFinite(taskDurationHours) ? Math.max(0, taskDurationHours) : 0;
   const durationMinutes = Math.max(0, Math.round(durationHours * 60));
   const start = previousRow?.end || nextRow?.start || normalizeClockTime(shiftStart, '06:00');
@@ -633,9 +513,9 @@ async function insertTaskAssignment({
         org_id: orgId,
         employee_id: employeeId,
         property_id: propertyId,
-        task_id: propertyTask.id,
+        task_id: task.id,
         date,
-        location: propertyTask.category ?? 'General',
+        location: task.category ?? 'General',
         status: 'completed',
         order_index: insertIndex + 1,
         estimated_hours: durationHours,
@@ -643,7 +523,7 @@ async function insertTaskAssignment({
         actual_start_at: wallClockToStoredIso(date, start, timezone),
         actual_completed_at: wallClockToStoredIso(date, end, timezone),
         start_time: start,
-        title: propertyTask.name,
+        title: task.name,
       }),
     'Task assignment create',
   ) as SupabaseResult<null>;
@@ -671,9 +551,7 @@ async function insertSplitAssignments({
   employeeId,
   date,
   propertyIds,
-  taskName,
-  category,
-  estimatedHours,
+  task,
   timeRangesByProperty,
   timezone,
   nextOrderIndex,
@@ -682,13 +560,13 @@ async function insertSplitAssignments({
   employeeId: string;
   date: string;
   propertyIds: string[];
-  taskName: string;
-  category: string;
-  estimatedHours: number;
+  task: Task;
   timeRangesByProperty: Record<string, SplitTimeRange>;
   timezone: string;
   nextOrderIndex: number;
 }) {
+  if (!isUuid(task.id)) throw new Error('Invalid task ID. Please reselect a task.');
+  const category = task.category ?? 'General';
   for (const [index, propertyId] of propertyIds.entries()) {
     if (!isUuid(propertyId)) throw new Error('Invalid property selection. Please reselect properties.');
     const range = timeRangesByProperty[propertyId];
@@ -697,13 +575,6 @@ async function insertSplitAssignments({
     if (!start || !end) throw new Error('Choose start and end times for every selected property.');
     const hours = Number(calculateSplitHours(start, end).toFixed(2));
     if (hours <= 0) continue;
-    const task = await ensurePropertyTask({
-      orgId,
-      propertyId,
-      taskName,
-      category,
-      estimatedHours,
-    });
     const insertResult = await withReviewTimeout(
       supabase
         .from('assignments')
@@ -759,17 +630,7 @@ async function saveReviewedTimes({
     if (Object.prototype.hasOwnProperty.call(taskOverrides, row.assignment.id)) {
       const nextTaskId = taskOverrides[row.assignment.id] ?? '';
       if (nextTaskId && !isUuid(nextTaskId)) throw new Error('Invalid task ID. Please reselect a task.');
-      let nextTask = nextTaskId ? tasks.find((task) => task.id === nextTaskId) ?? null : null;
-      if (nextTask && row.assignment.propertyId && nextTask.propertyId !== row.assignment.propertyId) {
-        if (!isUuid(row.assignment.propertyId)) throw new Error('Could not identify the assignment property. Refresh and try again.');
-        nextTask = await ensurePropertyTask({
-          orgId,
-          propertyId: row.assignment.propertyId,
-          taskName: nextTask.name,
-          category: nextTask.category ?? 'General',
-          estimatedHours: Number(nextTask.estimatedHours ?? nextTask.estimated_hours ?? 0) || 0,
-        });
-      }
+      const nextTask = nextTaskId ? tasks.find((task) => task.id === nextTaskId) ?? null : null;
       payload.task_id = nextTask?.id ?? null;
       payload.title = nextTask?.name ?? null;
     }
@@ -964,23 +825,13 @@ export function OpenTaskDayReviewPanel({
   const firstDerivedStart = rows[0]?.start ?? shiftStart;
   const reviewTasks = reviewData?.tasks ?? [];
   const splitTaskOptions = useMemo<SplitTaskOption[]>(() => {
-    const options = new Map<string, SplitTaskOption>();
-    reviewTasks.forEach((task) => {
-      if (getTaskIsUnpaid(task)) return;
-      const name = task.name?.trim() || 'Task';
-      const category = task.category?.trim() || 'General';
-      const key = normalizeTaskMatchKey(name, category);
-      const option = options.get(key) ?? {
-        key,
-        name,
-        category,
-        estimatedHours: Number(task.estimatedHours ?? task.estimated_hours ?? 0) || 0,
-        taskByPropertyId: new Map<string, Task>(),
-      };
-      if (task.propertyId) option.taskByPropertyId.set(task.propertyId, task);
-      options.set(key, option);
-    });
-    return Array.from(options.values()).sort((first, second) => first.category.localeCompare(second.category) || first.name.localeCompare(second.name));
+    return reviewTasks
+      .filter((task) => !getTaskIsUnpaid(task))
+      .map((task) => ({ key: task.id, task }))
+      .sort((first, second) =>
+        (first.task.category ?? 'General').localeCompare(second.task.category ?? 'General') ||
+        first.task.name.localeCompare(second.task.name),
+      );
   }, [reviewTasks]);
   const selectedSplitTask = splitTaskOptions.find((option) => option.key === splitTaskKey) ?? null;
   const totalScheduled = rows.reduce((sum, row) => sum + Number(row.assignment.estimatedHours ?? 0), 0);
@@ -1140,9 +991,7 @@ export function OpenTaskDayReviewPanel({
         employeeId: validEmployeeId,
         date: validDate,
         propertyIds: validPropertyIds,
-        taskName: selectedSplitTask.name,
-        category: selectedSplitTask.category,
-        estimatedHours: selectedSplitTask.estimatedHours,
+        task: selectedSplitTask.task,
         timeRangesByProperty,
         timezone: operationalTimezone,
         nextOrderIndex,
@@ -1243,7 +1092,7 @@ export function OpenTaskDayReviewPanel({
       const lastSplitEnd = lastSelectedPropertyId ? splitTimesByProperty[lastSelectedPropertyId]?.end : '';
       const latestReviewEnd = rows.reduce((latest, row) => Math.max(latest, timeToMinutes(row.end)), timeToMinutes(shiftStart));
       const start = normalizeClockTime(lastSplitEnd, minutesToTime(latestReviewEnd));
-      const selectedTaskHours = Number(selectedSplitTask?.estimatedHours ?? 0);
+      const selectedTaskHours = Number(selectedSplitTask?.task.estimatedHours ?? selectedSplitTask?.task.estimated_hours ?? 0);
       const durationMinutes = Math.max(15, Math.round((Number.isFinite(selectedTaskHours) && selectedTaskHours > 0 ? selectedTaskHours : 1) * 60));
       const end = addMinutesToTime(start, durationMinutes);
       setSplitTimesByProperty((times) => ({
@@ -1552,7 +1401,7 @@ export function OpenTaskDayReviewPanel({
                           <option value="">Choose task to split</option>
                           {splitTaskOptions.map((option) => (
                             <option key={option.key} value={option.key}>
-                              {option.name} - {option.category} ({option.taskByPropertyId.size} propert{option.taskByPropertyId.size === 1 ? 'y' : 'ies'})
+                              {option.task.name} - {option.task.category ?? 'General'}
                             </option>
                           ))}
                         </select>

@@ -1364,6 +1364,90 @@ function toTask(row: DbTask): Task {
   };
 }
 
+const TASK_SELECT_COLUMNS =
+  'id, org_id, property_id, name, description, category, status, priority, estimated_hours, color, icon, is_unpaid, created_at';
+
+type FindOrCreateOrgTaskOptions = {
+  estimatedHours?: number | null;
+  isUnpaid?: boolean | null;
+  priority?: number | null;
+  description?: string | null;
+  updateExisting?: boolean;
+};
+
+export async function findOrCreateOrgTask(
+  orgId: string,
+  name: string,
+  category = 'General',
+  options: FindOrCreateOrgTaskOptions = {},
+): Promise<Task> {
+  const client = ensureSupabase();
+  const scopedOrgId = requiredUuid(orgId, 'Organization');
+  const taskName = name.trim();
+  const taskCategory = category.trim() || 'General';
+  if (!taskName) throw new Error('Task name is required.');
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Task library request timed out.')), 15_000);
+  });
+  const requestPromise = (async () => {
+    const { data: existing, error: lookupError } = await client
+      .from('tasks')
+      .select(TASK_SELECT_COLUMNS)
+      .eq('org_id', scopedOrgId)
+      .eq('status', 'active')
+      .eq('name', taskName)
+      .eq('category', taskCategory)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+
+    if (existing) {
+      if (options.updateExisting) {
+        const updatePayload: Record<string, unknown> = { property_id: null };
+        if (options.estimatedHours != null) updatePayload.estimated_hours = options.estimatedHours;
+        if (options.isUnpaid != null) updatePayload.is_unpaid = options.isUnpaid;
+        if (options.priority != null) updatePayload.priority = options.priority;
+        if (options.description !== undefined) updatePayload.description = options.description?.trim() || null;
+        const { data: updated, error: updateError } = await client
+          .from('tasks')
+          .update(updatePayload)
+          .eq('id', existing.id)
+          .eq('org_id', scopedOrgId)
+          .select(TASK_SELECT_COLUMNS)
+          .single();
+        if (updateError) throw updateError;
+        return toTask(updated as DbTask);
+      }
+      return toTask(existing as DbTask);
+    }
+
+    const { data: inserted, error: insertError } = await client
+      .from('tasks')
+      .insert({
+        org_id: scopedOrgId,
+        property_id: null,
+        name: taskName,
+        category: taskCategory,
+        status: 'active',
+        priority: options.priority ?? 1,
+        estimated_hours: options.estimatedHours ?? 0,
+        is_unpaid: options.isUnpaid ?? false,
+        description: options.description?.trim() || null,
+      })
+      .select(TASK_SELECT_COLUMNS)
+      .single();
+    if (insertError) throw insertError;
+    return toTask(inserted as DbTask);
+  })();
+
+  return Promise.race([requestPromise, timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
 function toEquipmentUnit(row: DbEquipmentUnit): EquipmentUnit {
   return {
     id: row.id,
@@ -1646,14 +1730,26 @@ async function fetchEmployeeEquipmentHistory(employeeId: string, orgId?: string)
 
 async function fetchTasks(orgId?: string): Promise<Task[]> {
   const client = ensureSupabase();
-  let query = client.from('tasks').select('*');
-  if (orgId) query = query.eq('org_id', orgId);
-  const { data, error } = await query
-    .eq('status', 'active')
-    .order('category', { ascending: true })
-    .order('name', { ascending: true });
-  if (error) throw error;
-  return (data as DbTask[]).map(toTask);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    let query = client.from('tasks').select(TASK_SELECT_COLUMNS);
+    if (orgId) query = query.eq('org_id', orgId);
+    const { data, error } = await query
+      .eq('status', 'active')
+      .order('category', { ascending: true })
+      .order('name', { ascending: true })
+      .abortSignal(controller.signal);
+    if (error) throw error;
+    return (data as DbTask[]).map(toTask);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Tasks request timed out after 15 seconds.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function fetchEquipmentUnits(propertyId?: string, orgId?: string): Promise<EquipmentUnit[]> {

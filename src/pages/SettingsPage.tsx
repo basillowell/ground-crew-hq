@@ -3,6 +3,7 @@ import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { createClient } from '@/lib/supabase';
 import {
+  findOrCreateOrgTask,
   useDepartmentOptions,
   useEmployees,
   useProgramSettings,
@@ -2029,27 +2030,27 @@ function WorkspaceTab({
     let taskRowsForAssignments: Array<{ id: string; name: string; estimated_hours: number | null }> = [];
 
     if ((taskCount ?? 0) < 5) {
-      const rows = taskSeed.map((task) => ({
-        id: crypto.randomUUID(),
-        org_id: orgId,
-        property_id: activePropertyId,
-        name: task.name,
-        category: task.category,
-        status: 'active',
-        priority: task.priority,
-        estimated_hours: task.estimated_hours,
-      }));
-      const { data: insertedTasks, error: taskInsertError } = await supabase
-        .from('tasks')
-        .insert(rows)
-        .select('id, name, estimated_hours');
-      if (taskInsertError) {
+      try {
+        const seededTasks = await Promise.all(
+          taskSeed.map((task) =>
+            findOrCreateOrgTask(orgId, task.name, task.category, {
+              estimatedHours: task.estimated_hours,
+              priority: task.priority,
+            }),
+          ),
+        );
+        taskRowsForAssignments = seededTasks.map((task) => ({
+          id: task.id,
+          name: task.name,
+          estimated_hours: Number(task.estimatedHours ?? task.estimated_hours ?? 0),
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown task seed error';
         setLoadingDemoData(false);
-        setError(taskInsertError.message);
-        toast.error(`Failed to seed demo tasks: ${taskInsertError.message}`);
+        setError(message);
+        toast.error(`Failed to seed demo tasks: ${message}`);
         return;
       }
-      taskRowsForAssignments = (insertedTasks ?? []) as Array<{ id: string; name: string; estimated_hours: number | null }>;
     } else {
       const { data: existingTasks, error: existingTaskError } = await supabase
         .from('tasks')
@@ -4038,26 +4039,14 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
 
   const addTask = async () => {
     if (!supabase || !orgId || !newName.trim()) return;
-    if (!properties[0]?.id) {
-      toast.error('Add a property in Settings before creating tasks');
-      return;
-    }
-    const { data, error: insertError } = await supabase
-      .from('tasks')
-      .insert({
-        org_id: orgId,
-        property_id: properties[0]?.id ?? null,
-        name: newName.trim(),
-        category: newCategory.trim() || 'General',
+    const taskName = newName.trim();
+    try {
+      await findOrCreateOrgTask(orgId, taskName, newCategory.trim() || 'General', {
         priority: Number(newPriority),
-        estimated_hours: Number(newEstimatedHours || '0'),
-        status: 'active',
-      })
-      .select('id, org_id, property_id, name, category, priority, estimated_hours')
-      .single();
-
-    if (insertError) {
-      toast.error(`Failed to add task: ${insertError.message}`);
+        estimatedHours: Number(newEstimatedHours || '0'),
+      });
+    } catch (error) {
+      toast.error(`Failed to add task: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return;
     }
     void queryClient.invalidateQueries({ queryKey: ['tasks', orgId ?? undefined] });
@@ -4065,7 +4054,7 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     setAddTaskDialogOpen(false);
     setTaskPanelOpen(false);
     signalTaskLibraryUpdate();
-    toast.success(`Task added: ${newName.trim()}`);
+    toast.success(`Task ready: ${taskName}`);
   };
 
   const removeTask = async (taskId: string) => {
