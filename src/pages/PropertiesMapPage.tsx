@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AlertTriangle, Edit3, Map as MapIcon, RefreshCw, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,9 +13,12 @@ import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import {
   usePropertyBoundaries,
+  useLocatedProjectPhotos,
   useSavePropertyBoundary,
+  useSetPhotoLocation,
   useSetProjectArea,
   useSetProjectLocation,
+  type ProjectPhoto,
   type PropertyBoundaryGeoJson,
   type PropertyProject,
 } from '@/lib/supabase-queries';
@@ -41,13 +44,17 @@ export default function PropertiesMapPage() {
   const boundariesQuery = usePropertyBoundaries(orgId ?? undefined);
   const saveBoundaryMutation = useSavePropertyBoundary(orgId ?? undefined);
   const setProjectLocationMutation = useSetProjectLocation(orgId ?? undefined);
+  const setPhotoLocationMutation = useSetPhotoLocation(orgId ?? undefined);
   const setProjectAreaMutation = useSetProjectArea(orgId ?? undefined);
   const pinSaveInFlightRef = useRef(false);
+  const photoSaveInFlightRef = useRef(false);
   const [editMode, setEditMode] = useState(false);
   const [pendingBoundaryGeojson, setPendingBoundaryGeojson] = useState<PropertyBoundaryGeoJson | null | undefined>(undefined);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [pinPlacementProject, setPinPlacementProject] = useState<{ propertyId: string; projectId: string; projectName: string } | null>(null);
   const [pinSavingProjectId, setPinSavingProjectId] = useState<string | null>(null);
+  const [photoPlacement, setPhotoPlacement] = useState<{ photoId: string; propertyId: string; projectId: string; label: string } | null>(null);
+  const [photoSavingId, setPhotoSavingId] = useState<string | null>(null);
   const [areaEditProject, setAreaEditProject] = useState<{ propertyId: string; projectId: string; projectName: string } | null>(null);
   const [pendingAreaGeojson, setPendingAreaGeojson] = useState<PropertyBoundaryGeoJson | null | undefined>(undefined);
   const [areaSavingProjectId, setAreaSavingProjectId] = useState<string | null>(null);
@@ -56,6 +63,7 @@ export default function PropertiesMapPage() {
     currentUser,
     properties,
   });
+  const locatedPhotosQuery = useLocatedProjectPhotos(orgId ?? undefined, selectedPropertyId);
   const mappedCount = properties.filter((property) => property.boundaryGeojson).length;
   const selectedProperty = selectedPropertyId === 'all'
     ? null
@@ -64,6 +72,19 @@ export default function PropertiesMapPage() {
   const hasConcretePropertySelected = selectedPropertyId !== 'all' && Boolean(selectedProperty);
   const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
   const hasPendingAreaChange = pendingAreaGeojson !== undefined;
+  const photoPins = useMemo(
+    () => {
+      const projectNameById = new Map<string, string>();
+      properties.forEach((property) => {
+        property.projects.forEach((project) => projectNameById.set(project.id, project.name));
+      });
+      return (locatedPhotosQuery.data ?? []).map((photo) => ({
+        ...photo,
+        projectName: projectNameById.get(photo.projectId),
+      }));
+    },
+    [locatedPhotosQuery.data, properties],
+  );
 
   const handleSelectProperty = (propertyId: string) => {
     if (propertyId !== selectedPropertyId) setSelectedProjectId(null);
@@ -73,6 +94,7 @@ export default function PropertiesMapPage() {
   const handleSelectWorkspaceProject = (projectId: string | null) => {
     setEditMode(false);
     setPinPlacementProject(null);
+    setPhotoPlacement(null);
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
     setSelectedProjectId(projectId);
@@ -82,6 +104,7 @@ export default function PropertiesMapPage() {
     setEditMode(false);
     setPendingBoundaryGeojson(undefined);
     setPinPlacementProject(null);
+    setPhotoPlacement(null);
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
   }, [selectedPropertyId]);
@@ -111,6 +134,7 @@ export default function PropertiesMapPage() {
     setPendingBoundaryGeojson(undefined);
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
+    setPhotoPlacement(null);
     setSelectedProjectId(project.id);
     setSelectedPropertyId(project.propertyId);
     setPinPlacementProject({ propertyId: project.propertyId, projectId: project.id, projectName: project.name });
@@ -119,6 +143,7 @@ export default function PropertiesMapPage() {
   const handleSelectProject = (propertyId: string, projectId: string) => {
     setEditMode(false);
     setPinPlacementProject(null);
+    setPhotoPlacement(null);
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
     setSelectedProjectId(projectId);
@@ -139,6 +164,7 @@ export default function PropertiesMapPage() {
     setEditMode(false);
     setPendingBoundaryGeojson(undefined);
     setPinPlacementProject(null);
+    setPhotoPlacement(null);
     setSelectedProjectId(project.id);
     setSelectedPropertyId(project.propertyId);
     setAreaEditProject({ propertyId: project.propertyId, projectId: project.id, projectName: project.name });
@@ -149,6 +175,61 @@ export default function PropertiesMapPage() {
     if (areaSavingProjectId) return;
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
+  };
+
+  const handleStartPlacePhoto = (photo: ProjectPhoto) => {
+    if (!canViewMap || photoSaveInFlightRef.current) return;
+    if (!photo.propertyId || photo.propertyId === 'all') {
+      toast.error('Select a property before placing a photo.');
+      return;
+    }
+    if (!photo.projectId || photo.projectId === 'all') {
+      toast.error('Choose a project before placing a photo.');
+      return;
+    }
+    setEditMode(false);
+    setPendingBoundaryGeojson(undefined);
+    setPinPlacementProject(null);
+    setAreaEditProject(null);
+    setPendingAreaGeojson(undefined);
+    setSelectedProjectId(photo.projectId);
+    setSelectedPropertyId(photo.propertyId);
+    setPhotoPlacement({
+      photoId: photo.id,
+      propertyId: photo.propertyId,
+      projectId: photo.projectId,
+      label: photo.caption || 'progress photo',
+    });
+  };
+
+  const handleCancelPhotoPlacement = () => {
+    if (photoSaveInFlightRef.current) return;
+    setPhotoPlacement(null);
+  };
+
+  const handleClearPhotoPin = async (photo: ProjectPhoto) => {
+    if (!canViewMap || !orgId || photoSaveInFlightRef.current) return;
+    const confirmed = window.confirm('Clear this photo pin from the map?');
+    if (!confirmed) return;
+    photoSaveInFlightRef.current = true;
+    setPhotoSavingId(photo.id);
+    try {
+      await setPhotoLocationMutation.mutateAsync({
+        propertyId: photo.propertyId,
+        projectId: photo.projectId,
+        photoId: photo.id,
+        latitude: null,
+        longitude: null,
+      });
+      if (photoPlacement?.photoId === photo.id) setPhotoPlacement(null);
+      toast.success('Photo pin cleared.');
+    } catch (error) {
+      console.error('Photo pin clear failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Photo pin could not be cleared.');
+    } finally {
+      photoSaveInFlightRef.current = false;
+      setPhotoSavingId(null);
+    }
   };
 
   const saveProjectArea = async (areaGeojson: PropertyBoundaryGeoJson | null) => {
@@ -229,6 +310,30 @@ export default function PropertiesMapPage() {
     }
   };
 
+  const handlePlacePhotoPin = async (latitude: number, longitude: number) => {
+    if (!photoPlacement || !orgId || photoSaveInFlightRef.current) return;
+    photoSaveInFlightRef.current = true;
+    setPhotoSavingId(photoPlacement.photoId);
+    try {
+      await setPhotoLocationMutation.mutateAsync({
+        propertyId: photoPlacement.propertyId,
+        projectId: photoPlacement.projectId,
+        photoId: photoPlacement.photoId,
+        latitude,
+        longitude,
+      });
+      setSelectedProjectId(photoPlacement.projectId);
+      setPhotoPlacement(null);
+      toast.success('Photo pin saved.');
+    } catch (error) {
+      console.error('Photo pin save failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Photo pin could not be saved.');
+    } finally {
+      photoSaveInFlightRef.current = false;
+      setPhotoSavingId(null);
+    }
+  };
+
   if (!isOrgReady) {
     return (
       <section className="flex flex-1 flex-col gap-4 p-4 md:p-6">
@@ -298,11 +403,12 @@ export default function PropertiesMapPage() {
             className="h-10 rounded-xl"
             onClick={() => {
               setPinPlacementProject(null);
+              setPhotoPlacement(null);
               setAreaEditProject(null);
               setPendingAreaGeojson(undefined);
               setEditMode((current) => !current);
             }}
-            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinSavingProjectId) || Boolean(areaSavingProjectId)}
+            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinSavingProjectId) || Boolean(photoSavingId) || Boolean(areaSavingProjectId)}
           >
             <Edit3 className="mr-2 h-4 w-4" />
             {editMode ? 'Editing' : 'Edit boundary'}
@@ -311,7 +417,7 @@ export default function PropertiesMapPage() {
             type="button"
             className="h-10 rounded-xl"
             onClick={() => void handleSaveBoundary()}
-            disabled={!hasPendingBoundaryChange || !hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinPlacementProject) || Boolean(areaEditProject)}
+            disabled={!hasPendingBoundaryChange || !hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinPlacementProject) || Boolean(photoPlacement) || Boolean(areaEditProject)}
           >
             <Save className="mr-2 h-4 w-4" />
             {saveBoundaryMutation.isPending ? 'Saving...' : 'Save boundary'}
@@ -343,7 +449,7 @@ export default function PropertiesMapPage() {
             variant="outline"
             className="h-10 rounded-xl border-surface-border bg-surface-card/80"
             onClick={() => void boundariesQuery.refetch()}
-            disabled={boundariesQuery.isFetching || saveBoundaryMutation.isPending || Boolean(areaSavingProjectId)}
+            disabled={boundariesQuery.isFetching || saveBoundaryMutation.isPending || Boolean(areaSavingProjectId) || Boolean(photoSavingId)}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${boundariesQuery.isFetching ? 'animate-spin' : ''}`} />
             Retry
@@ -372,12 +478,15 @@ export default function PropertiesMapPage() {
         <PropertyMap
           properties={properties}
           currentPropertyId={selectedPropertyId || 'all'}
-          className={areaEditProject || pinPlacementProject ? 'h-[min(78vh,780px)] min-h-[620px] max-h-[820px]' : hasConcretePropertySelected ? 'h-[380px] min-h-[320px] max-h-[420px]' : undefined}
+          className={areaEditProject || pinPlacementProject || photoPlacement ? 'h-[min(78vh,780px)] min-h-[620px] max-h-[820px]' : hasConcretePropertySelected ? 'h-[380px] min-h-[320px] max-h-[420px]' : undefined}
           editMode={editMode}
           canEditBoundary={canViewMap}
           selectedProjectId={selectedProjectId}
           pinPlacementProject={pinPlacementProject}
           pinPlacementDisabled={Boolean(pinSavingProjectId)}
+          photoPins={photoPins}
+          photoPlacementActive={Boolean(photoPlacement)}
+          photoPlacementDisabled={Boolean(photoSavingId)}
           areaEditProjectId={areaEditProject?.projectId ?? null}
           onBoundaryChange={setPendingBoundaryGeojson}
           onAreaChange={setPendingAreaGeojson}
@@ -385,7 +494,13 @@ export default function PropertiesMapPage() {
           onSelectProperty={handleSelectProperty}
           onSelectProject={handleSelectProject}
           onPlaceProjectPin={handlePlaceProjectPin}
+          onPlacePhotoPin={handlePlacePhotoPin}
+          onSelectPhoto={(photo) => {
+            setSelectedProjectId(photo.projectId);
+            if (photo.propertyId && photo.propertyId !== selectedPropertyId) setSelectedPropertyId(photo.propertyId);
+          }}
           onCancelPinPlacement={handleCancelPinPlacement}
+          onCancelPhotoPlacement={handleCancelPhotoPlacement}
         />
       )}
       {hasConcretePropertySelected && selectedProperty ? (
@@ -397,10 +512,15 @@ export default function PropertiesMapPage() {
           selectedProjectId={selectedProjectId}
           pinPlacementProjectId={pinPlacementProject?.projectId ?? null}
           pinPlacementSaving={Boolean(pinSavingProjectId)}
+          photoPlacementPhotoId={photoPlacement?.photoId ?? null}
+          photoPlacementSaving={Boolean(photoSavingId)}
           areaEditProjectId={areaEditProject?.projectId ?? null}
           areaSaving={Boolean(areaSavingProjectId)}
           onStartPlacePin={handleStartPlacePin}
           onCancelPlacePin={handleCancelPinPlacement}
+          onStartPlacePhoto={handleStartPlacePhoto}
+          onCancelPlacePhoto={handleCancelPhotoPlacement}
+          onClearPhotoPin={(photo) => void handleClearPhotoPin(photo)}
           onStartEditArea={handleStartEditArea}
           onCancelEditArea={handleCancelEditArea}
           onClearArea={(project) => void handleClearArea(project)}
@@ -408,6 +528,7 @@ export default function PropertiesMapPage() {
           onClose={() => {
             setSelectedProjectId(null);
             setPinPlacementProject(null);
+            setPhotoPlacement(null);
             setAreaEditProject(null);
             setPendingAreaGeojson(undefined);
             setSelectedPropertyId('all');

@@ -16,6 +16,7 @@ import {
   useDeleteTimelineEvent,
   useProjects,
   useTimelineEvents,
+  type ProjectPhoto,
   type ProjectTimelineEvent,
   type PropertyBoundary,
   type PropertyProject,
@@ -29,10 +30,15 @@ type PropertyDetailPanelProps = {
   selectedProjectId?: string | null;
   pinPlacementProjectId?: string | null;
   pinPlacementSaving: boolean;
+  photoPlacementPhotoId?: string | null;
+  photoPlacementSaving: boolean;
   areaEditProjectId?: string | null;
   areaSaving: boolean;
   onStartPlacePin: (project: PropertyProject) => void;
   onCancelPlacePin: () => void;
+  onStartPlacePhoto: (photo: ProjectPhoto) => void;
+  onCancelPlacePhoto: () => void;
+  onClearPhotoPin: (photo: ProjectPhoto) => void;
   onStartEditArea: (project: PropertyProject) => void;
   onCancelEditArea: () => void;
   onClearArea: (project: PropertyProject) => void;
@@ -62,12 +68,22 @@ function ProjectTimeline({
   orgId,
   canManage,
   createdBy,
+  photoPlacementPhotoId,
+  photoPlacementSaving,
+  onStartPlacePhoto,
+  onCancelPlacePhoto,
+  onClearPhotoPin,
 }: {
   project: PropertyProject;
   propertyId: string;
   orgId?: string | null;
   canManage: boolean;
   createdBy?: string | null;
+  photoPlacementPhotoId?: string | null;
+  photoPlacementSaving: boolean;
+  onStartPlacePhoto: (photo: ProjectPhoto) => void;
+  onCancelPlacePhoto: () => void;
+  onClearPhotoPin: (photo: ProjectPhoto) => void;
 }) {
   const timelineQuery = useTimelineEvents(project.id, orgId ?? undefined);
   const deleteTimelineEventMutation = useDeleteTimelineEvent(orgId ?? undefined);
@@ -107,6 +123,11 @@ function ProjectTimeline({
         canManage={canManage}
         uploadedBy={createdBy}
         title="Progress photos"
+        placingPhotoId={photoPlacementPhotoId}
+        placementSaving={photoPlacementSaving}
+        onPlacePhotoOnMap={onStartPlacePhoto}
+        onCancelPlacePhoto={onCancelPlacePhoto}
+        onClearPhotoPin={onClearPhotoPin}
       />
       <TimelineEventForm
         orgId={orgId}
@@ -170,6 +191,11 @@ function ProjectTimeline({
                   timelineEventId={event.id}
                   canManage={canManage}
                   uploadedBy={createdBy ?? null}
+                  placingPhotoId={photoPlacementPhotoId}
+                  placementSaving={photoPlacementSaving}
+                  onPlacePhotoOnMap={onStartPlacePhoto}
+                  onCancelPlacePhoto={onCancelPlacePhoto}
+                  onClearPhotoPin={onClearPhotoPin}
                 />
               </div>
             ))}
@@ -188,10 +214,15 @@ export function PropertyDetailPanel({
   selectedProjectId,
   pinPlacementProjectId,
   pinPlacementSaving,
+  photoPlacementPhotoId,
+  photoPlacementSaving,
   areaEditProjectId,
   areaSaving,
   onStartPlacePin,
   onCancelPlacePin,
+  onStartPlacePhoto,
+  onCancelPlacePhoto,
+  onClearPhotoPin,
   onStartEditArea,
   onCancelEditArea,
   onClearArea,
@@ -407,6 +438,11 @@ export function PropertyDetailPanel({
                       orgId={orgId}
                       canManage={canManage}
                       createdBy={createdBy}
+                      photoPlacementPhotoId={photoPlacementPhotoId}
+                      photoPlacementSaving={photoPlacementSaving}
+                      onStartPlacePhoto={onStartPlacePhoto}
+                      onCancelPlacePhoto={onCancelPlacePhoto}
+                      onClearPhotoPin={onClearPhotoPin}
                     />
                   </Card>
                 ) : (

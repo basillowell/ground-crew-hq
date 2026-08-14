@@ -1,7 +1,7 @@
 'use client';
 
 import { ChangeEvent, useCallback, useRef } from 'react';
-import { ImagePlus, RefreshCw, Trash2 } from 'lucide-react';
+import { ImagePlus, MapPin, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,6 +24,11 @@ type ProjectPhotoStripProps = {
   canManage: boolean;
   uploadedBy?: string | null;
   title?: string;
+  placingPhotoId?: string | null;
+  placementSaving?: boolean;
+  onPlacePhotoOnMap?: (photo: ProjectPhoto) => void;
+  onCancelPlacePhoto?: () => void;
+  onClearPhotoPin?: (photo: ProjectPhoto) => void;
 };
 
 function formatPhotoSize(sizeBytes: number | null) {
@@ -50,6 +55,11 @@ export function ProjectPhotoStrip({
   canManage,
   uploadedBy,
   title = 'Photos',
+  placingPhotoId,
+  placementSaving = false,
+  onPlacePhotoOnMap,
+  onCancelPlacePhoto,
+  onClearPhotoPin,
 }: ProjectPhotoStripProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const photosQuery = useProjectPhotos(
@@ -128,34 +138,67 @@ export function ProjectPhotoStrip({
         </Card>
       ) : (
         <div className="flex flex-wrap gap-2">
-          {photos.map((photo) => (
-            <div key={photo.id} className="group relative h-20 w-20 overflow-hidden rounded-lg border border-surface-border bg-surface-elevated">
-              <img
-                src={photo.signedUrl}
-                alt={photo.caption || 'Project progress photo'}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-              {photo.sizeBytes ? (
-                <div className="absolute bottom-0 left-0 right-0 bg-surface-base/80 px-1 py-0.5 text-[10px] text-text-secondary">
-                  {formatPhotoSize(photo.sizeBytes)}
+          {photos.map((photo) => {
+            const isPlacingThisPhoto = placingPhotoId === photo.id;
+            const hasPhotoPin = Boolean(photo.locationGeojson);
+            return (
+              <div key={photo.id} className="group relative flex w-32 flex-col gap-1.5">
+                <div className="relative h-20 w-32 overflow-hidden rounded-lg border border-surface-border bg-surface-elevated">
+                  <img
+                    src={photo.signedUrl}
+                    alt={photo.caption || 'Project progress photo'}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                  {photo.sizeBytes ? (
+                    <div className="absolute bottom-0 left-0 right-0 bg-surface-base/80 px-1 py-0.5 text-[10px] text-text-secondary">
+                      {formatPhotoSize(photo.sizeBytes)}
+                    </div>
+                  ) : null}
+                  {canManage ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1 h-7 w-7 bg-surface-card/90 text-status-warning opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus:opacity-100"
+                      onClick={() => void handleDeletePhoto(photo)}
+                      disabled={isDeleting || placementSaving}
+                      aria-label="Remove photo"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : null}
                 </div>
-              ) : null}
-              {canManage ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-7 w-7 bg-surface-card/90 text-status-warning opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus:opacity-100"
-                  onClick={() => void handleDeletePhoto(photo)}
-                  disabled={isDeleting}
-                  aria-label="Remove photo"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              ) : null}
-            </div>
-          ))}
+                {canManage && onPlacePhotoOnMap && onCancelPlacePhoto ? (
+                  <div className="flex flex-wrap gap-1">
+                    <Button
+                      type="button"
+                      variant={isPlacingThisPhoto ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-7 flex-1 px-2 text-[11px]"
+                      onClick={() => (isPlacingThisPhoto ? onCancelPlacePhoto() : onPlacePhotoOnMap(photo))}
+                      disabled={placementSaving}
+                    >
+                      <MapPin className="mr-1 h-3 w-3" />
+                      {isPlacingThisPhoto ? 'Cancel' : hasPhotoPin ? 'Move pin' : 'Place on map'}
+                    </Button>
+                    {hasPhotoPin && onClearPhotoPin ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px] text-status-warning"
+                        onClick={() => onClearPhotoPin(photo)}
+                        disabled={placementSaving}
+                      >
+                        Clear
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
           {photos.length === 0 ? (
             <div className="flex h-20 min-w-40 items-center rounded-lg border border-dashed border-surface-border px-3 text-sm text-text-secondary">
               No photos yet.

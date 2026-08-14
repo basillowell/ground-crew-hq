@@ -120,6 +120,7 @@ export type ProjectPhoto = {
   uploadedBy: string | null;
   sortOrder: number;
   createdAt: string;
+  locationGeojson: ProjectLocationGeoJson | null;
   signedUrl: string;
 };
 
@@ -347,6 +348,7 @@ type DbProjectPhoto = {
   uploaded_by: string | null;
   sort_order: number | null;
   created_at: string;
+  location_geojson: unknown;
 };
 
 type DbSignature = {
@@ -985,6 +987,7 @@ function toProjectPhoto(row: DbProjectPhoto, signedUrl: string): ProjectPhoto {
     uploadedBy: row.uploaded_by,
     sortOrder: row.sort_order ?? 0,
     createdAt: row.created_at,
+    locationGeojson: isProjectLocationGeoJson(row.location_geojson) ? row.location_geojson : null,
     signedUrl,
   };
 }
@@ -4134,7 +4137,7 @@ export const PROJECT_PHOTO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/we
 export const PROJECT_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const PROJECT_PHOTOS_BUCKET = 'project-photos';
 const PROJECT_SELECT_COLUMNS = 'id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson, area_geojson';
-const PROJECT_PHOTO_SELECT_COLUMNS = 'id, org_id, property_id, project_id, timeline_event_id, storage_path, caption, content_type, size_bytes, uploaded_by, sort_order, created_at';
+const PROJECT_PHOTO_SELECT_COLUMNS = 'id, org_id, property_id, project_id, timeline_event_id, storage_path, caption, content_type, size_bytes, uploaded_by, sort_order, created_at, location_geojson';
 const SIGNATURE_SELECT_COLUMNS = 'id, org_id, property_id, assignment_id, signer_name, signature_data, signed_at, captured_by, created_at';
 
 export type ProjectPhotosScope = {
@@ -4170,6 +4173,14 @@ export type SetProjectLocationPayload = {
   projectId: string;
   latitude: number;
   longitude: number;
+};
+
+export type SetPhotoLocationPayload = {
+  propertyId: string;
+  projectId: string;
+  photoId: string;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 export type SetProjectAreaPayload = {
@@ -4302,15 +4313,42 @@ async function fetchProjectPhotos(scope: ProjectPhotosScope, orgId: string): Pro
     const rows = (data ?? []) as DbProjectPhoto[];
     const signedPhotos = await Promise.all(
       rows.map(async (row) => {
-        const { data: signedData, error: signedError } = await client
-          .storage
-          .from(PROJECT_PHOTOS_BUCKET)
-          .createSignedUrl(row.storage_path, 60 * 10);
-        if (signedError) throw signedError;
-        return toProjectPhoto(row, signedData.signedUrl);
+        const signedUrl = await createProjectPhotoSignedUrl(client, row.storage_path);
+        return toProjectPhoto(row, signedUrl);
       }),
     );
     return signedPhotos;
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchLocatedProjectPhotos(orgId: string, propertyId?: string | null): Promise<ProjectPhoto[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Located photos request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('project_photos')
+      .select(PROJECT_PHOTO_SELECT_COLUMNS)
+      .eq('org_id', orgId)
+      .not('location_geojson', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (propertyId && propertyId !== 'all') {
+      query = query.eq('property_id', propertyId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = (data ?? []) as DbProjectPhoto[];
+    return Promise.all(
+      rows.map(async (row) => {
+        const signedUrl = await createProjectPhotoSignedUrl(client, row.storage_path);
+        return toProjectPhoto(row, signedUrl);
+      }),
+    );
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -4380,6 +4418,15 @@ function getPhotoExtension(file: File) {
   return 'jpg';
 }
 
+async function createProjectPhotoSignedUrl(client: ReturnType<typeof ensureSupabase>, storagePath: string) {
+  const { data: signedData, error: signedError } = await client
+    .storage
+    .from(PROJECT_PHOTOS_BUCKET)
+    .createSignedUrl(storagePath, 60 * 10);
+  if (signedError) throw signedError;
+  return signedData.signedUrl;
+}
+
 async function uploadProjectPhoto(orgId: string, payload: UploadProjectPhotoPayload): Promise<ProjectPhoto> {
   if (!PROJECT_PHOTO_ALLOWED_TYPES.includes(payload.file.type as typeof PROJECT_PHOTO_ALLOWED_TYPES[number])) {
     throw new Error('Choose a JPEG, PNG, WebP, HEIC, or HEIF image.');
@@ -4431,12 +4478,8 @@ async function uploadProjectPhoto(orgId: string, payload: UploadProjectPhotoPayl
       throw insertError;
     }
 
-    const { data: signedData, error: signedError } = await client
-      .storage
-      .from(PROJECT_PHOTOS_BUCKET)
-      .createSignedUrl(storagePath, 60 * 10);
-    if (signedError) throw signedError;
-    return toProjectPhoto(data as DbProjectPhoto, signedData.signedUrl);
+    const signedUrl = await createProjectPhotoSignedUrl(client, storagePath);
+    return toProjectPhoto(data as DbProjectPhoto, signedUrl);
   })();
 
   return Promise.race([uploadPromise, timeoutPromise]);
@@ -4495,6 +4538,44 @@ async function setProjectLocation(orgId: string, payload: SetProjectLocationPayl
       .single();
     if (error) throw error;
     return toProject(data as DbProject);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+async function setPhotoLocation(orgId: string, payload: SetPhotoLocationPayload): Promise<ProjectPhoto> {
+  if (!payload.propertyId || payload.propertyId === 'all') throw new Error('Select a property before placing a photo.');
+  if (!payload.projectId || payload.projectId === 'all') throw new Error('Choose a project before placing a photo.');
+  if (!payload.photoId || payload.photoId === 'all') throw new Error('Choose a photo before placing it on the map.');
+  const isClearing = payload.latitude === null && payload.longitude === null;
+  if (!isClearing && (!Number.isFinite(payload.latitude) || !Number.isFinite(payload.longitude))) {
+    throw new Error('Choose a valid map location.');
+  }
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Photo pin request timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const locationGeojson: ProjectLocationGeoJson | null = isClearing
+      ? null
+      : {
+          type: 'Point',
+          coordinates: [payload.longitude as number, payload.latitude as number],
+        };
+    const { data, error } = await client
+      .from('project_photos')
+      .update({ location_geojson: locationGeojson })
+      .eq('id', payload.photoId)
+      .eq('project_id', payload.projectId)
+      .eq('property_id', payload.propertyId)
+      .eq('org_id', orgId)
+      .select(PROJECT_PHOTO_SELECT_COLUMNS)
+      .single();
+    if (error) throw error;
+    const row = data as DbProjectPhoto;
+    const signedUrl = await createProjectPhotoSignedUrl(client, row.storage_path);
+    return toProjectPhoto(row, signedUrl);
   })();
 
   return Promise.race([savePromise, timeoutPromise]);
@@ -4669,6 +4750,18 @@ export function useProjectPhotosByProject(projectId?: string | null, orgId?: str
   return useProjectPhotos(projectId && projectId !== 'all' ? { projectId } : undefined, orgId);
 }
 
+export function useLocatedProjectPhotos(orgId?: string | null, propertyId?: string | null) {
+  return useQuery({
+    queryKey: ['located-project-photos', orgId ?? 'all-orgs', propertyId ?? 'all'],
+    queryFn: () => fetchLocatedProjectPhotos(orgId!, propertyId),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
 export function useAssignmentSignature(assignmentId?: string | null, orgId?: string | null) {
   const validAssignmentId = assignmentId && assignmentId !== 'all' ? assignmentId : undefined;
   return useQuery({
@@ -4726,6 +4819,7 @@ export function useDeleteProjectPhoto(orgId?: string) {
         queryKey: ['project-photos', orgId ?? 'all-orgs', variables.photo.timelineEventId ?? 'no-event', variables.photo.projectId],
       });
       await queryClient.invalidateQueries({ queryKey: ['project-photos'] });
+      await queryClient.invalidateQueries({ queryKey: ['located-project-photos'] });
     },
   });
 }
@@ -4741,6 +4835,21 @@ export function useSetProjectLocation(orgId?: string) {
       await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
       await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
       await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useSetPhotoLocation(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SetPhotoLocationPayload) => {
+      if (!orgId) throw new Error('Organization is required to place a photo.');
+      return setPhotoLocation(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['project-photos'] });
+      await queryClient.invalidateQueries({ queryKey: ['located-project-photos', orgId ?? 'all-orgs', variables.propertyId] });
+      await queryClient.invalidateQueries({ queryKey: ['located-project-photos'] });
     },
   });
 }

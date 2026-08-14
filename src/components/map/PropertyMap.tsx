@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
-import type { Layer, PathOptions } from 'leaflet';
+import { CircleMarker, MapContainer, Marker, Polygon, Popup, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { divIcon, type Layer, type PathOptions } from 'leaflet';
 import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
-import type { PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
+import type { ProjectPhoto, PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
 import { PROJECT_STATUS_LEGEND, normalizeProjectStatus, projectStatusColor, statusKeyColor, type ProjectStatusKey } from '@/lib/project-status';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +21,9 @@ type PropertyMapProps = {
   selectedProjectId: string | null;
   pinPlacementProject: { projectId: string; projectName: string } | null;
   pinPlacementDisabled: boolean;
+  photoPins: Array<ProjectPhoto & { projectName?: string }>;
+  photoPlacementActive: boolean;
+  photoPlacementDisabled: boolean;
   areaEditProjectId: string | null;
   onBoundaryChange: (geojson: PropertyBoundaryGeoJson | null) => void;
   onAreaChange: (geojson: PropertyBoundaryGeoJson | null) => void;
@@ -28,7 +31,10 @@ type PropertyMapProps = {
   onSelectProperty: (propertyId: string) => void;
   onSelectProject: (propertyId: string, projectId: string) => void;
   onPlaceProjectPin: (latitude: number, longitude: number) => void;
+  onPlacePhotoPin: (latitude: number, longitude: number) => void;
+  onSelectPhoto?: (photo: ProjectPhoto & { projectName?: string }) => void;
   onCancelPinPlacement: () => void;
+  onCancelPhotoPlacement: () => void;
 };
 
 const USGS_IMAGERY_TILE_URL =
@@ -81,19 +87,29 @@ type ProjectArea = PropertyProject & {
   areaColor: string;
 };
 
-function ProjectPinClickHandler({
-  active,
+function PlacementClickHandler({
+  projectPinActive,
+  photoPinActive,
   disabled,
   onPlaceProjectPin,
+  onPlacePhotoPin,
 }: {
-  active: boolean;
+  projectPinActive: boolean;
+  photoPinActive: boolean;
   disabled: boolean;
   onPlaceProjectPin: (latitude: number, longitude: number) => void;
+  onPlacePhotoPin: (latitude: number, longitude: number) => void;
 }) {
   useMapEvents({
     click: (event) => {
-      if (!active || disabled) return;
-      onPlaceProjectPin(event.latlng.lat, event.latlng.lng);
+      if (disabled) return;
+      if (projectPinActive) {
+        onPlaceProjectPin(event.latlng.lat, event.latlng.lng);
+        return;
+      }
+      if (photoPinActive) {
+        onPlacePhotoPin(event.latlng.lat, event.latlng.lng);
+      }
     },
   });
 
@@ -140,6 +156,9 @@ export function PropertyMap({
   selectedProjectId,
   pinPlacementProject,
   pinPlacementDisabled,
+  photoPins,
+  photoPlacementActive,
+  photoPlacementDisabled,
   areaEditProjectId,
   onBoundaryChange,
   onAreaChange,
@@ -147,7 +166,10 @@ export function PropertyMap({
   onSelectProperty,
   onSelectProject,
   onPlaceProjectPin,
+  onPlacePhotoPin,
+  onSelectPhoto,
   onCancelPinPlacement,
+  onCancelPhotoPlacement,
 }: PropertyMapProps) {
   const mappedProperties = useMemo(
     () => properties.filter((property) => property.boundaryGeojson),
@@ -204,11 +226,12 @@ export function PropertyMap({
     return { total: projects.length, counts, mapped };
   }, [currentPropertyId, selectedProperty]);
   const initialCenter = useMemo(() => getInitialCenter(properties), [properties]);
-  const isPlacingProjectPin = Boolean(pinPlacementProject);
-  const isAreaEditActive = Boolean(areaEditProjectId) && !editMode && !isPlacingProjectPin;
+  const isPlacingPhotoPin = photoPlacementActive;
+  const isPlacingProjectPin = Boolean(pinPlacementProject) && !isPlacingPhotoPin;
+  const isAreaEditActive = Boolean(areaEditProjectId) && !editMode && !isPlacingProjectPin && !isPlacingPhotoPin;
   const isSingleProperty = currentPropertyId !== 'all';
-  const canEditSelectedBoundary = editMode && !isPlacingProjectPin && !areaEditProjectId && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
-  const isMapInteractionActive = editMode || isAreaEditActive || isPlacingProjectPin;
+  const canEditSelectedBoundary = editMode && !isPlacingProjectPin && !isPlacingPhotoPin && !areaEditProjectId && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
+  const isMapInteractionActive = editMode || isAreaEditActive || isPlacingProjectPin || isPlacingPhotoPin;
   // Always-on project labels only when zoomed into one property and not mid-edit;
   // in the All view we label properties (name + count) instead, to avoid clutter.
   const showProjectLabels = isSingleProperty && !isMapInteractionActive;
@@ -217,10 +240,26 @@ export function PropertyMap({
     currentPropertyId,
     selectedProjectId ?? 'none',
     pinPlacementProject?.projectId ?? 'none',
+    isPlacingPhotoPin ? 'placing-photo' : 'photo-viewing',
     areaEditProjectId ?? 'none',
     editMode ? 'editing' : 'viewing',
     className ?? 'default',
   ].join('|');
+  const photoMarkerIcon = useMemo(
+    () =>
+      divIcon({
+        className: '',
+        html: [
+          '<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid oklch(var(--brand));background:oklch(var(--surface-card));color:oklch(var(--brand-bright));box-shadow:0 10px 24px oklch(var(--surface-base) / 0.38);">',
+          '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>',
+          '</div>',
+        ].join(''),
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        popupAnchor: [0, -14],
+      }),
+    [],
+  );
 
   const polygonOptionsById = useMemo(() => {
     const options = new Map<string, GeomanPathOptions>();
@@ -259,10 +298,12 @@ export function PropertyMap({
         />
         <MapResizeInvalidator watchKey={resizeWatchKey} />
         <FitBounds properties={visibleProperties} selectedPropertyId={currentPropertyId} disabled={isMapInteractionActive} />
-        <ProjectPinClickHandler
-          active={isPlacingProjectPin}
-          disabled={pinPlacementDisabled}
+        <PlacementClickHandler
+          projectPinActive={isPlacingProjectPin}
+          photoPinActive={isPlacingPhotoPin}
+          disabled={pinPlacementDisabled || photoPlacementDisabled}
           onPlaceProjectPin={onPlaceProjectPin}
+          onPlacePhotoPin={onPlacePhotoPin}
         />
         {canEditSelectedBoundary ? <GeomanControl onBoundaryChange={onBoundaryChange} /> : null}
         {isAreaEditActive ? <GeomanControl onBoundaryChange={onAreaChange} onCreateComplete={onAreaCreate} /> : null}
@@ -393,8 +434,39 @@ export function PropertyMap({
             </CircleMarker>
           );
         })}
+        {!isMapInteractionActive ? photoPins.map((photo) => {
+          const coordinates = photo.locationGeojson?.coordinates;
+          if (!coordinates) return null;
+          const markerCenter: LatLngTuple = [coordinates[1], coordinates[0]];
+          return (
+            <Marker
+              key={`${photo.id}-photo-pin`}
+              position={markerCenter}
+              icon={photoMarkerIcon}
+              eventHandlers={{
+                click: (event) => {
+                  event.originalEvent.stopPropagation();
+                  onSelectPhoto?.(photo);
+                },
+              }}
+            >
+              <Popup>
+                <div className="w-[200px] space-y-2">
+                  <img
+                    src={photo.signedUrl}
+                    alt={photo.caption || 'Project progress photo'}
+                    className="max-h-36 w-full rounded-md object-cover"
+                    loading="lazy"
+                  />
+                  {photo.caption ? <div className="text-sm font-medium">{photo.caption}</div> : null}
+                  {photo.projectName ? <div className="text-xs">{photo.projectName}</div> : null}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        }) : null}
       </MapContainer>
-      {pinPlacementProject ? (
+      {isPlacingProjectPin && pinPlacementProject ? (
         <div className="absolute left-4 top-4 z-[500] max-w-sm rounded-lg border border-surface-border bg-surface-card px-3 py-3 text-sm text-text-secondary shadow-md">
           <div className="font-semibold text-text-primary">
             {pinPlacementDisabled ? 'Saving project pin...' : `Click the map to place ${pinPlacementProject.projectName}.`}
@@ -406,6 +478,23 @@ export function PropertyMap({
             className="mt-3"
             onClick={onCancelPinPlacement}
             disabled={pinPlacementDisabled}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+      {isPlacingPhotoPin ? (
+        <div className="absolute left-4 top-4 z-[500] max-w-sm rounded-lg border border-surface-border bg-surface-card px-3 py-3 text-sm text-text-secondary shadow-md">
+          <div className="font-semibold text-text-primary">
+            {photoPlacementDisabled ? 'Saving photo pin...' : 'Click the map to place this progress photo.'}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={onCancelPhotoPlacement}
+            disabled={photoPlacementDisabled}
           >
             Cancel
           </Button>
