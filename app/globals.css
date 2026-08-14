@@ -22,7 +22,7 @@ Theme tokens use OKLCH payloads.
   --brand-ghost: 26.751% 0.04185 158.26;        /* #122c1e */
   --text-primary: 96.601% 0.00677 145.52;    /* #f1f5f1 - near-white, slight warm */
   --text-secondary: 71.067% 0.03511 256.79;  /* #94a3b8 - pure slate-400, no green tint */
-  --text-muted: 44.553% 0.03745 257.28;        /* #475569 - slate-600 */
+  --text-muted: 65.559% 0.03079 256.52;        /* #8592a4 - readable muted slate */
   --text-inverse: 18.754% 0.00512 173.77;       /* #111413 */
   --status-active: 72.275% 0.19201 149.58;
   --status-pending: 76.859% 0.16466 70.08;
@@ -48,7 +48,7 @@ html.light {
   --surface-hover: 92.875% 0.01366 145.46;    /* #e2eae2 */
   --text-primary: 16.172% 0.01014 158.69;       /* #0a0f0c */
   --text-secondary: 44.136% 0.06198 144.44;     /* #3d5c3d */
-  --text-muted: 60.558% 0.06175 144.77;      /* #6b8c6b */
+  --text-muted: 47.555% 0.04966 144.74;      /* #4b644b */
   --text-inverse: 96.301% 0.00677 145.52;    /* #f0f4f0 */
   --brand-ghost: 94.833% 0.03139 163.24;     /* #dcf5e8 - light emerald tint */
   --status-active: 54.979% 0.13945 149.81;
