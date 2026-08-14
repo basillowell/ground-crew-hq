@@ -1,4 +1,4 @@
-import { type ReactNode, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
@@ -800,6 +800,12 @@ export default function WorkboardContent() {
   const [expandedSopIds, setExpandedSopIds] = useState<string[]>([]);
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<string[]>([]);
   const [taskRows, setTaskRows] = useState<TaskRowDraft[]>(() => [makeEmptyTaskRow()]);
+  const [, startAssignmentTransition] = useTransition();
+  const markAssignmentModalDirtyDeferred = useCallback(() => {
+    startAssignmentTransition(() => {
+      setIsAssignmentModalDirty(true);
+    });
+  }, [startAssignmentTransition]);
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState({
     scheduledCrew: false,
     notes: false,
@@ -6480,7 +6486,7 @@ export default function WorkboardContent() {
                     router.push('/app/settings?tab=Tasks');
                     return;
                   }
-                  setIsAssignmentModalDirty(true);
+                  markAssignmentModalDirtyDeferred();
                   setAssignmentDraft({
                     ...assignmentDraft,
                     taskId: e.target.value,
@@ -6641,7 +6647,7 @@ export default function WorkboardContent() {
                         ? taskRows
                         : [makeEmptyTaskRow(getDefaultStartTimeForEmployee(scheduleList, assignmentDraft.employeeId, boardDate, operationalTimezone), effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : '')];
                       const nextRows = baseRows.map((item, itemIndex) => (itemIndex === 0 ? { ...item, taskId } : item));
-                      setIsAssignmentModalDirty(true);
+                      markAssignmentModalDirtyDeferred();
                       setAssignmentDraft({ ...assignmentDraft, taskId });
                       setTaskRows(nextRows);
                       if (!taskId) return;
@@ -6831,7 +6837,7 @@ export default function WorkboardContent() {
                               router.push('/app/settings?tab=Tasks');
                               return;
                             }
-                            setIsAssignmentModalDirty(true);
+                            markAssignmentModalDirtyDeferred();
                             setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, taskId: e.target.value } : item)));
                           }}
                           className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"

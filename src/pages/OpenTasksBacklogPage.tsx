@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, useTransition } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, Loader2, RefreshCw, UsersRound } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -133,6 +133,7 @@ export default function OpenTasksBacklogPage() {
   const employeesQuery = useEmployees(undefined, queryOrgId, 'all');
   const tasksQuery = useTasks(undefined, queryOrgId);
   const [expandedReviewKeys, setExpandedReviewKeys] = useState<Set<string>>(() => new Set());
+  const [, startExpandTransition] = useTransition();
   const [groupBy, setGroupBy] = useState<'employee' | 'date'>('employee');
   const [quickApprovingKey, setQuickApprovingKey] = useState<string | null>(null);
 
@@ -314,11 +315,13 @@ export default function OpenTasksBacklogPage() {
   const toggleDayReview = (employeeId: string, date: string) => {
     if (!employeeId || employeeId === 'unknown-employee' || !date) return;
     const key = makeReviewKey(employeeId, date);
-    setExpandedReviewKeys((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
+    startExpandTransition(() => {
+      setExpandedReviewKeys((current) => {
+        const next = new Set(current);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
     });
   };
 
