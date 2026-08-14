@@ -668,6 +668,7 @@ via can_manage_property(property_id).
 | uploaded_by       | uuid        | YES      |                   |
 | sort_order        | integer     | NO       | 0                 |
 | created_at        | timestamptz | NO       | now()             |
+| location_geojson  | jsonb       | YES      |                   |
 
 > Progress photos. A photo may attach to a TIMELINE EVENT (desktop: each dated
 > entry carries its own before/during/after images) OR, as of Phase C-1
@@ -680,6 +681,12 @@ via can_manage_property(property_id).
 > storage_path holds the object key inside the `project-photos` bucket and MUST
 > follow `{org_id}/{project_id}/{uuid}.{ext}` — the storage policies match on the
 > first path segment, so any other shape is rejected on upload.
+>
+> location_geojson (migration project_photo_map_location 2026-08-14): optional
+> GeoJSON Point `{type:'Point', coordinates:[lng, lat]}` placing the photo on the
+> property map. NULL = unplaced. Mirrors projects.location_geojson. Set via a
+> manual place-on-map action (UPDATE is manager-gated, matching the admin/manager
+> Properties map). Photos with a location render as camera markers on PropertyMap.
 
 RLS (relaxed for field capture, migration phase_c_field_photo_capture 2026-07-25):
 - SELECT: can_read_property(property_id) — unchanged.
@@ -1693,6 +1700,8 @@ The app calls these via the ANON supabase client from the public /view routes
 
 ## Table count: 53
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl
+Map/visual-record migrations applied 2026-08-14:
+- project_photo_map_location — project_photos.location_geojson (nullable jsonb Point) for progress-photo map pins
 Phase C migrations applied 2026-07-25/26:
 - phase_c_field_photo_capture — project_photos.timeline_event_id nullable; INSERT relaxed to any active member who can_read_property; storage INSERT org-scoped, DELETE manager-or-owner
 - phase_c_signatures — new signatures table (immutable, attaches to an assignment)
