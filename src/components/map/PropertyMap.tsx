@@ -250,7 +250,7 @@ export function PropertyMap({
       divIcon({
         className: '',
         html: [
-          '<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid oklch(var(--brand));background:oklch(var(--surface-card));color:oklch(var(--brand-bright));box-shadow:0 10px 24px oklch(var(--surface-base) / 0.38);">',
+          '<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid oklch(var(--brand-default));background:oklch(var(--surface-card));color:oklch(var(--brand-bright));box-shadow:0 10px 24px oklch(var(--surface-base) / 0.38);">',
           '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>',
           '</div>',
         ].join(''),
