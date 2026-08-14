@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
 import type { PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
+import { PROJECT_STATUS_LEGEND, projectStatusColor, statusKeyColor } from '@/lib/project-status';
 import { cn } from '@/lib/utils';
 
 type LatLngTuple = [number, number];
@@ -166,7 +167,7 @@ export function PropertyMap({
           .map((project) => ({
             ...project,
             propertyName: property.name,
-            markerColor: project.color ?? property.color,
+            markerColor: projectStatusColor(project.status),
           })),
       ),
     [visibleProperties],
@@ -179,7 +180,7 @@ export function PropertyMap({
           .map((project) => ({
             ...project,
             propertyName: property.name,
-            areaColor: project.color ?? property.color,
+            areaColor: projectStatusColor(project.status),
           })),
       ),
     [visibleProperties],
@@ -374,6 +375,24 @@ export function PropertyMap({
           >
             Cancel
           </Button>
+        </div>
+      ) : null}
+      {(projectAreas.length > 0 || projectPins.length > 0) && !isMapInteractionActive ? (
+        <div className="pointer-events-none absolute bottom-4 right-4 z-[500] rounded-lg border border-surface-border bg-surface-card/95 px-3 py-2.5 shadow-md backdrop-blur-sm">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+            Project status
+          </div>
+          <div className="flex flex-col gap-1">
+            {PROJECT_STATUS_LEGEND.map((entry) => (
+              <div key={entry.key} className="flex items-center gap-2 text-xs text-text-secondary">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-[3px] ring-1 ring-inset ring-white/40"
+                  style={{ backgroundColor: statusKeyColor(entry.key) }}
+                />
+                {entry.label}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
       {mappedProperties.length === 0 && !editMode ? (

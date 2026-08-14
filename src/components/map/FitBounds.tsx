@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { useMap } from 'react-leaflet';
+import type { LatLngBoundsExpression } from 'leaflet';
 import type { PropertyBoundary } from '@/lib/supabase-queries';
 
 type LatLngTuple = [number, number];
@@ -68,13 +69,30 @@ export function FitBounds({ properties, selectedPropertyId, disabled = false }: 
   const fitSignature = useMemo(() => getFitSignature(properties, selectedPropertyId), [properties, selectedPropertyId]);
 
   useEffect(() => {
-    if (disabled) return;
-    const visibleProperties = selectedPropertyId === 'all'
-      ? properties
-      : properties.filter((property) => property.id === selectedPropertyId);
+    const isSingleProperty = selectedPropertyId !== 'all';
+    const visibleProperties = isSingleProperty
+      ? properties.filter((property) => property.id === selectedPropertyId)
+      : properties;
     const bounds = getPropertyBounds(visibleProperties);
+
+    // Always release any prior lock first, so fitBounds and edit-mode panning
+    // are never fighting a stale maxBounds/minZoom from a previous selection.
+    map.setMinZoom(0);
+    map.setMaxBounds(null as unknown as LatLngBoundsExpression);
+
+    // While drawing/placing, leave the map completely free to pan and zoom.
+    if (disabled) return;
     if (!bounds) return;
+
     map.fitBounds(bounds, { animate: false, maxZoom: 18, padding: [32, 32] });
+
+    // Hard-freeze: on a single selected property, keep it framed and centered.
+    // maxBounds stops panning away; minZoom = the fitted zoom stops zooming out
+    // past the whole property. Zooming *in* to inspect a spot stays allowed.
+    if (isSingleProperty) {
+      map.setMaxBounds(map.getBounds().pad(0.12));
+      map.setMinZoom(map.getZoom());
+    }
   }, [disabled, map, properties, selectedPropertyId, fitSignature]);
 
   return null;
