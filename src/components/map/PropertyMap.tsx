@@ -8,6 +8,7 @@ import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
 import type { ProjectPhoto, PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
 import { PROJECT_STATUS_LEGEND, normalizeProjectStatus, projectStatusColor, statusKeyColor, type ProjectStatusKey } from '@/lib/project-status';
+import { formatAcres, geojsonPolygonAcres } from '@/lib/geo';
 import { cn } from '@/lib/utils';
 
 type LatLngTuple = [number, number];
@@ -85,6 +86,7 @@ type ProjectPin = PropertyProject & {
 type ProjectArea = PropertyProject & {
   propertyName: string;
   areaColor: string;
+  areaAcres: number | null;
 };
 
 function PlacementClickHandler({
@@ -147,6 +149,39 @@ function MapResizeInvalidator({ watchKey }: { watchKey: string }) {
   return null;
 }
 
+// When area-edit or pin-move starts, bring that project's zone/pin up close so
+// it's easy to work with (otherwise the map stays at the whole-property zoom and
+// the target feels tiny and far away). Fits once per target — keyed on targetKey,
+// not the geometry, so it never fights the user mid-edit.
+function FitToFocus({ positions, targetKey }: { positions: LatLngTuple[] | null; targetKey: string }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!targetKey || !positions || positions.length === 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      // Ensure Leaflet has the current (often just-grown) container size first.
+      map.invalidateSize({ animate: false, pan: false });
+      if (positions.length === 1) {
+        map.setView(positions[0], Math.min(19, Math.max(map.getZoom(), 18)), { animate: true });
+        return;
+      }
+      let minLat = positions[0][0];
+      let maxLat = positions[0][0];
+      let minLng = positions[0][1];
+      let maxLng = positions[0][1];
+      positions.forEach(([lat, lng]) => {
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+        minLng = Math.min(minLng, lng);
+        maxLng = Math.max(maxLng, lng);
+      });
+      map.fitBounds([[minLat, minLng], [maxLat, maxLng]], { animate: true, maxZoom: 19, padding: [50, 50] });
+    });
+    return () => window.cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, targetKey]);
+  return null;
+}
+
 export function PropertyMap({
   properties,
   currentPropertyId,
@@ -203,6 +238,7 @@ export function PropertyMap({
             ...project,
             propertyName: property.name,
             areaColor: projectStatusColor(project.status),
+            areaAcres: geojsonPolygonAcres(project.areaGeojson),
           })),
       ),
     [visibleProperties],
@@ -236,6 +272,20 @@ export function PropertyMap({
   // in the All view we label properties (name + count) instead, to avoid clutter.
   const showProjectLabels = isSingleProperty && !isMapInteractionActive;
   const showPropertyLabels = !isSingleProperty;
+  // The zone/pin to zoom to when its edit/move starts (see FitToFocus).
+  const focusTarget = useMemo<{ key: string; positions: LatLngTuple[] | null }>(() => {
+    if (isAreaEditActive && areaEditProjectId) {
+      const area = projectAreas.find((project) => project.id === areaEditProjectId);
+      const positions = area ? geoJsonToPolygonPositions(area.areaGeojson).flat() : [];
+      if (positions.length >= 2) return { key: `area:${areaEditProjectId}`, positions };
+    }
+    if (isPlacingProjectPin && pinPlacementProject) {
+      const pin = projectPins.find((project) => project.id === pinPlacementProject.projectId);
+      const coordinates = pin?.locationGeojson?.coordinates;
+      if (coordinates) return { key: `pin:${pinPlacementProject.projectId}`, positions: [[coordinates[1], coordinates[0]]] };
+    }
+    return { key: '', positions: null };
+  }, [isAreaEditActive, areaEditProjectId, isPlacingProjectPin, pinPlacementProject, projectAreas, projectPins]);
   const resizeWatchKey = [
     currentPropertyId,
     selectedProjectId ?? 'none',
@@ -298,6 +348,7 @@ export function PropertyMap({
         />
         <MapResizeInvalidator watchKey={resizeWatchKey} />
         <FitBounds properties={visibleProperties} selectedPropertyId={currentPropertyId} disabled={isMapInteractionActive} />
+        <FitToFocus positions={focusTarget.positions} targetKey={focusTarget.key} />
         <PlacementClickHandler
           projectPinActive={isPlacingProjectPin}
           photoPinActive={isPlacingPhotoPin}
@@ -379,12 +430,17 @@ export function PropertyMap({
               }}
             >
               {showProjectLabels ? (
-                <Tooltip permanent direction="center" className="gc-map-label">{project.name}</Tooltip>
+                <Tooltip permanent direction="center" className="gc-map-label">
+                  {project.name}
+                  {project.areaAcres !== null ? (
+                    <span className="gc-map-label-sub"> · {formatAcres(project.areaAcres)}</span>
+                  ) : null}
+                </Tooltip>
               ) : (
                 <Tooltip sticky>
                   <div className="space-y-1">
                     <div className="font-semibold">{project.name}</div>
-                    <div>{project.propertyName}</div>
+                    <div>{project.areaAcres !== null ? `${formatAcres(project.areaAcres)} · ` : ''}{project.propertyName}</div>
                   </div>
                 </Tooltip>
               )}

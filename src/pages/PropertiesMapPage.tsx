@@ -11,6 +11,7 @@ import { PropertyDetailPanel } from '@/components/map/PropertyDetailPanel';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
+import { geojsonPolygonAcres } from '@/lib/geo';
 import {
   usePropertyBoundaries,
   useLocatedProjectPhotos,
@@ -72,6 +73,12 @@ export default function PropertiesMapPage() {
   const hasConcretePropertySelected = selectedPropertyId !== 'all' && Boolean(selectedProperty);
   const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
   const hasPendingAreaChange = pendingAreaGeojson !== undefined;
+  const editingAreaProject = areaEditProject
+    ? selectedProperty?.projects.find((project) => project.id === areaEditProject.projectId) ?? null
+    : null;
+  const editingAreaAcres = geojsonPolygonAcres(
+    hasPendingAreaChange ? pendingAreaGeojson : editingAreaProject?.areaGeojson,
+  );
   const photoPins = useMemo(
     () => {
       const projectNameById = new Map<string, string>();
@@ -385,7 +392,9 @@ export default function PropertiesMapPage() {
           ) : null}
           {areaEditProject ? (
             <div className="mt-2 text-xs font-medium text-brand-bright">
-              Editing area for {areaEditProject.projectName}{hasPendingAreaChange ? ' - unsaved changes are ready to save.' : '.'}
+              Editing area for {areaEditProject.projectName}
+              {editingAreaAcres !== null ? ` — ${formatAcres(editingAreaAcres)}` : ''}
+              {hasPendingAreaChange ? ' · unsaved changes are ready to save.' : '.'}
             </div>
           ) : null}
         </div>
