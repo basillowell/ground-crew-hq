@@ -180,7 +180,25 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [orgId, queryClient]);
 
   useEffect(() => {
-    void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    // Only refresh assignments when navigating to a route that actually shows them.
+    // The layout observes the assignments query (badges/notifications), so invalidating on
+    // EVERY navigation forced a refetch on every page change — even Settings/Clients/etc. that
+    // don't use assignments. Scoping it removes those wasted refetches; staleTime + the
+    // mutation-driven invalidations keep the data fresh everywhere else.
+    const ASSIGNMENT_ROUTES = [
+      '/app/dashboard',
+      '/app/workboard',
+      '/app/scheduler',
+      '/app/dispatch',
+      '/app/open-tasks',
+      '/app/field',
+      '/app/payroll',
+      '/app/job-costing',
+      '/app/reports',
+    ];
+    if (ASSIGNMENT_ROUTES.some((route) => pathname.startsWith(route))) {
+      void queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    }
   }, [pathname, queryClient]);
 
   useEffect(() => {
