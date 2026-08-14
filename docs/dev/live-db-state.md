@@ -945,6 +945,10 @@ Replaces the old localStorage-based `gcrew-task-categories-{orgId}` key — cate
 > canonical, archived the extras) and set all active tasks to property_id=NULL. Task pickers/queries
 > must be org-scoped (do NOT filter tasks by property_id — that would now return nothing). Per-org
 > isolation is unchanged (org_id + RLS); "shared" = across an org's properties, never across orgs.
+> RLS (migration tasks_org_level_rls, 2026-08-14): policies are now ORG-SCOPED, not property-scoped —
+> "tasks select" = org_id = current_org_id(); "tasks manage" (ALL) = org + current_user_role() IN
+> ('admin','manager'). This was REQUIRED: the old can_read_property/can_manage_property policies returned
+> false for a NULL property, so global tasks were invisible to the app until this changed.
 >
 > sop_id: nullable FK to sops.id. When set, this task has an associated
 > SOP that should be surfaced to the assigned employee (see
