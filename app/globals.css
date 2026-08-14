@@ -397,3 +397,27 @@ input[type="color"] {
     color: oklch(var(--text-primary));
   }
 }
+
+/* Always-on labels on the property map (Leaflet permanent tooltips).
+   Token-styled so they read as intentional chips over satellite imagery. */
+.leaflet-tooltip.gc-map-label {
+  background: oklch(var(--surface-card) / 0.92);
+  color: oklch(var(--text-primary));
+  border: 1px solid oklch(var(--surface-border));
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.leaflet-tooltip.gc-map-label::before {
+  display: none; /* no callout arrow on centered labels */
+}
+.leaflet-tooltip.gc-map-label .gc-map-label-sub {
+  color: oklch(var(--text-muted));
+  font-weight: 500;
+}

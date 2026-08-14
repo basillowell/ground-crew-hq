@@ -206,8 +206,13 @@ export function PropertyMap({
   const initialCenter = useMemo(() => getInitialCenter(properties), [properties]);
   const isPlacingProjectPin = Boolean(pinPlacementProject);
   const isAreaEditActive = Boolean(areaEditProjectId) && !editMode && !isPlacingProjectPin;
+  const isSingleProperty = currentPropertyId !== 'all';
   const canEditSelectedBoundary = editMode && !isPlacingProjectPin && !areaEditProjectId && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
   const isMapInteractionActive = editMode || isAreaEditActive || isPlacingProjectPin;
+  // Always-on project labels only when zoomed into one property and not mid-edit;
+  // in the All view we label properties (name + count) instead, to avoid clutter.
+  const showProjectLabels = isSingleProperty && !isMapInteractionActive;
+  const showPropertyLabels = !isSingleProperty;
   const resizeWatchKey = [
     currentPropertyId,
     selectedProjectId ?? 'none',
@@ -283,12 +288,21 @@ export function PropertyMap({
               },
             }}
           >
-            <Tooltip sticky>
-              <div className="space-y-1">
-                <div className="font-semibold">{property.name}</div>
-                <div>{property.calculatedAcreage?.toFixed(1) ?? property.acreage.toFixed(1)} acres</div>
-              </div>
-            </Tooltip>
+            {showPropertyLabels ? (
+              <Tooltip permanent direction="center" className="gc-map-label">
+                {property.name}
+                {property.projects.length > 0 ? (
+                  <span className="gc-map-label-sub"> · {property.projects.length}</span>
+                ) : null}
+              </Tooltip>
+            ) : (
+              <Tooltip sticky>
+                <div className="space-y-1">
+                  <div className="font-semibold">{property.name}</div>
+                  <div>{property.calculatedAcreage?.toFixed(1) ?? property.acreage.toFixed(1)} acres</div>
+                </div>
+              </Tooltip>
+            )}
           </Polygon>
         ))}
         {projectAreas.map((project: ProjectArea) => {
@@ -323,12 +337,16 @@ export function PropertyMap({
                 },
               }}
             >
-              <Tooltip sticky>
-                <div className="space-y-1">
-                  <div className="font-semibold">{project.name}</div>
-                  <div>{project.propertyName}</div>
-                </div>
-              </Tooltip>
+              {showProjectLabels ? (
+                <Tooltip permanent direction="center" className="gc-map-label">{project.name}</Tooltip>
+              ) : (
+                <Tooltip sticky>
+                  <div className="space-y-1">
+                    <div className="font-semibold">{project.name}</div>
+                    <div>{project.propertyName}</div>
+                  </div>
+                </Tooltip>
+              )}
             </Polygon>
           );
         })}
@@ -355,12 +373,16 @@ export function PropertyMap({
                 },
               }}
             >
-              <Tooltip sticky>
-                <div className="space-y-1">
-                  <div className="font-semibold">{project.name}</div>
-                  <div>{project.status}</div>
-                </div>
-              </Tooltip>
+              {showProjectLabels ? (
+                <Tooltip permanent direction="top" offset={[0, -6]} className="gc-map-label">{project.name}</Tooltip>
+              ) : (
+                <Tooltip sticky>
+                  <div className="space-y-1">
+                    <div className="font-semibold">{project.name}</div>
+                    <div>{project.status}</div>
+                  </div>
+                </Tooltip>
+              )}
               <Popup>
                 <div className="space-y-1">
                   <div className="font-semibold">{project.name}</div>
