@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import type { Employee, Property, ScheduleEntry } from '@/data/seedData';
 import { Card } from '@/components/ui/card';
@@ -200,35 +200,37 @@ export default function SchedulerPage() {
 
 
 
-  const weekScheduleQueryConfigs = useMemo(() => weekDays.map((day) => ({
-      queryKey: ['schedule-entries', day.date, propertyScope ?? 'all', orgId ?? 'all-orgs'],
-      enabled: Boolean(orgId),
-      queryFn: async () => {
-        if (!supabase || !orgId) return [] as ScheduleEntry[];
-        let query = supabase
-          .from('schedule_entries')
-          .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
-          .eq('org_id', orgId)
-          .eq('date', day.date)
-          .order('shift_start');
-        if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
-        const result = await withSchedulerRequestTimeout(query);
-        if (result.error) throw result.error;
-        return (result.data ?? []).map((row) => ({
-          id: String(row.id),
-          employeeId: String(row.employee_id),
-          date: String(row.date),
-          shiftStart: String(row.shift_start ?? '').slice(0, 5),
-          shiftEnd: String(row.shift_end ?? '').slice(0, 5),
-          status: (row.status ?? 'scheduled') as ScheduleEntry['status'],
-          notes: typeof row.notes === 'string' ? row.notes : null,
-        })) as (ScheduleEntry & { notes?: string | null })[];
-      },
-      staleTime: 1000 * 60 * 5,
-    })), [weekDays, propertyScope, orgId]);
-
-  const weekScheduleQueries = useQueries({
-    queries: weekScheduleQueryConfigs,
+  // One range query for the whole visible week instead of seven per-day queries
+  // (the old useQueries fired 7 network round-trips per load). Mirrors
+  // useAssignmentsRange above; consumers group scheduleList by date client-side.
+  const weekStartDate = weekDays[0]?.date ?? '';
+  const weekEndDate = weekDays[6]?.date ?? '';
+  const weekScheduleQuery = useQuery({
+    queryKey: ['schedule-entries', weekStartDate, weekEndDate, propertyScope ?? 'all', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId) && Boolean(weekStartDate) && Boolean(weekEndDate),
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as (ScheduleEntry & { notes?: string | null })[];
+      let query = supabase
+        .from('schedule_entries')
+        .select('id, employee_id, property_id, date, shift_start, shift_end, status, created_at, org_id, notes')
+        .eq('org_id', orgId)
+        .gte('date', weekStartDate)
+        .lte('date', weekEndDate)
+        .order('shift_start');
+      if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
+      const result = await withSchedulerRequestTimeout(query);
+      if (result.error) throw result.error;
+      return (result.data ?? []).map((row) => ({
+        id: String(row.id),
+        employeeId: String(row.employee_id),
+        date: String(row.date),
+        shiftStart: String(row.shift_start ?? '').slice(0, 5),
+        shiftEnd: String(row.shift_end ?? '').slice(0, 5),
+        status: (row.status ?? 'scheduled') as ScheduleEntry['status'],
+        notes: typeof row.notes === 'string' ? row.notes : null,
+      })) as (ScheduleEntry & { notes?: string | null })[];
+    },
+    staleTime: 1000 * 60 * 5,
   });
 
   const employeeList = useMemo(
@@ -238,13 +240,13 @@ export default function SchedulerPage() {
         .filter((employee) => String(employee.role ?? '').toLowerCase() !== 'viewer'),
     [propertyScope, storeEmployees],
   );
-  const scheduleList = useMemo(() => weekScheduleQueries.flatMap((q) => q.data ?? []), [weekScheduleQueries]);
-  const hasAnyScheduleData = weekScheduleQueries.some((q) => q.data !== undefined);
-  const isWeekScheduleLoading = Boolean(orgId) && !hasAnyScheduleData && weekScheduleQueries.some((q) => q.isLoading);
+  const scheduleList = useMemo(() => weekScheduleQuery.data ?? [], [weekScheduleQuery.data]);
+  const hasAnyScheduleData = weekScheduleQuery.data !== undefined;
+  const isWeekScheduleLoading = Boolean(orgId) && !hasAnyScheduleData && weekScheduleQuery.isLoading;
   const isLoading = isWeekScheduleLoading || employeesLoading || propertiesLoading;
   const queryErrorMessage =
     (orgId
-      ? (weekScheduleQueries.find((query) => query.error)?.error as { message?: string } | null)?.message
+      ? (weekScheduleQuery.error as { message?: string } | null)?.message
       : '') ||
     '';
 
@@ -1245,9 +1247,7 @@ export default function SchedulerPage() {
                 variant="outline"
                 className="mt-3"
                 onClick={() => {
-                  weekScheduleQueries.forEach((query) => {
-                    void query.refetch();
-                  });
+                  void weekScheduleQuery.refetch();
                 }}
               >
                 Retry
