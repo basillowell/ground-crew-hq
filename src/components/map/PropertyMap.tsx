@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
 import type { PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
-import { PROJECT_STATUS_LEGEND, projectStatusColor, statusKeyColor } from '@/lib/project-status';
+import { PROJECT_STATUS_LEGEND, normalizeProjectStatus, projectStatusColor, statusKeyColor, type ProjectStatusKey } from '@/lib/project-status';
 import { cn } from '@/lib/utils';
 
 type LatLngTuple = [number, number];
@@ -191,6 +191,18 @@ export function PropertyMap({
       : properties.find((property) => property.id === currentPropertyId) ?? null,
     [currentPropertyId, properties],
   );
+  const workSummary = useMemo(() => {
+    if (currentPropertyId === 'all' || !selectedProperty) return null;
+    const projects = selectedProperty.projects;
+    if (projects.length === 0) return null;
+    const counts = { active: 0, pending: 0, hold: 0, complete: 0, warning: 0 } as Record<ProjectStatusKey, number>;
+    let mapped = 0;
+    projects.forEach((project) => {
+      counts[normalizeProjectStatus(project.status)] += 1;
+      if (project.areaGeojson || project.locationGeojson) mapped += 1;
+    });
+    return { total: projects.length, counts, mapped };
+  }, [currentPropertyId, selectedProperty]);
   const initialCenter = useMemo(() => getInitialCenter(properties), [properties]);
   const isPlacingProjectPin = Boolean(pinPlacementProject);
   const isAreaEditActive = Boolean(areaEditProjectId) && !editMode && !isPlacingProjectPin;
@@ -375,6 +387,26 @@ export function PropertyMap({
           >
             Cancel
           </Button>
+        </div>
+      ) : null}
+      {workSummary && !isMapInteractionActive ? (
+        <div className="pointer-events-none absolute left-4 top-4 z-[500] max-w-[min(20rem,calc(100%-2rem))] rounded-lg border border-surface-border bg-surface-card/95 px-3 py-2.5 shadow-md backdrop-blur-sm">
+          <div className="truncate text-sm font-semibold text-text-primary">{selectedProperty?.name}</div>
+          <div className="mt-0.5 text-[11px] text-text-muted">
+            {workSummary.total} project{workSummary.total === 1 ? '' : 's'} · {workSummary.mapped} mapped
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            {PROJECT_STATUS_LEGEND.filter((entry) => workSummary.counts[entry.key] > 0).map((entry) => (
+              <div key={entry.key} className="flex items-center gap-1.5 text-xs text-text-secondary">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-white/40"
+                  style={{ backgroundColor: statusKeyColor(entry.key) }}
+                />
+                <span className="font-semibold text-text-primary">{workSummary.counts[entry.key]}</span>
+                {entry.label}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
       {(projectAreas.length > 0 || projectPins.length > 0) && !isMapInteractionActive ? (
