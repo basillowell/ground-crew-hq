@@ -335,6 +335,7 @@ async function fetchReviewData(orgId: string, employeeId: string, date: string):
       .from('tasks')
       .select('id, property_id, name, category, estimated_hours, is_unpaid')
       .eq('org_id', orgId)
+      .eq('status', 'active')
       .order('category', { ascending: true })
       .order('name', { ascending: true }),
     'Task review fetch',

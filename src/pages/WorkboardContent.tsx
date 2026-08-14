@@ -1003,7 +1003,7 @@ export default function WorkboardContent() {
     isLoading: isLoadingTasks,
     error: tasksError,
     refetch: refetchTasks,
-  } = useTasks(undefined, authOrgId ?? undefined);
+  } = useTasks(undefined, (authOrgId ?? currentUser?.orgId) ?? undefined);
   const showTaskLoading = isLoadingTasks && taskOptions.length === 0;
   const equipmentQuery = useEquipmentUnits(effectivePropertyId, orgId);
   const notesQuery = useQuery({
