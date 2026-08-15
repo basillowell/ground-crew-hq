@@ -1854,7 +1854,7 @@ export default function ApplicationsPage() {
                       {properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
                     </select>
                   ) : (
-                    <div className="mt-1 rounded-md border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <div className="mt-1 rounded-md border border-dashed border-status-pending/40 bg-status-pending/10 px-3 py-2 text-xs text-status-pending">
                       No properties configured
                     </div>
                   )}

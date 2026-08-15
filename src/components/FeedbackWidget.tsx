@@ -93,7 +93,7 @@ export function FeedbackWidget({ pagePath }: FeedbackWidgetProps) {
               className="text-lg leading-none"
               aria-label={`Rate ${value} star${value > 1 ? 's' : ''}`}
             >
-              <span className={value <= (rating ?? 0) ? 'text-amber-500' : 'text-text-muted'}>★</span>
+              <span className={value <= (rating ?? 0) ? 'text-status-pending' : 'text-text-muted'}>★</span>
             </button>
           ))}
         </div>

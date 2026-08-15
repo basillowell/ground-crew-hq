@@ -90,7 +90,7 @@ export default function ResetPasswordPage() {
           {/* Error: misconfigured or expired link */}
           {resetState === 'error' && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-400">
+              <div className="rounded-xl border border-status-warning/30 bg-status-warning/10 px-3 py-3 text-xs text-status-warning">
                 {errorMessage || 'This reset link is invalid or has expired. Please request a new one.'}
               </div>
               <button
@@ -138,7 +138,7 @@ export default function ResetPasswordPage() {
               </div>
 
               {errorMessage ? (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-400">
+                <div className="rounded-xl border border-status-warning/30 bg-status-warning/10 px-3 py-3 text-xs text-status-warning">
                   {errorMessage}
                 </div>
               ) : null}

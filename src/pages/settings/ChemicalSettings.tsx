@@ -143,7 +143,7 @@ export default function ChemicalSettings() {
         <Button onClick={handleSave} disabled={!canSave || isSaving}>
           {isSaving ? 'Saving...' : 'Save Chemical Settings'}
         </Button>
-        {saveState === 'saved' ? <span className="text-sm text-emerald-600">Saved</span> : null}
+        {saveState === 'saved' ? <span className="text-sm text-status-active">Saved</span> : null}
       </div>
 
       <ProductManager />

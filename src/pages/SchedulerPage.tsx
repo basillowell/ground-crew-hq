@@ -87,22 +87,22 @@ function toCoveragePercent(assignedHours: number, scheduledHours: number): numbe
 
 const STATUS_STYLES: Record<string, { cell: string; label: string; badge: string }> = {
   scheduled: {
-    cell: 'bg-card border border-l-4 border-l-emerald-400 text-foreground hover:bg-muted/30',
+    cell: 'bg-card border border-l-4 border-l-status-active text-foreground hover:bg-muted/30',
     label: 'Scheduled',
-    badge: 'border-emerald-200 text-emerald-700',
+    badge: 'border-status-active/20 text-status-active',
   },
   off: {
-    cell: 'bg-card border border-l-4 border-l-amber-400 text-foreground hover:bg-muted/30',
+    cell: 'bg-card border border-l-4 border-l-status-pending text-foreground hover:bg-muted/30',
     label: 'Day Off',
-    badge: 'border-amber-200 text-amber-700',
+    badge: 'border-status-pending/20 text-status-pending',
   },
   vacation: {
-    cell: 'bg-card border border-l-4 border-l-blue-400 text-foreground hover:bg-muted/30',
+    cell: 'bg-card border border-l-4 border-l-status-complete text-foreground hover:bg-muted/30',
     label: 'Vacation',
-    badge: 'border-blue-200 text-blue-700',
+    badge: 'border-status-complete/20 text-status-complete',
   },
   sick: {
-    cell: 'bg-card border border-l-4 border-l-red-400 text-foreground hover:bg-muted/30',
+    cell: 'bg-card border border-l-4 border-l-status-warning text-foreground hover:bg-muted/30',
     label: 'Sick',
     badge: 'border-status-warning/20 text-status-warning',
   },
@@ -395,27 +395,27 @@ export default function SchedulerPage() {
     const department = String(employee.department ?? '').toLowerCase();
     if (role.includes('field staff') || department.includes('field staff')) {
       return {
-        cell: 'bg-card border border-l-4 border-l-amber-500 text-foreground hover:bg-muted/30',
-        badge: 'border-amber-200 text-amber-700',
+        cell: 'bg-card border border-l-4 border-l-status-pending text-foreground hover:bg-muted/30',
+        badge: 'border-status-pending/20 text-status-pending',
         label: 'Field Staff',
       };
     }
     if (department.includes('maintenance')) {
       return {
-        cell: 'bg-card border border-l-4 border-l-emerald-500 text-foreground hover:bg-muted/30',
-        badge: 'border-emerald-200 text-emerald-700',
+        cell: 'bg-card border border-l-4 border-l-status-active text-foreground hover:bg-muted/30',
+        badge: 'border-status-active/20 text-status-active',
         label: 'Maintenance',
       };
     }
     if (department.includes('irrigation')) {
       return {
-        cell: 'bg-card border border-l-4 border-l-blue-500 text-foreground hover:bg-muted/30',
-        badge: 'border-blue-200 text-blue-700',
+        cell: 'bg-card border border-l-4 border-l-status-complete text-foreground hover:bg-muted/30',
+        badge: 'border-status-complete/20 text-status-complete',
         label: 'Irrigation',
       };
     }
     return {
-      cell: 'bg-card border border-l-4 border-l-slate-400 text-foreground hover:bg-muted/30',
+      cell: 'bg-card border border-l-4 border-l-status-hold text-foreground hover:bg-muted/30',
       badge: 'border-surface-border text-text-muted',
       label: employee.department?.trim() || 'General',
     };
@@ -1507,7 +1507,7 @@ export default function SchedulerPage() {
                         <td className="px-3 py-2 text-center">
                           <div className="space-y-0.5">
                             <div className="text-[11px] font-semibold text-foreground">{weekDaysScheduled} days</div>
-                            <span className={`font-mono text-xs font-semibold ${weekHours >= 40 ? 'text-emerald-700 dark:text-emerald-300' : weekHours > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            <span className={`font-mono text-xs font-semibold ${weekHours >= 40 ? 'text-status-active' : weekHours > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
                               {weekHours > 0 ? `${weekHours.toFixed(1)}h` : '—'}
                             </span>
                           </div>
@@ -1526,7 +1526,7 @@ export default function SchedulerPage() {
                     <td key={day.date} className="px-2 py-2 text-center">
                       <div className="space-y-0.5">
                         <div className="text-[11px] font-semibold text-foreground">{day.shiftCount} shifts</div>
-                        <span className={`font-mono text-xs font-semibold ${day.totalHours >= 24 ? 'text-amber-700 dark:text-amber-300' : 'text-foreground'}`}>
+                        <span className={`font-mono text-xs font-semibold ${day.totalHours >= 24 ? 'text-status-pending' : 'text-foreground'}`}>
                           {day.totalHours > 0 ? `${day.totalHours.toFixed(1)}h` : '0.0h'}
                         </span>
                       </div>
