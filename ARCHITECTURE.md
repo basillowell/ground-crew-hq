@@ -1,6 +1,6 @@
 # Ground Crew HQ - Application Architecture
-**Last updated:** June 16, 2026
-**Version:** v2.5.32.2
+**Last updated:** August 15, 2026
+**Version:** v7.19.44
 **Purpose:** Authoritative reference for frontend layers, route inventory, data store, database schema domains, and structural notes.
 
 ---
@@ -9,7 +9,7 @@
 
 | Layer | Technology |
 |---|---|
-| Frontend | React + Vite + TypeScript |
+| Frontend | React + Next.js (App Router) + TypeScript |
 | Styling | Tailwind CSS + shadcn/ui |
 | Drag-drop | @dnd-kit/core + @dnd-kit/sortable |
 | Charts | Recharts |
@@ -130,6 +130,7 @@ Exception: `useTasks()` must use `orgId` directly and must not be gated by `isOr
 **Supabase project:** `fjqeekwisnbpxgebrnpl`
 **RLS:** Enabled on all production tables
 **Schema doc:** `docs/dev/live-db-state.md` is authoritative for column names
+**Table count:** authoritative in `docs/dev/live-db-state.md` — **53 tables** as of the 2026-07-23 sync. Treat the Domain Map below as a grouping guide, not a count; do not report a table count from counting this map.
 
 ### Query Rules
 - All queries must include `.eq('org_id', orgId)` on tables with `org_id`.
@@ -167,9 +168,13 @@ Exception: `useTasks()` must use `orgId` directly and must not be gated by `isOr
 | `assignments` | Core job assignments linking employees, tasks, properties, and dates |
 | `schedule_entries` | Shift schedule records |
 | `tasks` | Org-wide reusable task library; `tasks.property_id` is nullable and must not be used to filter `useTasks()` |
+| `task_categories` | Task grouping/categorization |
 | `task_requests` | Ad-hoc job requests |
 | `recurring_task_rules` | Recurring job automation |
-| `work_orders` | Equipment work orders |
+| `work_orders` | Equipment/maintenance work orders |
+| `task_work_orders` | Client- and equipment-originated work-order funnel (review → assign → verify); separate from `work_orders` |
+| `work_order_jobs` | Line items within a work order |
+| `turf_mow_patterns` | Turf mow pattern records |
 | `notes` | Property/operational notes |
 | `sops` | Standard operating procedures |
 | `sop_checklist_items` | SOP checklist steps |
@@ -180,6 +185,8 @@ Exception: `useTasks()` must use `orgId` directly and must not be gated by `isOr
 |---|---|
 | `equipment_units` | Individual equipment records |
 | `equipment_types` | Equipment categories |
+| `equipment_specs` | Per-unit spec sheets |
+| `equipment_favorites` | Per-user equipment favorites |
 
 #### Compliance
 | Table | Purpose |
@@ -188,18 +195,40 @@ Exception: `useTasks()` must use `orgId` directly and must not be gated by `isOr
 | `chemical_products` | Product library; `id` is text |
 | `chemical_application_tank_mix_items` | Tank mix line items with camelCase DB columns |
 | `chemical_settings` | Org chemical compliance settings |
+| `fertilizer_application_logs` | Fertilizer application records |
+| `fertilizer_products` | Fertilizer product library |
 | `beta_feedback` | In-app feedback submissions |
 
-#### Finance
+#### Projects / Property Map
 | Table | Purpose |
 |---|---|
-| `invoices` | Invoice records |
+| `projects` | Property projects rendered as map zones |
+| `project_photos` | Progress photos; optional map pin via `location_geojson` |
+| `project_timeline_events` | Project timeline / Gantt events |
+
+#### Finance / Revenue Chain
+| Table | Purpose |
+|---|---|
 | `clients` | Client records with public portal token |
+| `estimates` | Client estimates |
+| `estimate_line_items` | Estimate line items |
+| `invoices` | Invoice records |
+| `invoice_line_items` | Invoice line items |
+| `payments` | Payment records |
+| `service_catalog` | Reusable service/offering catalog |
+| `service_contracts` | Recurring service contracts |
+| `service_contract_line_items` | Contract line items |
+| `contract_invoice_runs` | Scheduled contract invoice generation runs |
 
 #### Comms
 | Table | Purpose |
 |---|---|
 | `messages` | Team messaging with Realtime publication |
+
+#### Documents / Legal
+| Table | Purpose |
+|---|---|
+| `signatures` | Captured signatures (hosted sharing / e-sign) |
 
 #### Weather
 | Table | Purpose |
@@ -221,7 +250,7 @@ Exception: `useTasks()` must use `orgId` directly and must not be gated by `isOr
 | `application_areas` | Chemical application zones with camelCase DB column |
 
 #### Lookup Tables
-`department_options`, `group_options`, `property_class_options`
+`property_class_options` (note: `department_options` and `group_options` were DROPPED 2026-07-23)
 
 ---
 
