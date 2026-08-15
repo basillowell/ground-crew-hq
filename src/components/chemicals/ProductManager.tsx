@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { createClient } from '@/lib/supabase';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { retryTimeoutOnly, timeoutRetryDelay } from '@/lib/queryRetry';
 import { withRequestTimeout } from '@/lib/requestTimeout';
 
 const supabase = createClient();
@@ -65,7 +66,8 @@ export default function ProductManager() {
   const productsQuery = useQuery({
     queryKey: ['chemical-products-manager', orgId ?? 'no-org'],
     enabled: Boolean(orgId),
-    retry: false,
+    retry: retryTimeoutOnly,
+    retryDelay: timeoutRetryDelay,
     queryFn: async () => {
       if (!orgId) return [] as ChemicalProductRow[];
       const { data, error } = await withRequestTimeout(

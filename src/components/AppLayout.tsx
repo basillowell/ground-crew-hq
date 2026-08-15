@@ -43,6 +43,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { createClient } from '@/lib/supabase';
 import { applyFontTheme, resolveEffectiveTheme, THEME_VARS_STORAGE_KEY, type CustomThemeColors } from '@/lib/colorThemes';
 import { applyThemeSurfaces } from '@/lib/colorConversion';
+import { retryTimeoutOnly, timeoutRetryDelay } from '@/lib/queryRetry';
 import { withRequestTimeout } from '@/lib/requestTimeout';
 import { cn } from '@/lib/utils';
 
@@ -369,7 +370,8 @@ export function AppLayout({ children }: AppLayoutProps) {
     queryKey: ['chemical-logs-pending', orgId ?? 'no-org'],
     enabled: Boolean(orgId),
     staleTime: 1000 * 30,
-    retry: false,
+    retry: retryTimeoutOnly,
+    retryDelay: timeoutRetryDelay,
     queryFn: async () => {
       try {
         if (!supabase || !orgId) return 0;

@@ -31,6 +31,11 @@ async function withFieldRequestTimeout<T extends PromiseLike<unknown>>(request: 
   const timeoutId = window.setTimeout(() => controller.abort(), 15_000);
   try {
     return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Field workspace request timed out.');
+    }
+    throw error;
   } finally {
     window.clearTimeout(timeoutId);
   }

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase';
 import type { ChemicalApplicationLog } from '@/data/seedData';
+import { retryTimeoutOnly, timeoutRetryDelay } from '@/lib/queryRetry';
 
 const supabase = createClient();
 const CHEMICAL_LOGS_TIMEOUT_MS = 15_000;
@@ -14,7 +15,8 @@ export function useChemicalLogs(orgId?: string, propertyId?: string) {
   return useQuery({
     queryKey: ['chemical-logs', orgId ?? 'no-org', propertyId ?? 'all-properties'],
     enabled: Boolean(orgId),
-    retry: false,
+    retry: retryTimeoutOnly,
+    retryDelay: timeoutRetryDelay,
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
       if (!orgId) return [] as ChemicalLogRow[];
