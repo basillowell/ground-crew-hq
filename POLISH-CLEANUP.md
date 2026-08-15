@@ -6,18 +6,20 @@ they're things to batch-address in a dedicated cleanup pass.
 
 _Started: 2026-08-10 · last swept: 2026-08-11 (Sweep A) · Sweep B queued 2026-08-15_
 
-## Sweep B — queued (Codex prompt: `codex_polish_sweep_b.md`)
+## Sweep B — DONE (Codex, commit `553d527`, 2026-08-15 · Claude-audited)
 
-One concern: residual `className`-based raw-palette colors → design tokens (Rule 23).
-Audited 2026-08-15; verified real violations (print/export stylesheets, chart-segment
-data, and the QR white background are excluded as legitimate, not violations).
+One concern: residual raw-palette colors → design tokens (Rule 23). Executed by
+Codex from `codex_polish_sweep_b.md`; diff audited against the rules by Claude —
+6 files, color-preserving token mapping, `dark:` variants dropped, exclusions
+(print/export stylesheets, recharts data hex, QR `bg-white`, `ui/*`,
+`property.color`) untouched, verify grep down to the QR exception, clean build.
 
-- [ ] `ErrorRetry.tsx` — shared error card is light-mode (`bg-red-50 text-red-700`) → `status.warning` tokens.
-- [ ] `SchedulerPage.tsx` — hour-threshold indicators use `emerald`/`amber` + `dark:` variants → `status.active` / `status.pending`.
-- [ ] `ResetPasswordPage.tsx` — two identical error boxes on `red-500`/`red-400` → `status.warning` tokens.
-- [ ] `ChemicalSettings.tsx` — "Saved" label `text-emerald-600` → `text-status-active`.
-- [ ] `FeedbackWidget.tsx` — filled-star `text-amber-500` → `text-status-pending`.
-- [ ] `ApplicationsPage.tsx` — dashed caution note `amber-300/amber-50/amber-800` → `status.pending` tokens.
+- [x] `ErrorRetry.tsx` — shared error card `bg-red-50 text-red-700` → `status.warning` tokens.
+- [x] `SchedulerPage.tsx` — hour-threshold indicators → `status.active` / `status.pending`. Codex also (in-scope) converted the `STATUS_STYLES` shift-status map and department-color helper — object-literal `className` strings my grep missed — from `emerald/amber/blue/red/slate` to `status.active/pending/complete/warning/hold`, hues preserved. Also finished a pre-existing gap: `sick` had a token badge but a raw `red-400` cell border.
+- [x] `ResetPasswordPage.tsx` — both error boxes `red-500/red-400` → `status.warning` tokens.
+- [x] `ChemicalSettings.tsx` — "Saved" label `text-emerald-600` → `text-status-active`.
+- [x] `FeedbackWidget.tsx` — filled-star `text-amber-500` → `text-status-pending`.
+- [x] `ApplicationsPage.tsx` — dashed caution note `amber-300/50/800` → `status.pending` tokens.
 
 ## Open
 
