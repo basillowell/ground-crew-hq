@@ -7,6 +7,8 @@ they're things to batch-address in a dedicated cleanup pass.
 _Started: 2026-08-10 · last swept: 2026-08-11 (Sweep A) · Sweep B queued 2026-08-15_
 
 ## Sweep B — DONE (Codex, commit `553d527`, 2026-08-15 · Claude-audited)
+<!-- prompt archived at docs/codex-prompts/codex_polish_sweep_b.md -->
+
 
 One concern: residual raw-palette colors → design tokens (Rule 23). Executed by
 Codex from `codex_polish_sweep_b.md`; diff audited against the rules by Claude —
