@@ -47,6 +47,29 @@ import { cn } from '@/lib/utils';
 
 const supabase = createClient();
 const SIDEBAR_RAIL_STORAGE_KEY = 'gchq-sidebar-rail-open-v1';
+const APP_LAYOUT_REQUEST_TIMEOUT_MS = 15_000;
+
+type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
+  abortSignal: (signal: AbortSignal) => T;
+};
+
+async function withAppLayoutRequestTimeout<T extends PromiseLike<unknown>>(
+  request: AbortableSupabaseRequest<T>,
+  label: string,
+): Promise<Awaited<T>> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), APP_LAYOUT_REQUEST_TIMEOUT_MS);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label} request timed out.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 function readDesktopSidebarOpen() {
   if (typeof window === 'undefined') return true;
@@ -216,14 +239,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     queryKey: ['employee-mobile-clock-status', orgId, currentUser?.employeeId],
     enabled: currentRole === 'employee' && Boolean(orgId && currentUser?.employeeId),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('clock_events')
-        .select('event_type')
-        .eq('org_id', orgId!)
-        .eq('employee_id', currentUser!.employeeId)
-        .order('timestamp', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data, error } = await withAppLayoutRequestTimeout(
+        supabase
+          .from('clock_events')
+          .select('event_type')
+          .eq('org_id', orgId!)
+          .eq('employee_id', currentUser!.employeeId)
+          .order('timestamp', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        'Employee mobile clock status',
+      );
 
       if (error) throw error;
       return data?.event_type ?? null;
@@ -370,11 +396,14 @@ export function AppLayout({ children }: AppLayoutProps) {
       try {
         if (!supabase || !orgId) return 0;
         const nowIso = new Date().toISOString();
-        const { count, error } = await supabase
-          .from('chemical_application_logs')
-          .select('id', { count: 'exact', head: true })
-          .eq('org_id', orgId)
-          .or(`supervisor_license_number.is.null,restricted_entry_until.gt.${nowIso}`);
+        const { count, error } = await withAppLayoutRequestTimeout(
+          supabase
+            .from('chemical_application_logs')
+            .select('id', { count: 'exact', head: true })
+            .eq('org_id', orgId)
+            .or(`supervisor_license_number.is.null,restricted_entry_until.gt.${nowIso}`),
+          'Chemical compliance count',
+        );
         if (error) {
           console.error('[CHEMICAL COMPLIANCE COUNT ERROR]', error);
           return 0;

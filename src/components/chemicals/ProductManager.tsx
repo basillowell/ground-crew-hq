@@ -8,6 +8,28 @@ import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 
 const supabase = createClient();
+const PRODUCT_MANAGER_REQUEST_TIMEOUT_MS = 15_000;
+
+type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
+  abortSignal: (signal: AbortSignal) => T;
+};
+
+async function withProductManagerRequestTimeout<T extends PromiseLike<unknown>>(
+  request: AbortableSupabaseRequest<T>,
+): Promise<Awaited<T>> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PRODUCT_MANAGER_REQUEST_TIMEOUT_MS);
+  try {
+    return await request.abortSignal(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Chemical products manager request timed out.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 type ProductFormState = {
   name: string;
@@ -67,11 +89,13 @@ export default function ProductManager() {
     retry: false,
     queryFn: async () => {
       if (!orgId) return [] as ChemicalProductRow[];
-      const { data, error } = await supabase
-        .from('chemical_products')
-        .select('id, org_id, name, product_type, target_use, rate_unit, epa_registration_number, formulation, signal_word, reentry_interval_hours, pre_harvest_interval_hours, default_application_method, restricted_use')
-        .eq('org_id', orgId)
-        .order('name');
+      const { data, error } = await withProductManagerRequestTimeout(
+        supabase
+          .from('chemical_products')
+          .select('id, org_id, name, product_type, target_use, rate_unit, epa_registration_number, formulation, signal_word, reentry_interval_hours, pre_harvest_interval_hours, default_application_method, restricted_use')
+          .eq('org_id', orgId)
+          .order('name'),
+      );
       if (error) throw error;
       return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
         id: String(row.id ?? ''),

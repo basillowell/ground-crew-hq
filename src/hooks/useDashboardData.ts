@@ -18,6 +18,17 @@ import type {
 } from '@/store/appStore';
 
 const supabase = createClient();
+const DASHBOARD_DATA_TIMEOUT_MS = 15_000;
+
+function withDashboardDataTimeout<T>(requestPromise: Promise<T>, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} request timed out.`)), DASHBOARD_DATA_TIMEOUT_MS);
+  });
+  return Promise.race([requestPromise, timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
 
 type UseDashboardDataParams = {
   orgId?: string;
@@ -238,19 +249,22 @@ export function useDashboardData(params: UseDashboardDataParams) {
         tasksResult,
         notesResult,
         clockEventsResult,
-      ] = await Promise.all([
-        withProperty<any>(withOrg<any>(supabase.from('assignments').select('*').eq('date', todayKey).order('created_at'))),
-        withProperty<any>(withOrg<any>(supabase.from('schedule_entries').select('*').eq('date', todayKey).order('shift_start'))),
-        withProperty<any>(
-          withOrg<any>(
-            supabase.from('schedule_entries').select('*').gte('date', start30Date).lte('date', todayKey).order('date').order('shift_start'),
+      ] = await withDashboardDataTimeout(
+        Promise.all([
+          withProperty<any>(withOrg<any>(supabase.from('assignments').select('*').eq('date', todayKey).order('created_at'))),
+          withProperty<any>(withOrg<any>(supabase.from('schedule_entries').select('*').eq('date', todayKey).order('shift_start'))),
+          withProperty<any>(
+            withOrg<any>(
+              supabase.from('schedule_entries').select('*').gte('date', start30Date).lte('date', todayKey).order('date').order('shift_start'),
+            ),
           ),
-        ),
-        withProperty<any>(withOrg<any>(supabase.from('equipment_units').select('*').order('name'))),
-        withOrg<any>(supabase.from('tasks').select('*').order('name')),
-        withProperty<any>(withOrg<any>(supabase.from('notes').select('*').order('created_at', { ascending: false }))),
-        withProperty<any>(withOrg<any>(supabase.from('clock_events').select('*').order('timestamp', { ascending: false }))),
-      ]);
+          withProperty<any>(withOrg<any>(supabase.from('equipment_units').select('*').order('name'))),
+          withOrg<any>(supabase.from('tasks').select('*').order('name')),
+          withProperty<any>(withOrg<any>(supabase.from('notes').select('*').order('created_at', { ascending: false }))),
+          withProperty<any>(withOrg<any>(supabase.from('clock_events').select('*').order('timestamp', { ascending: false }))),
+        ]),
+        'Dashboard data',
+      );
 
       const firstError =
         assignmentsResult.error ||

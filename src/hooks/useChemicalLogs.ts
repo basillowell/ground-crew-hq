@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase';
 import type { ChemicalApplicationLog } from '@/data/seedData';
 
 const supabase = createClient();
+const CHEMICAL_LOGS_TIMEOUT_MS = 15_000;
 
 type ChemicalLogRow = ChemicalApplicationLog & {
   org_id?: string | null;
@@ -27,18 +28,29 @@ export function useChemicalLogs(orgId?: string, propertyId?: string) {
       // Keep reads org-scoped and let page-level filters apply operational context.
       void propertyId;
 
-      const { data, error } = await query;
-      if (error) {
-        console.error('[chemical_application_logs] query failed', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
-        throw new Error(error.message);
-      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CHEMICAL_LOGS_TIMEOUT_MS);
+      try {
+        const { data, error } = await query.abortSignal(controller.signal);
+        if (error) {
+          console.error('[chemical_application_logs] query failed', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+          });
+          throw new Error(error.message);
+        }
 
-      return (data as ChemicalLogRow[] | null) ?? [];
+        return (data as ChemicalLogRow[] | null) ?? [];
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new Error('Chemical logs request timed out.');
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     },
   });
 }
