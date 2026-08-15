@@ -4,7 +4,20 @@ Running list of deferred / follow-up items surfaced while executing the 8-move
 polish gameplan (see the shared gameplan artifact). These are **not** blockers —
 they're things to batch-address in a dedicated cleanup pass.
 
-_Started: 2026-08-10 · last swept: 2026-08-11 (Sweep A)_
+_Started: 2026-08-10 · last swept: 2026-08-11 (Sweep A) · Sweep B queued 2026-08-15_
+
+## Sweep B — queued (Codex prompt: `codex_polish_sweep_b.md`)
+
+One concern: residual `className`-based raw-palette colors → design tokens (Rule 23).
+Audited 2026-08-15; verified real violations (print/export stylesheets, chart-segment
+data, and the QR white background are excluded as legitimate, not violations).
+
+- [ ] `ErrorRetry.tsx` — shared error card is light-mode (`bg-red-50 text-red-700`) → `status.warning` tokens.
+- [ ] `SchedulerPage.tsx` — hour-threshold indicators use `emerald`/`amber` + `dark:` variants → `status.active` / `status.pending`.
+- [ ] `ResetPasswordPage.tsx` — two identical error boxes on `red-500`/`red-400` → `status.warning` tokens.
+- [ ] `ChemicalSettings.tsx` — "Saved" label `text-emerald-600` → `text-status-active`.
+- [ ] `FeedbackWidget.tsx` — filled-star `text-amber-500` → `text-status-pending`.
+- [ ] `ApplicationsPage.tsx` — dashed caution note `amber-300/amber-50/amber-800` → `status.pending` tokens.
 
 ## Open
 
