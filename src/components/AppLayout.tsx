@@ -43,33 +43,11 @@ import { useTheme } from '@/hooks/useTheme';
 import { createClient } from '@/lib/supabase';
 import { applyFontTheme, resolveEffectiveTheme, THEME_VARS_STORAGE_KEY, type CustomThemeColors } from '@/lib/colorThemes';
 import { applyThemeSurfaces } from '@/lib/colorConversion';
+import { withRequestTimeout } from '@/lib/requestTimeout';
 import { cn } from '@/lib/utils';
 
 const supabase = createClient();
 const SIDEBAR_RAIL_STORAGE_KEY = 'gchq-sidebar-rail-open-v1';
-const APP_LAYOUT_REQUEST_TIMEOUT_MS = 15_000;
-
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withAppLayoutRequestTimeout<T extends PromiseLike<unknown>>(
-  request: AbortableSupabaseRequest<T>,
-  label: string,
-): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), APP_LAYOUT_REQUEST_TIMEOUT_MS);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(`${label} request timed out.`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 function readDesktopSidebarOpen() {
   if (typeof window === 'undefined') return true;
@@ -239,7 +217,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     queryKey: ['employee-mobile-clock-status', orgId, currentUser?.employeeId],
     enabled: currentRole === 'employee' && Boolean(orgId && currentUser?.employeeId),
     queryFn: async () => {
-      const { data, error } = await withAppLayoutRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('clock_events')
           .select('event_type')
@@ -248,7 +226,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           .order('timestamp', { ascending: false })
           .limit(1)
           .maybeSingle(),
-        'Employee mobile clock status',
+        'Employee mobile clock status request timed out.',
       );
 
       if (error) throw error;
@@ -396,13 +374,13 @@ export function AppLayout({ children }: AppLayoutProps) {
       try {
         if (!supabase || !orgId) return 0;
         const nowIso = new Date().toISOString();
-        const { count, error } = await withAppLayoutRequestTimeout(
+        const { count, error } = await withRequestTimeout(
           supabase
             .from('chemical_application_logs')
             .select('id', { count: 'exact', head: true })
             .eq('org_id', orgId)
             .or(`supervisor_license_number.is.null,restricted_entry_until.gt.${nowIso}`),
-          'Chemical compliance count',
+          'Chemical compliance count request timed out.',
         );
         if (error) {
           console.error('[CHEMICAL COMPLIANCE COUNT ERROR]', error);

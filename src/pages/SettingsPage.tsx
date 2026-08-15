@@ -18,6 +18,7 @@ import { APP_VERSION } from '@/constants/version';
 import { applyFontTheme, COLOR_THEMES, type ColorTheme, type CustomThemeColors } from '@/lib/colorThemes';
 import { applyThemeSurfaces } from '@/lib/colorConversion';
 import { getContrastText } from '@/lib/colorContrast';
+import { withRequestTimeout } from '@/lib/requestTimeout';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/sonner';
@@ -1182,7 +1183,7 @@ function PayrollSettingsSection({ orgId, userRole }: { orgId: string | null; use
     setError(null);
     let saveError: Error | null = null;
     try {
-      const result = await withSettingsAbortControllerTimeout(
+      const result = await withRequestTimeout(
         supabase
           .from('program_settings')
           .update({
@@ -1190,6 +1191,7 @@ function PayrollSettingsSection({ orgId, userRole }: { orgId: string | null; use
             pay_period_anchor_date: nextAnchorDate,
           })
           .eq('org_id', orgId),
+        'Settings request timed out after 15 seconds.',
       );
       saveError = result.error ?? null;
     } catch (caughtError) {
@@ -1273,24 +1275,6 @@ function PayrollSettingsSection({ orgId, userRole }: { orgId: string | null; use
 
 type SettingsEquipmentType = { id: string; name: string; category: string | null };
 
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withSettingsAbortControllerTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error('Settings request timed out after 15 seconds.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 function EquipmentTab({ orgId }: { orgId: string | null }) {
   const queryClient = useQueryClient();
   const equipmentTypesQueryKey = useMemo(
@@ -1302,13 +1286,14 @@ function EquipmentTab({ orgId }: { orgId: string | null }) {
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return [];
-      const { data, error: fetchError } = await withSettingsAbortControllerTimeout(
+      const { data, error: fetchError } = await withRequestTimeout(
         supabase
           .from('equipment_types')
           .select('id, name, category')
           .eq('org_id', orgId)
           .eq('active', true)
           .order('name', { ascending: true }),
+        'Settings request timed out after 15 seconds.',
       );
       if (fetchError) throw fetchError;
       return (data ?? []) as SettingsEquipmentType[];
@@ -1425,12 +1410,13 @@ function WorkspaceTab({
     queryKey: ['organization-info', orgId ?? 'no-org'],
     queryFn: async () => {
       if (!supabase || !orgId) return null;
-      const { data, error } = await withSettingsAbortControllerTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('organizations')
           .select('name, plan, subscription_status, created_at')
           .eq('id', orgId)
           .maybeSingle(),
+        'Settings request timed out after 15 seconds.',
       );
       if (error) throw error;
       return data as OrganizationInfo | null;
@@ -3173,12 +3159,13 @@ function AccessTab({
     queryKey: ['organization-info', orgId ?? 'no-org'],
     queryFn: async () => {
       if (!supabase || !orgId) return null;
-      const { data, error } = await withSettingsAbortControllerTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('organizations')
           .select('name, plan, subscription_status, created_at')
           .eq('id', orgId)
           .maybeSingle(),
+        'Settings request timed out after 15 seconds.',
       );
       if (error) throw error;
       return data as OrganizationInfo | null;
@@ -3793,12 +3780,13 @@ function TasksTab({ orgId: _orgIdProp, propertyId }: { orgId: string | null; pro
     queryKey: ['task-categories', orgId],
     queryFn: async () => {
       if (!supabase || !orgId) return [];
-      const { data, error } = await withSettingsAbortControllerTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('task_categories')
           .select('id, name, sort_order')
           .eq('org_id', orgId)
           .order('sort_order', { ascending: true }),
+        'Settings request timed out after 15 seconds.',
       );
       if (error) throw error;
       return (data ?? []) as TaskCategoryItem[];
@@ -4700,8 +4688,9 @@ function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: str
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await withSettingsAbortControllerTimeout(
+      const { data, error: fetchError } = await withRequestTimeout(
         supabase.from('scheduler_settings').select('*').eq('org_id', orgId).single(),
+        'Settings request timed out after 15 seconds.',
       );
       if (fetchError) {
         setError(fetchError.message);
@@ -4772,7 +4761,7 @@ function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: str
     setError(null);
     let saveError: Error | null = null;
     try {
-      const result = await withSettingsAbortControllerTimeout(
+      const result = await withRequestTimeout(
         supabase
           .from('scheduler_settings')
           .update({
@@ -4787,6 +4776,7 @@ function SchedulerTab({ orgId, userRole }: { orgId: string | null; userRole: str
             default_break_start_time: settings.default_break_start_time ? `${settings.default_break_start_time.slice(0, 5)}:00` : '11:00:00',
           })
           .eq('org_id', orgId),
+        'Settings request timed out after 15 seconds.',
       );
       saveError = result.error ?? null;
     } catch (error) {

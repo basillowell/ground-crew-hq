@@ -6,32 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import type { Employee } from '@/data/seedData';
+import { withRequestTimeout } from '@/lib/requestTimeout';
 import { createClient } from '@/lib/supabase';
 
 const supabase = createClient();
-const TURF_PANEL_REQUEST_TIMEOUT_MS = 15_000;
-
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withTurfPanelRequestTimeout<T extends PromiseLike<unknown>>(
-  request: AbortableSupabaseRequest<T>,
-  label: string,
-): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TURF_PANEL_REQUEST_TIMEOUT_MS);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(`${label} request timed out.`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 type ApplicationAreaRow = {
   id: string;
@@ -93,14 +71,14 @@ export function TurfPanel({ orgId, propertyId, currentEmployeeId, employees = []
     enabled: Boolean(orgId && scopedPropertyId),
     queryFn: async () => {
       if (!orgId || !scopedPropertyId) return [] as ApplicationAreaRow[];
-      const { data, error } = await withTurfPanelRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('application_areas')
           .select('id, name, property, org_id')
           .eq('org_id', orgId)
           .eq('property', scopedPropertyId)
           .order('name'),
-        'Turf application areas',
+        'Turf application areas request timed out.',
       );
       if (error) throw error;
       return (data ?? []) as ApplicationAreaRow[];
@@ -114,14 +92,14 @@ export function TurfPanel({ orgId, propertyId, currentEmployeeId, employees = []
     enabled: Boolean(orgId && areaIds.length > 0),
     queryFn: async () => {
       if (!orgId || areaIds.length === 0) return [] as TurfMowPatternRow[];
-      const { data, error } = await withTurfPanelRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('turf_mow_patterns')
           .select('id, org_id, application_area_id, pattern, rotation, applied_by, applied_at, created_at')
           .eq('org_id', orgId)
           .in('application_area_id', areaIds)
           .order('applied_at', { ascending: false }),
-        'Turf mow patterns',
+        'Turf mow patterns request timed out.',
       );
       if (error) throw error;
       return (data ?? []) as TurfMowPatternRow[];

@@ -15,6 +15,7 @@ import { PageHeaderSkeleton, TableSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { toast } from '@/components/ui/sonner';
 import { useDepartmentOptions, useEmployees, useProperties, type EmployeeStatusFilter } from '@/lib/supabase-queries';
+import { withRequestTimeout, type AbortableSupabaseRequest } from '@/lib/requestTimeout';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DropdownMenu,
@@ -123,29 +124,6 @@ type EditEmployeeDraft = {
   employment_type: string;
   language: string;
 };
-
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withEmployeesRequestTimeout<T extends PromiseLike<unknown>>(
-  request: AbortableSupabaseRequest<T>,
-  timeoutMs: number,
-  timeoutMessage: string,
-): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(timeoutMessage);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 type SupabaseTimeoutResult = { data: null; error: Error };
 
@@ -333,14 +311,14 @@ export default function EmployeesPage() {
       if (!supabase || !orgId) {
         return { start: FALLBACK_SHIFT_START, end: FALLBACK_SHIFT_END };
       }
-      const { data, error: settingsError } = await withEmployeesRequestTimeout(
+      const { data, error: settingsError } = await withRequestTimeout(
         supabase
           .from('scheduler_settings')
           .select('operational_day_start, operational_day_end')
           .eq('org_id', orgId)
           .single(),
-        15_000,
         'Availability settings request timed out after 15 seconds.',
+        15_000,
       );
 
       if (settingsError) throw settingsError;
@@ -358,7 +336,7 @@ export default function EmployeesPage() {
     enabled: Boolean(orgId && viewMode === 'availability'),
     queryFn: async () => {
       if (!orgId) return [] as ScheduleEntryRow[];
-      const result = await withEmployeesRequestTimeout(
+      const result = await withRequestTimeout(
         supabase
           .from('schedule_entries')
           .select('id, employee_id, property_id, date, shift_start, shift_end, status, notes')
@@ -366,8 +344,8 @@ export default function EmployeesPage() {
           .gte('date', availabilityStartKey)
           .lte('date', availabilityEndKey)
           .order('date', { ascending: true }),
-        10_000,
         'Availability request timed out after 10 seconds.',
+        10_000,
       );
       if (result.error) throw result.error;
       return (result.data ?? []) as ScheduleEntryRow[];
@@ -446,15 +424,15 @@ export default function EmployeesPage() {
       return;
     }
 
-    const { data, error: rolesError } = await withEmployeesRequestTimeout(
+    const { data, error: rolesError } = await withRequestTimeout(
       supabase
         .from('workforce_roles')
         .select('id, name')
         .eq('org_id', orgId)
         .eq('active', true)
         .order('name', { ascending: true }),
-      15_000,
       'Workforce roles request timed out after 15 seconds.',
+      15_000,
     );
 
     if (rolesError) {

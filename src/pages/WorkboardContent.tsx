@@ -69,6 +69,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { EmptyState } from '@/components/EmptyState';
 import { CardSkeleton } from '@/components/CardSkeleton';
+import { withRequestTimeout, type AbortableSupabaseRequest } from '@/lib/requestTimeout';
 
 const supabase = createClient();
 
@@ -83,25 +84,6 @@ function SafeSection({ children, fallback = null }: { children: ReactNode; fallb
     return <>{children}</>;
   } catch {
     return <>{fallback}</>;
-  }
-}
-
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withWorkboardRequestTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error('Workboard request timed out after 15 seconds.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
@@ -963,7 +945,7 @@ export default function WorkboardContent() {
       if (effectivePropertyId && effectivePropertyId !== 'all') {
         query = query.eq('property_id', effectivePropertyId);
       }
-      const { data, error } = await withWorkboardRequestTimeout(query);
+      const { data, error } = await withRequestTimeout(query, 'Workboard request timed out after 15 seconds.');
       if (error) throw error;
       return (data ?? []).map((row) => ({
         id: String(row.id ?? ''),
@@ -997,7 +979,7 @@ export default function WorkboardContent() {
       if (effectivePropertyId && effectivePropertyId !== 'all') {
         query = query.eq('property_id', effectivePropertyId);
       }
-      const { count, error } = await withWorkboardRequestTimeout(query);
+      const { count, error } = await withRequestTimeout(query, 'Workboard request timed out after 15 seconds.');
       if (error) throw error;
       return count ?? 0;
     },
@@ -1017,12 +999,13 @@ export default function WorkboardContent() {
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return [] as WorkboardScopedNote[];
-      const { data, error } = await withWorkboardRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('notes')
           .select('*')
           .eq('org_id', orgId)
           .order('created_at', { ascending: false }),
+        'Workboard request timed out after 15 seconds.',
       );
       if (error) throw error;
       return (data ?? []).map((row) => normalizeWorkboardNote(row as Record<string, unknown>));
@@ -1039,7 +1022,7 @@ export default function WorkboardContent() {
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return [] as AvailableEquipmentItem[];
-      const { data, error } = await withWorkboardRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('equipment_units')
           .select('id, name, unit_name, type, status, active, org_id')
@@ -1047,6 +1030,7 @@ export default function WorkboardContent() {
           .eq('active', true)
           .eq('status', 'available')
           .order('unit_name', { ascending: true }),
+        'Workboard request timed out after 15 seconds.',
       );
       if (error) throw error;
       return (data ?? []) as AvailableEquipmentItem[];
@@ -1066,7 +1050,7 @@ export default function WorkboardContent() {
       let query = supabase.from('task_requests').select('*').order('priority', { ascending: true }).order('created_at', { ascending: false });
       if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
-      const { data, error } = await withWorkboardRequestTimeout(query);
+      const { data, error } = await withRequestTimeout(query, 'Workboard request timed out after 15 seconds.');
       if (error) throw error;
       return (data ?? []).map((row) => normalizeTaskRequest(row as Record<string, unknown>));
     },
@@ -1079,12 +1063,13 @@ export default function WorkboardContent() {
     enabled: Boolean(orgId),
     queryFn: async () => {
       if (!supabase || !orgId) return DEFAULT_ESCALATION_THRESHOLDS;
-      const { data, error } = await withWorkboardRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('scheduler_settings')
           .select('escalation_config')
           .eq('org_id', orgId)
           .single(),
+        'Workboard request timed out after 15 seconds.',
       );
       if (error) {
         return DEFAULT_ESCALATION_THRESHOLDS;
@@ -1109,7 +1094,7 @@ export default function WorkboardContent() {
         .order('created_at', { ascending: true });
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
       if (orgId) query = query.eq('org_id', orgId);
-      const { data, error } = await withWorkboardRequestTimeout(query);
+      const { data, error } = await withRequestTimeout(query, 'Workboard request timed out after 15 seconds.');
       if (error) throw error;
       return (data ?? []) as PendingTaskRequest[];
     },
@@ -1132,7 +1117,7 @@ export default function WorkboardContent() {
         .order('created_at', { ascending: false });
       if (orgId) query = query.eq('org_id', orgId);
       if (effectivePropertyId && effectivePropertyId !== 'all') query = query.eq('property_id', effectivePropertyId);
-      const { data, error } = await withWorkboardRequestTimeout(query);
+      const { data, error } = await withRequestTimeout(query, 'Workboard request timed out after 15 seconds.');
       if (error) throw error;
       return (data ?? []) as Array<Record<string, unknown>>;
     },
@@ -1146,7 +1131,7 @@ export default function WorkboardContent() {
       if (!supabase) return [] as WorkLocation[];
       let query = supabase.from('work_locations').select('*');
       if (orgId) query = query.eq('org_id', orgId);
-      const { data, error } = await withWorkboardRequestTimeout(query);
+      const { data, error } = await withRequestTimeout(query, 'Workboard request timed out after 15 seconds.');
       if (error) return [] as WorkLocation[];
       return (data ?? []).map((row) => normalizeWorkLocation(row as Record<string, unknown>));
     },
@@ -1357,7 +1342,7 @@ export default function WorkboardContent() {
 
     setWorkOrderSaving(true);
     try {
-      const { error } = await withWorkboardRequestTimeout(
+      const { error } = await withRequestTimeout(
         supabase.from('work_orders').insert({
           org_id: resolvedOrgId,
           property_id: propertyId,
@@ -1369,6 +1354,7 @@ export default function WorkboardContent() {
           submitted_by: submittedBy,
           status: 'open',
         }),
+        'Workboard request timed out after 15 seconds.',
       );
 
       if (error) {
@@ -1427,7 +1413,7 @@ export default function WorkboardContent() {
       if (effectivePropertyId && effectivePropertyId !== 'all') {
         query = query.or(`property_id.is.null,property_id.eq.${effectivePropertyId}`);
       }
-      const { data, error } = await withWorkboardRequestTimeout(query);
+      const { data, error } = await withRequestTimeout(query, 'Workboard request timed out after 15 seconds.');
       if (error) throw error;
       return (data ?? []) as RecurringTaskRuleRow[];
     },
@@ -1781,7 +1767,7 @@ export default function WorkboardContent() {
       if (effectivePropertyId && effectivePropertyId !== 'all') {
         query = query.eq('property_id', effectivePropertyId);
       }
-      const { data, error } = await withWorkboardRequestTimeout(query);
+      const { data, error } = await withRequestTimeout(query, 'Workboard request timed out after 15 seconds.');
       if (error) throw error;
       return (data ?? []).map((row) => normalizeClockEvent(row as Record<string, unknown>));
     },
@@ -3231,7 +3217,7 @@ export default function WorkboardContent() {
 
     setPublishingScope(scope);
     try {
-      const publisherResult = await withWorkboardRequestTimeout(supabase.rpc('current_employee_id'));
+      const publisherResult = await withRequestTimeout(supabase.rpc('current_employee_id'), 'Workboard request timed out after 15 seconds.');
       if (publisherResult.error) throw publisherResult.error;
       const authenticatedPublisherId = publisherResult.data ? String(publisherResult.data) : '';
       if (!authenticatedPublisherId) {

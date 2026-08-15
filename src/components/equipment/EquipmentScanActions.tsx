@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { EquipmentMaintenanceBadge, getEquipmentMaintenanceState } from './EquipmentMaintenanceBadge';
+import { withRequestTimeout } from '@/lib/requestTimeout';
 
 type EquipmentScanRow = {
   id: string;
@@ -29,25 +30,6 @@ type EquipmentScanRow = {
   maintenance_interval_hours: number | null;
   hours_at_last_service: number | null;
 };
-
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withScanTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error('Equipment scan request timed out after 15 seconds.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 function normalizeNumber(value: number | null | undefined) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -74,7 +56,7 @@ export function EquipmentScanActions({ qrToken }: { qrToken: string }) {
         .eq('org_id', orgId)
         .eq('qr_token', qrToken)
         .maybeSingle();
-      const { data, error } = await withScanTimeout(request);
+      const { data, error } = await withRequestTimeout(request, 'Equipment scan request timed out after 15 seconds.');
       if (error) throw error;
       return data as EquipmentScanRow | null;
     },

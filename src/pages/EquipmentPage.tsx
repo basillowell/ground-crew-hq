@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { EquipmentMaintenanceBadge, getEquipmentMaintenanceState } from '@/components/equipment/EquipmentMaintenanceBadge';
 import { useGenerateDueEquipmentWorkOrders, useProperties } from '@/lib/supabase-queries';
 import { EquipmentQrCard } from '@/components/equipment/EquipmentQrCard';
+import { withRequestTimeout, type AbortableSupabaseRequest } from '@/lib/requestTimeout';
 
 const supabase = createClient();
 
@@ -145,24 +146,6 @@ function emptyAddDraft(): AddDraft {
   };
 }
 
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withEquipmentRequestTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error('Equipment request timed out after 15 seconds.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 type SupabaseTimeoutResult = { data: null; error: Error };
 
 async function withEquipmentMutationTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T> | SupabaseTimeoutResult> {
@@ -228,9 +211,9 @@ export default function EquipmentPage() {
       }
 
       const [unitsResult, typesResult, propertiesResult] = await Promise.all([
-        withEquipmentRequestTimeout(unitsQuery),
-        withEquipmentRequestTimeout(typesQuery),
-        withEquipmentRequestTimeout(propertiesQuery),
+        withRequestTimeout(unitsQuery, 'Equipment request timed out after 15 seconds.'),
+        withRequestTimeout(typesQuery, 'Equipment request timed out after 15 seconds.'),
+        withRequestTimeout(propertiesQuery, 'Equipment request timed out after 15 seconds.'),
       ]);
       if (unitsResult.error || typesResult.error || propertiesResult.error) {
         throw new Error(

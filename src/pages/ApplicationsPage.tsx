@@ -44,6 +44,7 @@ import { createClient } from '@/lib/supabase';
 import ChemicalSettings from '@/pages/settings/ChemicalSettings';
 import { useChemicalLogs } from '@/hooks/useChemicalLogs';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { withRequestTimeout, type AbortableSupabaseRequest } from '@/lib/requestTimeout';
 
 const supabase = createClient();
 
@@ -239,27 +240,6 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withChemicalLookupRequestTimeout<T extends PromiseLike<unknown>>(
-  request: AbortableSupabaseRequest<T>,
-  timeoutMessage = 'Chemical lookup request timed out after 15 seconds.',
-): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(timeoutMessage);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 type SupabaseTimeoutResult = { data: null; error: Error };
 
 async function withChemicalMutationTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T> | SupabaseTimeoutResult> {
@@ -310,11 +290,12 @@ export default function ApplicationsPage() {
     retryDelay: 1000,
     queryFn: async () => {
       if (!orgScope) return [] as EmployeeApplicatorLicenseRow[];
-      const { data, error } = await withChemicalLookupRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('employees')
           .select('id, applicator_license_number')
           .eq('org_id', orgScope),
+        'Chemical lookup request timed out after 15 seconds.',
       );
       if (error) throw error;
       return (data ?? []) as EmployeeApplicatorLicenseRow[];
@@ -329,12 +310,13 @@ export default function ApplicationsPage() {
     enabled: Boolean(orgScope),
     queryFn: async () => {
       if (!supabase || !orgScope) return [];
-      const { data, error } = await withChemicalLookupRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('application_areas')
           .select('*')
           .eq('org_id', orgScope)
           .order('name'),
+        'Chemical lookup request timed out after 15 seconds.',
       );
       if (error) throw error;
       return (data ?? []) as ApplicationArea[];
@@ -347,7 +329,7 @@ export default function ApplicationsPage() {
     enabled: Boolean(orgScope),
     queryFn: async () => {
       if (!supabase || !orgScope) return [];
-      const { data, error } = await withChemicalLookupRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         supabase
           .from('fertilizer_products')
           .select('id, name, fertilizer_type, rate_unit, org_id, created_at, updated_at')
@@ -373,7 +355,7 @@ export default function ApplicationsPage() {
         .order('application_date', { ascending: false })
         .order('start_time', { ascending: false });
       if (propertyScope) query = query.eq('property_id', propertyScope);
-      const { data, error } = await withChemicalLookupRequestTimeout(
+      const { data, error } = await withRequestTimeout(
         query,
         'Fertilizer application lookup request timed out after 15 seconds.',
       );

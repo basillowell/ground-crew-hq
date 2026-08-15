@@ -21,6 +21,7 @@ import { formatTime } from '@/utils/formatTime';
 import { EmptyState } from '@/components/EmptyState';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { useAssignmentsRange, useEmployees, useProperties } from '@/lib/supabase-queries';
+import { withRequestTimeout, type AbortableSupabaseRequest } from '@/lib/requestTimeout';
 
 const supabase = createClient();
 
@@ -107,25 +108,6 @@ const STATUS_STYLES: Record<string, { cell: string; label: string; badge: string
     badge: 'border-status-warning/20 text-status-warning',
   },
 };
-
-type AbortableSupabaseRequest<T extends PromiseLike<unknown>> = T & {
-  abortSignal: (signal: AbortSignal) => T;
-};
-
-async function withSchedulerRequestTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  try {
-    return await request.abortSignal(controller.signal);
-  } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error('Schedule request timed out after 15 seconds.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 
 type SupabaseTimeoutResult = { data: null; error: Error };
 
@@ -218,7 +200,7 @@ export default function SchedulerPage() {
         .lte('date', weekEndDate)
         .order('shift_start');
       if (propertyScope && propertyScope !== 'all') query = query.eq('property_id', propertyScope);
-      const result = await withSchedulerRequestTimeout(query);
+      const result = await withRequestTimeout(query, 'Schedule request timed out after 15 seconds.');
       if (result.error) throw result.error;
       return (result.data ?? []).map((row) => ({
         id: String(row.id),
