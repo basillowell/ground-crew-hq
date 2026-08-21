@@ -178,7 +178,7 @@ function ProjectGanttRow({
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
           {!hasExplicitDates ? (
-            <span className="text-[11px] font-medium text-text-muted">No dates set</span>
+            <span className="text-2xs font-medium text-text-muted">No dates set</span>
           ) : null}
         </div>
         <div className="mt-2 flex items-center gap-1 text-xs text-text-muted">
@@ -267,7 +267,7 @@ export function ProjectGantt({ projects, orgId, selectedProjectId, onSelectProje
       <section className="rounded-xl border border-surface-border bg-surface-card p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Project calendar</div>
+            <div className="text-3xs font-semibold uppercase tracking-[0.18em] text-text-muted">Project calendar</div>
             <h3 className="mt-1 text-lg font-bold text-text-primary">No project dates available</h3>
           </div>
         </div>
@@ -280,7 +280,7 @@ export function ProjectGantt({ projects, orgId, selectedProjectId, onSelectProje
       <section className="overflow-hidden rounded-xl border border-surface-border bg-surface-card shadow-sm">
         <div className="flex flex-col gap-3 border-b border-surface-border bg-surface-elevated px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Project calendar</div>
+            <div className="text-3xs font-semibold uppercase tracking-[0.18em] text-text-muted">Project calendar</div>
             <h3 className="mt-1 text-lg font-bold text-text-primary">Planned schedule and progress submissions</h3>
           </div>
           <div className="flex items-center gap-2 text-xs text-text-muted">
@@ -301,7 +301,7 @@ export function ProjectGantt({ projects, orgId, selectedProjectId, onSelectProje
                   {range.ticks.map((tick) => (
                     <div
                       key={`axis-${tick}`}
-                      className="absolute top-0 -translate-x-1/2 text-[11px] font-medium text-text-muted"
+                      className="absolute top-0 -translate-x-1/2 text-2xs font-medium text-text-muted"
                       style={{ left: `${dayToPercent(tick, range)}%` }}
                     >
                       {formatAxisDate(tick)}

@@ -231,7 +231,7 @@ export function EmployeeRow({
           draggable
           onDragStart={() => onDragStart?.(employee.id)}
           onDragEnd={onDragEnd}
-          className="mt-1 flex cursor-grab items-center gap-1 rounded-full border border-dashed px-2 py-1 text-[11px] text-muted-foreground/60 hover:border-primary/30 hover:text-primary"
+          className="mt-1 flex cursor-grab items-center gap-1 rounded-full border border-dashed px-2 py-1 text-2xs text-muted-foreground/60 hover:border-primary/30 hover:text-primary"
           title="Drag to reorder employee lanes for the display board"
         >
           <GripVertical className="h-4 w-4" />
@@ -251,7 +251,7 @@ export function EmployeeRow({
           </div>
 
           {laneWarning ? (
-            <div className="mb-3 rounded-xl border border-status-pending/30 bg-status-pending/10 px-3 py-2 text-[11px] font-medium text-status-pending">
+            <div className="mb-3 rounded-xl border border-status-pending/30 bg-status-pending/10 px-3 py-2 text-2xs font-medium text-status-pending">
               {laneWarning}
             </div>
           ) : null}
@@ -360,7 +360,7 @@ export function EmployeeRow({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="min-h-11 w-full rounded-full px-3 text-sm sm:min-h-8 sm:w-auto sm:px-2 sm:text-[11px]"
+                          className="min-h-11 w-full rounded-full px-3 text-sm sm:min-h-8 sm:w-auto sm:px-2 sm:text-2xs"
                           onClick={() => void onStartAssignment(assignment)}
                           disabled={savingTimelineAssignmentId === assignment.id || isSubmittedToPayroll}
                           title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Start task'}
@@ -373,7 +373,7 @@ export function EmployeeRow({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="min-h-11 w-full rounded-full px-3 text-sm sm:min-h-8 sm:w-auto sm:px-2 sm:text-[11px]"
+                          className="min-h-11 w-full rounded-full px-3 text-sm sm:min-h-8 sm:w-auto sm:px-2 sm:text-2xs"
                           onClick={() => void onCompleteAssignment(assignment, sortedAssignments)}
                           disabled={savingTimelineAssignmentId === assignment.id || isSubmittedToPayroll}
                           title={isSubmittedToPayroll ? 'Submitted to payroll - review only' : 'Complete task'}
@@ -381,7 +381,7 @@ export function EmployeeRow({
                           {savingTimelineAssignmentId === assignment.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />} Complete
                         </Button>
                       ) : null}
-                      <span className={`text-[11px] ${actualHoursTone}`}>
+                      <span className={`text-2xs ${actualHoursTone}`}>
                         {startLabel && completedLabel
                           ? `${startLabel} → ${completedLabel} (${actualHours.toFixed(1)}h)`
                           : startLabel
@@ -399,7 +399,7 @@ export function EmployeeRow({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-7 rounded-full px-2 text-[11px]"
+                          className="h-7 rounded-full px-2 text-2xs"
                           onClick={(event) => {
                             event.stopPropagation();
                             if (isSubmittedToPayroll) return;
@@ -421,11 +421,11 @@ export function EmployeeRow({
                     {editingTimelineAssignmentId === assignment.id && onSaveAssignmentTimes ? (
                       <div className="relative z-20 mx-2 mb-1 flex flex-wrap items-end gap-2 rounded-lg border bg-muted/20 p-2 pointer-events-auto">
                         <div className="w-40">
-                          <span className="text-[10px] text-muted-foreground">Start</span>
+                          <span className="text-3xs text-muted-foreground">Start</span>
                           <TimeSelect value={timelineStartInput} onChange={setTimelineStartInput} disabled={isSubmittedToPayroll} />
                         </div>
                         <div className="w-40">
-                          <span className="text-[10px] text-muted-foreground">Complete</span>
+                          <span className="text-3xs text-muted-foreground">Complete</span>
                           <TimeSelect value={timelineEndInput} onChange={setTimelineEndInput} disabled={isSubmittedToPayroll} />
                         </div>
                         <Button
@@ -474,11 +474,11 @@ export function EmployeeRow({
           {breakFormOpen && onLogBreak ? (
             <div className="relative z-20 mt-3 flex flex-wrap items-end gap-2 rounded-lg border bg-muted/20 p-2 pointer-events-auto">
               <div className="w-40">
-                <span className="text-[10px] text-muted-foreground">Break start</span>
+                <span className="text-3xs text-muted-foreground">Break start</span>
                 <TimeSelect value={breakStartInput} onChange={setBreakStartInput} />
               </div>
               <div className="w-40">
-                <span className="text-[10px] text-muted-foreground">Break end</span>
+                <span className="text-3xs text-muted-foreground">Break end</span>
                 <TimeSelect value={breakEndInput} onChange={setBreakEndInput} />
               </div>
               <Button

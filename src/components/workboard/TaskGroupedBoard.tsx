@@ -104,7 +104,7 @@ export function TaskGroupedBoard({ assignments, tasks, employees, onEditAssignme
                   <p className="text-xs text-muted-foreground">{group.task.category}</p>
                 ) : null}
               </div>
-              <Badge variant="secondary" className="shrink-0 text-[10px]">
+              <Badge variant="secondary" className="shrink-0 text-3xs">
                 {group.assignments.length} assigned
               </Badge>
             </div>

@@ -465,7 +465,7 @@ export function SOPSettings({ orgId }: { orgId: string | null; propertyId?: stri
                           className="h-7 flex-1 rounded border border-surface-border bg-surface-elevated px-2 text-xs text-text-primary placeholder:text-text-muted"
                           placeholder="Checklist item..."
                         />
-                        <label className="flex shrink-0 items-center gap-1 text-[10px] text-text-muted">
+                        <label className="flex shrink-0 items-center gap-1 text-3xs text-text-muted">
                           <input
                             type="checkbox"
                             checked={item.is_required}

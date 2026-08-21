@@ -151,7 +151,7 @@ export function ProjectPhotoStrip({
                     loading="lazy"
                   />
                   {photo.sizeBytes ? (
-                    <div className="absolute bottom-0 left-0 right-0 bg-surface-base/80 px-1 py-0.5 text-[10px] text-text-secondary">
+                    <div className="absolute bottom-0 left-0 right-0 bg-surface-base/80 px-1 py-0.5 text-3xs text-text-secondary">
                       {formatPhotoSize(photo.sizeBytes)}
                     </div>
                   ) : null}
@@ -175,7 +175,7 @@ export function ProjectPhotoStrip({
                       type="button"
                       variant={isPlacingThisPhoto ? 'default' : 'outline'}
                       size="sm"
-                      className="h-7 flex-1 px-2 text-[11px]"
+                      className="h-7 flex-1 px-2 text-2xs"
                       onClick={() => (isPlacingThisPhoto ? onCancelPlacePhoto() : onPlacePhotoOnMap(photo))}
                       disabled={placementSaving}
                     >
@@ -187,7 +187,7 @@ export function ProjectPhotoStrip({
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2 text-[11px] text-status-warning"
+                        className="h-7 px-2 text-2xs text-status-warning"
                         onClick={() => onClearPhotoPin(photo)}
                         disabled={placementSaving}
                       >

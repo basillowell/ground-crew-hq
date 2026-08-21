@@ -175,7 +175,7 @@ export default function PricingPage() {
               }`}
             >
               {tier.highlighted ? (
-                <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-brand-bright px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-inverse">
+                <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-brand-bright px-3 py-1 text-3xs font-semibold uppercase tracking-wide text-text-inverse">
                   <Star className="h-3 w-3" />
                   Most Popular
                 </div>

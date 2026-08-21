@@ -16,6 +16,11 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
+      fontSize: {
+        "2xs": "0.6875rem",
+        "3xs": "0.625rem",
+        "4xs": "0.5625rem",
+      },
       colors: {
         surface: {
           base: "oklch(var(--surface-base) / <alpha-value>)",

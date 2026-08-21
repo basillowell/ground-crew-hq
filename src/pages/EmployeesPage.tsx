@@ -1213,7 +1213,7 @@ export default function EmployeesPage() {
                                   }
                                   openAvailabilityCell(employee, day.key);
                                 }}
-                                className={`h-7 w-9 rounded border text-[11px] ${statusCellClass(entry?.status ?? null)} ${isSelected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+                                className={`h-7 w-9 rounded border text-2xs ${statusCellClass(entry?.status ?? null)} ${isSelected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
                               >
                                 {entry ? (String(entry.status).slice(0, 1).toUpperCase()) : '—'}
                               </button>

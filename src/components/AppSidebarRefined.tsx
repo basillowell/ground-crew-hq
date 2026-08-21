@@ -241,7 +241,7 @@ function NavSection({ id, label, icon: Icon, items, collapsed, open, onToggle, r
     <section className={cn('py-1', className)}>
       <button
         type="button"
-        className="mb-1 flex h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-[10px] font-semibold uppercase tracking-widest text-text-muted/70 transition-colors hover:bg-surface-hover hover:text-text-secondary"
+        className="mb-1 flex h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-3xs font-semibold uppercase tracking-widest text-text-muted/70 transition-colors hover:bg-surface-hover hover:text-text-secondary"
         onClick={() => onToggle(id)}
         aria-expanded={open}
       >

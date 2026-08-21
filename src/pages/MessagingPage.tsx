@@ -97,7 +97,7 @@ export default function MessagingPage() {
               }`}
             >
               <Checkbox checked={selected.includes(emp.id)} />
-              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary">
+              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-3xs font-semibold text-primary">
                 {emp.firstName[0]}{emp.lastName[0]}
               </div>
               <span className="text-xs">{emp.firstName} {emp.lastName}</span>

@@ -461,13 +461,13 @@ function CustomColorInputs({
                   aria-label={`${field.label} color`}
                 />
               </span>
-              <span className="text-[11px] uppercase text-text-secondary">{value[field.key]}</span>
+              <span className="text-2xs uppercase text-text-secondary">{value[field.key]}</span>
             </span>
-            <span className="text-[10px] text-text-muted">{field.hint}</span>
+            <span className="text-3xs text-text-muted">{field.hint}</span>
           </label>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-text-muted">Card tint is derived automatically from the primary color.</p>
+      <p className="mt-2 text-2xs text-text-muted">Card tint is derived automatically from the primary color.</p>
     </div>
   );
 }
@@ -565,7 +565,7 @@ function BackgroundDarknessSlider({
         className="mt-3 w-full accent-brand disabled:cursor-not-allowed disabled:opacity-60"
         aria-label="Contrast"
       />
-      <div className="mt-1 flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-text-muted">
+      <div className="mt-1 flex items-center justify-between text-2xs font-medium uppercase tracking-wide text-text-muted">
         <span>Softer</span>
         <span>Stronger</span>
       </div>

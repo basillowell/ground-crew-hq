@@ -1463,7 +1463,7 @@ export function OpenTaskDayReviewPanel({
                               </label>
                               {selected ? (
                                 <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_72px] sm:items-end">
-                                  <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                                  <label className="text-3xs font-medium uppercase tracking-wide text-text-muted">
                                     Start
                                     <TimeSelect
                                       value={timeRange?.start ?? shiftStart}
@@ -1471,7 +1471,7 @@ export function OpenTaskDayReviewPanel({
                                       className={isApproved || splitAcrossPropertiesMutation.isPending ? 'pointer-events-none opacity-70' : ''}
                                     />
                                   </label>
-                                  <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                                  <label className="text-3xs font-medium uppercase tracking-wide text-text-muted">
                                     End
                                     <TimeSelect
                                       value={timeRange?.end ?? shiftEnd}
@@ -1480,7 +1480,7 @@ export function OpenTaskDayReviewPanel({
                                     />
                                   </label>
                                   <div className="rounded-md border border-surface-border bg-surface-elevated px-2 py-2 text-right">
-                                    <p className="text-[10px] uppercase tracking-wide text-text-muted">Hours</p>
+                                    <p className="text-3xs uppercase tracking-wide text-text-muted">Hours</p>
                                     <p className="font-mono text-sm font-semibold text-text-primary">{splitHours.toFixed(2)}</p>
                                   </div>
                                 </div>

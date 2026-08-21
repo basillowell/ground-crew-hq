@@ -1601,7 +1601,7 @@ export default function MobileFieldWorkspacePage() {
       <div className="mt-3 rounded-xl border border-surface-border bg-surface-card/80 p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{sopMeta?.title ?? 'SOP Checklist'}</p>
-          <Badge variant="secondary" className="shrink-0 text-[10px]">
+          <Badge variant="secondary" className="shrink-0 text-3xs">
             SOP
           </Badge>
         </div>
@@ -1626,7 +1626,7 @@ export default function MobileFieldWorkspacePage() {
                 />
                 <span className="min-w-0 flex-1">
                   <span className={isChecked ? 'line-through opacity-70' : ''}>{item.label}</span>
-                  {item.isRequired ? <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-brand">Required</span> : null}
+                  {item.isRequired ? <span className="ml-2 text-3xs font-semibold uppercase tracking-wide text-brand">Required</span> : null}
                 </span>
                 {isSaving ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-text-muted" /> : null}
               </label>
@@ -1736,18 +1736,18 @@ export default function MobileFieldWorkspacePage() {
                       <div className="flex items-center gap-2">
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">{assignment.title}</span>
                         {assignment.taskWorkOrderId ? (
-                          <Badge variant="active" className="shrink-0 px-1.5 py-0.5 text-[10px]">
+                          <Badge variant="active" className="shrink-0 px-1.5 py-0.5 text-3xs">
                             Work Order
                           </Badge>
                         ) : null}
                         {isSubmittedToPayroll ? (
-                          <Badge variant="complete" className="shrink-0 px-1.5 py-0.5 text-[10px]">
+                          <Badge variant="complete" className="shrink-0 px-1.5 py-0.5 text-3xs">
                             Submitted to payroll &mdash; review only
                           </Badge>
                         ) : null}
-                        <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{assignment.location || 'Area'}</span>
+                        <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-3xs text-text-secondary">{assignment.location || 'Area'}</span>
                         <span className="shrink-0 text-xs text-text-muted">{assignment.estimatedHours.toFixed(1)}h</span>
-                        <Badge variant={statusBadgeVariant(assignment.status)} className="shrink-0 px-1.5 py-0.5 text-[10px]">{statusBadgeLabel(assignment.status)}</Badge>
+                        <Badge variant={statusBadgeVariant(assignment.status)} className="shrink-0 px-1.5 py-0.5 text-3xs">{statusBadgeLabel(assignment.status)}</Badge>
                       </div>
                       {renderSopChecklist(assignment)}
                       {displayStatus(assignment.status) === 'done' || activeDonePromptId === assignment.id ? (
@@ -1903,13 +1903,13 @@ export default function MobileFieldWorkspacePage() {
                           <div key={task.id} className="flex min-h-[48px] items-center gap-2 rounded-xl border border-surface-border px-3">
                             <span className="truncate text-sm font-medium text-text-secondary">{task.title}</span>
                             {getAssignmentApprovedAt(task) ? (
-                              <Badge variant="complete" className="shrink-0 px-1.5 py-0.5 text-[10px]">
+                              <Badge variant="complete" className="shrink-0 px-1.5 py-0.5 text-3xs">
                                 Submitted to payroll
                               </Badge>
                             ) : null}
-                            <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-[10px] text-text-secondary">{task.location || 'Area'}</span>
+                            <span className="shrink-0 rounded-full border border-surface-border px-1.5 py-0.5 text-3xs text-text-secondary">{task.location || 'Area'}</span>
                             <span className="shrink-0 text-xs text-text-muted">{task.estimatedHours.toFixed(1)}h</span>
-                            <Badge variant={statusBadgeVariant(task.status)} className="shrink-0 px-1.5 py-0.5 text-[10px]">{statusBadgeLabel(task.status)}</Badge>
+                            <Badge variant={statusBadgeVariant(task.status)} className="shrink-0 px-1.5 py-0.5 text-3xs">{statusBadgeLabel(task.status)}</Badge>
                           </div>
                         ))
                       )}
@@ -1968,7 +1968,7 @@ export default function MobileFieldWorkspacePage() {
             <Clock3 className="h-4 w-4" />
             <span className="mt-1">Today</span>
             {isClockedIn ? (
-              <span className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold text-brand">
+              <span className="mt-0.5 flex items-center gap-1 text-3xs font-semibold text-brand">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-bright" />
                 <span className="font-mono">{elapsedLabel}</span>
               </span>

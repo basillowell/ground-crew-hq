@@ -10,7 +10,7 @@ interface AvatarInitialsProps {
 }
 
 const sizes = {
-  sm: 'w-6 h-6 text-[10px]',
+  sm: 'w-6 h-6 text-3xs',
   md: 'w-8 h-8 text-xs',
   lg: 'w-12 h-12 text-lg',
 };

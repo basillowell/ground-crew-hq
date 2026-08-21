@@ -291,7 +291,7 @@ export function PropertyDetailPanel({
       <div className="rounded-xl border border-surface-border bg-surface-card p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Property projects</div>
+            <div className="text-3xs font-semibold uppercase tracking-[0.18em] text-text-muted">Property projects</div>
             <h2 className="mt-1 truncate text-xl font-bold text-text-primary">{property.name}</h2>
             <p className="mt-1 text-sm text-text-secondary">{projects.length} active project{projects.length === 1 ? '' : 's'} tracked here.</p>
           </div>
@@ -342,7 +342,7 @@ export function PropertyDetailPanel({
             />
             <div className="grid gap-5 lg:grid-cols-[minmax(280px,380px)_1fr]">
               <div className="space-y-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Project selector</div>
+                <div className="text-3xs font-semibold uppercase tracking-[0.18em] text-text-muted">Project selector</div>
                 {projects.map((project) => {
                   const isSelected = expandedProject?.id === project.id;
                   const isPlacingThisPin = pinPlacementProjectId === project.id;

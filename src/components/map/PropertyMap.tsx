@@ -559,7 +559,7 @@ export function PropertyMap({
       {workSummary && !isMapInteractionActive ? (
         <div className="pointer-events-none absolute left-4 top-4 z-[500] max-w-[min(20rem,calc(100%-2rem))] rounded-lg border border-surface-border bg-surface-card/95 px-3 py-2.5 shadow-md backdrop-blur-sm">
           <div className="truncate text-sm font-semibold text-text-primary">{selectedProperty?.name}</div>
-          <div className="mt-0.5 text-[11px] text-text-muted">
+          <div className="mt-0.5 text-2xs text-text-muted">
             {workSummary.total} project{workSummary.total === 1 ? '' : 's'} · {workSummary.mapped} mapped
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
@@ -578,7 +578,7 @@ export function PropertyMap({
       ) : null}
       {(projectAreas.length > 0 || projectPins.length > 0) && !isMapInteractionActive ? (
         <div className="pointer-events-none absolute bottom-4 right-4 z-[500] rounded-lg border border-surface-border bg-surface-card/95 px-3 py-2.5 shadow-md backdrop-blur-sm">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+          <div className="mb-1.5 text-3xs font-semibold uppercase tracking-[0.16em] text-text-muted">
             Project status
           </div>
           <div className="flex flex-col gap-1">

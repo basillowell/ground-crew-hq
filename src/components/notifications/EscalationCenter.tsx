@@ -88,7 +88,7 @@ export function EscalationCenter({ onNavigate }: { onNavigate?: (route: string) 
             Escalation Center
           </h3>
           {criticalCount > 0 && (
-            <Badge variant="destructive" className="text-[10px] animate-pulse">
+            <Badge variant="destructive" className="text-3xs animate-pulse">
               {criticalCount} critical
             </Badge>
           )}
@@ -117,18 +117,18 @@ export function EscalationCenter({ onNavigate }: { onNavigate?: (route: string) 
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium">{alert.message}</p>
-                        <Badge variant={config.badge} className="text-[10px] shrink-0">{alert.severity}</Badge>
+                        <Badge variant={config.badge} className="text-3xs shrink-0">{alert.severity}</Badge>
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-2xs text-muted-foreground">
                         <span>{alert.propertyName}</span>
                         <span>·</span>
                         <span>{alert.timestamp}</span>
                       </div>
                       <div className="flex items-center gap-2 pt-1">
-                        <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => dismissAlert(alert.id)}>
+                        <Button size="sm" variant="outline" className="h-6 text-3xs px-2" onClick={() => dismissAlert(alert.id)}>
                           Dismiss
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={() => onNavigate?.('/app/workboard')}>
+                        <Button size="sm" variant="ghost" className="h-6 text-3xs px-2" onClick={() => onNavigate?.('/app/workboard')}>
                           View <ChevronRight className="h-3 w-3 ml-0.5" />
                         </Button>
                       </div>
@@ -148,9 +148,9 @@ export function EscalationCenter({ onNavigate }: { onNavigate?: (route: string) 
                 <Switch checked={rule.isActive} onCheckedChange={() => toggleRule(rule.id)} />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium">{rule.message.replace('{count}', '#').replace('{unit}', '...').replace('{hours}', '..').replace('{property}', '...')}</div>
-                  <div className="text-[11px] text-muted-foreground">{rule.condition} · Notify: {rule.notifyRoles.join(', ')}</div>
+                  <div className="text-2xs text-muted-foreground">{rule.condition} · Notify: {rule.notifyRoles.join(', ')}</div>
                 </div>
-                <Badge variant={config.badge} className="text-[10px]">{rule.severity}</Badge>
+                <Badge variant={config.badge} className="text-3xs">{rule.severity}</Badge>
               </Card>
             );
           })}

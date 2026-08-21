@@ -368,7 +368,7 @@ export default function PropertiesMapPage() {
     <section className="flex flex-1 flex-col gap-5 p-4 md:p-6">
       <div className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface-card p-4 shadow-sm md:flex-row md:flex-wrap md:items-end md:justify-between">
         <div className="min-w-[16rem] flex-1">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+          <div className="flex items-center gap-2 text-3xs font-semibold uppercase tracking-[0.18em] text-text-muted">
             <MapIcon className="h-3.5 w-3.5" />
             Boundaries
           </div>

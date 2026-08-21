@@ -42,7 +42,7 @@ export function PageHeader({ title, subtitle, badge, action, children, compact =
               <Badge variant="outline" className="rounded-full">
                 {programSetting?.clientLabel || programSetting?.organizationName || 'Client profile'}
               </Badge>
-              <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              <span className="text-2xs uppercase tracking-[0.16em] text-muted-foreground">
                 {programSetting?.appName || 'Ground Crew HQ'}
               </span>
             </div>

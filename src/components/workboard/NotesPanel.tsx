@@ -25,7 +25,7 @@ export function NotesPanel({ notes, onAddNote }: NotesPanelProps) {
               <div key={note.id} className="p-2.5 rounded-md bg-muted/50 border text-xs group hover:border-primary/20 transition-colors">
                 <div className="font-medium text-foreground mb-0.5">{note.title}</div>
                 <p className="text-muted-foreground leading-relaxed">{note.content}</p>
-                <div className="text-muted-foreground/70 mt-1.5 text-[10px] flex items-center gap-1">
+                <div className="text-muted-foreground/70 mt-1.5 text-3xs flex items-center gap-1">
                   {note.author} • {note.date}
                   {note.location && <span>• 📍 {note.location}</span>}
                 </div>

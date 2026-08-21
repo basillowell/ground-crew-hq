@@ -3438,12 +3438,12 @@ export default function WorkboardContent() {
   const renderRecentEquipmentChips = (onSelect: (equipmentId: string) => void) => (
     recentEquipmentOptions.length > 0 ? (
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Recently used</span>
+        <span className="text-3xs font-medium uppercase tracking-wide text-muted-foreground">Recently used</span>
         {recentEquipmentOptions.map((option) => (
           <button
             key={`${option.equipmentId}-${option.dateLabel}`}
             type="button"
-            className="rounded-full border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-[11px] font-medium text-status-pending transition-colors hover:bg-status-pending/15"
+            className="rounded-full border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-2xs font-medium text-status-pending transition-colors hover:bg-status-pending/15"
             onClick={() => {
               setIsAssignmentModalDirty(true);
               onSelect(option.equipmentId);
@@ -3458,7 +3458,7 @@ export default function WorkboardContent() {
   const renderShiftCoverageWarning = (warning: ShiftCoverageWarning | null) => {
     if (!warning) return null;
     return (
-      <p className="mt-1 rounded-md border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-[11px] font-medium text-status-pending">
+      <p className="mt-1 rounded-md border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-2xs font-medium text-status-pending">
         This pushes {warning.employeeName}'s shift to {formatMinutesAsHoursAndMinutes(warning.totalMinutes)}, {formatMinutesAsHoursAndMinutes(warning.overMinutes)} over their {formatMinutesAsHoursAndMinutes(warning.shiftMinutes)} shift.
       </p>
     );
@@ -3467,7 +3467,7 @@ export default function WorkboardContent() {
     const conflictNames = getEquipmentConflictNames(equipmentId, employeeId, startTime, estimatedMinutes);
     if (conflictNames.length === 0) return null;
     return (
-      <p className="mt-1 rounded-md border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-[11px] font-medium text-status-pending">
+      <p className="mt-1 rounded-md border border-status-pending/30 bg-status-pending/10 px-2 py-1 text-2xs font-medium text-status-pending">
         Overlaps {conflictNames.join(', ')}. You can still save if the unit is being shared.
       </p>
     );
@@ -4901,7 +4901,7 @@ export default function WorkboardContent() {
           />
 
           <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-elevated px-3 py-1.5">
-            <span className="text-[10px] uppercase tracking-wider text-text-muted">Board Date</span>
+            <span className="text-3xs uppercase tracking-wider text-text-muted">Board Date</span>
             <div className="relative flex items-center">
               <input
                 ref={boardDateInputRef}
@@ -5020,7 +5020,7 @@ export default function WorkboardContent() {
                   <Radio className="h-3.5 w-3.5" />
                   {isPublishingDay ? 'Publishing...' : 'Publish Day'}
                   {draftAssignmentCount > 0 ? (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{draftAssignmentCount}</Badge>
+                    <Badge variant="secondary" className="h-5 px-1.5 text-3xs">{draftAssignmentCount}</Badge>
                   ) : null}
                 </Button>
                 <Button
@@ -5035,7 +5035,7 @@ export default function WorkboardContent() {
                   <Calendar className="h-3.5 w-3.5" />
                   {isPublishingWeek ? 'Publishing...' : 'Publish Week'}
                   {weekDraftAssignmentCount > 0 ? (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{weekDraftAssignmentCount}</Badge>
+                    <Badge variant="secondary" className="h-5 px-1.5 text-3xs">{weekDraftAssignmentCount}</Badge>
                   ) : null}
                 </Button>
               </div>
@@ -5072,7 +5072,7 @@ export default function WorkboardContent() {
               >
                 <StickyNote className="h-3.5 w-3.5" />
                 Notes
-                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
+                <Badge variant="secondary" className="h-5 px-1.5 text-3xs">{noteList.length}</Badge>
               </Button>
             ) : null}
             {!isReadOnly ? (
@@ -5087,18 +5087,18 @@ export default function WorkboardContent() {
                 Turf
               </Button>
             ) : null}
-            <div className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-surface-border bg-surface-elevated px-2 text-[10px] text-text-muted">
+            <div className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-surface-border bg-surface-elevated px-2 text-3xs text-text-muted">
               <span className="inline-flex items-center gap-1">
                 Planned
-                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{plannedCount}</Badge>
+                <Badge variant="secondary" className="h-5 px-1.5 text-3xs">{plannedCount}</Badge>
               </span>
               <span className="inline-flex items-center gap-1">
                 Critical
-                <Badge variant={criticalCount > 0 ? "destructive" : "secondary"} className="h-5 px-1.5 text-[10px]">{criticalCount}</Badge>
+                <Badge variant={criticalCount > 0 ? "destructive" : "secondary"} className="h-5 px-1.5 text-3xs">{criticalCount}</Badge>
               </span>
               <span className="inline-flex items-center gap-1">
                 Assigned
-                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{assignedCount}</Badge>
+                <Badge variant="secondary" className="h-5 px-1.5 text-3xs">{assignedCount}</Badge>
               </span>
             </div>
             <DropdownMenu>
@@ -5215,7 +5215,7 @@ export default function WorkboardContent() {
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-7 px-2 text-[11px]"
+                className="h-7 px-2 text-2xs"
                 onClick={() => setSopCollapsed((current) => !current)}
               >
                 {sopCollapsed ? (
@@ -5271,11 +5271,11 @@ export default function WorkboardContent() {
                 <div className="flex items-center gap-2">
                   <ListChecks className="h-4 w-4 text-primary" />
                   <h3 className="text-sm font-semibold">Requests</h3>
-                  <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
+                  <Badge variant="destructive" className="h-5 px-1.5 text-3xs">
                     {pendingTaskRequests.length}
                   </Badge>
                 </div>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Today</span>
+                <span className="text-3xs uppercase tracking-wider text-muted-foreground">Today</span>
               </div>
               <div className="grid gap-2 md:grid-cols-2">
                 {pendingTaskRequests.map((request) => {
@@ -5284,17 +5284,17 @@ export default function WorkboardContent() {
                     <div key={request.id} className={`rounded-2xl border p-3 ${PRIORITY_COLOR[request.priority] ?? 'bg-muted/20 border-border'}`}>
                       <div className="mb-1 flex items-center justify-between gap-2">
                         <span className="text-sm font-medium">{request.title}</span>
-                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] capitalize">
+                        <Badge variant="outline" className="h-5 px-1.5 text-3xs capitalize">
                           {request.priority}
                         </Badge>
                       </div>
                       {request.description ? <p className="mb-2 text-xs text-muted-foreground">{request.description}</p> : null}
-                      <div className="mb-2 text-[11px] text-muted-foreground">
+                      <div className="mb-2 text-2xs text-muted-foreground">
                         {requestEmployee ? `${requestEmployee.firstName} ${requestEmployee.lastName}` : 'Unassigned crew'} · {request.date}
                       </div>
                       <Button
                         size="sm"
-                        className="h-7 text-[11px]"
+                        className="h-7 text-2xs"
                         onClick={() => void approveRequestToAssignment(request)}
                         data-testid={`button-approve-request-${request.id}`}
                       >
@@ -5315,13 +5315,13 @@ export default function WorkboardContent() {
                 </h3>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{boardDate}</span>
+                <span className="text-3xs uppercase tracking-wider text-muted-foreground">{boardDate}</span>
                 {!isReadOnly ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-7 px-2 text-[11px]"
+                    className="h-7 px-2 text-2xs"
                     onClick={openSubmitWorkOrderDialog}
                   >
                     Submit Work Order
@@ -5331,7 +5331,7 @@ export default function WorkboardContent() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-7 px-2 text-[11px]"
+                  className="h-7 px-2 text-2xs"
                   onClick={() => setWorkOrdersExpanded((current) => !current)}
                 >
                   {workOrdersExpanded ? 'Hide' : 'Show'}
@@ -5417,12 +5417,12 @@ export default function WorkboardContent() {
                                 <span className="flex min-w-0 items-center gap-2 text-sm">
                                   <span className="truncate">{a.title}</span>
                                   {isDraft ? (
-                                    <Badge variant="pending" className="shrink-0 text-[10px] uppercase tracking-wide">Draft</Badge>
+                                    <Badge variant="pending" className="shrink-0 text-3xs uppercase tracking-wide">Draft</Badge>
                                   ) : (
-                                    <Badge variant="active" className="shrink-0 text-[10px] uppercase tracking-wide">Published</Badge>
+                                    <Badge variant="active" className="shrink-0 text-3xs uppercase tracking-wide">Published</Badge>
                                   )}
                                   {isSubmittedToPayroll ? (
-                                    <Badge variant="complete" className="shrink-0 text-[10px]">Submitted to payroll</Badge>
+                                    <Badge variant="complete" className="shrink-0 text-3xs">Submitted to payroll</Badge>
                                   ) : null}
                                 </span>
                                 <Badge variant={
@@ -5469,7 +5469,7 @@ export default function WorkboardContent() {
           ) : (
             <>
             <div className="hidden space-y-2 md:block">
-              <div className="rounded-xl border bg-card/70 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="rounded-xl border bg-card/70 px-3 py-2 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                 <div className="grid grid-cols-[minmax(0,1fr)_90px_60px_90px_80px_24px] items-center gap-3">
                   <span>Employee</span>
                   <span className="text-right">Shift</span>
@@ -5525,13 +5525,13 @@ export default function WorkboardContent() {
                           {lane.shift ? `${formatTime(lane.shift.shiftStart)}-${formatTime(lane.shift.shiftEnd)}` : 'No shift'}
                         </span>
                         <span className="w-[60px] text-right">
-                          <span className="inline-flex rounded-full bg-brand-bright/10 px-2 py-0.5 text-[11px] font-medium text-brand-bright">
+                          <span className="inline-flex rounded-full bg-brand-bright/10 px-2 py-0.5 text-2xs font-medium text-brand-bright">
                             {lane.employeeAssignments.length}
                           </span>
                         </span>
                         <span className="w-[90px] text-right">
                           <span
-                            className={`relative inline-flex h-5 w-[76px] items-center justify-center overflow-hidden rounded-full border text-[11px] font-semibold ${coverageIndicator.trackClass}`}
+                            className={`relative inline-flex h-5 w-[76px] items-center justify-center overflow-hidden rounded-full border text-2xs font-semibold ${coverageIndicator.trackClass}`}
                             aria-label={`Coverage ${coverageRounded}%`}
                           >
                             <span
@@ -5542,7 +5542,7 @@ export default function WorkboardContent() {
                             {coverageIndicator.markerClass ? (
                               <span className={`absolute right-0 top-0 h-full w-1 ${coverageIndicator.markerClass}`} aria-hidden="true" />
                             ) : null}
-                            <span className="relative z-10 rounded-full bg-background/70 px-1 text-[10px] leading-none text-foreground shadow-sm">
+                            <span className="relative z-10 rounded-full bg-background/70 px-1 text-3xs leading-none text-foreground shadow-sm">
                               {coverageRounded}%
                             </span>
                           </span>
@@ -5690,7 +5690,7 @@ export default function WorkboardContent() {
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <span>{lane.shift ? `${formatTime(lane.shift.shiftStart)}-${formatTime(lane.shift.shiftEnd)}` : 'No shift'}</span>
                           <span
-                            className={`relative inline-flex h-5 w-20 items-center justify-center overflow-hidden rounded-full border text-[11px] font-semibold ${coverageIndicator.trackClass}`}
+                            className={`relative inline-flex h-5 w-20 items-center justify-center overflow-hidden rounded-full border text-2xs font-semibold ${coverageIndicator.trackClass}`}
                             aria-label={`Coverage ${coverageRounded}%`}
                           >
                             <span
@@ -5701,7 +5701,7 @@ export default function WorkboardContent() {
                             {coverageIndicator.markerClass ? (
                               <span className={`absolute right-0 top-0 h-full w-1 ${coverageIndicator.markerClass}`} aria-hidden="true" />
                             ) : null}
-                            <span className="relative z-10 rounded-full bg-background/70 px-1 text-[10px] leading-none text-foreground shadow-sm">
+                            <span className="relative z-10 rounded-full bg-background/70 px-1 text-3xs leading-none text-foreground shadow-sm">
                               {coverageRounded}%
                             </span>
                           </span>
@@ -5773,12 +5773,12 @@ export default function WorkboardContent() {
                                       <div className="flex flex-wrap items-center gap-2">
                                         <p className="text-sm font-medium">{assignment.title || task?.name || 'Untitled task'}</p>
                                         {isDraft ? (
-                                          <Badge variant="pending" className="text-[10px] uppercase tracking-wide">Draft</Badge>
+                                          <Badge variant="pending" className="text-3xs uppercase tracking-wide">Draft</Badge>
                                         ) : (
-                                          <Badge variant="active" className="text-[10px] uppercase tracking-wide">Published</Badge>
+                                          <Badge variant="active" className="text-3xs uppercase tracking-wide">Published</Badge>
                                         )}
                                         {isSubmittedToPayroll ? (
-                                          <Badge variant="complete" className="text-[10px]">Submitted to payroll</Badge>
+                                          <Badge variant="complete" className="text-3xs">Submitted to payroll</Badge>
                                         ) : null}
                                       </div>
                                       <p className="text-xs text-muted-foreground">
@@ -5871,7 +5871,7 @@ export default function WorkboardContent() {
                                   </button>
                                   {timelineEditAssignmentId === assignment.id ? (
                                     <div className="relative z-20 mt-2 flex flex-wrap items-end gap-2 rounded-md border bg-background/70 p-2 pointer-events-auto">
-                                      <label className="text-[10px] text-muted-foreground">
+                                      <label className="text-3xs text-muted-foreground">
                                         Start
                                         <TimeSelect
                                           value={timelineEditStart}
@@ -5880,7 +5880,7 @@ export default function WorkboardContent() {
                                           disabled={isSubmittedToPayroll}
                                         />
                                       </label>
-                                      <label className="text-[10px] text-muted-foreground">
+                                      <label className="text-3xs text-muted-foreground">
                                         Complete
                                         <TimeSelect
                                           value={timelineEditEnd}
@@ -6136,7 +6136,7 @@ export default function WorkboardContent() {
               <StickyNote className="h-4 w-4" />
               Notes
             </span>
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{noteList.length}</Badge>
+            <Badge variant="secondary" className="h-5 px-1.5 text-3xs">{noteList.length}</Badge>
           </Button>
 
         </div>
@@ -6348,7 +6348,7 @@ export default function WorkboardContent() {
                 onChange={(event) => setBulkEditDraft((current) => ({ ...current, startTime: event.target.value }))}
                 className="mt-1 h-10 border-border bg-background text-foreground"
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">Leave blank to keep each assignment's current start time.</p>
+              <p className="mt-1 text-2xs text-muted-foreground">Leave blank to keep each assignment's current start time.</p>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Property</label>
@@ -6593,7 +6593,7 @@ export default function WorkboardContent() {
                   setAssignmentDraft({ ...assignmentDraft, startTime: value });
                 }}
               />
-              <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(assignmentDraft.startTime)}</div>
+              <div className="mt-1 text-2xs text-muted-foreground">{formatTime(assignmentDraft.startTime)}</div>
             </div>
 
 
@@ -6715,7 +6715,7 @@ export default function WorkboardContent() {
                       });
                     }}
                   />
-                  <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(taskRows[0]?.startTime ?? assignmentDraft.startTime)}</div>
+                  <div className="mt-1 text-2xs text-muted-foreground">{formatTime(taskRows[0]?.startTime ?? assignmentDraft.startTime)}</div>
                 </div>
                 {quickAssignmentSaving ? (
                   <p className="col-span-2 text-xs text-muted-foreground">Dispatching quick task...</p>
@@ -6893,7 +6893,7 @@ export default function WorkboardContent() {
                             setTaskRows((current) => current.map((item) => (item.id === row.id ? { ...item, startTime: value } : item)));
                           }}
                         />
-                        <div className="mt-1 text-[11px] text-muted-foreground">{formatTime(row.startTime)}</div>
+                        <div className="mt-1 text-2xs text-muted-foreground">{formatTime(row.startTime)}</div>
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground">Status</label>
@@ -7231,7 +7231,7 @@ export default function WorkboardContent() {
                   key={tab.id}
                   type="button"
                   onClick={() => setNoteScope(tab.id)}
-                  className={`flex-1 rounded-lg py-1 text-[11px] font-medium transition-colors ${
+                  className={`flex-1 rounded-lg py-1 text-2xs font-medium transition-colors ${
                     noteScope === tab.id
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted/50 text-muted-foreground hover:bg-muted'
@@ -7247,7 +7247,7 @@ export default function WorkboardContent() {
                   key={tab.id}
                   type="button"
                   onClick={() => setNoteTypeFilter(tab.id)}
-                  className={`rounded-full border px-2 py-1 text-[10px] font-medium transition-colors ${
+                  className={`rounded-full border px-2 py-1 text-3xs font-medium transition-colors ${
                     noteTypeFilter === tab.id
                       ? 'border-primary/40 bg-primary/10 text-primary'
                       : 'border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground'
@@ -7345,7 +7345,7 @@ export default function WorkboardContent() {
                           <p className="truncate text-sm font-semibold">{note.title}</p>
                           <p className="mt-1 text-xs text-muted-foreground">{note.date}</p>
                         </div>
-                        <Badge variant={note.type === 'alert' ? 'destructive' : 'secondary'} className="shrink-0 text-[10px] capitalize">
+                        <Badge variant={note.type === 'alert' ? 'destructive' : 'secondary'} className="shrink-0 text-3xs capitalize">
                           {note.type}
                         </Badge>
                       </div>

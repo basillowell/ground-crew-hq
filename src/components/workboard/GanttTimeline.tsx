@@ -104,7 +104,7 @@ export function GanttTimeline({
             <div className="relative">
               <div className="grid grid-cols-12">
                 {hours.slice(0, 12).map((hour) => (
-                  <div key={`timeline-hour-${hour}`} className="border-r px-1 py-2 text-center text-[11px] text-muted-foreground last:border-r-0">
+                  <div key={`timeline-hour-${hour}`} className="border-r px-1 py-2 text-center text-2xs text-muted-foreground last:border-r-0">
                     {hourLabel(hour)}
                   </div>
                 ))}
@@ -114,7 +114,7 @@ export function GanttTimeline({
                   className="pointer-events-none absolute bottom-0 top-0 z-20 border-l-2 border-dotted border-status-warning"
                   style={{ left: `${clamp(nowLeftPct, 0, 100)}%` }}
                 >
-                  <span className="absolute -top-5 -translate-x-1/2 rounded bg-status-warning px-1.5 py-0.5 text-[10px] font-medium text-text-primary">
+                  <span className="absolute -top-5 -translate-x-1/2 rounded bg-status-warning px-1.5 py-0.5 text-3xs font-medium text-text-primary">
                     Now
                   </span>
                 </div>
@@ -198,7 +198,7 @@ export function GanttTimeline({
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              className={`absolute top-2 h-[calc(100%-16px)] rounded-md border px-2 text-left text-[11px] font-semibold shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70 ${tone}`}
+                              className={`absolute top-2 h-[calc(100%-16px)] rounded-md border px-2 text-left text-2xs font-semibold shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70 ${tone}`}
                               style={{
                                 left: `${bar.leftPct}%`,
                                 width: `${bar.widthPct}%`,
@@ -212,7 +212,7 @@ export function GanttTimeline({
                                 {bar.status === 'done' ? '✓ ' : ''}{bar.taskName}
                               </span>
                               {bar.isSubmittedToPayroll ? (
-                                <Badge variant="complete" className="mt-1 max-w-full truncate px-1 py-0 text-[9px]">
+                                <Badge variant="complete" className="mt-1 max-w-full truncate px-1 py-0 text-4xs">
                                   Submitted
                                 </Badge>
                               ) : null}

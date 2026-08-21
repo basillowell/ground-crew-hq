@@ -28,12 +28,12 @@ function WorkOrderCard({ wo, units, onMoveForward }: { wo: WorkOrder; units: Equ
     <Card className="p-3 space-y-2 border hover:border-primary/20 transition-all hover:shadow-sm cursor-grab active:cursor-grabbing">
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-medium leading-tight">{wo.title}</h4>
-        <Badge variant={priorityColors[wo.priority]} className="text-[10px] shrink-0 px-1.5">
+        <Badge variant={priorityColors[wo.priority]} className="text-3xs shrink-0 px-1.5">
           {wo.priority}
         </Badge>
       </div>
       <p className="text-xs text-muted-foreground line-clamp-2">{wo.description}</p>
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between text-2xs text-muted-foreground">
         <span className="flex items-center gap-1">
           <Wrench className="h-3 w-3" />
           {eqType?.name || 'Unknown'} #{unit?.unitNumber || '?'}
@@ -45,11 +45,11 @@ function WorkOrderCard({ wo, units, onMoveForward }: { wo: WorkOrder; units: Equ
         )}
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+        <span className="text-3xs text-muted-foreground flex items-center gap-1">
           <Clock className="h-3 w-3" />{wo.createdDate}
         </span>
         {wo.status !== 'completed' && onMoveForward && (
-          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={onMoveForward}>
+          <Button variant="ghost" size="sm" className="h-6 text-3xs px-2" onClick={onMoveForward}>
             Move <ChevronRight className="h-3 w-3 ml-0.5" />
           </Button>
         )}
@@ -113,7 +113,7 @@ export function WorkOrderKanban() {
               <div className="flex items-center gap-2 px-1">
                 <col.icon className="h-4 w-4" style={{ color: col.color }} />
                 <span className="text-sm font-medium">{col.label}</span>
-                <Badge variant="secondary" className="text-[10px] h-5 min-w-5 flex items-center justify-center">
+                <Badge variant="secondary" className="text-3xs h-5 min-w-5 flex items-center justify-center">
                   {colOrders.length}
                 </Badge>
               </div>

@@ -1,4 +1,4 @@
-﻿import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 
 type EquipmentQrCardProps = {
   qrToken?: string | null;
@@ -25,7 +25,7 @@ export function EquipmentQrCard({ qrToken, scanUrl }: EquipmentQrCardProps) {
         <div className="min-w-0 flex-1 space-y-2 text-sm">
           <p className="font-semibold text-text-primary">Field scan link</p>
           <p className="break-all text-xs text-text-muted">{scanUrl}</p>
-          <p className="break-all text-[11px] uppercase tracking-[0.12em] text-text-muted">Token {qrToken}</p>
+          <p className="break-all text-2xs uppercase tracking-[0.12em] text-text-muted">Token {qrToken}</p>
           <Button
             type="button"
             variant="outline"

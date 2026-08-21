@@ -164,7 +164,7 @@ export default function LaunchPortalPage() {
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
           <div>
             <div className="text-base font-semibold tracking-tight text-text-primary">{appName}</div>
-            <div className="text-[10px] uppercase tracking-[0.16em] text-text-muted">{clientName}</div>
+            <div className="text-3xs uppercase tracking-[0.16em] text-text-muted">{clientName}</div>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -222,12 +222,12 @@ export default function LaunchPortalPage() {
               <span className="h-2.5 w-2.5 rounded-full bg-status-warning/70" />
               <span className="h-2.5 w-2.5 rounded-full bg-status-pending/70" />
               <span className="h-2.5 w-2.5 rounded-full bg-status-active/70" />
-              <span className="ml-2 text-[11px] text-text-muted">ground-crew-hq.vercel.app/dashboard</span>
+              <span className="ml-2 text-2xs text-text-muted">ground-crew-hq.vercel.app/dashboard</span>
             </div>
             <div className="grid grid-cols-[80px_1fr]">
               <div className="space-y-2 bg-surface-base p-3">
                 {['Dashboard', 'Workboard', 'Scheduler', 'Equipment'].map((item) => (
-                  <div key={item} className="rounded-md bg-surface-elevated px-2 py-1 text-[10px] text-text-secondary">
+                  <div key={item} className="rounded-md bg-surface-elevated px-2 py-1 text-3xs text-text-secondary">
                     {item}
                   </div>
                 ))}
@@ -235,20 +235,20 @@ export default function LaunchPortalPage() {
               <div className="space-y-3 p-3">
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
-                    <div className="text-[10px] text-text-muted">Crew</div>
+                    <div className="text-3xs text-text-muted">Crew</div>
                     <div className="text-sm font-semibold text-text-primary">3 Scheduled</div>
                   </div>
                   <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
-                    <div className="text-[10px] text-text-muted">Tasks</div>
+                    <div className="text-3xs text-text-muted">Tasks</div>
                     <div className="text-sm font-semibold text-text-primary">8 Assigned</div>
                   </div>
                   <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
-                    <div className="text-[10px] text-text-muted">Equipment</div>
+                    <div className="text-3xs text-text-muted">Equipment</div>
                     <div className="text-sm font-semibold text-text-primary">12 Ready</div>
                   </div>
                 </div>
                 <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
-                  <div className="mb-2 text-[10px] text-text-muted">Schedule Grid</div>
+                  <div className="mb-2 text-3xs text-text-muted">Schedule Grid</div>
                   <div className="space-y-1">
                     <div className="h-5 rounded bg-status-active/25" />
                     <div className="h-5 rounded bg-status-complete/25" />
@@ -256,7 +256,7 @@ export default function LaunchPortalPage() {
                   </div>
                 </div>
                 <div className="rounded-lg border border-surface-border bg-surface-elevated p-2">
-                  <div className="mb-2 text-[10px] text-text-muted">Task Timeline</div>
+                  <div className="mb-2 text-3xs text-text-muted">Task Timeline</div>
                   <div className="flex h-3 overflow-hidden rounded-full">
                     <div className="w-1/2 bg-status-active/60" />
                     <div className="w-1/4 bg-status-pending/60" />

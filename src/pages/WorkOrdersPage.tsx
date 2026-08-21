@@ -648,7 +648,7 @@ export default function WorkOrdersPage() {
                 <section key={lane.key} className="space-y-3">
                   <div className="flex items-center gap-2 px-1">
                     <span className="text-sm font-medium text-text-primary">{lane.label}</span>
-                    <Badge variant={lane.variant} className="flex h-5 min-w-5 items-center justify-center px-1.5 text-[10px]">
+                    <Badge variant={lane.variant} className="flex h-5 min-w-5 items-center justify-center px-1.5 text-3xs">
                       {laneOrders.length}
                     </Badge>
                   </div>

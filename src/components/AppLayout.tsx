@@ -694,7 +694,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </div>
               ) : null}
               <div className="border-b border-surface-border bg-surface-base/60 px-4 py-2 md:hidden">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
+                <div className="text-3xs uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
                 <div className="text-sm font-medium text-text-secondary">
                   {currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                 </div>

@@ -217,7 +217,7 @@ export default function CommandCenterOperationalPage() {
             </div>
             <div>
               <div className="text-2xl font-bold">{m.value}</div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{m.label}</div>
+              <div className="text-2xs uppercase tracking-wider text-muted-foreground">{m.label}</div>
               {m.subtext && <div className="text-xs text-muted-foreground">{m.subtext}</div>}
             </div>
           </Card>
@@ -267,7 +267,7 @@ export default function CommandCenterOperationalPage() {
                             <p className="text-xs text-muted-foreground">{property.city}, {property.state}</p>
                           </div>
                         </div>
-                        <Badge variant={property.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">
+                        <Badge variant={property.status === 'active' ? 'default' : 'secondary'} className="text-3xs">
                           {property.status}
                         </Badge>
                       </div>
@@ -280,7 +280,7 @@ export default function CommandCenterOperationalPage() {
                         ].map(item => (
                           <div key={item.label}>
                             <div className="text-lg font-bold">{item.value}</div>
-                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{item.label}</div>
+                            <div className="text-3xs uppercase tracking-wider text-muted-foreground">{item.label}</div>
                           </div>
                         ))}
                       </div>
@@ -326,7 +326,7 @@ export default function CommandCenterOperationalPage() {
               <h3 className="flex items-center gap-2 text-sm font-semibold">
                 <Activity className="h-4 w-4 text-primary" /> Live Crew Activity
               </h3>
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-3xs">
                 <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-status-active" />
                 Live
               </Badge>
@@ -338,9 +338,9 @@ export default function CommandCenterOperationalPage() {
                 <span className={`h-2 w-2 rounded-full ${member.status === 'active' ? 'bg-status-active' : member.status === 'scheduled' ? 'bg-status-pending' : 'bg-status-hold'}`} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{member.name}</div>
-                  <div className="truncate text-[11px] text-muted-foreground">{member.currentTask || member.status} · {member.propertyShortName}</div>
+                  <div className="truncate text-2xs text-muted-foreground">{member.currentTask || member.status} · {member.propertyShortName}</div>
                 </div>
-                <Badge variant="outline" className="shrink-0 text-[10px]">{member.role}</Badge>
+                <Badge variant="outline" className="shrink-0 text-3xs">{member.role}</Badge>
               </div>
             ))}
           </Card>

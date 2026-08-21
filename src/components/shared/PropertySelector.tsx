@@ -39,7 +39,7 @@ export function PropertySelector({
 
   return (
     <div className={cn('min-w-[220px]', className)}>
-      <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">{label}</div>
+      <div className="text-3xs uppercase tracking-[0.18em] text-text-muted">{label}</div>
       {canSwitchProperties ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

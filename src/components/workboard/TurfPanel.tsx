@@ -199,7 +199,7 @@ export function TurfPanel({ orgId, propertyId, currentEmployeeId, employees = []
           <h3 className="text-sm font-semibold text-foreground">Turf Management</h3>
           <p className="text-xs text-muted-foreground">Apply mow patterns by application area.</p>
         </div>
-        <Badge variant="secondary" className="shrink-0 text-[10px]">
+        <Badge variant="secondary" className="shrink-0 text-3xs">
           {areas.length} areas
         </Badge>
       </div>

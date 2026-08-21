@@ -223,7 +223,7 @@ export function CalendarReport({ assignments, tasks, startDate, endDate, loading
             <h4 className="mb-3 text-sm font-semibold text-text-primary">
               {month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </h4>
-            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-text-muted">
+            <div className="grid grid-cols-7 gap-1 text-center text-2xs font-medium text-text-muted">
               {WEEKDAYS.map((weekday) => <div key={weekday}>{weekday}</div>)}
             </div>
             <div className="mt-1 grid grid-cols-7 gap-1">
@@ -243,11 +243,11 @@ export function CalendarReport({ assignments, tasks, startDate, endDate, loading
                     <div className="text-xs font-medium text-text-primary">{day.getDate()}</div>
                     <div className="mt-2 space-y-1">
                       {Array.from(categoryCounts.entries()).slice(0, 3).map(([category, count]) => (
-                        <div key={`${dateKey}-${category}`} className="truncate rounded px-1.5 py-1 text-[11px] font-medium text-text-inverse" style={{ backgroundColor: categoryColors.get(category) }}>
+                        <div key={`${dateKey}-${category}`} className="truncate rounded px-1.5 py-1 text-2xs font-medium text-text-inverse" style={{ backgroundColor: categoryColors.get(category) }}>
                           {category} ({count})
                         </div>
                       ))}
-                      {categoryCounts.size > 3 ? <div className="text-[11px] text-text-muted">+{categoryCounts.size - 3} more</div> : null}
+                      {categoryCounts.size > 3 ? <div className="text-2xs text-text-muted">+{categoryCounts.size - 3} more</div> : null}
                     </div>
                   </div>
                 );

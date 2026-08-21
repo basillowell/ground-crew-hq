@@ -1205,7 +1205,7 @@ export default function SchedulerPage() {
           <span><span className="font-semibold text-foreground">{summary.scheduledHours.toFixed(1)}h</span> scheduled hours</span>
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground ml-auto">
-          <span className="text-[10px] uppercase tracking-wider">
+          <span className="text-3xs uppercase tracking-wider">
             {activeEmployees.length} crew{search ? ' (filtered)' : ''}
           </span>
         </div>
@@ -1277,9 +1277,9 @@ export default function SchedulerPage() {
                         <p className="text-xs text-muted-foreground">{emp.group || emp.department}</p>
                       </div>
                       {entry ? (
-                        <Badge variant="outline" className="text-[11px]">{entry.status}</Badge>
+                        <Badge variant="outline" className="text-2xs">{entry.status}</Badge>
                       ) : (
-                        <Badge variant="outline" className="text-[11px]">No Shift</Badge>
+                        <Badge variant="outline" className="text-2xs">No Shift</Badge>
                       )}
                     </div>
                     <div className="mt-2">
@@ -1320,7 +1320,7 @@ export default function SchedulerPage() {
                         key={day.date}
                         className={`text-center px-2 py-3 font-medium text-xs min-w-[110px] ${isToday ? 'bg-primary/10 ring-1 ring-primary/40 text-primary' : 'text-muted-foreground'}`}
                       >
-                        <div className={`text-[10px] uppercase tracking-wider ${isToday ? 'text-primary' : ''}`}>{day.short}</div>
+                        <div className={`text-3xs uppercase tracking-wider ${isToday ? 'text-primary' : ''}`}>{day.short}</div>
                         <div className={`mt-0.5 text-lg font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{day.dayNum}</div>
                         {isToday && <div className="h-1 w-1 rounded-full bg-primary mx-auto mt-1" />}
                       </th>
@@ -1360,10 +1360,10 @@ export default function SchedulerPage() {
                             </div>
                             <div className="min-w-0">
                               <div className="font-medium text-xs truncate">{emp.firstName} {emp.lastName}</div>
-                              <div className="text-[10px] text-muted-foreground truncate">{emp.group || emp.department}</div>
+                              <div className="text-3xs text-muted-foreground truncate">{emp.group || emp.department}</div>
                               <button
                                 type="button"
-                                className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
+                                className="mt-1 inline-flex items-center gap-1 text-3xs text-primary hover:underline"
                                 onClick={() => exportEmployeeWeekIcs(emp.id, 'single')}
                                 title="Download weekly .ics"
                               >
@@ -1391,7 +1391,7 @@ export default function SchedulerPage() {
                                 <button
                                   type="button"
                                   disabled={isReadOnly}
-                                  className="h-11 w-full rounded-lg border border-dashed border-surface-border text-[10px] text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                                  className="h-11 w-full rounded-lg border border-dashed border-surface-border text-3xs text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                                   onClick={() => openAddShift(emp.id, day.date)}
                                   data-testid={`button-add-shift-${emp.id}-${day.date}`}
                                 >
@@ -1431,23 +1431,23 @@ export default function SchedulerPage() {
                               >
                                 {entry.status === 'scheduled' ? (
                                   <>
-                                    <div className="font-mono text-[11px] font-semibold">
+                                    <div className="font-mono text-2xs font-semibold">
                                       {formatTime(entry.shiftStart)} - {formatTime(entry.shiftEnd)}
                                     </div>
                                     <Badge
                                       variant="outline"
-                                      className={`mt-1 h-5 px-1.5 text-[9px] uppercase tracking-wide ${departmentStyle.badge}`}
+                                      className={`mt-1 h-5 px-1.5 text-4xs uppercase tracking-wide ${departmentStyle.badge}`}
                                     >
                                       {departmentStyle.label}
                                     </Badge>
-                                    {entryNotes ? <div className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{entryNotes}</div> : null}
+                                    {entryNotes ? <div className="mt-0.5 line-clamp-2 text-3xs text-muted-foreground">{entryNotes}</div> : null}
                                   </>
                                 ) : String(entry.status) === 'off' ? (
                                   <>
-                                    <div className="text-[11px] font-semibold">DAY OFF</div>
+                                    <div className="text-2xs font-semibold">DAY OFF</div>
                                     <Badge
                                       variant="outline"
-                                      className={`mt-1 h-5 px-1.5 text-[9px] uppercase tracking-wide ${style.badge}`}
+                                      className={`mt-1 h-5 px-1.5 text-4xs uppercase tracking-wide ${style.badge}`}
                                     >
                                       Day Off
                                     </Badge>
@@ -1455,7 +1455,7 @@ export default function SchedulerPage() {
                                 ) : (
                                   <>
                                     <div className="font-medium capitalize">{style.label}</div>
-                                    <Badge variant="outline" className={`mt-1 h-5 px-1.5 text-[9px] uppercase tracking-wide ${style.badge}`}>
+                                    <Badge variant="outline" className={`mt-1 h-5 px-1.5 text-4xs uppercase tracking-wide ${style.badge}`}>
                                       {style.label}
                                     </Badge>
                                   </>
@@ -1464,21 +1464,21 @@ export default function SchedulerPage() {
                               {detailOpen ? (
                                 <div className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 w-60 -translate-x-1/2 rounded-lg border bg-popover p-3 text-left shadow-lg">
                                   <div className="text-xs font-semibold text-foreground">{emp.firstName} {emp.lastName} · {emp.role}</div>
-                                  <div className="mt-1 text-[11px] text-muted-foreground">
+                                  <div className="mt-1 text-2xs text-muted-foreground">
                                     Shift: {formatTime(entry.shiftStart)} - {formatTime(entry.shiftEnd)} ({scheduledHours.toFixed(1)}h)
                                   </div>
-                                  <div className="mt-1 text-[11px] text-muted-foreground">
+                                  <div className="mt-1 text-2xs text-muted-foreground">
                                     Assigned tasks: {cellAssignments.length}
                                   </div>
                                   {cellAssignments.length > 0 ? (
-                                    <ul className="mt-1 list-disc pl-4 text-[11px] text-muted-foreground">
+                                    <ul className="mt-1 list-disc pl-4 text-2xs text-muted-foreground">
                                       {cellAssignments.slice(0, 3).map((assignment, idx) => (
                                         <li key={`${cellKey}-assignment-${idx}`}>{assignment.title || 'Task'}</li>
                                       ))}
                                     </ul>
                                   ) : null}
-                                  <div className="mt-1 text-[11px] text-muted-foreground">Coverage: {coverage}% of shift covered</div>
-                                  {entryNotes ? <div className="mt-1 text-[11px] text-muted-foreground">Notes: {entryNotes}</div> : null}
+                                  <div className="mt-1 text-2xs text-muted-foreground">Coverage: {coverage}% of shift covered</div>
+                                  {entryNotes ? <div className="mt-1 text-2xs text-muted-foreground">Notes: {entryNotes}</div> : null}
                                 </div>
                               ) : null}
                             </td>
@@ -1488,7 +1488,7 @@ export default function SchedulerPage() {
                         {/* Weekly total */}
                         <td className="px-3 py-2 text-center">
                           <div className="space-y-0.5">
-                            <div className="text-[11px] font-semibold text-foreground">{weekDaysScheduled} days</div>
+                            <div className="text-2xs font-semibold text-foreground">{weekDaysScheduled} days</div>
                             <span className={`font-mono text-xs font-semibold ${weekHours >= 40 ? 'text-status-active' : weekHours > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
                               {weekHours > 0 ? `${weekHours.toFixed(1)}h` : '—'}
                             </span>
@@ -1507,7 +1507,7 @@ export default function SchedulerPage() {
                   {dailyTotals.map((day) => (
                     <td key={day.date} className="px-2 py-2 text-center">
                       <div className="space-y-0.5">
-                        <div className="text-[11px] font-semibold text-foreground">{day.shiftCount} shifts</div>
+                        <div className="text-2xs font-semibold text-foreground">{day.shiftCount} shifts</div>
                         <span className={`font-mono text-xs font-semibold ${day.totalHours >= 24 ? 'text-status-pending' : 'text-foreground'}`}>
                           {day.totalHours > 0 ? `${day.totalHours.toFixed(1)}h` : '0.0h'}
                         </span>
@@ -1516,7 +1516,7 @@ export default function SchedulerPage() {
                   ))}
                   <td className="px-3 py-2 text-center">
                     <div className="space-y-0.5">
-                      <div className="text-[11px] font-semibold text-foreground">{weeklyShiftTotal} shifts total</div>
+                      <div className="text-2xs font-semibold text-foreground">{weeklyShiftTotal} shifts total</div>
                       <span className="font-mono text-xs font-semibold text-primary">
                         {weeklyTotalHours.toFixed(1)}h total
                       </span>

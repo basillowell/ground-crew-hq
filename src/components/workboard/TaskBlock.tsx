@@ -199,9 +199,9 @@ export function TaskBlock({
           <span className={`truncate text-sm font-semibold ${status === 'done' ? 'line-through text-muted-foreground' : ''}`} style={{ color: status === 'done' ? undefined : task.color }}>
             {task.name}
           </span>
-          <Badge variant="outline" className="shrink-0 text-[10px]">{propertyLabel}</Badge>
+          <Badge variant="outline" className="shrink-0 text-3xs">{propertyLabel}</Badge>
           {isSubmittedToPayroll ? (
-            <Badge variant="complete" className="shrink-0 text-[10px]">
+            <Badge variant="complete" className="shrink-0 text-3xs">
               Submitted to payroll
             </Badge>
           ) : null}
@@ -219,31 +219,31 @@ export function TaskBlock({
           </Badge>
             <Badge
               variant={isPublished ? 'active' : 'pending'}
-              className="shrink-0 text-[10px] uppercase tracking-wide"
+              className="shrink-0 text-3xs uppercase tracking-wide"
             >
             {isPublished ? 'Published' : 'Draft'}
           </Badge>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="shrink-0 text-[11px] text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
+          <span className="shrink-0 text-2xs text-muted-foreground">
             est {estimatedHours > 0 ? `${estimatedHours.toFixed(1)}h` : '—'} →{' '}
             <span className={actualHoursTone}>{actualHours != null ? `${actualHours.toFixed(1)}h actual` : '—'}</span>
           </span>
           {status === 'in-progress' && elapsedLabel ? (
-            <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+            <span className="flex shrink-0 items-center gap-1 text-2xs text-muted-foreground">
               <span>Live {elapsedLabel}</span>
               {isElapsedCappedAtShiftEnd ? (
-                <Badge variant="outline" className="gap-1 border-status-pending/20 bg-status-pending/10 px-1.5 py-0 text-[10px] text-status-pending">
+                <Badge variant="outline" className="gap-1 border-status-pending/20 bg-status-pending/10 px-1.5 py-0 text-3xs text-status-pending">
                   <span className="h-1.5 w-1.5 rounded-full bg-status-pending" aria-hidden="true" />
                   Past shift end
                 </Badge>
               ) : null}
             </span>
           ) : null}
-          {status === 'done' && doneLabel ? <span className="shrink-0 text-[11px] text-muted-foreground">{doneLabel}</span> : null}
-          <Badge variant="outline" className="shrink-0 text-[10px]">{task.category}</Badge>
-          {typeof priorityIndex === 'number' ? <Badge variant="secondary" className="shrink-0 text-[10px]">#{priorityIndex + 1}</Badge> : null}
-          <span className="inline-flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground">
+          {status === 'done' && doneLabel ? <span className="shrink-0 text-2xs text-muted-foreground">{doneLabel}</span> : null}
+          <Badge variant="outline" className="shrink-0 text-3xs">{task.category}</Badge>
+          {typeof priorityIndex === 'number' ? <Badge variant="secondary" className="shrink-0 text-3xs">#{priorityIndex + 1}</Badge> : null}
+          <span className="inline-flex min-w-0 items-center gap-1 truncate text-2xs text-muted-foreground">
             <span className="truncate">
               {formatTime(assignment.startTime)} · {assignment.duration}m · {equipment ? equipment.unitNumber : 'None'}
             </span>

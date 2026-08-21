@@ -382,7 +382,7 @@ export default function BreakroomPage() {
                             </div>
                           )}
                           <p className="text-sm leading-relaxed">{msg.body}</p>
-                          <div className="mt-1 text-[11px] text-text-muted">
+                          <div className="mt-1 text-2xs text-text-muted">
                             {fmtTime(msg.created_at)}
                           </div>
                         </div>
@@ -416,7 +416,7 @@ export default function BreakroomPage() {
               <Send className="h-4 w-4" />
             </button>
           </div>
-          <p className="mt-1 text-[11px] text-text-muted">Enter to send · Shift+Enter for new line</p>
+          <p className="mt-1 text-2xs text-text-muted">Enter to send · Shift+Enter for new line</p>
         </div>
       </div>
     </div>

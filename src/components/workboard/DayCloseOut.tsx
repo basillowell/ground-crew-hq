@@ -279,7 +279,7 @@ export function DayCloseOutReviewRows({
   };
   return (
     <div className="overflow-hidden rounded-xl border border-surface-border">
-      <div className={`grid grid-cols-1 gap-3 bg-surface-elevated px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted ${templateClass}`}>
+      <div className={`grid grid-cols-1 gap-3 bg-surface-elevated px-3 py-2 text-2xs font-semibold uppercase tracking-wide text-text-muted ${templateClass}`}>
         <span>Task</span>
         <span>Property</span>
         {showScheduledHours ? <span>Scheduled</span> : null}
@@ -303,7 +303,7 @@ export function DayCloseOutReviewRows({
             >
               <div className="min-w-0">
                 {onTaskChange ? (
-                  <label className="block text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+                  <label className="block text-3xs font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
                     <span className="sm:hidden">Task</span>
                     <select
                       value={row.assignment.taskId ?? ''}
@@ -327,27 +327,27 @@ export function DayCloseOutReviewRows({
                   <p className="truncate text-sm font-medium text-text-primary">{getTaskName(row.assignment, tasks)}</p>
                 )}
                 <div className="mt-1 flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="text-[10px] capitalize">
+                  <Badge variant="secondary" className="text-3xs capitalize">
                     {status}
                   </Badge>
                   {showScheduledHours ? (
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-3xs">
                       {getTaskCategory(row.assignment, tasks)}
                     </Badge>
                   ) : null}
                   {isUnpaid ? (
-                    <Badge variant="outline" className="border-status-pending/40 text-[10px] text-status-pending">
+                    <Badge variant="outline" className="border-status-pending/40 text-3xs text-status-pending">
                       Unpaid
                     </Badge>
                   ) : null}
                   {isSubmittedToPayroll ? (
-                    <Badge variant="complete" className="text-[10px]">
+                    <Badge variant="complete" className="text-3xs">
                       Submitted to payroll &mdash; review only
                     </Badge>
                   ) : null}
                 </div>
               </div>
-              <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+              <label className="text-3xs font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
                 <span className="sm:hidden">Property</span>
                 {onPropertyChange ? (
                   <select
@@ -371,11 +371,11 @@ export function DayCloseOutReviewRows({
               </label>
               {showScheduledHours ? (
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Scheduled</p>
+                  <p className="text-3xs uppercase tracking-wide text-text-muted sm:hidden">Scheduled</p>
                   <p className="font-mono text-sm text-text-primary">{Number(row.assignment.estimatedHours ?? 0).toFixed(1)}h</p>
                 </div>
               ) : null}
-              <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+              <label className="text-3xs font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
                 <span className="sm:hidden">Start</span>
                 {onStartChange ? (
                   <TimeSelect
@@ -387,7 +387,7 @@ export function DayCloseOutReviewRows({
                   <p className="font-mono text-sm text-text-primary">{row.start}</p>
                 )}
               </label>
-              <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+              <label className="text-3xs font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
                 <span className="sm:hidden">End</span>
                 <TimeSelect
                   value={row.end}
@@ -397,7 +397,7 @@ export function DayCloseOutReviewRows({
               </label>
               <div className="flex items-center justify-between gap-2 sm:justify-end">
                 <div className="text-left sm:text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Hours</p>
+                  <p className="text-3xs uppercase tracking-wide text-text-muted sm:hidden">Hours</p>
                   <p className="font-mono text-sm font-semibold text-text-primary">{row.hours.toFixed(2)}</p>
                 </div>
                 {onDelete ? (
@@ -585,7 +585,7 @@ export function DayCloseOut({
               </div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-surface-border">
-                <div className="grid grid-cols-[minmax(0,1fr)_96px_176px_92px] gap-3 bg-surface-elevated px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                <div className="grid grid-cols-[minmax(0,1fr)_96px_176px_92px] gap-3 bg-surface-elevated px-3 py-2 text-2xs font-semibold uppercase tracking-wide text-text-muted">
                   <span>Task</span>
                   <span>Start</span>
                   <span>End</span>
@@ -603,16 +603,16 @@ export function DayCloseOut({
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-text-primary">{getTaskName(row.assignment, tasks)}</p>
                           <div className="mt-1 flex flex-wrap gap-2">
-                            <Badge variant="secondary" className="text-[10px] capitalize">
+                            <Badge variant="secondary" className="text-3xs capitalize">
                               {status}
                             </Badge>
                           </div>
                         </div>
                         <div>
-                          <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Start</p>
+                          <p className="text-3xs uppercase tracking-wide text-text-muted sm:hidden">Start</p>
                           <p className="font-mono text-sm text-text-primary">{row.start}</p>
                         </div>
-                        <label className="text-[10px] font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
+                        <label className="text-3xs font-medium uppercase tracking-wide text-text-muted sm:normal-case sm:tracking-normal">
                           <span className="sm:hidden">End</span>
                           <TimeSelect
                             value={row.end}
@@ -620,7 +620,7 @@ export function DayCloseOut({
                           />
                         </label>
                         <div className="text-left sm:text-right">
-                          <p className="text-[10px] uppercase tracking-wide text-text-muted sm:hidden">Hours</p>
+                          <p className="text-3xs uppercase tracking-wide text-text-muted sm:hidden">Hours</p>
                           <p className="font-mono text-sm font-semibold text-text-primary">{row.hours.toFixed(2)}</p>
                         </div>
                       </div>

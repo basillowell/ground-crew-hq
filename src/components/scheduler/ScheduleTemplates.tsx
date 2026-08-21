@@ -56,27 +56,27 @@ export function ScheduleTemplates({ onApply }: { onApply?: (template: ScheduleTe
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <h4 className="font-medium text-sm">{template.name}</h4>
-                  <Badge variant="outline" className={`text-[10px] border ${seasonColors[template.season]}`}>
+                  <Badge variant="outline" className={`text-3xs border ${seasonColors[template.season]}`}>
                     {template.season}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2">
                   {template.isActive && (
-                    <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20">Active</Badge>
+                    <Badge className="text-3xs bg-primary/10 text-primary border-primary/20">Active</Badge>
                   )}
                 </div>
               </div>
 
               <p className="text-xs text-muted-foreground line-clamp-2">{template.description}</p>
 
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-3 text-2xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   {template.daysOfWeek.map((d) => dayLabels[d]).join(', ')}
                 </span>
               </div>
 
-              <div className="flex items-center gap-4 text-[11px]">
+              <div className="flex items-center gap-4 text-2xs">
                 <span className="flex items-center gap-1 text-muted-foreground">
                   <Users className="h-3 w-3" />
                   {template.shifts.reduce((a, s) => a + s.count, 0)} positions
@@ -113,7 +113,7 @@ export function ScheduleTemplates({ onApply }: { onApply?: (template: ScheduleTe
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   {selectedTemplate.name}
-                  <Badge variant="outline" className={`text-[10px] ${seasonColors[selectedTemplate.season]}`}>
+                  <Badge variant="outline" className={`text-3xs ${seasonColors[selectedTemplate.season]}`}>
                     {selectedTemplate.season}
                   </Badge>
                 </DialogTitle>
@@ -142,7 +142,7 @@ export function ScheduleTemplates({ onApply }: { onApply?: (template: ScheduleTe
                       <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
                         <span className="font-medium">{shift.role}</span>
                         <span className="text-muted-foreground">{formatTime(shift.shiftStart)}–{formatTime(shift.shiftEnd)}</span>
-                        <Badge variant="secondary" className="text-[10px]">{shift.count}x</Badge>
+                        <Badge variant="secondary" className="text-3xs">{shift.count}x</Badge>
                       </div>
                     ))}
                   </div>

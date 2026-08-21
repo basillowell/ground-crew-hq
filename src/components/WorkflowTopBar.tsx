@@ -167,7 +167,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
         <div className="ml-auto hidden items-center gap-2 md:flex">
           {pageTitle.showDateSelector ? (
             <div className="hidden min-w-[250px] lg:block">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
+            <div className="text-3xs uppercase tracking-[0.18em] text-text-muted">Workflow Date</div>
             <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="mt-1 h-10 w-full justify-between rounded-xl border-surface-border bg-surface-card/80 px-3 text-left font-medium text-text-primary hover:bg-surface-elevated/80 hover:text-text-primary">
@@ -198,7 +198,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
               <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full border border-transparent text-text-muted hover:border-surface-border hover:bg-surface-hover hover:text-text-primary" aria-label="Open notifications">
                 <Bell className="h-4 w-4" />
                 <span
-                  className={`absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
+                  className={`absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-3xs font-semibold ${
                     syncFlashActive ? 'bg-brand text-text-inverse' : 'bg-status-warning text-text-inverse'
                   } ${bellBadgeLabel === '0' ? 'hidden' : ''}`}
                 >
@@ -209,7 +209,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
             <DropdownMenuContent align="end" className="w-96">
               <DropdownMenuLabel className="flex items-center justify-between">
                 <span>Notifications</span>
-                <span className="text-[11px] font-normal text-muted-foreground">{programSetting?.clientLabel || 'Active club'}</span>
+                <span className="text-2xs font-normal text-muted-foreground">{programSetting?.clientLabel || 'Active club'}</span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {notifications.map((notification) => (
@@ -231,7 +231,7 @@ export const WorkflowTopBar = memo(function WorkflowTopBar({
                   <div className="space-y-1">
                     <div className="text-sm font-medium">{notification.title}</div>
                     <div className="text-xs text-muted-foreground">{notification.description}</div>
-                    <div className="text-[11px] text-muted-foreground">{formatTimestamp(notification.timestamp)}</div>
+                    <div className="text-2xs text-muted-foreground">{formatTimestamp(notification.timestamp)}</div>
                   </div>
                 </DropdownMenuItem>
               ))}

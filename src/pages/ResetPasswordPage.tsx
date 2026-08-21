@@ -74,7 +74,7 @@ export default function ResetPasswordPage() {
             <ShieldCheck className="h-6 w-6 text-brand-bright" />
           </div>
           <div className="mt-3 text-base font-semibold tracking-tight text-text-primary">Ground Crew HQ</div>
-          <div className="text-[10px] uppercase tracking-[0.16em] text-text-muted">Secure account recovery</div>
+          <div className="text-3xs uppercase tracking-[0.16em] text-text-muted">Secure account recovery</div>
         </div>
 
         <div className="rounded-2xl border border-surface-border bg-surface-card p-6 shadow-2xl backdrop-blur-xl">
