@@ -893,6 +893,7 @@ export default function WorkboardContent() {
   const [savingNote, setSavingNote] = useState(false);
   const workflowParams = useMemo(() => new URLSearchParams(searchParams?.toString() ?? ''), [searchParams]);
   const focusedPropertyId = workflowParams.get('property') || '';
+  const workflowMode = workflowParams.get('mode') || '';
   const orgId = authOrgId ?? currentUser?.orgId;
   const safeOrgId = authOrgId ?? currentUser?.orgId ?? '';
   const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
@@ -1706,6 +1707,12 @@ export default function WorkboardContent() {
       setSelectedPagePropertyId(focusedPropertyId);
     }
   }, [focusedPropertyId, selectedPagePropertyId, setSelectedPagePropertyId]);
+
+  useEffect(() => {
+    if (workflowMode !== 'day') return;
+    setViewMode((current) => (current === 'list' ? current : 'list'));
+    setGroupMode((current) => (current === 'employee' ? current : 'employee'));
+  }, [workflowMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -4118,6 +4125,10 @@ export default function WorkboardContent() {
 
       for (const taskRow of rowsForSave) {
         if (!taskRow.taskId) continue;
+        if (!quickMode && (!taskRow.propertyId || taskRow.propertyId === 'all')) {
+          toast.error('Select a property for each task before dispatching.');
+          return;
+        }
         const propertyIdForRow = taskRow.propertyId || activeProperty?.id || properties[0]?.id || null;
         if (!propertyIdForRow) {
           toast.warning('Skipped a task: no property selected.');

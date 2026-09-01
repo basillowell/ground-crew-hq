@@ -1,3 +1,18 @@
 'use client'
 
-export { default } from '@/src/pages/DispatchBoardPage'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+
+export default function DispatchRedirectPage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace('/app/workboard?mode=day')
+  }, [router])
+
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center p-6 text-sm text-text-muted">
+      Opening Crew Job Board...
+    </div>
+  )
+}
