@@ -217,7 +217,7 @@ export default function LaunchAuthDialog({
       setIsAwaitingProfile(false);
       setIsSubmitting(false);
       setErrorMessage('');
-      window.location.href = '/app/scheduler';
+      window.location.href = '/app/workboard?mode=week';
       return;
     }
     const isDoneLoading = authState === 'profile-missing' || authState === 'profile-error';

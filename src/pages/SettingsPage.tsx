@@ -2252,7 +2252,7 @@ function WorkspaceTab({
     { label: 'Add property', done: usageStats.properties > 0, href: '/app/settings?tab=Operations' },
     { label: 'Add departments', done: usageStats.departments > 0, href: '/app/settings?tab=Workforce' },
     { label: 'Add employees', done: usageStats.employees > 0, href: '/app/employees' },
-    { label: 'Create shift templates', done: usageStats.shiftTemplates > 0, href: '/app/scheduler' },
+    { label: 'Create shift templates', done: usageStats.shiftTemplates > 0, href: '/app/workboard?mode=week' },
     { label: 'Build task library', done: usageStats.tasks > 0, href: '/app/settings?tab=Tasks' },
   ];
   const setupComplete = setupChecklist.every((item) => item.done);

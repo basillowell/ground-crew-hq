@@ -36,7 +36,7 @@ const tourSteps = [
   {
     title: 'Scheduler & Workflow',
     body: 'Plan the week and dispatch your crew to tasks at each property.',
-    href: '/app/scheduler',
+    href: '/app/workboard?mode=week',
   },
   {
     title: 'Properties',

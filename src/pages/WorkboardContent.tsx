@@ -5451,7 +5451,7 @@ export default function WorkboardContent() {
               title="No crew scheduled today"
               description="Add shifts in the Scheduler to see your crew here."
               actionLabel="Open Scheduler"
-              onAction={() => router.push('/app/scheduler')}
+              onAction={() => router.push('/app/workboard?mode=week')}
             />
           ) : isMobile ? (
             <div className="space-y-3 px-4 pb-24">

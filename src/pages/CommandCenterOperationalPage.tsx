@@ -351,7 +351,7 @@ export default function CommandCenterOperationalPage() {
             </h3>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { icon: Clock, label: 'Schedule', route: '/app/scheduler' },
+                { icon: Clock, label: 'Schedule', route: '/app/workboard?mode=week' },
                 { icon: BarChart3, label: 'Workflow', route: '/app/workboard' },
                 { icon: Wrench, label: 'Equipment', route: '/app/equipment' },
                 { icon: TrendingUp, label: 'Reports', route: '/app/reports' },

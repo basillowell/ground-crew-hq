@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { memo, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
@@ -85,10 +85,10 @@ const navGroupIds: NavGroupId[] = ['primary', 'management', 'settings'];
 
 const primaryOperations: NavItemConfig[] = [
   { label: 'Command Center', href: '/app/dashboard', icon: LayoutDashboard, moduleId: 'command-center' },
-  { label: 'Dispatch', href: '/app/dispatch', icon: CalendarDays, moduleId: 'workflow' },
-  { label: 'Scheduler', href: '/app/scheduler', icon: Calendar, moduleId: 'workflow' },
+  { label: 'Dispatch', href: '/app/workboard?mode=day', icon: CalendarDays, moduleId: 'workflow' },
+  { label: 'Scheduler', href: '/app/workboard?mode=week', icon: Calendar, moduleId: 'workflow' },
   { label: 'Workflow', href: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
-  { label: 'Open Tasks', href: '/app/open-tasks', icon: ListTodo, moduleId: 'workflow' },
+  { label: 'Open Tasks', href: '/app/workboard?mode=backlog', icon: ListTodo, moduleId: 'workflow' },
 ];
 
 const management: NavItemConfig[] = [
@@ -262,6 +262,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const { state, toggleSidebar, isMobile } = useSidebar();
   const collapsed = state === 'collapsed' && !isMobile;
   const pathname = usePathname() ?? '/';
+  const searchParams = useSearchParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { currentRole, orgId, signOut, currentUser } = useOrgProfile();
@@ -310,6 +311,20 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const footerItems = withVisibility(complianceAndSettings);
   const roleBadgeLabel = currentRole === 'admin' ? 'Admin' : currentRole === 'manager' ? 'Supervisor' : 'Field Crew';
   const userDisplayName = currentUser?.fullName || currentUser?.email || '';
+  const isNavItemActive = (href?: string) => {
+    if (!href || href.startsWith('mailto:')) return false;
+    const [hrefPath, hrefSearch = ''] = href.split('?');
+    if (!hrefPath) return false;
+    if (hrefSearch) {
+      if (pathname !== hrefPath) return false;
+      const requiredSearch = new URLSearchParams(hrefSearch);
+      return [...requiredSearch.entries()].every(([key, value]) => searchParams?.get(key) === value);
+    }
+    if (hrefPath === '/app/workboard') {
+      return pathname === hrefPath && !searchParams?.has('mode');
+    }
+    return pathname.startsWith(hrefPath);
+  };
 
   const handleSignOut = async () => {
     queryClient.clear();
@@ -335,7 +350,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
           <NavItem
             {...item}
             collapsed={collapsed}
-            isActive={Boolean(item.href && pathname.startsWith(item.href))}
+            isActive={isNavItemActive(item.href)}
             onNavigate={onNavigate}
           />
         </SidebarMenuItem>

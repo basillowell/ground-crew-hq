@@ -59,7 +59,7 @@ export function GettingStartedPanel({
     {
       title: 'Plan the week',
       description: 'Assign your crew to tasks at each property, day by day, on the Scheduler and Workflow board.',
-      href: '/app/scheduler',
+      href: '/app/workboard?mode=week',
     },
     {
       title: 'Handle a work order',

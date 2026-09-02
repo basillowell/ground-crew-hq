@@ -31,7 +31,7 @@ export const AGENT_SKILLS: AgentSkill[] = [
     title: 'Scheduler Skill',
     description: 'Weekly workforce planning rules for shifts, validation, and totals.',
     docPath: 'docs/skills/scheduler-skill.md',
-    relatedPages: ['/app/scheduler'],
+    relatedPages: ['/app/workboard?mode=week'],
     recommendedCodexPromptTemplate:
       'Use AGENTS.md and docs/skills/scheduler-skill.md. TASK: improve weekly schedule grid behavior and save integrity. Preserve existing handlers and table names.',
   },

@@ -190,9 +190,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     const ASSIGNMENT_ROUTES = [
       '/app/dashboard',
       '/app/workboard',
-      '/app/scheduler',
-      '/app/dispatch',
-      '/app/open-tasks',
+      '/app/open-tasks/review',
       '/app/field',
       '/app/payroll',
       '/app/job-costing',
@@ -280,7 +278,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           title: `${unscheduledCrew.length} crew members still need shifts`,
           description: `${unscheduledCrew.slice(0, 3).map((entry) => `${entry.firstName} ${entry.lastName}`).join(', ')}${unscheduledCrew.length > 3 ? ' and more' : ''}`,
           severity: 'warning',
-          route: '/app/scheduler',
+          route: '/app/workboard?mode=week',
           icon: 'schedule',
           timestamp: now,
           read: false,
@@ -504,29 +502,37 @@ export function AppLayout({ children }: AppLayoutProps) {
   const mobilePrimaryTabs = [
     { label: 'Field View', route: '/app/field', icon: MapPin },
     { label: 'Workflow', route: '/app/workboard', icon: ClipboardList },
-    { label: 'Open Tasks', route: '/app/open-tasks', icon: ListTodo },
+    { label: 'Open Tasks', route: '/app/workboard?mode=backlog', icon: ListTodo },
     { label: 'Team', route: '/app/employees', icon: Users },
   ];
   const employeeTabs = [
     { label: 'Today', icon: Home, href: '/app/field' },
-    { label: 'My Jobs', icon: ClipboardList, href: '/app/scheduler' },
+    { label: 'My Jobs', icon: ClipboardList, href: '/app/workboard?mode=week' },
     { label: 'Clock', icon: Clock, href: '/app/field?tab=clock' },
     { label: 'Messages', icon: MessageSquare, href: '/app/breakroom' },
     { label: 'Profile', icon: User, href: '/app/settings?tab=Account' },
   ];
   const mobileMoreItems = [
     { label: 'Dashboard', route: '/app/dashboard', icon: LayoutDashboard },
-    { label: 'Scheduler', route: '/app/scheduler', icon: Calendar },
+    { label: 'Scheduler', route: '/app/workboard?mode=week', icon: Calendar },
     { label: 'Properties', route: '/app/properties', icon: MapIcon },
     { label: 'Equipment', route: '/app/equipment', icon: Wrench },
     { label: 'Applications', route: '/app/applications', icon: ShieldCheck },
     { label: 'Safety', route: '/app/safety', icon: Shield },
     { label: 'Reports', route: '/app/reports', icon: BarChart3 },
-    { label: 'Open Tasks', route: '/app/open-tasks', icon: ListTodo },
+    { label: 'Open Tasks', route: '/app/workboard?mode=backlog', icon: ListTodo },
     { label: 'Breakroom', route: '/app/breakroom', icon: LayoutDashboard },
     { label: 'Messaging', route: '/app/messaging', icon: Mail },
     { label: 'Settings', route: '/app/settings', icon: Settings },
   ];
+  const isRouteActive = (route: string) => {
+    const [routePath, routeSearch = ''] = route.split('?');
+    if (pathname !== routePath) return false;
+    const currentSearch = new URLSearchParams(searchParams?.toString() ?? '');
+    if (!routeSearch) return !currentSearch.has('mode');
+    const requiredSearch = new URLSearchParams(routeSearch);
+    return [...requiredSearch.entries()].every(([key, value]) => currentSearch.get(key) === value);
+  };
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
@@ -561,7 +567,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         return;
       }
 
-      if (event.shiftKey && key === 'n' && pathname === '/app/scheduler') {
+      if (event.shiftKey && key === 'n' && pathname === '/app/workboard' && searchParams?.get('mode') === 'week') {
         event.preventDefault();
         window.dispatchEvent(new CustomEvent('ground-crew-open-add-shift'));
         return;
@@ -581,13 +587,13 @@ export function AppLayout({ children }: AppLayoutProps) {
         router.push('/app/workboard');
       } else if (key === '3') {
         event.preventDefault();
-        router.push('/app/scheduler');
+        router.push('/app/workboard?mode=week');
       }
     };
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [pathname, router, shortcutsOverlayOpen]);
+  }, [pathname, router, searchParams, shortcutsOverlayOpen]);
 
   if (!isOrgReady && !orgReadyTimeout) {
     return <PageLoader />;
@@ -750,7 +756,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               ) : (
                 <div className="grid h-16 grid-cols-5">
                   {mobilePrimaryTabs.map((tab) => {
-                    const isActive = pathname === tab.route;
+                    const isActive = isRouteActive(tab.route);
                     return (
                       <button
                         key={tab.route}
@@ -793,7 +799,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                         setMobileMoreOpen(false);
                       }}
                       className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
-                        pathname === item.route
+                        isRouteActive(item.route)
                           ? 'border-brand-dim bg-brand-ghost text-brand'
                           : 'border-surface-border text-text-secondary hover:bg-surface-hover hover:text-text-primary'
                       }`}

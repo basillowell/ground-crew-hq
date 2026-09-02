@@ -10,7 +10,7 @@ export default function OpenTaskDayReviewPage() {
       employeeId={searchParams.get('employeeId')}
       date={searchParams.get('date')}
       showBackButton
-      onBack={() => router.push('/app/open-tasks')}
+      onBack={() => router.push('/app/workboard?mode=backlog')}
     />
   );
 }
