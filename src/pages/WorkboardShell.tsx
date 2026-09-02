@@ -6,12 +6,17 @@ const WorkboardContent = lazy(() => import("./WorkboardContent"));
 const OpenTasksBacklogView = lazy(() =>
   import("@/components/workboard/OpenTasksBacklogView").then((module) => ({ default: module.OpenTasksBacklogView })),
 );
+const WorkboardWeekView = lazy(() =>
+  import("@/components/workboard/WorkboardWeekView").then((module) => ({ default: module.WorkboardWeekView })),
+);
 
 function WorkboardModeContent() {
   const searchParams = useSearchParams();
   const workflowMode = searchParams.get("mode") || "";
 
-  return workflowMode === "backlog" ? <OpenTasksBacklogView /> : <WorkboardContent />;
+  if (workflowMode === "backlog") return <OpenTasksBacklogView />;
+  if (workflowMode === "week") return <WorkboardWeekView />;
+  return <WorkboardContent />;
 }
 
 export default function WorkboardShell() {
