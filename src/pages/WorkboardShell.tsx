@@ -1,7 +1,18 @@
 import { lazy, Suspense, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 
 const WorkboardContent = lazy(() => import("./WorkboardContent"));
+const OpenTasksBacklogView = lazy(() =>
+  import("@/components/workboard/OpenTasksBacklogView").then((module) => ({ default: module.OpenTasksBacklogView })),
+);
+
+function WorkboardModeContent() {
+  const searchParams = useSearchParams();
+  const workflowMode = searchParams.get("mode") || "";
+
+  return workflowMode === "backlog" ? <OpenTasksBacklogView /> : <WorkboardContent />;
+}
 
 export default function WorkboardShell() {
   const queryClient = useQueryClient();
@@ -26,7 +37,7 @@ export default function WorkboardShell() {
         </div>
       }
     >
-      <WorkboardContent />
+      <WorkboardModeContent />
     </Suspense>
   );
 }
