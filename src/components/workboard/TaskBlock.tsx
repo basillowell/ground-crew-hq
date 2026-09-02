@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Task, Assignment, Property } from '@/data/seedData';
@@ -23,9 +25,8 @@ interface TaskBlockProps {
   onEdit?: () => void;
   onRemove?: () => void;
   draggable?: boolean;
-  onDragStart?: () => void;
-  onDragEnter?: () => void;
-  onDrop?: () => void;
+  sortableId?: string;
+  sortableData?: { type: 'assignment'; employeeId: string; assignmentId: string };
 }
 
 function normalizeStatus(status?: string) {
@@ -70,9 +71,8 @@ export function TaskBlock({
   onEdit,
   onRemove,
   draggable,
-  onDragStart,
-  onDragEnter,
-  onDrop,
+  sortableId,
+  sortableData,
 }: TaskBlockProps) {
   const { currentUser } = useOrgProfile();
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -95,6 +95,19 @@ export function TaskBlock({
   const isEquipmentDoubleBooked = assignment.id ? Boolean(doubleBookedAssignmentIds?.has(assignment.id)) : false;
   const isSelected = assignment.id ? Boolean(selectedAssignmentIds?.has(assignment.id)) : false;
   const isSubmittedToPayroll = Boolean(getAssignmentApprovedAt(assignment));
+  const dndDisabled = !draggable || isSubmittedToPayroll || !sortableId;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: sortableId ?? `assignment:${assignment.id ?? task.id}`,
+    data: sortableData,
+    disabled: dndDisabled,
+  });
   const canSelect = Boolean(assignment.id && onToggleSelect);
   const status = normalizeStatus(assignment.status);
   const assignmentRecord = assignment as Assignment & Record<string, unknown>;
@@ -174,12 +187,14 @@ export function TaskBlock({
 
   return (
     <div
-      className={`grid min-h-[58px] grid-cols-[auto_1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)} ${isPublished ? 'border-status-active/20 shadow-[inset_3px_0_0_oklch(var(--status-active))]' : 'border-dashed border-status-pending/60 bg-status-pending/10 shadow-[inset_3px_0_0_oklch(var(--status-pending))]'} ${isSelected ? 'ring-1 ring-primary/40 bg-primary/5' : ''}`}
-      draggable={Boolean(draggable && !isSubmittedToPayroll)}
-      onDragStart={draggable && !isSubmittedToPayroll ? onDragStart : undefined}
-      onDragEnter={draggable && !isSubmittedToPayroll ? onDragEnter : undefined}
-      onDragOver={draggable && !isSubmittedToPayroll ? (event) => event.preventDefault() : undefined}
-      onDrop={draggable && !isSubmittedToPayroll ? onDrop : undefined}
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={`grid min-h-[58px] grid-cols-[auto_1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)} ${isPublished ? 'border-status-active/20 shadow-[inset_3px_0_0_oklch(var(--status-active))]' : 'border-dashed border-status-pending/60 bg-status-pending/10 shadow-[inset_3px_0_0_oklch(var(--status-pending))]'} ${isSelected ? 'ring-1 ring-primary/40 bg-primary/5' : ''} ${!dndDisabled ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-60 ring-2 ring-primary/20' : ''}`}
+      {...(!dndDisabled ? attributes : {})}
+      {...(!dndDisabled ? listeners : {})}
     >
       {canSelect ? (
         <input

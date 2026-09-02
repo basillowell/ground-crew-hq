@@ -1,5 +1,21 @@
 import { type ReactNode, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -88,6 +104,24 @@ function SafeSection({ children, fallback = null }: { children: ReactNode; fallb
 }
 
 type SupabaseTimeoutResult = { data: null; error: Error };
+type WorkboardDragData =
+  | { type: 'employee-lane'; employeeId: string }
+  | { type: 'assignment'; employeeId: string; assignmentId: string };
+
+function getWorkboardDragData(value: unknown): WorkboardDragData | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const type = record.type;
+  const employeeId = typeof record.employeeId === 'string' ? record.employeeId : '';
+  if (type === 'employee-lane' && employeeId) {
+    return { type, employeeId };
+  }
+  const assignmentId = typeof record.assignmentId === 'string' ? record.assignmentId : '';
+  if (type === 'assignment' && employeeId && assignmentId) {
+    return { type, employeeId, assignmentId };
+  }
+  return null;
+}
 
 async function withWorkboardMutationTimeout<T extends PromiseLike<unknown>>(request: AbortableSupabaseRequest<T>): Promise<Awaited<T> | SupabaseTimeoutResult> {
   const controller = new AbortController();
@@ -749,6 +783,10 @@ export default function WorkboardContent() {
   const [timelineEditAssignmentId, setTimelineEditAssignmentId] = useState<string | null>(null);
   const [timelineEditStart, setTimelineEditStart] = useState('');
   const [timelineEditEnd, setTimelineEditEnd] = useState('');
+  const workboardDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const timelineSaveGuardRef = useRef<Record<string, number>>({});
   const timelineSaveWarnedRef = useRef<Record<string, boolean>>({});
   const pendingDeleteTimeoutsRef = useRef<Record<string, number>>({});
@@ -759,7 +797,6 @@ export default function WorkboardContent() {
     scheduleEntries: boolean;
     timeoutId: number | null;
   }>({ assignments: false, taskRequests: false, scheduleEntries: false, timeoutId: null });
-  const [draggingTask, setDraggingTask] = useState<{ employeeId: string; assignmentId: string } | null>(null);
   const [selectedTemplateTaskIds, setSelectedTemplateTaskIds] = useState<string[]>([]);
   const [selectedTemplateEmployeeIds, setSelectedTemplateEmployeeIds] = useState<string[]>([]);
   const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
@@ -4842,18 +4879,49 @@ export default function WorkboardContent() {
     }
   }
 
-  function moveEmployeeLane(targetEmployeeId: string) {
-    if (!draggingEmployeeId || draggingEmployeeId === targetEmployeeId) {
+  function moveEmployeeLane(targetEmployeeId: string, sourceEmployeeId = draggingEmployeeId) {
+    if (!sourceEmployeeId || sourceEmployeeId === targetEmployeeId) {
       setDraggingEmployeeId(null); setDropTargetEmployeeId(null); return;
     }
     const ids = orderedDispatchBoard.map((l) => l.employee.id);
-    const base = ids.filter((id) => id !== draggingEmployeeId);
+    const base = ids.filter((id) => id !== sourceEmployeeId);
     const idx = base.indexOf(targetEmployeeId);
     if (idx === -1) { setDraggingEmployeeId(null); setDropTargetEmployeeId(null); return; }
-    base.splice(idx, 0, draggingEmployeeId);
+    base.splice(idx, 0, sourceEmployeeId);
     persistLaneOrder(base);
     setDraggingEmployeeId(null);
     setDropTargetEmployeeId(null);
+  }
+
+  function handleWorkboardDragStart(event: DragStartEvent) {
+    const activeData = getWorkboardDragData(event.active.data.current);
+    setDraggingEmployeeId(activeData?.type === 'employee-lane' ? activeData.employeeId : null);
+  }
+
+  function handleWorkboardDragOver(event: DragOverEvent) {
+    const activeData = getWorkboardDragData(event.active.data.current);
+    const overData = getWorkboardDragData(event.over?.data.current);
+    setDropTargetEmployeeId(activeData?.type === 'assignment' && overData?.employeeId ? overData.employeeId : null);
+  }
+
+  function handleWorkboardDragEnd(event: DragEndEvent) {
+    const activeData = getWorkboardDragData(event.active.data.current);
+    const overData = getWorkboardDragData(event.over?.data.current);
+    setDraggingEmployeeId(null);
+    setDropTargetEmployeeId(null);
+    if (!activeData || !overData) return;
+
+    if (activeData.type === 'employee-lane') {
+      moveEmployeeLane(overData.employeeId, activeData.employeeId);
+      return;
+    }
+
+    if (overData.type === 'assignment') {
+      void reorderEmployeeAssignments(activeData.employeeId, overData.employeeId, activeData.assignmentId, overData.assignmentId);
+      return;
+    }
+
+    void moveTaskToEmployeeLane(activeData.employeeId, overData.employeeId, activeData.assignmentId);
   }
 
   const isLoadingBoard =
@@ -5490,6 +5558,21 @@ export default function WorkboardContent() {
                   <span />
                 </div>
               </div>
+              <DndContext
+                sensors={workboardDndSensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleWorkboardDragStart}
+                onDragOver={handleWorkboardDragOver}
+                onDragEnd={handleWorkboardDragEnd}
+                onDragCancel={() => {
+                  setDraggingEmployeeId(null);
+                  setDropTargetEmployeeId(null);
+                }}
+              >
+                <SortableContext
+                  items={orderedDispatchBoard.map((lane) => `employee-lane:${lane.employee.id}`)}
+                  strategy={verticalListSortingStrategy}
+                >
               {orderedDispatchBoard.map((lane, index) => {
                 const laneFlashTone = lane.employeeAssignments.reduce<'complete' | 'started' | null>((tone, assignment) => {
                   const assignmentId = assignment.id ?? '';
@@ -5620,23 +5703,6 @@ export default function WorkboardContent() {
                           : undefined
                       }
                       coveragePercent={lane.coveragePercent}
-                      onDragStart={setDraggingEmployeeId}
-                      onDragEnter={setDropTargetEmployeeId}
-                      onDragEnd={() => { setDraggingEmployeeId(null); setDropTargetEmployeeId(null); }}
-                      onDropRow={(targetEmployeeId) => {
-                        if (draggingTask) {
-                          void moveTaskToEmployeeLane(draggingTask.employeeId, targetEmployeeId, draggingTask.assignmentId);
-                          setDraggingTask(null);
-                          return;
-                        }
-                        moveEmployeeLane(targetEmployeeId);
-                      }}
-                      onTaskDragStart={(employeeId, assignmentId) => setDraggingTask({ employeeId, assignmentId })}
-                      onTaskDropOnTask={(employeeId, targetAssignmentId) => {
-                        if (!draggingTask) return;
-                        void reorderEmployeeAssignments(draggingTask.employeeId, employeeId, draggingTask.assignmentId, targetAssignmentId);
-                        setDraggingTask(null);
-                      }}
                       onAddTask={openAssignmentDialog}
                       onEditAssignment={openEditAssignmentDialog}
                       onRemoveAssignment={removeAssignment}
@@ -5662,6 +5728,8 @@ export default function WorkboardContent() {
                   </div>
                 );
               })}
+                </SortableContext>
+              </DndContext>
 
               {/* Unscheduled crew notice */}
               {unscheduledEmployees.length > 0 && (

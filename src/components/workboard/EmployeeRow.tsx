@@ -5,7 +5,10 @@ import { AvatarInitials } from '@/components/shared';
 import { TimeSelect } from '@/components/TimeSelect';
 import { TaskBlock } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Loader2, Pencil, Play, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useDroppable } from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { Employee, Assignment, Task, Property } from '@/data/seedData';
 import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { storedIsoToWallClock, storedIsoToWallClockLabel } from '@/lib/timeWorkflow';
@@ -37,15 +40,9 @@ interface EmployeeRowProps {
   orderIndex?: number;
   isDragging?: boolean;
   isDropTarget?: boolean;
-  onDragStart?: (employeeId: string) => void;
-  onDragEnter?: (employeeId: string) => void;
-  onDragEnd?: () => void;
-  onDropRow?: (employeeId: string) => void;
   onAddTask?: (employeeId: string) => void;
   onEditAssignment?: (assignment: Assignment) => void;
   onRemoveAssignment?: (assignmentId: string) => void;
-  onTaskDragStart?: (employeeId: string, assignmentId: string) => void;
-  onTaskDropOnTask?: (employeeId: string, targetAssignmentId: string) => void;
   coveragePercent?: number;
   assignmentTimelineById?: Record<string, { actualStartAt: string | null; actualCompletedAt: string | null }>;
   breakEvents?: EmployeeBreakChip[];
@@ -97,15 +94,9 @@ export function EmployeeRow({
   orderIndex,
   isDragging,
   isDropTarget,
-  onDragStart,
-  onDragEnter,
-  onDragEnd,
-  onDropRow,
   onAddTask,
   onEditAssignment,
   onRemoveAssignment,
-  onTaskDragStart,
-  onTaskDropOnTask,
   coveragePercent,
   assignmentTimelineById,
   breakEvents = [],
@@ -124,6 +115,32 @@ export function EmployeeRow({
   const [breakStartInput, setBreakStartInput] = useState('');
   const [breakEndInput, setBreakEndInput] = useState('');
   const sortedAssignments = [...employeeAssignments];
+  const sortableAssignmentIds = sortedAssignments
+    .map((assignment) => assignment.id)
+    .filter((id): id is string => Boolean(id))
+    .map((id) => `assignment:${id}`);
+  const {
+    attributes: laneAttributes,
+    listeners: laneListeners,
+    setNodeRef: setLaneSortableNodeRef,
+    transform: laneTransform,
+    transition: laneTransition,
+    isDragging: isLaneSortableDragging,
+  } = useSortable({
+    id: `employee-lane:${employee.id}`,
+    data: { type: 'employee-lane', employeeId: employee.id },
+  });
+  const { setNodeRef: setLaneDroppableNodeRef, isOver: isLaneOver } = useDroppable({
+    id: `employee:${employee.id}`,
+    data: { type: 'employee-lane', employeeId: employee.id },
+  });
+  const setLaneNodeRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setLaneSortableNodeRef(node);
+      setLaneDroppableNodeRef(node);
+    },
+    [setLaneDroppableNodeRef, setLaneSortableNodeRef],
+  );
 
   const formatLabel = (value?: string | null) => {
     if (!value) return '';
@@ -217,20 +234,21 @@ export function EmployeeRow({
 
   return (
     <Card
+      ref={setLaneNodeRef}
       className={`rounded-xl border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30 ${
-        isDropTarget ? 'border-primary shadow-md ring-2 ring-primary/20' : ''
-      } ${isDragging ? 'opacity-60' : ''}`}
-      style={{ overflow: 'visible' }}
-      onDragOver={(event) => event.preventDefault()}
-      onDragEnter={() => onDragEnter?.(employee.id)}
-      onDrop={() => onDropRow?.(employee.id)}
+        isDropTarget || isLaneOver ? 'border-primary shadow-md ring-2 ring-primary/20' : ''
+      } ${isDragging || isLaneSortableDragging ? 'opacity-60' : ''}`}
+      style={{
+        overflow: 'visible',
+        transform: CSS.Transform.toString(laneTransform),
+        transition: laneTransition,
+      }}
     >
       <div className="flex items-start gap-3">
         <button
           type="button"
-          draggable
-          onDragStart={() => onDragStart?.(employee.id)}
-          onDragEnd={onDragEnd}
+          {...laneAttributes}
+          {...laneListeners}
           className="mt-1 flex cursor-grab items-center gap-1 rounded-full border border-dashed px-2 py-1 text-2xs text-muted-foreground/60 hover:border-primary/30 hover:text-primary"
           title="Drag to reorder employee lanes for the display board"
         >
@@ -256,6 +274,7 @@ export function EmployeeRow({
             </div>
           ) : null}
 
+          <SortableContext items={sortableAssignmentIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
             {timelineItems.length === 0 ? (
               <div className="rounded-xl border border-dashed px-3 py-5 text-center">
@@ -349,8 +368,8 @@ export function EmployeeRow({
                       operationalTimezone={operationalTimezone}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
                       draggable={!isSubmittedToPayroll}
-                      onDragStart={onTaskDragStart && !isSubmittedToPayroll ? () => onTaskDragStart(employee.id, assignment.id ?? '') : undefined}
-                      onDrop={onTaskDropOnTask && !isSubmittedToPayroll ? () => onTaskDropOnTask(employee.id, assignment.id ?? '') : undefined}
+                      sortableId={assignment.id ? `assignment:${assignment.id}` : undefined}
+                      sortableData={assignment.id ? { type: 'assignment', employeeId: employee.id, assignmentId: assignment.id } : undefined}
                       onEdit={onEditAssignment ? () => onEditAssignment(assignment) : undefined}
                       onRemove={onRemoveAssignment ? () => onRemoveAssignment(assignment.id) : undefined}
                     />
@@ -448,6 +467,7 @@ export function EmployeeRow({
               })
             )}
           </div>
+          </SortableContext>
 
           {timelineItems.length > 0 ? (
             <div className="mt-3 flex justify-end gap-2">
