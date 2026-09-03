@@ -3194,8 +3194,19 @@ function AccessTab({
   const [savingPersonalColorThemeId, setSavingPersonalColorThemeId] = useState<string | null>(null);
   const [savingPersonalDarkness, setSavingPersonalDarkness] = useState(false);
   const [personalCustomOpen, setPersonalCustomOpen] = useState(false);
+  const [billingEnabled, setBillingEnabled] = useState(true);
+  const [savingBilling, setSavingBilling] = useState(false);
+  const [billingSaved, setBillingSaved] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const canManageBillingSettings = userRole === 'admin' || userRole === 'manager';
+
+  useEffect(() => {
+    if (!programSettingsQuery.data) return;
+    setBillingEnabled(programSettingsQuery.data.billingEnabled ?? true);
+  }, [programSettingsQuery.data]);
 
   const fetchOrganizationName = useCallback(async () => {
     if (!supabase || !orgId) return;
@@ -3307,6 +3318,36 @@ function AccessTab({
     window.localStorage.removeItem('ground-crew-query-cache-v2');
     window.localStorage.removeItem('ground-crew-query-cache');
     window.location.reload();
+  };
+
+  const saveBillingSettings = async () => {
+    if (!supabase || !orgId || !canManageBillingSettings) return;
+    setSavingBilling(true);
+    setBillingError(null);
+    let saveError: Error | null = null;
+    try {
+      const result = await withRequestTimeout(
+        supabase
+          .from('program_settings')
+          .update({ billing_enabled: billingEnabled })
+          .eq('org_id', orgId),
+        'Settings request timed out after 15 seconds.',
+      );
+      saveError = result.error ?? null;
+    } catch (caughtError) {
+      saveError = caughtError instanceof Error ? caughtError : new Error('Billing settings could not be saved.');
+    }
+    setSavingBilling(false);
+    if (saveError) {
+      setBillingError(saveError.message);
+      toast.error(`Failed to save billing settings: ${saveError.message}`);
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ['program-settings', orgId] });
+    await queryClient.refetchQueries({ queryKey: ['program-settings', orgId] });
+    setBillingSaved(true);
+    toast.success('Billing settings saved');
+    window.setTimeout(() => setBillingSaved(false), 2000);
   };
 
   const updateUserRole = async (userId: string, role: string) => {
@@ -3649,7 +3690,44 @@ Your role: ${inviteRole}
       </SettingsCard>
 
       <SettingsCard title="Billing">
-        <p className="text-sm text-text-muted">Billing management is currently unavailable in-product.</p>
+        {!canManageBillingSettings ? (
+          <div className="mb-4 rounded-lg border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+            Admin or manager access is required to change billing settings.
+          </div>
+        ) : null}
+        {billingError ? (
+          <div className="mb-4">
+            <ErrorRetry
+              message={`Failed to save billing settings: ${billingError}`}
+              onRetry={() => {
+                setBillingError(null);
+                void programSettingsQuery.refetch();
+              }}
+            />
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-4 rounded-lg border border-surface-border bg-surface-elevated p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-text-primary">Enable billing tools</p>
+            <p className="mt-1 max-w-2xl text-sm text-text-muted">
+              Show Estimates, Invoicing, contract invoice generation, and billed-revenue reporting. Turning this off hides billing workflow UI only; existing billing data is preserved.
+            </p>
+          </div>
+          <Switch
+            checked={billingEnabled}
+            onCheckedChange={setBillingEnabled}
+            disabled={!canManageBillingSettings || savingBilling || programSettingsQuery.isLoading}
+            aria-label="Enable billing tools"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => void saveBillingSettings()}
+          disabled={savingBilling || !canManageBillingSettings || programSettingsQuery.isLoading}
+          className="mt-4 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-brand-bright disabled:opacity-60"
+        >
+          {savingBilling ? 'Saving...' : billingSaved ? 'Saved' : 'Save billing'}
+        </button>
       </SettingsCard>
 
       <section className="rounded-xl border border-status-warning/30 bg-surface-elevated p-5">

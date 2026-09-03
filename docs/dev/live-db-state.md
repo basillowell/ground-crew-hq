@@ -542,6 +542,7 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 | pay_period_length_days        | integer     | NO       | 14                         |
 | pay_period_anchor_date        | date        | NO       | '2024-01-01'               |
 | onboarding_dismissed          | boolean     | NO       | false                      |
+| billing_enabled               | boolean     | NO       | true                       |
 
 > onboarding_dismissed (migration program_settings_onboarding_dismissed, 2026-08-11): org-level flag —
 > true once an admin/manager dismisses the "Getting Started" orientation panel or completes the basics.
@@ -551,6 +552,10 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 > 2026-08-11): org-configurable payroll period. length in days (14 = bi-weekly), and an anchor
 > date (default 2024-01-01, a Monday) from which periods are computed deterministically — the org
 > shifts the anchor to align to their real pay calendar. Consumed by the /app/payroll review page.
+>
+> billing_enabled: org-level UI preference. false hides billing workflow surfaces
+> (Estimates, Invoicing, contract invoice generation, billed-revenue reporting) without changing
+> existing billing data.
 >
 > theme_darkness: nullable numeric, 0-100 scale. Controls theme surface/card
 > darkness at the org level. null = default 50.

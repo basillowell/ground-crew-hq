@@ -10,6 +10,7 @@ import {
   useInvoices,
   useJobCostingAssignments,
   usePayments,
+  useProgramSettings,
   useProperties,
   useRevenueWorkOrders,
   useTasks,
@@ -65,6 +66,7 @@ export default function JobCostingPage() {
   const invoicesQuery = useInvoices(orgId ?? undefined);
   const paymentsQuery = usePayments(undefined, orgId ?? undefined);
   const workOrdersQuery = useRevenueWorkOrders(undefined, orgId ?? undefined);
+  const programSettingsQuery = useProgramSettings(orgId ?? undefined);
   const [sortKey, setSortKey] = useState<SortKey>('period');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -79,6 +81,7 @@ export default function JobCostingPage() {
   const invoices = invoicesQuery.data ?? [];
   const payments = paymentsQuery.data ?? [];
   const workOrders = workOrdersQuery.data ?? [];
+  const billingEnabled = programSettingsQuery.data?.billingEnabled ?? true;
 
   const loading =
     (employeesQuery.isLoading && !employeesQuery.data) ||
@@ -87,7 +90,8 @@ export default function JobCostingPage() {
     (assignmentsQuery.isLoading && !assignmentsQuery.data) ||
     (invoicesQuery.isLoading && !invoicesQuery.data) ||
     (paymentsQuery.isLoading && !paymentsQuery.data) ||
-    (workOrdersQuery.isLoading && !workOrdersQuery.data);
+    (workOrdersQuery.isLoading && !workOrdersQuery.data) ||
+    (programSettingsQuery.isLoading && !programSettingsQuery.data);
   const queryError =
     employeesQuery.error ??
     propertiesQuery.error ??
@@ -95,7 +99,8 @@ export default function JobCostingPage() {
     assignmentsQuery.error ??
     invoicesQuery.error ??
     paymentsQuery.error ??
-    workOrdersQuery.error;
+    workOrdersQuery.error ??
+    programSettingsQuery.error;
   const error = queryError instanceof Error ? queryError.message : null;
 
   const handleRetry = useCallback(() => {
@@ -288,14 +293,20 @@ export default function JobCostingPage() {
     );
   }
 
-  const propertyColumns: [SortKey, string][] = [
-    ['period', 'Period'],
-    ['property', 'Property'],
-    ['labor_cost', 'Labor Cost'],
-    ['billed_revenue', 'Billed'],
-    ['collected_revenue', 'Collected'],
-    ['margin', 'Margin'],
-  ];
+  const propertyColumns: [SortKey, string][] = billingEnabled
+    ? [
+        ['period', 'Period'],
+        ['property', 'Property'],
+        ['labor_cost', 'Labor Cost'],
+        ['billed_revenue', 'Billed'],
+        ['collected_revenue', 'Collected'],
+        ['margin', 'Margin'],
+      ]
+    : [
+        ['period', 'Period'],
+        ['property', 'Property'],
+        ['labor_cost', 'Labor Cost'],
+      ];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
@@ -306,14 +317,16 @@ export default function JobCostingPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-lg border border-surface-border bg-surface-card p-4">
-          <div className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-status-active" />
-            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Billed Revenue</span>
+      <div className={`grid gap-4 ${billingEnabled ? 'md:grid-cols-4' : 'md:grid-cols-2'}`}>
+        {billingEnabled ? (
+          <div className="rounded-lg border border-surface-border bg-surface-card p-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-status-active" />
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Billed Revenue</span>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-text-primary">{fmt(summary.billedRevenue)}</div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-text-primary">{fmt(summary.billedRevenue)}</div>
-        </div>
+        ) : null}
         <div className="rounded-lg border border-surface-border bg-surface-card p-4">
           <div className="flex items-center gap-2">
             <Briefcase className="h-4 w-4 text-status-pending" />
@@ -321,15 +334,17 @@ export default function JobCostingPage() {
           </div>
           <div className="mt-2 text-2xl font-bold text-text-primary">{fmt(summary.laborCost)}</div>
         </div>
-        <div className="rounded-lg border border-surface-border bg-surface-card p-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-brand" />
-            <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Gross Margin</span>
+        {billingEnabled ? (
+          <div className="rounded-lg border border-surface-border bg-surface-card p-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-brand" />
+              <span className="text-xs font-medium uppercase tracking-widest text-text-muted">Gross Margin</span>
+            </div>
+            <div className={`mt-2 text-2xl font-bold ${marginClass(summary.margin)}`}>
+              {summary.margin === null ? '--' : `${summary.margin.toFixed(1)}%`}
+            </div>
           </div>
-          <div className={`mt-2 text-2xl font-bold ${marginClass(summary.margin)}`}>
-            {summary.margin === null ? '--' : `${summary.margin.toFixed(1)}%`}
-          </div>
-        </div>
+        ) : null}
         <div className="rounded-lg border border-surface-border bg-surface-card p-4">
           <div className="text-xs font-medium uppercase tracking-widest text-text-muted">Work Order Links</div>
           <div className="mt-2 text-2xl font-bold text-text-primary">{summary.linkedAssignmentCount}</div>
@@ -337,7 +352,7 @@ export default function JobCostingPage() {
         </div>
       </div>
 
-      {monthlyTrend.length > 0 ? (
+      {billingEnabled && monthlyTrend.length > 0 ? (
         <div className="rounded-lg border border-surface-border bg-surface-card p-4">
           <div className="mb-4 flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-brand" />
@@ -368,12 +383,14 @@ export default function JobCostingPage() {
         <div className="border-b border-surface-border p-4">
           <h2 className="text-sm font-semibold text-text-primary">Property Performance by Period</h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Delivery cost and optional billed revenue stay grouped by property and period until work orders carry direct revenue links.
+            {billingEnabled
+              ? 'Delivery cost and optional billed revenue stay grouped by property and period until work orders carry direct revenue links.'
+              : 'Delivery cost stays grouped by property and period while billing tools are disabled.'}
           </p>
         </div>
         {sortedPropertyRows.length === 0 ? (
           <div className="px-4 py-12 text-center text-sm text-text-secondary">
-            Completed assignments and invoices will appear here.
+            {billingEnabled ? 'Completed assignments and invoices will appear here.' : 'Completed assignments will appear here.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -390,7 +407,9 @@ export default function JobCostingPage() {
                       {sortKey === key ? (sortDir === 'asc' ? ' up' : ' down') : ''}
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Not Linked</th>
+                  {billingEnabled ? (
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Not Linked</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border">
@@ -399,12 +418,16 @@ export default function JobCostingPage() {
                     <td className="px-4 py-3 text-text-primary">{formatPeriod(row.period)}</td>
                     <td className="px-4 py-3 text-text-primary">{row.propertyName}</td>
                     <td className="px-4 py-3 text-text-secondary">{fmt(row.laborCost)}</td>
-                    <td className="px-4 py-3 font-medium text-text-primary">{fmt(row.billedRevenue)}</td>
-                    <td className="px-4 py-3 text-status-active">{fmt(row.collectedRevenue)}</td>
-                    <td className={`px-4 py-3 font-medium ${marginClass(row.margin)}`}>
-                      {row.margin === null ? '--' : `${row.margin.toFixed(1)}%`}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">{fmt(row.unlinkedRevenue)}</td>
+                    {billingEnabled ? (
+                      <>
+                        <td className="px-4 py-3 font-medium text-text-primary">{fmt(row.billedRevenue)}</td>
+                        <td className="px-4 py-3 text-status-active">{fmt(row.collectedRevenue)}</td>
+                        <td className={`px-4 py-3 font-medium ${marginClass(row.margin)}`}>
+                          {row.margin === null ? '--' : `${row.margin.toFixed(1)}%`}
+                        </td>
+                        <td className="px-4 py-3 text-text-secondary">{fmt(row.unlinkedRevenue)}</td>
+                      </>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -417,7 +440,9 @@ export default function JobCostingPage() {
         <div className="border-b border-surface-border p-4">
           <h2 className="text-sm font-semibold text-text-primary">Work Order Labor Cost</h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Optional revenue appears once invoices can be linked directly to work orders.
+            {billingEnabled
+              ? 'Optional revenue appears once invoices can be linked directly to work orders.'
+              : 'Labor cost stays visible while billing tools are disabled.'}
           </p>
         </div>
         {workOrderRows.length === 0 ? (
@@ -434,7 +459,9 @@ export default function JobCostingPage() {
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Assignments</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Hours</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Labor Cost</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Revenue</th>
+                  {billingEnabled ? (
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Revenue</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border">
@@ -445,7 +472,7 @@ export default function JobCostingPage() {
                     <td className="px-4 py-3 text-right text-text-secondary">{row.assignmentCount}</td>
                     <td className="px-4 py-3 text-right text-text-secondary">{row.actualHours.toFixed(1)}</td>
                     <td className="px-4 py-3 text-right font-medium text-text-primary">{fmt(row.laborCost)}</td>
-                    <td className="px-4 py-3 text-text-muted">Not linked</td>
+                    {billingEnabled ? <td className="px-4 py-3 text-text-muted">Not linked</td> : null}
                   </tr>
                 ))}
               </tbody>

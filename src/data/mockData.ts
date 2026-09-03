@@ -269,6 +269,7 @@ export interface ProgramSettings {
   payPeriodLengthDays: number;
   payPeriodAnchorDate: string;
   onboardingDismissed: boolean;
+  billingEnabled: boolean;
   enableMobileApp: boolean;
   overtimeTracking: boolean;
   equipmentQrCodes: boolean;
@@ -487,6 +488,7 @@ export const programSettings: ProgramSettings[] = [
     payPeriodLengthDays: 14,
     payPeriodAnchorDate: '2024-01-01',
     onboardingDismissed: false,
+    billingEnabled: true,
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,

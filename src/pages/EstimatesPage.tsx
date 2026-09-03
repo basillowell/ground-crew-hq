@@ -35,6 +35,7 @@ import {
   useCreateEstimate,
   useEstimateLineItems,
   useEstimates,
+  useProgramSettings,
   useProperties,
   useReplaceEstimateLineItems,
   useServiceCatalog,
@@ -92,8 +93,25 @@ function draftsFromLineItems(items: RevenueLineItem[]): LineItemDraft[] {
     }));
 }
 
+function BillingDisabledState() {
+  return (
+    <div className="mx-auto max-w-3xl p-6">
+      <div className="rounded-lg border border-surface-border bg-surface-card p-6">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-surface-elevated">
+          <FileText className="h-6 w-6 text-text-muted" />
+        </div>
+        <h1 className="text-xl font-semibold text-text-primary">Billing tools are disabled for this organization</h1>
+        <p className="mt-2 text-sm text-text-secondary">
+          Estimates are hidden while billing is turned off. Existing billing data is preserved and will be available again if billing tools are re-enabled.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function EstimatesPage() {
   const { orgId, currentUser } = useOrgProfile();
+  const programSettingsQuery = useProgramSettings(orgId ?? undefined);
   const estimatesQuery = useEstimates(orgId ?? undefined);
   const estimateLineItemsQuery = useEstimateLineItems(undefined, orgId ?? undefined);
   const clientsQuery = useClients(orgId ?? undefined);
@@ -307,8 +325,12 @@ export default function EstimatesPage() {
     () => estimates.filter((estimate) => estimate.status === activeTab.toLowerCase()),
     [activeTab, estimates],
   );
+  const billingSettingsLoading = programSettingsQuery.isLoading && !programSettingsQuery.data;
+  const billingEnabled = programSettingsQuery.data?.billingEnabled ?? true;
 
-  if (!orgId || loading) return <PageSkeleton />;
+  if (!orgId || billingSettingsLoading) return <PageSkeleton />;
+  if (!billingEnabled) return <BillingDisabledState />;
+  if (loading) return <PageSkeleton />;
   if (error) {
     return (
       <div className="p-6">

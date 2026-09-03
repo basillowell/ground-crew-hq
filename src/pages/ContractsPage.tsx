@@ -34,6 +34,7 @@ import {
   useContractInvoiceRuns,
   useCreateServiceContract,
   useGenerateContractInvoices,
+  useProgramSettings,
   useProperties,
   useReplaceServiceContractLineItems,
   useServiceCatalog,
@@ -163,6 +164,7 @@ export default function ContractsPage() {
   const clientsQuery = useClients(orgId ?? undefined);
   const serviceCatalogQuery = useServiceCatalog(orgId ?? undefined);
   const runsQuery = useContractInvoiceRuns(orgId ?? undefined);
+  const programSettingsQuery = useProgramSettings(orgId ?? undefined);
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
   const [selectedPagePropertyId] = usePagePropertySelection({
     currentUser,
@@ -211,7 +213,8 @@ export default function ContractsPage() {
   const queryError = contractsQuery.error ?? contractLineItemsQuery.error ?? clientsQuery.error ?? serviceCatalogQuery.error ?? runsQuery.error;
   const error = queryError instanceof Error ? queryError.message : null;
   const totals = calculateLineItemTotals(form.items, form.taxRate);
-  const canGenerateInvoices = currentRole === 'admin' || currentRole === 'manager';
+  const billingEnabled = programSettingsQuery.data?.billingEnabled ?? true;
+  const canGenerateInvoices = billingEnabled && (currentRole === 'admin' || currentRole === 'manager');
 
   const handleRetry = useCallback(() => {
     void contractsQuery.refetch();
@@ -555,42 +558,44 @@ export default function ContractsPage() {
         </div>
       )}
 
-      <section className="rounded-lg border border-surface-border bg-surface-card">
-        <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-          <div>
-            <h2 className="text-sm font-semibold text-text-primary">Run History</h2>
-            <p className="mt-0.5 text-xs text-text-secondary">Recent invoice results.</p>
+      {billingEnabled ? (
+        <section className="rounded-lg border border-surface-border bg-surface-card">
+          <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary">Run History</h2>
+              <p className="mt-0.5 text-xs text-text-secondary">Recent invoice results.</p>
+            </div>
           </div>
-        </div>
-        {runs.length === 0 ? (
-          <div className="px-4 py-8 text-sm text-text-secondary">No invoice runs yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-surface-border bg-surface-elevated">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Run</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">As Of</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Scopes</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Invoices</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Issue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-border">
-                {runs.map((run) => (
-                  <tr key={run.id}>
-                    <td className="px-4 py-3 text-text-primary">{fmtTimestamp(run.runAt)}</td>
-                    <td className="px-4 py-3 text-text-secondary">{fmtDate(run.asOf)}</td>
-                    <td className="px-4 py-3 text-right text-text-primary">{run.contractsProcessed}</td>
-                    <td className="px-4 py-3 text-right font-medium text-text-primary">{run.invoicesCreated}</td>
-                    <td className="max-w-xs px-4 py-3 text-text-secondary">{run.error || 'None'}</td>
+          {runs.length === 0 ? (
+            <div className="px-4 py-8 text-sm text-text-secondary">No invoice runs yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-surface-border bg-surface-elevated">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Run</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">As Of</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Scopes</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Invoices</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Issue</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                </thead>
+                <tbody className="divide-y divide-surface-border">
+                  {runs.map((run) => (
+                    <tr key={run.id}>
+                      <td className="px-4 py-3 text-text-primary">{fmtTimestamp(run.runAt)}</td>
+                      <td className="px-4 py-3 text-text-secondary">{fmtDate(run.asOf)}</td>
+                      <td className="px-4 py-3 text-right text-text-primary">{run.contractsProcessed}</td>
+                      <td className="px-4 py-3 text-right font-medium text-text-primary">{run.invoicesCreated}</td>
+                      <td className="max-w-xs px-4 py-3 text-text-secondary">{run.error || 'None'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeDialog())}>
         <DialogContent className="max-h-[90vh] overflow-y-auto border-surface-border bg-surface-card text-text-primary sm:max-w-4xl">

@@ -281,6 +281,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
   const activePropertyClass = propertyClasses.find((propertyClass) => propertyClass.id === currentPropertyClassId);
   const enabledModules = Array.isArray(activePropertyClass?.enabledModules) ? activePropertyClass.enabledModules : [];
   const navRole: NavRole = currentRole === 'admin' || currentRole === 'manager' ? 'admin' : 'employee';
+  const billingEnabled = programSetting?.billingEnabled ?? true;
   const [openGroup, setOpenGroup] = useState<NavGroupId>(() => readStoredOpenGroup());
 
   useEffect(() => {
@@ -295,6 +296,7 @@ export const AppSidebarRefined = memo(function AppSidebarRefined({
     items
       .filter((item) => {
         if (navRole === 'employee' && management.includes(item)) return false;
+        if (!billingEnabled && (item.href === '/app/estimates' || item.href === '/app/invoicing')) return false;
         if (!activePropertyClass || item.disabled || item.label === 'Settings') return true;
         return item.moduleId ? enabledModules.includes(item.moduleId) : true;
       })

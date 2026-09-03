@@ -708,6 +708,7 @@ type DbProgramSettings = {
   pay_period_length_days?: number | null;
   pay_period_anchor_date?: string | null;
   onboarding_dismissed?: boolean | null;
+  billing_enabled?: boolean | null;
   created_at: string;
 };
 
@@ -1503,6 +1504,7 @@ function toProgramSettings(row: DbProgramSettings): ProgramSettings {
     payPeriodLengthDays: Number(row.pay_period_length_days ?? 14),
     payPeriodAnchorDate: row.pay_period_anchor_date ?? '2024-01-01',
     onboardingDismissed: row.onboarding_dismissed ?? false,
+    billingEnabled: row.billing_enabled ?? true,
     enableMobileApp: true,
     overtimeTracking: true,
     equipmentQrCodes: true,

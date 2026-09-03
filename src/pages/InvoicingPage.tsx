@@ -34,6 +34,7 @@ import {
   useCreateInvoice,
   useInvoiceLineItems,
   useInvoices,
+  useProgramSettings,
   useProperties,
   useReplaceInvoiceLineItems,
   useServiceCatalog,
@@ -88,8 +89,25 @@ function draftsFromLineItems(items: RevenueLineItem[]): LineItemDraft[] {
     }));
 }
 
+function BillingDisabledState() {
+  return (
+    <div className="mx-auto max-w-3xl p-6">
+      <div className="rounded-lg border border-surface-border bg-surface-card p-6">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-surface-elevated">
+          <Receipt className="h-6 w-6 text-text-muted" />
+        </div>
+        <h1 className="text-xl font-semibold text-text-primary">Billing tools are disabled for this organization</h1>
+        <p className="mt-2 text-sm text-text-secondary">
+          Invoicing is hidden while billing is turned off. Existing billing data is preserved and will be available again if billing tools are re-enabled.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function InvoicingPage() {
   const { orgId, currentUser } = useOrgProfile();
+  const programSettingsQuery = useProgramSettings(orgId ?? undefined);
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
   const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
     currentUser,
@@ -171,6 +189,8 @@ export default function InvoicingPage() {
   const queryError = invoicesQuery.error ?? invoiceLineItemsQuery.error ?? paymentsQuery.error ?? clientsQuery.error ?? serviceCatalogQuery.error;
   const error = queryError instanceof Error ? queryError.message : null;
   const totals = calculateLineItemTotals(invoiceForm.items, invoiceForm.taxRate);
+  const billingSettingsLoading = programSettingsQuery.isLoading && !programSettingsQuery.data;
+  const billingEnabled = programSettingsQuery.data?.billingEnabled ?? true;
 
   const handleRetry = useCallback(() => {
     void invoicesQuery.refetch();
@@ -327,7 +347,9 @@ export default function InvoicingPage() {
     [activeTab, getInvoicePaymentState, invoices],
   );
 
-  if (!orgId || loading) return <PageSkeleton />;
+  if (!orgId || billingSettingsLoading) return <PageSkeleton />;
+  if (!billingEnabled) return <BillingDisabledState />;
+  if (loading) return <PageSkeleton />;
   if (error) {
     return (
       <div className="p-6">
