@@ -71,7 +71,7 @@ import {
 import { createClient } from '@/lib/supabase';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
-import { useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProperties, useRevenueWorkOrders, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProgramSettings, useProperties, useRevenueWorkOrders, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { PAYROLL_SUBMITTED_LOCK_MESSAGE, getAssignmentApprovedAt } from '@/lib/assignments';
 import {
   getOperationalTimezone,
@@ -939,6 +939,8 @@ export default function WorkboardContent() {
   const orgId = authOrgId ?? currentUser?.orgId;
   const safeOrgId = authOrgId ?? currentUser?.orgId ?? '';
   const { data: storeProperties = [], isLoading: propertiesLoading } = useProperties(orgId);
+  const programSettingsQuery = useProgramSettings(orgId);
+  const programSettings = programSettingsQuery.data;
   const [selectedPagePropertyId, setSelectedPagePropertyId] = usePagePropertySelection({
     currentUser,
     properties: storeProperties,
@@ -3454,10 +3456,32 @@ export default function WorkboardContent() {
     taskLibrary,
   ]);
 
-  const totalOpenMinutes = useMemo(
-    () => orderedDispatchBoard.reduce((s, l) => s + l.openMinutes, 0),
+  const scheduledWorkdayMinutes = useMemo(
+    () => orderedDispatchBoard.reduce((sum, lane) => sum + lane.shiftMinutes, 0),
     [orderedDispatchBoard],
   );
+  const unassignedScheduledCount = useMemo(
+    () => scheduledEmployees.filter((employee) => !assignedEmployeeIds.has(employee.id)).length,
+    [assignedEmployeeIds, scheduledEmployees],
+  );
+  const boardDateLabel = useMemo(
+    () =>
+      new Date(`${boardDate}T00:00:00`).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+    [boardDate],
+  );
+  const boardBrandLabel = (programSettings?.clientLabel || programSettings?.appName || 'Ground Crew HQ').trim() || 'Ground Crew HQ';
+  const boardBrandInitials =
+    boardBrandLabel
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || 'GC';
 
   const availableEquipment = useMemo(
     () =>
@@ -5001,6 +5025,61 @@ export default function WorkboardContent() {
       {/* ─── MAIN DISPATCH BOARD ─── */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
+        {/* Board summary band */}
+        <div className="border-b border-surface-border bg-surface-card px-3 py-3 md:px-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-surface-border bg-brand/10 text-sm font-bold text-brand">
+                {programSettings?.logoUrl ? (
+                  <img
+                    src={programSettings.logoUrl}
+                    alt={`${boardBrandLabel} logo`}
+                    className="h-full w-full object-contain p-1"
+                  />
+                ) : (
+                  <span>{boardBrandInitials}</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-3xs font-semibold uppercase tracking-wide text-text-muted">{boardBrandLabel}</p>
+                <h2 className="truncate text-lg font-semibold text-text-primary">Crew Job Board</h2>
+                <p className="text-xs text-text-secondary">{boardDateLabel}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
+              <div className="rounded-xl border border-surface-border bg-surface-elevated px-3 py-2">
+                <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wide text-text-muted">
+                  <Clock className="h-3.5 w-3.5 text-brand" />
+                  Workday Hours
+                </div>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-text-primary">{formatHoursFromMinutes(scheduledWorkdayMinutes)}</p>
+              </div>
+              <div className="rounded-xl border border-status-pending/20 bg-surface-elevated px-3 py-2">
+                <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wide text-status-pending">
+                  <ListChecks className="h-3.5 w-3.5" />
+                  Planned
+                </div>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-status-pending">{plannedCount}</p>
+              </div>
+              <div className="rounded-xl border border-status-active/20 bg-surface-elevated px-3 py-2">
+                <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wide text-status-active">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Assigned
+                </div>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-status-active">{assignedEmployeeIds.size}</p>
+              </div>
+              <div className={`rounded-xl border bg-surface-elevated px-3 py-2 ${unassignedScheduledCount > 0 ? 'border-status-pending/20' : 'border-status-hold/20'}`}>
+                <div className={`flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wide ${unassignedScheduledCount > 0 ? 'text-status-pending' : 'text-status-hold'}`}>
+                  <Users className="h-3.5 w-3.5" />
+                  Unassigned
+                </div>
+                <p className={`mt-1 text-lg font-semibold tabular-nums ${unassignedScheduledCount > 0 ? 'text-status-pending' : 'text-status-hold'}`}>{unassignedScheduledCount}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Header bar */}
         <div className="border-b border-surface-border bg-surface-card px-3 py-3 md:px-5">
           <div className="flex items-center gap-3 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
@@ -5280,38 +5359,6 @@ export default function WorkboardContent() {
             </Tooltip>
             </div>
           </div>
-        </div>
-
-        {/* Stats strip */}
-        <div className="hidden shrink-0 border-b border-surface-border bg-surface-elevated px-5 py-2 text-xs md:flex md:flex-wrap md:items-center md:gap-4">
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Users className="h-3.5 w-3.5" />
-            <span><span className="font-semibold text-foreground">{scheduledEmployees.length}</span> scheduled</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            <span><span className="font-semibold text-foreground">{assignedEmployeeIds.size}</span> with tasks</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Clock className="h-3.5 w-3.5" />
-            <span><span className="font-semibold text-foreground">{totalOpenMinutes}</span> open mins</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <ListChecks className="h-3.5 w-3.5" />
-            <span><span className="font-semibold text-foreground">{dayAssignments.length}</span> tasks assigned</span>
-          </div>
-          {newRequestsCount > 0 && (
-            <div className="ml-auto flex items-center gap-1.5 text-status-pending">
-              <AlertCircle className="h-3.5 w-3.5" />
-              <span><span className="font-semibold">{newRequestsCount}</span> unhandled {newRequestsCount === 1 ? 'need' : 'needs'}</span>
-            </div>
-          )}
-          {unscheduledEmployees.length > 0 && (
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <span className="text-status-pending font-semibold">{unscheduledEmployees.length}</span>
-              <span>unscheduled</span>
-            </div>
-          )}
         </div>
 
         {/* Crew board */}
