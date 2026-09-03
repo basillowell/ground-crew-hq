@@ -1719,7 +1719,8 @@ The app calls these via the ANON supabase client from the public /view routes
 
 ---
 
-## Table count: 53
+## Table count: 66
+Count corrected 2026-09-03 after live-schema drift audit — 13 tables added since the July sync: `client_properties`, `contract_invoice_runs`, `estimate_line_items`, `estimates`, `invoice_line_items`, `payments`, `project_photos`, `service_catalog`, `service_contract_line_items`, `service_contracts`, `signatures`, `task_work_orders`; all 66 tables already have documented sections in this file.
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl
 Map/visual-record migrations applied 2026-08-14:
 - project_photo_map_location — project_photos.location_geojson (nullable jsonb Point) for progress-photo map pins
