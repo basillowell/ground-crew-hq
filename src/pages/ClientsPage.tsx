@@ -66,7 +66,7 @@ export default function ClientsPage() {
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = 'Clients - Ground Crew HQ';
+    document.title = 'Accounts - Ground Crew HQ';
   }, []);
 
   const clients = clientsQuery.data ?? [];
@@ -104,7 +104,7 @@ export default function ClientsPage() {
     if (saving) return;
     const payload = toClientPayload(form, editingClient?.active ?? true);
     if (!payload.name) {
-      toast.error('Client name is required');
+      toast.error('Account name is required');
       return;
     }
 
@@ -112,14 +112,14 @@ export default function ClientsPage() {
     try {
       if (editingClient) {
         await updateClientMutation.mutateAsync({ ...payload, id: editingClient.id });
-        toast.success('Client updated');
+        toast.success('Account updated');
       } else {
         await createClientMutation.mutateAsync(payload);
-        toast.success('Client created');
+        toast.success('Account created');
       }
       closeDialog();
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : 'Unable to save client');
+      toast.error(saveError instanceof Error ? saveError.message : 'Unable to save account');
       setSaving(false);
     }
   };
@@ -137,9 +137,9 @@ export default function ClientsPage() {
         notes: client.notes || null,
         active: false,
       });
-      toast.success('Client deactivated');
+      toast.success('Account deactivated');
     } catch (deactivateError) {
-      toast.error(deactivateError instanceof Error ? deactivateError.message : 'Unable to deactivate client');
+      toast.error(deactivateError instanceof Error ? deactivateError.message : 'Unable to deactivate account');
     } finally {
       setDeactivatingId(null);
     }
@@ -167,9 +167,9 @@ export default function ClientsPage() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Clients</h1>
+          <h1 className="text-2xl font-bold text-text-primary">Accounts</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Manage billing contacts for invoices and future revenue workflows.
+            Manage accounts, request links, contacts, and service relationships.
           </p>
         </div>
         <Button
@@ -178,7 +178,7 @@ export default function ClientsPage() {
           className="bg-brand text-text-inverse hover:bg-brand/90"
         >
           <Plus className="h-4 w-4" />
-          New Client
+          New Account
         </Button>
       </div>
 
@@ -186,7 +186,7 @@ export default function ClientsPage() {
         <div className="rounded-lg border border-surface-border bg-surface-card p-4">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-text-muted">
             <UserRound className="h-4 w-4 text-brand" />
-            Active Clients
+            Active Accounts
           </div>
           <div className="mt-2 text-2xl font-bold text-text-primary">{activeClients.length}</div>
         </div>
@@ -213,9 +213,9 @@ export default function ClientsPage() {
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-surface-elevated">
             <UserRound className="h-6 w-6 text-text-muted" />
           </div>
-          <p className="mb-1 text-sm font-semibold text-text-primary">No clients yet</p>
+          <p className="mb-1 text-sm font-semibold text-text-primary">No accounts yet</p>
           <p className="max-w-sm text-sm text-text-secondary">
-            Add the billing contact that should receive new invoices.
+            Add an account to track contacts, request links, and service relationships.
           </p>
         </div>
       ) : (
@@ -224,7 +224,7 @@ export default function ClientsPage() {
             <thead className="border-b border-surface-border bg-surface-elevated">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">
-                  Client
+                  Account
                 </th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted md:table-cell">
                   Contact
@@ -302,14 +302,14 @@ export default function ClientsPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeDialog())}>
         <DialogContent className="border-surface-border bg-surface-card text-text-primary sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editingClient ? 'Edit Client' : 'New Client'}</DialogTitle>
+            <DialogTitle>{editingClient ? 'Edit Account' : 'New Account'}</DialogTitle>
             <DialogDescription>
-              Add billing details used when creating invoices.
+              Add contact details used for requests, service coordination, and optional billing.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <Input
-              placeholder="Client name"
+              placeholder="Account name"
               value={form.name}
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
             />
@@ -349,7 +349,7 @@ export default function ClientsPage() {
               disabled={saving || !form.name.trim()}
               className="bg-brand text-text-inverse hover:bg-brand/90"
             >
-              {saving ? 'Saving' : 'Save Client'}
+              {saving ? 'Saving' : 'Save Account'}
             </Button>
           </DialogFooter>
         </DialogContent>

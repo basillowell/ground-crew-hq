@@ -95,14 +95,14 @@ const management: NavItemConfig[] = [
   { label: 'Team', href: '/app/employees', icon: UsersRound, moduleId: 'workflow' },
   { label: 'Properties', href: '/app/properties', icon: MapIcon, moduleId: 'command-center' },
   { label: 'Equipment', href: '/app/equipment', icon: Wrench, moduleId: 'equipment' },
-  { label: 'Clients', href: '/app/clients', icon: UserRoundIcon, moduleId: 'workflow' },
+  { label: 'Accounts', href: '/app/clients', icon: UserRoundIcon, moduleId: 'workflow' },
   { label: 'Work Orders', href: '/app/work-orders', icon: Inbox, moduleId: 'workflow' },
+  { label: 'Service Scope', href: '/app/contracts', icon: Repeat, moduleId: 'workflow' },
+  { label: 'Performance', href: '/app/job-costing', icon: TrendingUp, moduleId: 'reports' },
   { label: 'Estimates', href: '/app/estimates', icon: FileTextIcon, moduleId: 'workflow' },
   { label: 'Invoicing', href: '/app/invoicing', icon: Receipt, moduleId: 'workflow' },
-  { label: 'Contracts', href: '/app/contracts', icon: Repeat, moduleId: 'workflow' },
   { label: 'Reports', href: '/app/reports', icon: BarChart3, moduleId: 'reports' },
   { label: 'Payroll', href: '/app/payroll', icon: CalendarClock, moduleId: 'reports' },
-  { label: 'Job Costing', href: '/app/job-costing', icon: TrendingUp, moduleId: 'reports' },
 ];
 
 const complianceAndSettings: NavItemConfig[] = [

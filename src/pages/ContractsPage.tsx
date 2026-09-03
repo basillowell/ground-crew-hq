@@ -140,7 +140,7 @@ function getNextPeriodHint(contract: ServiceContract) {
     next = addFrequency(next, contract.frequency);
     guard += 1;
   }
-  return `Next billing period starts ${fmtDate(next.toISOString().slice(0, 10))}`;
+  return `Next service period starts ${fmtDate(next.toISOString().slice(0, 10))}`;
 }
 
 function draftsFromLineItems(items: RevenueLineItem[]): LineItemDraft[] {
@@ -182,7 +182,7 @@ export default function ContractsPage() {
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    document.title = 'Contracts - Ground Crew HQ';
+    document.title = 'Service Scope - Ground Crew HQ';
   }, []);
 
   const contracts = contractsQuery.data ?? [];
@@ -221,7 +221,7 @@ export default function ContractsPage() {
     void runsQuery.refetch();
   }, [clientsQuery, contractLineItemsQuery, contractsQuery, runsQuery, serviceCatalogQuery]);
 
-  const getClientName = (id: string) => clientsById.get(id) ?? 'Unknown client';
+  const getClientName = (id: string) => clientsById.get(id) ?? 'Unknown account';
   const getPropertyName = (id: string | null) => (id ? propertiesById.get(id) ?? 'Unknown property' : 'No property');
 
   const closeDialog = () => {
@@ -261,11 +261,11 @@ export default function ContractsPage() {
   const saveContract = async () => {
     if (saving) return;
     if (!form.name.trim()) {
-      toast.error('Enter a contract name');
+      toast.error('Enter a scope name');
       return;
     }
     if (!form.clientId) {
-      toast.error('Select a client before saving the contract');
+      toast.error('Select an account before saving the scope');
       return;
     }
     if (!form.startDate) {
@@ -321,11 +321,11 @@ export default function ContractsPage() {
             notes: form.notes.trim() || null,
           });
       await replaceLineItemsMutation.mutateAsync({ contractId: savedContract.id, items: normalizedItems });
-      toast.success(editingContract ? 'Contract updated' : 'Contract created');
+      toast.success(editingContract ? 'Scope updated' : 'Scope created');
       closeDialog();
       setActiveTab(titleCase(savedContract.status) as ContractTab);
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : 'Unable to save contract');
+      toast.error(saveError instanceof Error ? saveError.message : 'Unable to save scope');
       setSaving(false);
     }
   };
@@ -335,10 +335,10 @@ export default function ContractsPage() {
     setStatusUpdatingId(contract.id);
     try {
       await updateContractStatusMutation.mutateAsync({ id: contract.id, status });
-      toast.success(`Contract ${status}`);
+      toast.success(`Scope ${status}`);
       setActiveTab(titleCase(status) as ContractTab);
     } catch (statusError) {
-      toast.error(statusError instanceof Error ? statusError.message : 'Unable to update contract');
+      toast.error(statusError instanceof Error ? statusError.message : 'Unable to update scope');
     } finally {
       setStatusUpdatingId(null);
     }
@@ -383,9 +383,9 @@ export default function ContractsPage() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Contracts</h1>
+          <h1 className="text-2xl font-bold text-text-primary">Service Scope</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Manage recurring service plans and generate invoices for the current billing period.
+            Define contracted scope, service cadence, and recurring commitments.
           </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -397,7 +397,7 @@ export default function ContractsPage() {
           ) : null}
           <Button type="button" onClick={openCreateDialog} className="bg-brand text-text-inverse hover:bg-brand/90">
             <Plus className="h-4 w-4" />
-            New Contract
+            New Scope
           </Button>
         </div>
       </div>
@@ -424,7 +424,7 @@ export default function ContractsPage() {
         <div className="rounded-lg border border-surface-border bg-surface-card p-4">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-text-muted">
             <FileClock className="h-4 w-4 text-brand" />
-            Active Plan Value
+            Active Scope Value
           </div>
           <div className="mt-2 text-2xl font-bold text-text-primary">{fmt(monthlyValue)}</div>
         </div>
@@ -460,9 +460,9 @@ export default function ContractsPage() {
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-surface-elevated">
             <CalendarClock className="h-6 w-6 text-text-muted" />
           </div>
-          <p className="mb-1 text-sm font-semibold text-text-primary">No {activeTab.toLowerCase()} contracts</p>
+          <p className="mb-1 text-sm font-semibold text-text-primary">No {activeTab.toLowerCase()} scope</p>
           <p className="max-w-xs text-sm text-text-secondary">
-            {activeTab === 'Active' ? 'Create a recurring service plan to start contract billing.' : 'Matching contracts will appear here.'}
+            {activeTab === 'Active' ? 'Create recurring service scope to define expected work.' : 'Matching scope records will appear here.'}
           </p>
         </div>
       ) : (
@@ -470,8 +470,8 @@ export default function ContractsPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-surface-border bg-surface-elevated">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Contract</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Client</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Scope</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Account</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted md:table-cell">Property</th>
                 <th className="hidden px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted lg:table-cell">Schedule</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Plan Total</th>
@@ -571,7 +571,7 @@ export default function ContractsPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Run</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">As Of</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Contracts</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Scopes</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-widest text-text-muted">Invoices</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-text-muted">Issue</th>
                 </tr>
@@ -595,9 +595,9 @@ export default function ContractsPage() {
       <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeDialog())}>
         <DialogContent className="max-h-[90vh] overflow-y-auto border-surface-border bg-surface-card text-text-primary sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>{editingContract ? 'Edit Contract' : 'New Contract'}</DialogTitle>
+            <DialogTitle>{editingContract ? 'Edit Scope' : 'New Scope'}</DialogTitle>
             <DialogDescription>
-              Build the service plan and template line items used for each billing period.
+              Build the contracted service plan and line items that define recurring work.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -607,15 +607,15 @@ export default function ContractsPage() {
                 <Input
                   value={form.name}
                   onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="Contract name"
+                  placeholder="Scope name"
                   disabled={saving}
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">Client</label>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-text-muted">Account</label>
                 <Select value={form.clientId || undefined} onValueChange={(value) => setForm((current) => ({ ...current, clientId: value }))} disabled={saving}>
                   <SelectTrigger className="border-surface-border bg-surface-elevated text-text-primary">
-                    <SelectValue placeholder="Select client" />
+                    <SelectValue placeholder="Select account" />
                   </SelectTrigger>
                   <SelectContent>
                     {activeClients.map((client) => (
@@ -703,7 +703,7 @@ export default function ContractsPage() {
               Cancel
             </Button>
             <Button type="button" onClick={() => void saveContract()} disabled={saving || !form.name.trim() || !form.clientId || totals.subtotal <= 0} className="bg-brand text-text-inverse hover:bg-brand/90">
-              {saving ? 'Saving' : 'Save Contract'}
+              {saving ? 'Saving' : 'Save Scope'}
             </Button>
           </DialogFooter>
         </DialogContent>

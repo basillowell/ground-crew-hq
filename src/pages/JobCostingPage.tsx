@@ -69,7 +69,7 @@ export default function JobCostingPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
-    document.title = 'Job Costing - Ground Crew HQ';
+    document.title = 'Performance - Ground Crew HQ';
   }, []);
 
   const employees = employeesQuery.data ?? [];
@@ -300,9 +300,9 @@ export default function JobCostingPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-text-primary">Job Costing</h1>
+        <h1 className="text-2xl font-bold text-text-primary">Performance</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Compare completed labor cost with invoice revenue by property and period.
+          Compare delivered labor, work volume, and optional billed revenue by property.
         </p>
       </div>
 
@@ -366,9 +366,9 @@ export default function JobCostingPage() {
 
       <div className="rounded-lg border border-surface-border bg-surface-card">
         <div className="border-b border-surface-border p-4">
-          <h2 className="text-sm font-semibold text-text-primary">Property Revenue and Cost by Period</h2>
+          <h2 className="text-sm font-semibold text-text-primary">Property Performance by Period</h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Invoice revenue is kept at the property-period level until an invoice is linked to a single work order.
+            Delivery cost and optional billed revenue stay grouped by property and period until work orders carry direct revenue links.
           </p>
         </div>
         {sortedPropertyRows.length === 0 ? (
@@ -417,7 +417,7 @@ export default function JobCostingPage() {
         <div className="border-b border-surface-border p-4">
           <h2 className="text-sm font-semibold text-text-primary">Work Order Labor Cost</h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Revenue is shown only after invoices can be linked directly to work orders.
+            Optional revenue appears once invoices can be linked directly to work orders.
           </p>
         </div>
         {workOrderRows.length === 0 ? (
