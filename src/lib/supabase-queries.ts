@@ -149,6 +149,14 @@ export type BillingClient = {
   createdAt: string;
 };
 
+export type ClientProperty = {
+  id: string;
+  orgId: string;
+  clientId: string;
+  propertyId: string;
+  createdAt: string;
+};
+
 export type RevenueInvoice = {
   id: string;
   orgId: string;
@@ -373,6 +381,14 @@ type DbBillingClient = {
   notes: string | null;
   active: boolean;
   client_token: string;
+  created_at: string;
+};
+
+type DbClientProperty = {
+  id: string;
+  org_id: string;
+  client_id: string;
+  property_id: string;
   created_at: string;
 };
 
@@ -1018,6 +1034,16 @@ function toBillingClient(row: DbBillingClient): BillingClient {
     notes: row.notes ?? '',
     active: row.active,
     clientToken: row.client_token,
+    createdAt: row.created_at,
+  };
+}
+
+function toClientProperty(row: DbClientProperty): ClientProperty {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    clientId: row.client_id,
+    propertyId: row.property_id,
     createdAt: row.created_at,
   };
 }
@@ -2418,6 +2444,7 @@ const revenueWorkOrderSelectColumns = 'id, org_id, property_id, title, status, p
 const taskWorkOrderSelectColumns = 'id, org_id, property_id, equipment_unit_id, client_id, title, description, priority, source, funnel_stage, submitted_by, reviewed_by, accepted_at, rejected_reason, punch_list, due_date, created_at, completed_at';
 const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
 const clientSelectColumns = 'id, org_id, name, email, phone, address, notes, active, client_token, created_at';
+const clientPropertySelectColumns = 'id, org_id, client_id, property_id, created_at';
 
 function optionalUuid(value: string | null | undefined): string | null {
   return value && value !== 'all' ? value : null;
@@ -2441,6 +2468,27 @@ async function fetchClients(orgId: string): Promise<BillingClient[]> {
       .order('name', { ascending: true });
     if (error) throw error;
     return ((data ?? []) as DbBillingClient[]).map(toBillingClient);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchClientProperties(orgId: string, clientId?: string): Promise<ClientProperty[]> {
+  const client = ensureSupabase();
+  const scopedClientId = clientId && clientId !== 'all' ? clientId : undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Client properties request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    let query = client
+      .from('client_properties')
+      .select(clientPropertySelectColumns)
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: false });
+    if (scopedClientId) query = query.eq('client_id', scopedClientId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbClientProperty[]).map(toClientProperty);
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -3484,6 +3532,18 @@ export function useClients(orgId?: string) {
     queryKey: ['clients', orgId ?? 'all-orgs'],
     queryFn: () => fetchClients(orgId!),
     enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useClientProperties(orgId?: string, clientId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['client-properties', orgId ?? 'all-orgs', clientId ?? 'all-clients'],
+    queryFn: () => fetchClientProperties(orgId!, clientId),
+    enabled: Boolean(orgId) && enabled,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
     retry: 2,

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Clipboard, Edit3, Mail, Phone, Plus, UserRound, XCircle } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
@@ -241,7 +242,9 @@ export default function ClientsPage() {
               {clients.map((client) => (
                 <tr key={client.id} className={!client.active ? 'bg-surface-elevated/40 opacity-70' : 'transition-colors hover:bg-surface-hover'}>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-text-primary">{client.name}</div>
+                    <Link href={`/app/clients/${client.id}`} className="font-medium text-text-primary transition-colors hover:text-brand">
+                      {client.name}
+                    </Link>
                     <div className="mt-1 text-xs text-text-secondary md:hidden">
                       {client.email || client.phone || 'No contact details'}
                     </div>
@@ -268,6 +271,9 @@ export default function ClientsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <Link href={`/app/clients/${client.id}`}>Open</Link>
+                      </Button>
                       <Button type="button" variant="outline" size="sm" onClick={() => void copyRequestLink(client)}>
                         <Clipboard className="h-4 w-4" />
                         <span className="hidden sm:inline">Copy request link</span>

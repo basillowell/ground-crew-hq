@@ -1507,6 +1507,22 @@ the client) and role admin or manager, else raises 'Not authorized.'
 
 ---
 
+## client_properties
+| column      | type        | nullable | default           |
+|-------------|-------------|----------|-------------------|
+| id          | uuid        | NO       | gen_random_uuid() |
+| org_id      | uuid        | NO       |                   |
+| client_id   | uuid        | NO       |                   |
+| property_id | uuid        | NO       |                   |
+| created_at  | timestamptz | NO       | now()             |
+
+> Canonical account -> property relationship table. Unique on
+> (org_id, client_id, property_id). Backfilled from distinct client/property pairs
+> across service_contracts, task_work_orders, estimates, and invoices when created.
+> RLS: org-scoped read; admin/manager manage.
+
+---
+
 ## service_catalog
 | column             | type        | nullable | default           |
 |--------------------|-------------|----------|-------------------|
