@@ -196,6 +196,10 @@ function formatMinutesAsHoursAndMinutes(totalMinutes: number) {
   return `${hours}h ${minutes}m`;
 }
 
+function formatHoursFromMinutes(totalMinutes: number) {
+  return `${(Math.max(0, totalMinutes) / 60).toFixed(1)}h`;
+}
+
 function normalizeAssignmentStatus(status?: string) {
   const value = String(status ?? '').toLowerCase();
   if (value === 'in_progress' || value === 'in-progress') return 'in-progress';
@@ -5613,6 +5617,30 @@ export default function WorkboardContent() {
                 const coverageRounded = Math.round(lane.coveragePercent);
                 const coverageIndicator = getCoverageFillIndicator(coverageRounded);
                 const coverageFillPercent = Math.min(Math.max(coverageRounded, 0), 100);
+                const laneStatusDotClass =
+                  coverageRounded > 100
+                    ? 'bg-status-warning'
+                    : coverageRounded >= 80
+                      ? 'bg-status-active'
+                      : lane.employeeAssignments.length > 0
+                        ? 'bg-status-pending'
+                        : 'bg-status-hold';
+                const laneHoursToneClass =
+                  coverageRounded > 100
+                    ? 'border-status-warning/30 bg-status-warning/10 text-status-warning'
+                    : coverageRounded >= 80
+                      ? 'border-status-active/30 bg-status-active/10 text-status-active'
+                      : lane.employeeAssignments.length > 0
+                        ? 'border-status-pending/30 bg-status-pending/10 text-status-pending'
+                        : 'border-status-hold/20 bg-status-hold/10 text-status-hold';
+                const laneHoursCue =
+                  coverageRounded > 100
+                    ? 'Over'
+                    : coverageRounded >= 80
+                      ? 'Near'
+                      : lane.employeeAssignments.length > 0
+                        ? 'Under'
+                        : 'Open';
                 const laneAccentClass =
                   coverageRounded > 100
                     ? 'border-l-4 border-l-status-warning'
@@ -5624,32 +5652,38 @@ export default function WorkboardContent() {
                 return (
                   <div
                     key={lane.employee.id}
-                    className={`rounded-xl border bg-card transition-all duration-500 ${laneAccentClass} ${
+                    className={`rounded-xl border border-surface-border bg-surface-card transition-all duration-500 ${laneAccentClass} ${
                       laneFlashTone === 'complete'
                         ? 'ring-2 ring-status-active/70 bg-status-active/10'
                         : laneFlashTone === 'started'
                           ? 'ring-2 ring-status-complete/70 bg-status-complete/10'
-                          : ''
+                      : ''
                     }`}
                   >
-                    <div className="flex h-[52px] min-h-[52px] max-h-[52px] w-full items-center gap-2 border-b bg-muted/40 px-3 hover:bg-muted/60">
+                    <div className="flex min-h-[56px] w-full items-center gap-2 border-b border-surface-border bg-surface-elevated/70 px-3 hover:bg-surface-hover/60">
                       <button
                         type="button"
                         onClick={() => toggleDesktopCrew(lane.employee.id)}
-                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        className="grid min-w-0 flex-1 grid-cols-[auto_auto_minmax(0,1fr)_auto_auto_auto] items-center gap-3 text-left"
                       >
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                        <span className={`h-2.5 w-2.5 rounded-full ${laneStatusDotClass}`} aria-hidden="true" />
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">
                           {initials}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                          {lane.employee.firstName} {lane.employee.lastName}
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-text-primary">
+                            {lane.employee.firstName} {lane.employee.lastName}
+                          </span>
+                          <span className="block truncate text-2xs text-text-muted">
+                            {lane.employee.role}
+                          </span>
                         </span>
-                        <span className="w-[90px] text-right font-mono text-xs text-muted-foreground">
+                        <span className="w-[112px] text-right font-mono text-xs text-text-muted">
                           {lane.shift ? `${formatTime(lane.shift.shiftStart)}-${formatTime(lane.shift.shiftEnd)}` : 'No shift'}
                         </span>
-                        <span className="w-[60px] text-right">
-                          <span className="inline-flex rounded-full bg-brand-bright/10 px-2 py-0.5 text-2xs font-medium text-brand-bright">
-                            {lane.employeeAssignments.length}
+                        <span className="w-[72px] text-right">
+                          <span className="inline-flex rounded-full border border-surface-border bg-surface-card px-2 py-0.5 text-2xs font-medium text-text-secondary">
+                            {lane.employeeAssignments.length} task{lane.employeeAssignments.length === 1 ? '' : 's'}
                           </span>
                         </span>
                         <span className="w-[90px] text-right">
@@ -5665,18 +5699,21 @@ export default function WorkboardContent() {
                             {coverageIndicator.markerClass ? (
                               <span className={`absolute right-0 top-0 h-full w-1 ${coverageIndicator.markerClass}`} aria-hidden="true" />
                             ) : null}
-                            <span className="relative z-10 rounded-full bg-background/70 px-1 text-3xs leading-none text-foreground shadow-sm">
+                            <span className="relative z-10 rounded-full bg-surface-base/70 px-1 text-3xs leading-none text-text-primary shadow-sm">
                               {coverageRounded}%
                             </span>
                           </span>
                         </span>
                         <span
-                          className="w-[80px] truncate text-right font-mono text-xs text-muted-foreground"
+                          className={`w-[120px] rounded-lg border px-2 py-1 text-right ${laneHoursToneClass}`}
                           title={lane.openMinutes > 0 ? `${lane.assignedMinutes}min assigned, ${lane.openMinutes}min open` : `${lane.assignedMinutes}min assigned`}
                         >
-                          {lane.assignedMinutes}m{lane.openMinutes > 0 ? <span className="text-status-warning"> / {lane.openMinutes}m open</span> : null}
+                          <span className="block text-4xs font-semibold uppercase tracking-wide">{laneHoursCue}</span>
+                          <span className="block font-mono text-xs font-semibold">
+                            {lane.shiftMinutes > 0 ? `${formatHoursFromMinutes(lane.assignedMinutes)} / ${formatHoursFromMinutes(lane.shiftMinutes)}` : formatHoursFromMinutes(lane.assignedMinutes)}
+                          </span>
                         </span>
-                        <span className="w-6 text-muted-foreground">
+                        <span className="w-6 text-text-muted">
                           {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </span>
                       </button>
@@ -5717,6 +5754,8 @@ export default function WorkboardContent() {
                       doubleBookedAssignmentIds={doubleBookedAssignmentIds}
                       selectedAssignmentIds={!isReadOnly ? selectedAssignmentIds : undefined}
                       onToggleSelect={!isReadOnly ? toggleAssignmentSelection : undefined}
+                      laneAssignedMinutes={lane.assignedMinutes}
+                      laneShiftMinutes={lane.shiftMinutes}
                       laneSummary={(() => {
                         const baseSummary = lane.shift
                           ? `Est: ${lane.estimatedHours.toFixed(1)}h - Actual: ${lane.actualHours.toFixed(1)}h`

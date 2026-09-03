@@ -1,7 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AvatarInitials } from '@/components/shared';
 import { TimeSelect } from '@/components/TimeSelect';
 import { TaskBlock } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Loader2, Pencil, Play, Plus } from 'lucide-react';
@@ -36,6 +35,8 @@ interface EmployeeRowProps {
   selectedAssignmentIds?: ReadonlySet<string>;
   onToggleSelect?: (assignmentId: string) => void;
   laneSummary?: string;
+  laneAssignedMinutes?: number;
+  laneShiftMinutes?: number;
   laneWarning?: string;
   orderIndex?: number;
   isDragging?: boolean;
@@ -78,6 +79,27 @@ function timeToMinutes(value?: string) {
   return hours * 60 + minutes;
 }
 
+function formatHoursFromMinutes(minutes: number | undefined) {
+  const safeMinutes = Math.max(0, Number(minutes ?? 0));
+  return `${(safeMinutes / 60).toFixed(1)}h`;
+}
+
+function laneStatusTone(coveragePercent: number | undefined) {
+  if (typeof coveragePercent !== 'number') return 'bg-status-hold';
+  if (coveragePercent > 100) return 'bg-status-warning';
+  if (coveragePercent >= 80) return 'bg-status-active';
+  if (coveragePercent > 0) return 'bg-status-pending';
+  return 'bg-status-hold';
+}
+
+function laneHoursTone(coveragePercent: number | undefined) {
+  if (typeof coveragePercent !== 'number') return 'border-status-hold/20 bg-status-hold/10 text-status-hold';
+  if (coveragePercent > 100) return 'border-status-warning/30 bg-status-warning/10 text-status-warning';
+  if (coveragePercent >= 80) return 'border-status-active/30 bg-status-active/10 text-status-active';
+  if (coveragePercent > 0) return 'border-status-pending/30 bg-status-pending/10 text-status-pending';
+  return 'border-status-hold/20 bg-status-hold/10 text-status-hold';
+}
+
 export function EmployeeRow({
   employee,
   assignments: employeeAssignments,
@@ -89,7 +111,9 @@ export function EmployeeRow({
   doubleBookedAssignmentIds,
   selectedAssignmentIds,
   onToggleSelect,
-  laneSummary: _laneSummary,
+  laneSummary,
+  laneAssignedMinutes,
+  laneShiftMinutes,
   laneWarning,
   orderIndex,
   isDragging,
@@ -211,6 +235,10 @@ export function EmployeeRow({
   ].sort((a, b) => a.sortMinutes - b.sortMinutes || a.sourceIndex - b.sourceIndex);
 
   const isSavingBreak = savingBreakEmployeeId === employee.id;
+  const laneHoursLabel =
+    typeof laneAssignedMinutes === 'number' && typeof laneShiftMinutes === 'number' && laneShiftMinutes > 0
+      ? `${formatHoursFromMinutes(laneAssignedMinutes)} / ${formatHoursFromMinutes(laneShiftMinutes)}`
+      : laneSummary ?? `${sortedAssignments.length} task${sortedAssignments.length === 1 ? '' : 's'}`;
 
   const toggleBreakForm = () => {
     setBreakFormOpen((current) => {
@@ -235,8 +263,8 @@ export function EmployeeRow({
   return (
     <Card
       ref={setLaneNodeRef}
-      className={`rounded-xl border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30 ${
-        isDropTarget || isLaneOver ? 'border-primary shadow-md ring-2 ring-primary/20' : ''
+      className={`rounded-xl border border-surface-border bg-surface-card p-3 shadow-sm transition-colors hover:bg-surface-hover/40 ${
+        isDropTarget || isLaneOver ? 'border-brand shadow-md ring-2 ring-brand/20' : ''
       } ${isDragging || isLaneSortableDragging ? 'opacity-60' : ''}`}
       style={{
         overflow: 'visible',
@@ -244,29 +272,35 @@ export function EmployeeRow({
         transition: laneTransition,
       }}
     >
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          {...laneAttributes}
-          {...laneListeners}
-          className="mt-1 flex cursor-grab items-center gap-1 rounded-full border border-dashed px-2 py-1 text-2xs text-muted-foreground/60 hover:border-primary/30 hover:text-primary"
-          title="Drag to reorder employee lanes for the display board"
-        >
-          <GripVertical className="h-4 w-4" />
-          <span>Lane</span>
-        </button>
-        <AvatarInitials firstName={employee.firstName} lastName={employee.lastName} size="md" className="mt-0.5" />
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-base font-semibold">{employee.firstName} {employee.lastName}</span>
-            <span className="text-sm text-muted-foreground">{employee.role}</span>
-            {typeof orderIndex === 'number' ? <Badge variant="secondary">Lane {orderIndex + 1}</Badge> : null}
-            <Badge variant="outline" className="rounded-full bg-muted/40">{shiftLabel || 'No shift'}</Badge>
-            <Badge variant="outline" className={`rounded-full ${coverageBadgeClass(coveragePercent)}`}>
-              {typeof coveragePercent === 'number' ? `${Math.round(coveragePercent)}%` : '—'}
-            </Badge>
-            <Badge variant="outline" className="ml-auto rounded-full">{sortedAssignments.length} task{sortedAssignments.length === 1 ? '' : 's'}</Badge>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-surface-border bg-surface-elevated/55 px-3 py-2">
+          <button
+            type="button"
+            {...laneAttributes}
+            {...laneListeners}
+            className="flex h-7 w-7 cursor-grab items-center justify-center rounded-full border border-dashed border-surface-border text-text-muted hover:border-brand/40 hover:text-brand"
+            title="Drag to reorder employee lanes for the display board"
+            aria-label={`Drag ${employee.firstName} ${employee.lastName} lane`}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+          <span className={`h-2.5 w-2.5 rounded-full ${laneStatusTone(coveragePercent)}`} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="truncate text-sm font-semibold text-text-primary">{employee.firstName} {employee.lastName}</span>
+              <span className="truncate text-2xs text-text-muted">{employee.role}</span>
+            </div>
           </div>
+          {typeof orderIndex === 'number' ? <Badge variant="secondary" className="text-3xs">Lane {orderIndex + 1}</Badge> : null}
+          <Badge variant="outline" className="rounded-full border-surface-border bg-surface-card text-text-secondary">{shiftLabel || 'No shift'}</Badge>
+          <Badge variant="outline" className={`rounded-full ${coverageBadgeClass(coveragePercent)}`}>
+            {typeof coveragePercent === 'number' ? `${Math.round(coveragePercent)}%` : '—'}
+          </Badge>
+          <div className={`ml-auto min-w-[122px] rounded-lg border px-2.5 py-1 text-right ${laneHoursTone(coveragePercent)}`}>
+            <p className="text-4xs font-semibold uppercase tracking-wide">Row total</p>
+            <p className="font-mono text-xs font-semibold">{laneHoursLabel}</p>
+          </div>
+        </div>
 
           {laneWarning ? (
             <div className="mb-3 rounded-xl border border-status-pending/30 bg-status-pending/10 px-3 py-2 text-2xs font-medium text-status-pending">
@@ -355,7 +389,7 @@ export function EmployeeRow({
                           priority: 3,
                           safetySensitive: false,
                           icon: 'clipboard',
-                          color: '#6b7280',
+                          color: '',
                         }
                       }
                       assignment={assignment}
@@ -513,7 +547,6 @@ export function EmployeeRow({
               </Button>
             </div>
           ) : null}
-        </div>
       </div>
     </Card>
   );

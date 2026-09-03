@@ -4,10 +4,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Task, Assignment, Property } from '@/data/seedData';
-import { AlertTriangle, CircleAlert, Pencil, X } from 'lucide-react';
+import { AlertTriangle, CircleAlert, Pencil, Wrench, X } from 'lucide-react';
 import { useEquipmentUnits } from '@/lib/supabase-queries';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import { formatTime } from '@/utils/formatTime';
 import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { wallClockToStoredIso } from '@/lib/timeWorkflow';
 
@@ -37,9 +36,15 @@ function normalizeStatus(status?: string) {
 }
 
 function statusContainerClass(status: string) {
-  if (status === 'in-progress') return 'border-l-[3px] border-l-status-complete bg-card';
-  if (status === 'done') return 'border-l-[3px] border-l-status-active bg-card';
-  return 'border-l-[3px] border-l-status-hold bg-card';
+  if (status === 'in-progress') return 'border-l-[3px] border-l-status-complete bg-surface-card';
+  if (status === 'done') return 'border-l-[3px] border-l-status-active bg-surface-card';
+  return 'border-l-[3px] border-l-status-hold bg-surface-card';
+}
+
+function statusDotClass(status: string) {
+  if (status === 'in-progress') return 'bg-status-complete';
+  if (status === 'done') return 'bg-status-active';
+  return 'bg-status-hold';
 }
 
 function parseShiftEndToTimestamp(
@@ -146,7 +151,7 @@ export function TaskBlock({
 
   const actualHoursTone =
     actualHours == null || estimatedHours <= 0
-      ? 'text-muted-foreground'
+      ? 'text-text-muted'
       : actualHours > estimatedHours
         ? 'text-status-pending'
         : 'text-status-active';
@@ -169,6 +174,7 @@ export function TaskBlock({
 
   const elapsedLabel = elapsedState?.label ?? null;
   const isElapsedCappedAtShiftEnd = Boolean(elapsedState?.cappedAtShiftEnd);
+  const statusBadgeVariant = status === 'in-progress' ? 'complete' : status === 'done' ? 'active' : 'hold';
 
   const doneLabel = useMemo(() => {
     if (status !== 'done' || !actualCompletedAt) return null;
@@ -192,7 +198,7 @@ export function TaskBlock({
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      className={`grid min-h-[58px] grid-cols-[auto_1fr_auto] items-start gap-3 overflow-hidden rounded-xl border px-3 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)} ${isPublished ? 'border-status-active/20 shadow-[inset_3px_0_0_oklch(var(--status-active))]' : 'border-dashed border-status-pending/60 bg-status-pending/10 shadow-[inset_3px_0_0_oklch(var(--status-pending))]'} ${isSelected ? 'ring-1 ring-primary/40 bg-primary/5' : ''} ${!dndDisabled ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-60 ring-2 ring-primary/20' : ''}`}
+      className={`grid min-h-[46px] grid-cols-[auto_minmax(0,1.7fr)_auto_auto] items-center gap-2 overflow-hidden rounded-lg border px-2.5 py-2 text-xs transition-all hover:shadow-sm ${statusContainerClass(status)} ${isPublished ? 'border-status-active/20 shadow-[inset_3px_0_0_oklch(var(--status-active))]' : 'border-dashed border-status-pending/60 bg-status-pending/10 shadow-[inset_3px_0_0_oklch(var(--status-pending))]'} ${isSelected ? 'ring-1 ring-brand/40 bg-brand/5' : ''} ${!dndDisabled ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-60 ring-2 ring-brand/20' : ''}`}
       {...(!dndDisabled ? attributes : {})}
       {...(!dndDisabled ? listeners : {})}
     >
@@ -204,48 +210,21 @@ export function TaskBlock({
           onChange={() => assignment.id && !isSubmittedToPayroll && onToggleSelect?.(assignment.id)}
           onClick={(event) => event.stopPropagation()}
           disabled={isSubmittedToPayroll}
-          className="mt-1 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-3.5 w-3.5 shrink-0 rounded border-surface-border accent-brand disabled:cursor-not-allowed disabled:opacity-50"
         />
       ) : (
         <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       )}
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-          <span className={`truncate text-sm font-semibold ${status === 'done' ? 'line-through text-muted-foreground' : ''}`} style={{ color: status === 'done' ? undefined : task.color }}>
+          <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass(status)}`} aria-hidden="true" />
+          <span className={`truncate text-sm font-semibold text-text-primary ${status === 'done' ? 'line-through text-text-muted' : ''}`}>
             {task.name}
           </span>
-          <Badge variant="outline" className="shrink-0 text-3xs">{propertyLabel}</Badge>
-          {isSubmittedToPayroll ? (
-            <Badge variant="complete" className="shrink-0 text-3xs">
-              Submitted to payroll
-            </Badge>
-          ) : null}
-          <Badge
-            variant="outline"
-            className={
-              status === 'in-progress'
-                ? 'shrink-0 border-status-complete/20 text-status-complete'
-                : status === 'done'
-                  ? 'shrink-0 border-status-active/20 text-status-active'
-                  : 'shrink-0 border-surface-border text-text-secondary'
-            }
-          >
-            {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned'}
-          </Badge>
-            <Badge
-              variant={isPublished ? 'active' : 'pending'}
-              className="shrink-0 text-3xs uppercase tracking-wide"
-            >
-            {isPublished ? 'Published' : 'Draft'}
-          </Badge>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
-          <span className="shrink-0 text-2xs text-muted-foreground">
-            est {estimatedHours > 0 ? `${estimatedHours.toFixed(1)}h` : '—'} →{' '}
-            <span className={actualHoursTone}>{actualHours != null ? `${actualHours.toFixed(1)}h actual` : '—'}</span>
-          </span>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-text-muted">
           {status === 'in-progress' && elapsedLabel ? (
-            <span className="flex shrink-0 items-center gap-1 text-2xs text-muted-foreground">
+            <span className="flex shrink-0 items-center gap-1 text-2xs text-text-muted">
               <span>Live {elapsedLabel}</span>
               {isElapsedCappedAtShiftEnd ? (
                 <Badge variant="outline" className="gap-1 border-status-pending/20 bg-status-pending/10 px-1.5 py-0 text-3xs text-status-pending">
@@ -255,30 +234,55 @@ export function TaskBlock({
               ) : null}
             </span>
           ) : null}
-          {status === 'done' && doneLabel ? <span className="shrink-0 text-2xs text-muted-foreground">{doneLabel}</span> : null}
+          {status === 'done' && doneLabel ? <span className="shrink-0 text-2xs text-text-muted">{doneLabel}</span> : null}
           <Badge variant="outline" className="shrink-0 text-3xs">{task.category}</Badge>
           {typeof priorityIndex === 'number' ? <Badge variant="secondary" className="shrink-0 text-3xs">#{priorityIndex + 1}</Badge> : null}
-          <span className="inline-flex min-w-0 items-center gap-1 truncate text-2xs text-muted-foreground">
-            <span className="truncate">
-              {formatTime(assignment.startTime)} · {assignment.duration}m · {equipment ? equipment.unitNumber : 'None'}
-            </span>
-            {isEquipmentOverdue ? (
-              <AlertTriangle
-                className="h-3.5 w-3.5 shrink-0 text-status-pending"
-                aria-label="Equipment overdue for service"
-              />
-            ) : null}
-            {isEquipmentDoubleBooked ? (
-              <CircleAlert
-                className="h-3.5 w-3.5 shrink-0 text-status-warning"
-                aria-label="Equipment time-window conflict"
-              />
-            ) : null}
-          </span>
+          <Badge variant="outline" className="shrink-0 text-3xs">{propertyLabel}</Badge>
         </div>
       </div>
 
+      <div className="flex min-w-[72px] flex-col items-end justify-center">
+        <span className="text-3xs font-semibold uppercase tracking-wide text-text-muted">Duration</span>
+        <span className="font-mono text-sm font-semibold text-text-primary">
+          {estimatedHours > 0 ? `${estimatedHours.toFixed(1)}h` : '—'}
+        </span>
+        {actualHours != null ? <span className={`text-3xs ${actualHoursTone}`}>{actualHours.toFixed(1)}h actual</span> : null}
+      </div>
+
+      <div className="flex min-w-[92px] items-center justify-end gap-1.5 text-2xs text-text-muted">
+        <Wrench className={`h-3.5 w-3.5 shrink-0 ${equipment ? 'text-text-secondary' : 'text-text-muted/70'}`} aria-hidden="true" />
+        <span className="truncate" title={equipment ? String(equipment.unitNumber ?? 'Equipment') : 'No equipment assigned'}>
+          {equipment ? equipment.unitNumber : 'None'}
+        </span>
+        {isEquipmentOverdue ? (
+          <AlertTriangle
+            className="h-3.5 w-3.5 shrink-0 text-status-pending"
+            aria-label="Equipment overdue for service"
+          />
+        ) : null}
+        {isEquipmentDoubleBooked ? (
+          <CircleAlert
+            className="h-3.5 w-3.5 shrink-0 text-status-warning"
+            aria-label="Equipment time-window conflict"
+          />
+        ) : null}
+      </div>
+
       <div className="flex items-start gap-1 pt-0.5">
+        <Badge variant={statusBadgeVariant} className="hidden shrink-0 text-3xs sm:inline-flex">
+          {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned'}
+        </Badge>
+        <Badge
+          variant={isPublished ? 'active' : 'pending'}
+          className="hidden shrink-0 text-3xs uppercase tracking-wide md:inline-flex"
+        >
+          {isPublished ? 'Published' : 'Draft'}
+        </Badge>
+        {isSubmittedToPayroll ? (
+          <Badge variant="complete" className="hidden shrink-0 text-3xs lg:inline-flex">
+            Payroll
+          </Badge>
+        ) : null}
         {onEdit ? (
           <Button
             type="button"
