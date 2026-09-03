@@ -844,6 +844,7 @@ export default function WorkboardContent() {
   const [workOrderDraft, setWorkOrderDraft] = useState<WorkOrderDraft>({ title: '', description: '', priority: 'medium', propertyId: '' });
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [selectedScheduleRecipientIds, setSelectedScheduleRecipientIds] = useState<string[]>([]);
+  const [postingScheduleToCrew, setPostingScheduleToCrew] = useState(false);
   const [endOfDayDialogOpen, setEndOfDayDialogOpen] = useState(false);
   const [endOfDayReportText, setEndOfDayReportText] = useState('');
   const [endOfDayReportCondensed, setEndOfDayReportCondensed] = useState('');
@@ -3584,6 +3585,34 @@ export default function WorkboardContent() {
     const text = buildScheduleShareText();
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   }, [buildScheduleShareText]);
+
+  const postScheduleToCrewComms = useCallback(async () => {
+    if (!currentUser?.orgId || !currentUser.employeeId) {
+      toast.error('Cannot identify your employee record to post to Crew Comms.');
+      return;
+    }
+    const channel = activeProperty?.id ? `property-${activeProperty.id}` : 'general';
+    const channelLabel = activeProperty?.name ?? 'Company-wide';
+    setPostingScheduleToCrew(true);
+    try {
+      const { error } = await withWorkboardMutationTimeout(supabase.from('messages').insert({
+        org_id: currentUser.orgId,
+        channel,
+        sender_id: currentUser.employeeId,
+        body: buildScheduleShareText(),
+      }));
+      if (error) {
+        toast.error(`Could not post to Crew Comms: ${error.message}`);
+        return;
+      }
+      toast.success(`Posted schedule to ${channelLabel} in Crew Comms`);
+      setSendScheduleDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not post to Crew Comms.');
+    } finally {
+      setPostingScheduleToCrew(false);
+    }
+  }, [activeProperty?.id, activeProperty?.name, buildScheduleShareText, currentUser?.employeeId, currentUser?.orgId]);
 
   const suggestedTasks = useMemo(() => {
     const items: SuggestedTaskItem[] = [];
@@ -7085,6 +7114,15 @@ export default function WorkboardContent() {
                 })
               )}
             </div>
+            <Button
+              type="button"
+              onClick={() => void postScheduleToCrewComms()}
+              disabled={postingScheduleToCrew || scheduledEmployees.length === 0}
+              className="w-full bg-brand text-text-inverse hover:bg-brand/90"
+            >
+              <MessageCircle className="h-4 w-4" />
+              {postingScheduleToCrew ? 'Posting to Crew Comms' : 'Post to Crew Comms'}
+            </Button>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <Button variant="outline" onClick={shareScheduleByEmail}>Email</Button>
               <Button variant="outline" onClick={() => void shareScheduleByCopy()}>Copy to clipboard</Button>

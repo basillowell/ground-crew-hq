@@ -509,7 +509,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { label: 'Today', icon: Home, href: '/app/field' },
     { label: 'My Jobs', icon: ClipboardList, href: '/app/workboard?mode=week' },
     { label: 'Clock', icon: Clock, href: '/app/field?tab=clock' },
-    { label: 'Messages', icon: MessageSquare, href: '/app/breakroom' },
+    { label: 'Comms', icon: MessageSquare, href: '/app/breakroom' },
     { label: 'Profile', icon: User, href: '/app/settings?tab=Account' },
   ];
   const mobileMoreItems = [
@@ -521,7 +521,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { label: 'Safety', route: '/app/safety', icon: Shield },
     { label: 'Reports', route: '/app/reports', icon: BarChart3 },
     { label: 'Open Tasks', route: '/app/workboard?mode=backlog', icon: ListTodo },
-    { label: 'Breakroom', route: '/app/breakroom', icon: LayoutDashboard },
+    { label: 'Crew Comms', route: '/app/breakroom', icon: MessageSquare },
     { label: 'Messaging', route: '/app/messaging', icon: Mail },
     { label: 'Settings', route: '/app/settings', icon: Settings },
   ];

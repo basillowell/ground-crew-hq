@@ -60,7 +60,7 @@ const routeTitles: Record<string, RouteTitle> = {
   '/app/reports': { title: 'Reports', subtitle: 'Labor summaries and cost analysis.' },
   '/app/job-costing': { title: 'Job Costing', subtitle: 'Labor cost and margin analysis.' },
   '/app/applications': { title: 'Applications', subtitle: 'Chemical logging with tank mix and site condition detail.' },
-  '/app/breakroom': { title: 'Breakroom', subtitle: 'Share updates with your team.' },
+  '/app/breakroom': { title: 'Crew Comms', subtitle: 'Announcements, live channels, and crew updates.' },
   '/app/messaging': { title: 'Messaging', subtitle: 'Compose and send a message to your crew.' },
   '/app/tasks': { title: 'Task Management', subtitle: 'Task library for Workflow assignment and operations planning.' },
   '/app/safety': { title: 'Safety', subtitle: 'Toolbox talks and compliance records.' },

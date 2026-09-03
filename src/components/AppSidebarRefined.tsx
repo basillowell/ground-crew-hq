@@ -13,6 +13,7 @@ import {
   LogOut,
   Map as MapIcon,
   Menu,
+  MessageSquare,
   Receipt,
   Repeat,
   Settings2,
@@ -89,6 +90,7 @@ const primaryOperations: NavItemConfig[] = [
   { label: 'Scheduler', href: '/app/workboard?mode=week', icon: Calendar, moduleId: 'workflow' },
   { label: 'Workflow', href: '/app/workboard', icon: ClipboardList, moduleId: 'workflow' },
   { label: 'Open Tasks', href: '/app/workboard?mode=backlog', icon: ListTodo, moduleId: 'workflow' },
+  { label: 'Crew Comms', href: '/app/breakroom', icon: MessageSquare, moduleId: 'workflow' },
 ];
 
 const management: NavItemConfig[] = [
