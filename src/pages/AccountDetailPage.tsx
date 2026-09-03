@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
@@ -7,19 +7,22 @@ import {
   Building2,
   CheckCircle2,
   Clipboard,
+  FileCheck2,
   Inbox,
   Mail,
+  PenLine,
   Phone,
   Receipt,
 } from 'lucide-react';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { TaskWorkOrderProofDialog } from '@/components/work-orders/TaskWorkOrderProofDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
-import type { Property } from '@/data/seedData';
+import type { Assignment, Employee, Property } from '@/data/seedData';
 import {
   type BillingClient,
   type EstimateStatus,
@@ -28,8 +31,10 @@ import {
   type ServiceContract,
   type TaskWorkOrder,
   type TaskWorkOrderFunnelStage,
+  useAssignmentSignaturesForAssignments,
   useClientProperties,
   useClients,
+  useEmployees,
   useEstimates,
   useInvoices,
   usePayments,
@@ -37,6 +42,7 @@ import {
   useProperties,
   useServiceContractLineItems,
   useServiceContracts,
+  useTaskWorkOrderAssignments,
   useTaskWorkOrders,
 } from '@/lib/supabase-queries';
 
@@ -86,6 +92,27 @@ function formatCurrency(value: number) {
 
 function titleCase(value: string) {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatHours(value: number) {
+  return `${value.toFixed(2)}h`;
+}
+
+function employeeName(employee: Employee | undefined) {
+  if (!employee) return 'Unassigned employee';
+  return `${employee.firstName} ${employee.lastName}`.trim() || employee.email || 'Unnamed employee';
+}
+
+function assignmentCompletionDate(assignment: Assignment) {
+  return assignment.actualCompletedAt ?? assignment.actual_completed_at ?? assignment.completedAt ?? assignment.completed_at ?? null;
+}
+
+function latestAssignmentCompletion(assignments: Assignment[]) {
+  return assignments
+    .map(assignmentCompletionDate)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1) ?? null;
 }
 
 function contractTotal(contract: ServiceContract, lineItems: RevenueLineItem[]) {
@@ -146,9 +173,11 @@ export default function AccountDetailPage() {
   const params = useParams();
   const clientId = getRouteParam(params?.id);
   const validClientId = Boolean(clientId && uuidPattern.test(clientId));
+  const [proofWorkOrder, setProofWorkOrder] = useState<TaskWorkOrder | null>(null);
   const { orgId } = useOrgProfile();
   const clientsQuery = useClients(orgId ?? undefined);
   const propertiesQuery = useProperties(orgId ?? undefined);
+  const employeesQuery = useEmployees(undefined, orgId ?? undefined);
   const clientPropertiesQuery = useClientProperties(orgId ?? undefined, clientId, validClientId);
   const serviceContractsQuery = useServiceContracts(orgId ?? undefined);
   const serviceContractLineItemsQuery = useServiceContractLineItems(undefined, orgId ?? undefined);
@@ -165,6 +194,7 @@ export default function AccountDetailPage() {
   const billingEnabled = programSettingsQuery.data?.billingEnabled ?? true;
   const clients = clientsQuery.data ?? [];
   const properties = propertiesQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
   const clientProperties = clientPropertiesQuery.data ?? [];
   const serviceContracts = serviceContractsQuery.data ?? [];
   const serviceContractLineItems = serviceContractLineItemsQuery.data ?? [];
@@ -208,6 +238,19 @@ export default function AccountDetailPage() {
     () => accountWorkOrders.filter((workOrder) => workOrder.funnelStage === 'completed'),
     [accountWorkOrders],
   );
+  const deliveredWorkOrders = useMemo(
+    () => accountWorkOrders.filter((workOrder) => ['completed', 'pending_verification'].includes(workOrder.funnelStage)),
+    [accountWorkOrders],
+  );
+  const deliveredWorkOrderIds = useMemo(() => deliveredWorkOrders.map((workOrder) => workOrder.id), [deliveredWorkOrders]);
+  const deliveredAssignmentsQuery = useTaskWorkOrderAssignments(orgId ?? undefined, deliveredWorkOrderIds);
+  const deliveredAssignments = deliveredAssignmentsQuery.data ?? [];
+  const deliveredAssignmentIds = useMemo(
+    () => deliveredAssignments.map((assignment) => assignment.id).filter((id): id is string => Boolean(id)),
+    [deliveredAssignments],
+  );
+  const deliveredSignaturesQuery = useAssignmentSignaturesForAssignments(orgId ?? undefined, deliveredAssignmentIds);
+  const deliveredSignatures = deliveredSignaturesQuery.data ?? [];
   const accountEstimates = useMemo(
     () => estimates.filter((estimate) => estimate.clientId === clientId),
     [clientId, estimates],
@@ -226,6 +269,7 @@ export default function AccountDetailPage() {
     !orgId ||
     (clientsQuery.isLoading && !clientsQuery.data) ||
     (propertiesQuery.isLoading && !propertiesQuery.data) ||
+    (employeesQuery.isLoading && !employeesQuery.data) ||
     (clientPropertiesQuery.isLoading && !clientPropertiesQuery.data) ||
     (serviceContractsQuery.isLoading && !serviceContractsQuery.data) ||
     (serviceContractLineItemsQuery.isLoading && !serviceContractLineItemsQuery.data) ||
@@ -239,6 +283,7 @@ export default function AccountDetailPage() {
   const queryError =
     clientsQuery.error ??
     propertiesQuery.error ??
+    employeesQuery.error ??
     clientPropertiesQuery.error ??
     serviceContractsQuery.error ??
     serviceContractLineItemsQuery.error ??
@@ -260,6 +305,41 @@ export default function AccountDetailPage() {
     return { activeScopeValue, estimateValue, invoiceValue, paidValue };
   }, [accountEstimates, accountInvoices, accountPayments, activeContracts, serviceContractLineItems]);
 
+  const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
+  const deliveredAssignmentSummaryByWorkOrderId = useMemo(() => {
+    const signatureCountByAssignmentId = deliveredSignatures.reduce<Record<string, number>>((counts, signature) => {
+      counts[signature.assignmentId] = (counts[signature.assignmentId] ?? 0) + 1;
+      return counts;
+    }, {});
+    return deliveredAssignments.reduce<Record<string, {
+      assignmentCount: number;
+      crewNames: string[];
+      fieldCompletedAt: string | null;
+      signatureCount: number;
+      totalHours: number;
+    }>>((summary, assignment) => {
+      const workOrderId = assignment.taskWorkOrderId ?? assignment.task_work_order_id;
+      if (!workOrderId) return summary;
+      const current = summary[workOrderId] ?? {
+        assignmentCount: 0,
+        crewNames: [],
+        fieldCompletedAt: null,
+        signatureCount: 0,
+        totalHours: 0,
+      };
+      const crewName = employeeName(employeeById.get(assignment.employeeId));
+      const completedAt = assignmentCompletionDate(assignment);
+      summary[workOrderId] = {
+        assignmentCount: current.assignmentCount + 1,
+        crewNames: current.crewNames.includes(crewName) ? current.crewNames : [...current.crewNames, crewName],
+        fieldCompletedAt: [current.fieldCompletedAt, completedAt].filter((value): value is string => Boolean(value)).sort().at(-1) ?? null,
+        signatureCount: current.signatureCount + (assignment.id ? signatureCountByAssignmentId[assignment.id] ?? 0 : 0),
+        totalHours: current.totalHours + Number(assignment.actualHours ?? assignment.actual_hours ?? 0),
+      };
+      return summary;
+    }, {});
+  }, [deliveredAssignments, deliveredSignatures, employeeById]);
+
   const copyRequestLink = async () => {
     if (!account) return;
     try {
@@ -273,10 +353,13 @@ export default function AccountDetailPage() {
   const handleRetry = () => {
     void clientsQuery.refetch();
     void propertiesQuery.refetch();
+    void employeesQuery.refetch();
     void clientPropertiesQuery.refetch();
     void serviceContractsQuery.refetch();
     void serviceContractLineItemsQuery.refetch();
     void taskWorkOrdersQuery.refetch();
+    void deliveredAssignmentsQuery.refetch();
+    void deliveredSignaturesQuery.refetch();
     void programSettingsQuery.refetch();
     if (billingEnabled) {
       void estimatesQuery.refetch();
@@ -421,13 +504,24 @@ export default function AccountDetailPage() {
         </div>
 
         <div className="space-y-6">
-          <Section title="Completed & Verified Work" icon={<CheckCircle2 className="h-4 w-4 text-status-complete" />}>
-            {completedWorkOrders.length === 0 ? (
-              <EmptySection message="No verified completed work yet." />
+          <Section title="Delivered Results" icon={<CheckCircle2 className="h-4 w-4 text-status-complete" />}>
+            {deliveredAssignmentsQuery.isError || deliveredSignaturesQuery.isError ? (
+              <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
+                Delivered proof details could not load.
+              </div>
+            ) : deliveredWorkOrders.length === 0 ? (
+              <EmptySection message="No delivered results yet." />
             ) : (
               <div className="space-y-3">
-                {completedWorkOrders.slice(0, 6).map((workOrder) => (
-                  <WorkOrderCard key={workOrder.id} workOrder={workOrder} propertiesById={propertiesById} />
+                {deliveredWorkOrders.slice(0, 6).map((workOrder) => (
+                  <WorkOrderCard
+                    key={workOrder.id}
+                    workOrder={workOrder}
+                    propertiesById={propertiesById}
+                    proofSummary={deliveredAssignmentSummaryByWorkOrderId[workOrder.id]}
+                    proofLoading={deliveredAssignmentsQuery.isLoading || deliveredSignaturesQuery.isLoading}
+                    onOpenProof={setProofWorkOrder}
+                  />
                 ))}
               </div>
             )}
@@ -488,6 +582,17 @@ export default function AccountDetailPage() {
           ) : null}
         </div>
       </div>
+
+      <TaskWorkOrderProofDialog
+        open={Boolean(proofWorkOrder)}
+        onOpenChange={(open) => {
+          if (!open) setProofWorkOrder(null);
+        }}
+        orgId={orgId}
+        workOrder={proofWorkOrder}
+        properties={properties}
+        employees={employees}
+      />
     </div>
   );
 }
@@ -495,10 +600,24 @@ export default function AccountDetailPage() {
 function WorkOrderCard({
   workOrder,
   propertiesById,
+  proofSummary,
+  proofLoading = false,
+  onOpenProof,
 }: {
   workOrder: TaskWorkOrder;
   propertiesById: Map<string, Property>;
+  proofSummary?: {
+    assignmentCount: number;
+    crewNames: string[];
+    fieldCompletedAt: string | null;
+    signatureCount: number;
+    totalHours: number;
+  };
+  proofLoading?: boolean;
+  onOpenProof?: (workOrder: TaskWorkOrder) => void;
 }) {
+  const deliveredAt = workOrder.completedAt ?? proofSummary?.fieldCompletedAt ?? null;
+  const deliveredLabel = workOrder.completedAt ? 'Verified' : 'Field complete';
   return (
     <div className="rounded-lg border border-surface-border bg-surface-elevated p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -510,11 +629,40 @@ function WorkOrderCard({
         </div>
         <Badge variant={workOrderStageVariants[workOrder.funnelStage]}>{titleCase(workOrder.funnelStage)}</Badge>
       </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Badge variant="hold" className="capitalize">{workOrder.source}</Badge>
+        {deliveredAt ? <Badge variant="complete">{deliveredLabel} {formatDate(deliveredAt)}</Badge> : null}
+      </div>
       {workOrder.description ? (
         <p className="mt-3 line-clamp-2 text-sm text-text-secondary">{workOrder.description}</p>
       ) : null}
-      {workOrder.completedAt ? (
-        <div className="mt-3 text-xs text-text-muted">Verified {formatDate(workOrder.completedAt)}</div>
+      {proofSummary ? (
+        <div className="mt-3 grid gap-2 text-xs text-text-secondary">
+          <div className="flex items-center gap-2">
+            <FileCheck2 className="h-3.5 w-3.5 text-text-muted" />
+            <span>{proofSummary.assignmentCount} linked assignment{proofSummary.assignmentCount === 1 ? '' : 's'} · {formatHours(proofSummary.totalHours)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <PenLine className="h-3.5 w-3.5 text-text-muted" />
+            <span>{proofSummary.signatureCount} signature{proofSummary.signatureCount === 1 ? '' : 's'} captured</span>
+          </div>
+          {proofSummary.crewNames.length > 0 ? (
+            <div className="text-text-muted">Crew: {proofSummary.crewNames.slice(0, 3).join(', ')}</div>
+          ) : null}
+        </div>
+      ) : proofLoading ? (
+        <div className="mt-3 text-xs text-text-muted">Loading proof details...</div>
+      ) : null}
+      {workOrder.punchList ? (
+        <div className="mt-3 rounded-lg border border-status-warning/25 bg-status-warning/10 p-2 text-xs leading-5 text-text-secondary">
+          <p className="font-medium text-status-warning">Punch list</p>
+          <p className="mt-1 whitespace-pre-line">{workOrder.punchList}</p>
+        </div>
+      ) : null}
+      {onOpenProof ? (
+        <Button type="button" variant="outline" size="sm" className="mt-3 w-full" onClick={() => onOpenProof(workOrder)}>
+          View proof package
+        </Button>
       ) : null}
     </div>
   );

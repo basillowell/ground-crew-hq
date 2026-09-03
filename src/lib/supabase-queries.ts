@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ApplicationArea,
@@ -647,6 +648,7 @@ type DbAssignment = {
   title?: string | null;
   equipment_unit_id?: string | null;
   work_order_id?: string | null;
+  task_work_order_id?: string | null;
   created_at: string;
 };
 
@@ -1331,6 +1333,8 @@ function toAssignment(row: DbAssignment): Assignment {
     area: row.location ?? 'Unassigned area',
     equipmentId: row.equipment_unit_id ?? undefined,
     workOrderId: row.work_order_id ?? undefined,
+    taskWorkOrderId: row.task_work_order_id ?? null,
+    task_work_order_id: row.task_work_order_id ?? null,
     order: row.order_index ?? undefined,
     actualStartAt: row.actual_start_at ?? null,
     actualCompletedAt: row.actual_completed_at ?? null,
@@ -1365,6 +1369,7 @@ const ASSIGNMENTS_SELECT_COLUMNS =
   notes,
   equipment_unit_id,
   work_order_id,
+  task_work_order_id,
   created_at,
   org_id,
   completed_at,
@@ -2574,6 +2579,51 @@ async function fetchTaskWorkOrders(orgId: string, funnelStage?: TaskWorkOrderFun
   return Promise.race([fetchPromise, timeoutPromise]);
 }
 
+async function fetchTaskWorkOrderAssignments(orgId: string, workOrderIds: string[]): Promise<Assignment[]> {
+  const ids = Array.from(new Set(workOrderIds.filter((id) => id && id !== 'all')));
+  if (ids.length === 0) return [];
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Task work order assignments request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('assignments')
+      .select(ASSIGNMENTS_SELECT_COLUMNS)
+      .eq('org_id', orgId)
+      .in('task_work_order_id', ids)
+      .is('deleted_at', null)
+      .order('date', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return ((data ?? []) as DbAssignment[]).map(toAssignment);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchAssignmentSignaturesForAssignments(orgId: string, assignmentIds: string[]): Promise<AssignmentSignature[]> {
+  const ids = Array.from(new Set(assignmentIds.filter((id) => id && id !== 'all')));
+  if (ids.length === 0) return [];
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Assignment signatures request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('signatures')
+      .select(SIGNATURE_SELECT_COLUMNS)
+      .eq('org_id', orgId)
+      .in('assignment_id', ids)
+      .order('signed_at', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as DbSignature[]).map(toAssignmentSignature);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
 async function fetchJobCostingAssignments(orgId: string): Promise<JobCostingAssignment[]> {
   const client = ensureSupabase();
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -3592,6 +3642,32 @@ export function useTaskWorkOrders(orgId?: string, funnelStage?: TaskWorkOrderFun
     queryKey: ['task-work-orders', orgId ?? 'all-orgs', funnelStage ?? 'all-stages'],
     queryFn: () => fetchTaskWorkOrders(orgId!, funnelStage),
     enabled: Boolean(orgId) && enabled,
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useTaskWorkOrderAssignments(orgId?: string, workOrderIds?: string[]) {
+  const ids = useMemo(() => Array.from(new Set((workOrderIds ?? []).filter(Boolean))).sort(), [workOrderIds]);
+  return useQuery({
+    queryKey: ['task-work-order-assignments', orgId ?? 'all-orgs', ids],
+    queryFn: () => fetchTaskWorkOrderAssignments(orgId!, ids),
+    enabled: Boolean(orgId && ids.length > 0),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
+export function useAssignmentSignaturesForAssignments(orgId?: string, assignmentIds?: string[]) {
+  const ids = useMemo(() => Array.from(new Set((assignmentIds ?? []).filter(Boolean))).sort(), [assignmentIds]);
+  return useQuery({
+    queryKey: ['assignment-signatures', orgId ?? 'all-orgs', ids],
+    queryFn: () => fetchAssignmentSignaturesForAssignments(orgId!, ids),
+    enabled: Boolean(orgId && ids.length > 0),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
     retry: 2,

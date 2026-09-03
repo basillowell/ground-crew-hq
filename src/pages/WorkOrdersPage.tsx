@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Building2, CalendarDays, Inbox, Plus, UserRound } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { TaskWorkOrderProofDialog } from '@/components/work-orders/TaskWorkOrderProofDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -155,6 +156,7 @@ function WorkOrderCard({
   onOpenAssign,
   onComplete,
   onOpenReturn,
+  onOpenProof,
   pendingAction,
 }: {
   workOrder: TaskWorkOrder;
@@ -166,6 +168,7 @@ function WorkOrderCard({
   onOpenAssign: (workOrder: TaskWorkOrder) => void;
   onComplete: (workOrder: TaskWorkOrder) => void;
   onOpenReturn: (workOrder: TaskWorkOrder) => void;
+  onOpenProof?: (workOrder: TaskWorkOrder) => void;
   pendingAction: string | null;
 }) {
   const clientName = findNameById(clients, workOrder.clientId);
@@ -306,6 +309,18 @@ function WorkOrderCard({
           </Button>
         </div>
       ) : null}
+
+      {onOpenProof && ['pending_verification', 'completed'].includes(workOrder.funnelStage) ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => onOpenProof(workOrder)}
+        >
+          View proof package
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -357,6 +372,7 @@ export default function WorkOrdersPage() {
   const [returnDialogWorkOrder, setReturnDialogWorkOrder] = useState<TaskWorkOrder | null>(null);
   const [punchList, setPunchList] = useState('');
   const [assignDialogWorkOrder, setAssignDialogWorkOrder] = useState<TaskWorkOrder | null>(null);
+  const [proofWorkOrder, setProofWorkOrder] = useState<TaskWorkOrder | null>(null);
   const [assignForm, setAssignForm] = useState<AssignFormState>(() => emptyAssignForm());
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const canManage = currentRole === 'admin' || currentRole === 'manager';
@@ -668,6 +684,7 @@ export default function WorkOrdersPage() {
                           onOpenAssign={openAssignDialog}
                           onComplete={(targetWorkOrder) => void completeWorkOrder(targetWorkOrder)}
                           onOpenReturn={openReturnDialog}
+                          onOpenProof={setProofWorkOrder}
                           pendingAction={pendingAction}
                         />
                       ))
@@ -708,6 +725,7 @@ export default function WorkOrdersPage() {
                     onOpenAssign={openAssignDialog}
                     onComplete={(targetWorkOrder) => void completeWorkOrder(targetWorkOrder)}
                     onOpenReturn={openReturnDialog}
+                    onOpenProof={setProofWorkOrder}
                     pendingAction={pendingAction}
                   />
                 ))
@@ -935,6 +953,17 @@ export default function WorkOrdersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TaskWorkOrderProofDialog
+        open={Boolean(proofWorkOrder)}
+        onOpenChange={(open) => {
+          if (!open) setProofWorkOrder(null);
+        }}
+        orgId={orgId}
+        workOrder={proofWorkOrder}
+        properties={properties}
+        employees={employees}
+      />
     </div>
   );
 }

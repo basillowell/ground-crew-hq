@@ -136,6 +136,8 @@ export interface Assignment {
   taskId: string;
   equipmentId?: string;
   workOrderId?: string;
+  taskWorkOrderId?: string | null;
+  task_work_order_id?: string | null;
   date: string;
   location?: string;
   startTime: string;
