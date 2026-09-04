@@ -878,8 +878,10 @@ export default function WorkboardContent() {
     assignments: boolean;
     taskRequests: boolean;
     scheduleEntries: boolean;
+    equipmentUnits: boolean;
+    notes: boolean;
     timeoutId: number | null;
-  }>({ assignments: false, taskRequests: false, scheduleEntries: false, timeoutId: null });
+  }>({ assignments: false, taskRequests: false, scheduleEntries: false, equipmentUnits: false, notes: false, timeoutId: null });
   const [selectedTemplateTaskIds, setSelectedTemplateTaskIds] = useState<string[]>([]);
   const [selectedTemplateEmployeeIds, setSelectedTemplateEmployeeIds] = useState<string[]>([]);
   const [applyTemplateToAllCrew, setApplyTemplateToAllCrew] = useState(true);
@@ -966,26 +968,39 @@ export default function WorkboardContent() {
     }, 2200);
   }, []);
 
-  const queueRealtimeInvalidation = useCallback((queryKey: 'assignments' | 'task-requests' | 'schedule-entries') => {
+  const queueRealtimeInvalidation = useCallback((queryKey: 'assignments' | 'task-requests' | 'schedule-entries' | 'equipment-units' | 'notes') => {
     const pending = pendingRealtimeInvalidationsRef.current;
     if (queryKey === 'assignments') pending.assignments = true;
     if (queryKey === 'task-requests') pending.taskRequests = true;
     if (queryKey === 'schedule-entries') pending.scheduleEntries = true;
+    if (queryKey === 'equipment-units') pending.equipmentUnits = true;
+    if (queryKey === 'notes') pending.notes = true;
     if (pending.timeoutId !== null) return;
 
     pending.timeoutId = window.setTimeout(() => {
       const shouldInvalidateAssignments = pending.assignments;
       const shouldInvalidateTaskRequests = pending.taskRequests;
       const shouldInvalidateScheduleEntries = pending.scheduleEntries;
+      const shouldInvalidateEquipmentUnits = pending.equipmentUnits;
+      const shouldInvalidateNotes = pending.notes;
       pending.assignments = false;
       pending.taskRequests = false;
       pending.scheduleEntries = false;
+      pending.equipmentUnits = false;
+      pending.notes = false;
       pending.timeoutId = null;
 
       const invalidations = [
         ...(shouldInvalidateAssignments ? [queryClient.invalidateQueries({ queryKey: ['assignments'] })] : []),
         ...(shouldInvalidateTaskRequests ? [queryClient.invalidateQueries({ queryKey: ['task-requests'] })] : []),
         ...(shouldInvalidateScheduleEntries ? [queryClient.invalidateQueries({ queryKey: ['schedule-entries'] })] : []),
+        ...(shouldInvalidateEquipmentUnits
+          ? [
+              queryClient.invalidateQueries({ queryKey: ['equipment-units'] }),
+              queryClient.invalidateQueries({ queryKey: ['workboard-available-equipment'] }),
+            ]
+          : []),
+        ...(shouldInvalidateNotes ? [queryClient.invalidateQueries({ queryKey: ['notes'] })] : []),
       ];
       if (invalidations.length > 0) {
         void Promise.all(invalidations);
@@ -1895,6 +1910,12 @@ export default function WorkboardContent() {
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_entries', filter: `org_id=eq.${orgId}` }, () => {
           queueRealtimeInvalidation('schedule-entries');
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment_units', filter: `org_id=eq.${orgId}` }, () => {
+          queueRealtimeInvalidation('equipment-units');
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notes', filter: `org_id=eq.${orgId}` }, () => {
+          queueRealtimeInvalidation('notes');
         })
         .subscribe();
     }, 5000);

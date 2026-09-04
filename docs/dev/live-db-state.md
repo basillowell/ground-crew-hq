@@ -132,6 +132,10 @@
 > FK -> task_work_orders.id (on delete set null). Plan B link — assigning a task
 > work order to an employee creates an assignment carrying this id, so it rides
 > the workboard + job costing. DISTINCT from work_order_id (equipment).
+>
+> Realtime: assignments is included in supabase_realtime publication as of
+> job_board_12_realtime_push (2026-09-04), so internal Workboard views receive
+> live org-scoped assignment changes.
 
 ---
 
@@ -390,6 +394,10 @@ preserved in the migration comment for restoration.
 > can_read_property()/can_manage_property() as before. Application code should
 > treat property_id === null as "shared across all properties," not as an error
 > or an unassigned/incomplete record.
+>
+> Realtime: equipment_units is included in supabase_realtime publication as of
+> job_board_12_realtime_push (2026-09-04), so internal Workboard views can refresh
+> assigned equipment labels/status without a manual reload.
 
 ---
 
@@ -490,6 +498,10 @@ RLS. Row snapshot (including color) preserved in the migration comment.
 | assignment_id | uuid        | YES      |           |
 
 Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> property-scoped (property_id set) -> employee-scoped (+ employee_id) -> task-scoped (+ assignment_id). A CHECK constraint (notes_scope_chain_check) enforces that employee_id/assignment_id can only be set when property_id is also set. RLS was updated so org-wide notes (property_id IS NULL) are usable by org admin/manager for writes and any org member for reads — property-scoped notes continue using the existing can_manage_property/can_read_property functions unchanged.
+
+Realtime: notes is included in supabase_realtime publication as of
+job_board_12_realtime_push (2026-09-04), so internal Workboard/Today views can
+refresh daily, alert, and geo notes live.
 
 ---
 
@@ -648,6 +660,42 @@ RLS:
 > via current_user_role(), then returns property_id, property_name, board_token,
 > and board_enabled for the requested property. Used to build/copy the public
 > /view/board/[token] link without exposing board_token through an anon table read.
+
+---
+
+## DB function: broadcast_public_display_board_refresh(p_property_id uuid) -> void
+> migration job_board_12_realtime_push (2026-09-04). SECURITY DEFINER,
+> search_path pinned to public, realtime. Internal trigger helper only; no EXECUTE
+> granted to anon/authenticated. If the property exists and board_enabled=true,
+> sends a minimal Realtime broadcast event named refresh to
+> public-display-board:{board_token}. Payload is an empty JSON object; clients
+> must re-read through get_public_display_board(p_token) and never subscribe to
+> raw assignment/equipment/note table rows.
+
+---
+
+## DB trigger function: notify_public_display_board_assignment_change()
+> migration job_board_12_realtime_push (2026-09-04). Trigger:
+> public_display_board_assignments_refresh on assignments, AFTER INSERT OR UPDATE
+> OR DELETE FOR EACH ROW. Broadcasts a public display-board refresh signal for
+> affected properties when today's published, non-deleted assignment rows change.
+
+---
+
+## DB trigger function: notify_public_display_board_equipment_change()
+> migration job_board_12_realtime_push (2026-09-04). Trigger:
+> public_display_board_equipment_refresh on equipment_units, AFTER UPDATE OR DELETE
+> FOR EACH ROW. Broadcasts a public display-board refresh signal for properties
+> with today's published assignments using the changed equipment unit.
+
+---
+
+## DB trigger function: notify_public_display_board_geo_note_change()
+> migration job_board_12_realtime_push (2026-09-04). Trigger:
+> public_display_board_geo_notes_refresh on notes, AFTER INSERT OR UPDATE OR
+> DELETE FOR EACH ROW. Broadcasts a public display-board refresh signal for
+> properties whose geo notes changed. Current public board output does not expose
+> note rows; this is a refresh signal only for future geo-note display.
 
 ---
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Clock, MonitorSmartphone, Wrench } from 'lucide-react';
 import { Badge, type BadgeProps } from '@/src/components/ui/badge';
@@ -177,14 +177,15 @@ export default function PublicDisplayBoardPage() {
   const [state, setState] = useState<LoadState>('loading');
   const [board, setBoard] = useState<PublicDisplayBoard | null>(null);
   const [clock, setClock] = useState(() => new Date());
+  const refreshDebounceRef = useRef<number | null>(null);
 
-  const loadBoard = useCallback(async () => {
+  const loadBoard = useCallback(async (showLoading = true) => {
     if (!uuidPattern.test(token)) {
       setState('missing');
       return;
     }
 
-    setState('loading');
+    if (showLoading) setState('loading');
     try {
       const supabase = createClient();
       const { data, error } = await withTimeout(
@@ -208,6 +209,32 @@ export default function PublicDisplayBoardPage() {
   useEffect(() => {
     void loadBoard();
   }, [loadBoard]);
+
+  useEffect(() => {
+    if (!uuidPattern.test(token)) return;
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`public-display-board:${token}`)
+      .on('broadcast', { event: 'refresh' }, () => {
+        if (refreshDebounceRef.current !== null) {
+          window.clearTimeout(refreshDebounceRef.current);
+        }
+        refreshDebounceRef.current = window.setTimeout(() => {
+          refreshDebounceRef.current = null;
+          void loadBoard(false);
+        }, 500);
+      })
+      .subscribe();
+
+    return () => {
+      if (refreshDebounceRef.current !== null) {
+        window.clearTimeout(refreshDebounceRef.current);
+        refreshDebounceRef.current = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [loadBoard, token]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setClock(new Date()), 1000);
