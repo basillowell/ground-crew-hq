@@ -9,6 +9,9 @@ const OpenTasksBacklogView = lazy(() =>
 const WorkboardWeekView = lazy(() =>
   import("@/components/workboard/WorkboardWeekView").then((module) => ({ default: module.WorkboardWeekView })),
 );
+const WorkboardTodayView = lazy(() =>
+  import("@/components/workboard/WorkboardTodayView").then((module) => ({ default: module.WorkboardTodayView })),
+);
 
 function WorkboardModeContent() {
   const searchParams = useSearchParams();
@@ -16,6 +19,7 @@ function WorkboardModeContent() {
 
   if (workflowMode === "backlog") return <OpenTasksBacklogView />;
   if (workflowMode === "week") return <WorkboardWeekView />;
+  if (workflowMode === "today") return <WorkboardTodayView />;
   return <WorkboardContent />;
 }
 
