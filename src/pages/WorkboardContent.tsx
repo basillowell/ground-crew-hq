@@ -560,6 +560,20 @@ function normalizeWorkboardNote(row: Record<string, unknown>): WorkboardScopedNo
   };
 }
 
+function normalizeDisplayBoardShareContext(payload: unknown): DisplayBoardShareContext | null {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  const propertyId = typeof row.property_id === 'string' ? row.property_id : '';
+  const propertyName = typeof row.property_name === 'string' ? row.property_name : '';
+  const boardToken = typeof row.board_token === 'string' ? row.board_token : '';
+  if (!propertyId || !boardToken) return null;
+  return {
+    propertyId,
+    propertyName,
+    boardToken,
+    boardEnabled: row.board_enabled === true,
+  };
+}
+
 function normalizeClockEvent(row: Record<string, unknown>): WorkboardClockEventRow {
   return {
     id: String(row.id ?? ''),
@@ -625,6 +639,13 @@ type WorkOrderDraft = {
   description: string;
   priority: 'low' | 'medium' | 'high';
   propertyId: string;
+};
+
+type DisplayBoardShareContext = {
+  propertyId: string;
+  propertyName: string;
+  boardToken: string;
+  boardEnabled: boolean;
 };
 
 type NoteScope = 'org' | 'property' | 'employee' | 'task';
@@ -904,6 +925,12 @@ export default function WorkboardContent() {
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
   const [workOrderSaving, setWorkOrderSaving] = useState(false);
   const [workOrderDraft, setWorkOrderDraft] = useState<WorkOrderDraft>({ title: '', description: '', priority: 'medium', propertyId: '' });
+  const [displayBoardDialogOpen, setDisplayBoardDialogOpen] = useState(false);
+  const [displayBoardContext, setDisplayBoardContext] = useState<DisplayBoardShareContext | null>(null);
+  const [displayBoardLoading, setDisplayBoardLoading] = useState(false);
+  const [displayBoardSaving, setDisplayBoardSaving] = useState(false);
+  const [displayBoardCopying, setDisplayBoardCopying] = useState(false);
+  const [displayBoardError, setDisplayBoardError] = useState<string | null>(null);
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [selectedScheduleRecipientIds, setSelectedScheduleRecipientIds] = useState<string[]>([]);
   const [postingScheduleToCrew, setPostingScheduleToCrew] = useState(false);
@@ -3914,6 +3941,88 @@ export default function WorkboardContent() {
 
   const newRequestsCount = propertyRequests.filter((r) => isRequestOpen(String(r.status ?? ''))).length;
 
+  const displayBoardUrl = useMemo(() => {
+    if (!displayBoardContext?.boardToken || typeof window === 'undefined') return '';
+    return `${window.location.origin}/view/board/${displayBoardContext.boardToken}`;
+  }, [displayBoardContext?.boardToken]);
+
+  const openDisplayBoardDialog = useCallback(async () => {
+    if (!canCloseOutDay) {
+      toast.error('Only supervisors can share the display board.');
+      return;
+    }
+    if (!activeProperty?.id || !isValidUuid(activeProperty.id)) {
+      toast.error('Select a specific property before sharing its display board.');
+      return;
+    }
+    if (!supabase) return;
+
+    setDisplayBoardDialogOpen(true);
+    setDisplayBoardLoading(true);
+    setDisplayBoardError(null);
+    setDisplayBoardContext(null);
+    try {
+      const { data, error } = await withRequestTimeout(
+        supabase.rpc('get_property_board_share_context', { p_property_id: activeProperty.id }),
+        'Display board link request timed out after 15 seconds.',
+      );
+      if (error) throw error;
+      const normalized = normalizeDisplayBoardShareContext(data);
+      if (!normalized) throw new Error('Display board link is not available for this property.');
+      setDisplayBoardContext(normalized);
+    } catch (error) {
+      setDisplayBoardError(error instanceof Error ? error.message : 'Unable to load display board link.');
+    } finally {
+      setDisplayBoardLoading(false);
+    }
+  }, [activeProperty?.id, canCloseOutDay]);
+
+  const toggleDisplayBoardEnabled = useCallback(async (nextEnabled: boolean) => {
+    if (!displayBoardContext || !currentUser?.orgId || !supabase) return;
+    if (!canCloseOutDay) {
+      toast.error('Only supervisors can update display board sharing.');
+      return;
+    }
+    setDisplayBoardSaving(true);
+    try {
+      const { error } = await withWorkboardMutationTimeout(
+        supabase
+          .from('properties')
+          .update({ board_enabled: nextEnabled })
+          .eq('id', displayBoardContext.propertyId)
+          .eq('org_id', currentUser.orgId),
+      );
+      if (error) {
+        toast.error(`Could not ${nextEnabled ? 'enable' : 'disable'} display board: ${error.message}`);
+        return;
+      }
+      setDisplayBoardContext((current) => current ? { ...current, boardEnabled: nextEnabled } : current);
+      void queryClient.invalidateQueries({ queryKey: ['properties', currentUser.orgId] });
+      toast.success(nextEnabled ? 'Display board enabled' : 'Display board disabled');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update display board sharing.');
+    } finally {
+      setDisplayBoardSaving(false);
+    }
+  }, [canCloseOutDay, currentUser?.orgId, displayBoardContext, queryClient]);
+
+  const copyDisplayBoardLink = useCallback(async () => {
+    if (!displayBoardContext || !displayBoardUrl) return;
+    if (!displayBoardContext.boardEnabled) {
+      toast.info('Enable the display board before sharing the link.');
+      return;
+    }
+    setDisplayBoardCopying(true);
+    try {
+      await navigator.clipboard.writeText(displayBoardUrl);
+      toast.success('Display board link copied');
+    } catch {
+      toast.error('Unable to copy display board link');
+    } finally {
+      setDisplayBoardCopying(false);
+    }
+  }, [displayBoardContext, displayBoardUrl]);
+
 
   const buildScheduleShareText = useCallback(() => {
     const propertyLabel = activeProperty?.name || 'All Properties';
@@ -5602,6 +5711,18 @@ export default function WorkboardContent() {
                     <Badge variant="secondary" className="h-5 px-1.5 text-3xs">{weekDraftAssignmentCount}</Badge>
                   ) : null}
                 </Button>
+                {canCloseOutDay && activeProperty ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 gap-1.5 px-3 text-xs"
+                    onClick={() => void openDisplayBoardDialog()}
+                    data-testid="button-display-board-share"
+                  >
+                    <MonitorSmartphone className="h-3.5 w-3.5" />
+                    Display Board
+                  </Button>
+                ) : null}
               </div>
             ) : null}
             {canCloseOutDay ? (
@@ -6738,6 +6859,94 @@ export default function WorkboardContent() {
         }}
         onSaveAssignmentTimes={saveAssignmentTimelineTimes}
       />
+
+      <Dialog
+        open={displayBoardDialogOpen}
+        onOpenChange={(open) => {
+          setDisplayBoardDialogOpen(open);
+          if (!open) setDisplayBoardError(null);
+        }}
+      >
+        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
+          <DialogDescription className="sr-only">
+            Enable or disable the public display board for this property and copy its share link.
+          </DialogDescription>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MonitorSmartphone className="h-4 w-4 text-brand" />
+              Display Board
+            </DialogTitle>
+          </DialogHeader>
+          {displayBoardLoading ? (
+            <div className="space-y-3 py-3">
+              <div className="h-4 w-48 animate-pulse rounded bg-surface-elevated" />
+              <div className="h-10 animate-pulse rounded bg-surface-elevated" />
+              <div className="h-10 w-36 animate-pulse rounded bg-surface-elevated" />
+            </div>
+          ) : displayBoardError ? (
+            <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
+              {displayBoardError}
+            </div>
+          ) : displayBoardContext ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-surface-border bg-surface-elevated p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">{displayBoardContext.propertyName}</p>
+                    <p className="mt-1 text-xs text-text-secondary">
+                      Public board sharing is {displayBoardContext.boardEnabled ? 'enabled' : 'disabled'} for this property.
+                    </p>
+                  </div>
+                  <Badge variant={displayBoardContext.boardEnabled ? 'active' : 'hold'}>
+                    {displayBoardContext.boardEnabled ? 'Enabled' : 'Disabled'}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-text-muted" htmlFor="display-board-link">
+                  Share link
+                </label>
+                <input
+                  id="display-board-link"
+                  readOnly
+                  value={displayBoardUrl}
+                  className="mt-2 h-10 w-full rounded-md border border-surface-border bg-surface-base px-3 text-sm text-text-primary"
+                />
+                {!displayBoardContext.boardEnabled ? (
+                  <p className="mt-2 text-xs text-text-secondary">
+                    The link returns an unavailable state until sharing is enabled.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void toggleDisplayBoardEnabled(!displayBoardContext.boardEnabled)}
+                  disabled={displayBoardSaving}
+                >
+                  {displayBoardSaving
+                    ? 'Saving...'
+                    : displayBoardContext.boardEnabled
+                      ? 'Disable board'
+                      : 'Enable board'}
+                </Button>
+                <Button
+                  type="button"
+                  className="gap-1.5"
+                  onClick={() => void copyDisplayBoardLink()}
+                  disabled={displayBoardCopying || !displayBoardContext.boardEnabled}
+                >
+                  <ClipboardCopy className="h-3.5 w-3.5" />
+                  {displayBoardCopying ? 'Copying...' : 'Copy display board link'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       {/* ─── ASSIGNMENT DIALOG ─── */}
       <Dialog open={workOrderDialogOpen} onOpenChange={(open) => (open ? setWorkOrderDialogOpen(true) : closeSubmitWorkOrderDialog())}>

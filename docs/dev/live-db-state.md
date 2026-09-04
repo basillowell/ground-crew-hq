@@ -596,6 +596,8 @@ Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> prop
 | weather_location_label | text        | YES      |              |
 | boundary_geojson       | jsonb       | YES      |              |
 | calculated_acreage     | numeric     | YES      |              |
+| board_token            | uuid        | NO       | gen_random_uuid() |
+| board_enabled          | boolean     | NO       | false        |
 
 sort_order persists manual drag-and-drop ordering, ascending.
 
@@ -613,9 +615,39 @@ dropped in the 2026-07-30 PostGIS relocation (unused by the app, which reads onl
 boundary_geojson + calculated_acreage). Recreate a geometry column + GIST index
 qualified to `extensions` only if server-side spatial queries are ever added.
 
+board_token / board_enabled (migration public_display_board, 2026-09-04):
+token-scoped public display-board sharing for a single property. board_enabled
+must be true before the anon RPC returns data; rotating board_token invalidates
+the old link. Internal app code reads the token through
+get_property_board_share_context(property_id), not through direct anon table reads.
+
 RLS:
 - INSERT uses an `org_id` membership check only because a new row has no existing property `id`.
 - SELECT/UPDATE/DELETE use `can_manage_property(id)`.
+
+---
+
+## DB function: get_public_display_board(p_token uuid) -> jsonb
+> migration public_display_board (2026-09-04). SECURITY DEFINER, search_path pinned
+> to public. EXECUTE granted to anon and authenticated. The public broadcast-board
+> endpoint for /view/board/[token]. Returns null for a missing token or when the
+> matching property has board_enabled=false. Returns a narrow JSON envelope only:
+> org display name/logo, property display fields, board_date/generated_at, and
+> today's published (is_published=true), non-deleted assignments for that one
+> property. Assignment rows include task name/category, crew display name as
+> first name + last initial only, equipment label, start_time, estimated_hours,
+> and status. Explicitly excludes employee ids, email, phone, wage/rate data,
+> assignment notes, and every other property's data.
+
+---
+
+## DB function: get_property_board_share_context(p_property_id uuid) -> jsonb
+> migration public_display_board (2026-09-04). SECURITY INVOKER, search_path pinned
+> to public. EXECUTE granted to authenticated only. Internal admin/manager share
+> helper for the Workboard; checks the caller's org via current_org_id() and role
+> via current_user_role(), then returns property_id, property_name, board_token,
+> and board_enabled for the requested property. Used to build/copy the public
+> /view/board/[token] link without exposing board_token through an anon table read.
 
 ---
 
