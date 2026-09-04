@@ -7,6 +7,7 @@ import type { Task, Assignment, Property } from '@/data/seedData';
 import { AlertTriangle, CircleAlert, Loader2, Pencil, Wrench, X } from 'lucide-react';
 import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { wallClockToStoredIso } from '@/lib/timeWorkflow';
+import { fieldTranslations, type FieldLanguage } from '@/i18n/field-translations';
 
 export type TaskEquipmentOption = {
   id: string;
@@ -85,6 +86,18 @@ function parseShiftEndToTimestamp(
   return Number.isFinite(startMs) && shiftEndMs < startMs ? shiftEndMs + 86_400_000 : shiftEndMs;
 }
 
+const translatedFieldLabels = new Map<string, string>(
+  (Object.keys(fieldTranslations.en) as Array<keyof typeof fieldTranslations.en>).map((key) => [
+    fieldTranslations.en[key],
+    fieldTranslations.es[key],
+  ]),
+);
+
+function translateFieldLabel(label: string, language: FieldLanguage) {
+  if (language === 'en') return label;
+  return translatedFieldLabels.get(label) ?? label;
+}
+
 export function TaskBlock({
   task,
   assignment,
@@ -108,6 +121,7 @@ export function TaskBlock({
 }: TaskBlockProps) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [equipmentMode, setEquipmentMode] = useState<'favorites' | 'all'>('favorites');
+  const [language, setLanguage] = useState<FieldLanguage>('en');
   const equipment = assignment.equipmentId ? equipmentUnits.find((unit) => unit.id === assignment.equipmentId) : null;
   const selectableEquipmentUnits = useMemo(
     () =>
@@ -164,6 +178,8 @@ export function TaskBlock({
     : typeof publishValue === 'string'
       ? publishValue.toLowerCase() === 'true'
       : true;
+  const assignmentNotes = typeof assignmentRecord.notes === 'string' ? assignmentRecord.notes.trim() : '';
+  const translate = (label: string) => translateFieldLabel(label, language);
 
   const propertyLabel = properties.find((property) => property.id === assignment.propertyId)?.name ?? 'No property';
   const estimatedHours = useMemo(() => {
@@ -225,8 +241,8 @@ export function TaskBlock({
       .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
       .toLowerCase()
       .replace(' ', '');
-    return `Done ${timeLabel}`;
-  }, [actualCompletedAt, status]);
+    return `${translate('Done')} ${timeLabel}`;
+  }, [actualCompletedAt, language, status]);
 
   useEffect(() => {
     if (status !== 'in-progress' || !actualStartAt) return;
@@ -281,20 +297,45 @@ export function TaskBlock({
           <Badge variant="outline" className="shrink-0 text-3xs">{task.category}</Badge>
           {typeof priorityIndex === 'number' ? <Badge variant="secondary" className="shrink-0 text-3xs">#{priorityIndex + 1}</Badge> : null}
           <Badge variant="outline" className="shrink-0 text-3xs">{propertyLabel}</Badge>
+          <span className="inline-flex shrink-0 rounded-full border border-surface-border bg-surface-elevated p-0.5">
+            {(['en', 'es'] as FieldLanguage[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setLanguage(option);
+                }}
+                className={`rounded-full px-1.5 py-0.5 text-4xs font-semibold uppercase transition-colors ${
+                  language === option ? 'bg-brand text-text-inverse' : 'text-text-muted hover:text-text-primary'
+                }`}
+                aria-pressed={language === option}
+              >
+                {option}
+              </button>
+            ))}
+          </span>
         </div>
+        {assignmentNotes ? (
+          <div className="mt-2 rounded-md border border-surface-border bg-surface-elevated/60 px-2 py-1.5">
+            <p className="text-4xs font-semibold uppercase tracking-wide text-text-muted">{translate('Note (original text)')}</p>
+            <p className="mt-0.5 line-clamp-2 text-2xs text-text-secondary">{assignmentNotes}</p>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex min-w-[72px] flex-col items-end justify-center">
         <span className="text-3xs font-semibold uppercase tracking-wide text-text-muted">
-          {showActualVsEstimated ? 'Actual' : 'Duration'}
+          {translate(showActualVsEstimated ? 'Actual' : 'Duration')}
         </span>
         <span className="font-mono text-sm font-semibold text-text-primary">
           {showActualVsEstimated ? `${actualHours.toFixed(1)}h` : estimatedHours > 0 ? `${estimatedHours.toFixed(1)}h` : '—'}
         </span>
         {showActualVsEstimated ? (
-          <span className={`text-3xs ${actualHoursTone}`}>Est {estimatedHours.toFixed(1)}h</span>
+          <span className={`text-3xs ${actualHoursTone}`}>{translate('Est')} {estimatedHours.toFixed(1)}h</span>
         ) : actualHours != null ? (
-          <span className={`text-3xs ${actualHoursTone}`}>{actualHours.toFixed(1)}h actual</span>
+          <span className={`text-3xs ${actualHoursTone}`}>{actualHours.toFixed(1)}h {translate('actual')}</span>
         ) : null}
       </div>
 
@@ -310,7 +351,7 @@ export function TaskBlock({
             }}
             className={`rounded-full border px-1.5 py-0.5 text-4xs font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${equipmentMode === 'favorites' && favoriteEquipmentUnits.length > 0 ? 'border-status-pending/30 bg-status-pending/10 text-status-pending' : 'border-surface-border bg-surface-card text-text-muted'}`}
           >
-            Favorites
+            {translate('Favorites')}
           </button>
           <button
             type="button"
@@ -322,7 +363,7 @@ export function TaskBlock({
             }}
             className={`rounded-full border px-1.5 py-0.5 text-4xs font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${equipmentMode === 'all' || favoriteEquipmentUnits.length === 0 ? 'border-status-active/30 bg-status-active/10 text-status-active' : 'border-surface-border bg-surface-card text-text-muted'}`}
           >
-            All
+            {translate('All')}
           </button>
         </div>
         <div className="flex w-full items-center justify-end gap-1.5">
@@ -365,17 +406,17 @@ export function TaskBlock({
 
       <div className="flex items-start gap-1 pt-0.5">
         <Badge variant={statusBadgeVariant} className="hidden shrink-0 text-3xs sm:inline-flex">
-          {status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned'}
+          {translate(status === 'in-progress' ? 'In Progress' : status === 'done' ? 'Done' : 'Planned')}
         </Badge>
         <Badge
           variant={isPublished ? 'active' : 'pending'}
           className="hidden shrink-0 text-3xs uppercase tracking-wide md:inline-flex"
         >
-          {isPublished ? 'Published' : 'Draft'}
+          {translate(isPublished ? 'Published' : 'Draft')}
         </Badge>
         {isSubmittedToPayroll ? (
           <Badge variant="complete" className="hidden shrink-0 text-3xs lg:inline-flex">
-            Payroll
+            {translate('Payroll')}
           </Badge>
         ) : null}
         {onEdit ? (
