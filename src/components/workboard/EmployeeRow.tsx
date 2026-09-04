@@ -23,6 +23,12 @@ type EmployeeBreakChip = {
   sortMinutes: number;
 };
 
+type EmployeeClockStatus = {
+  state: 'clocked-in' | 'on-break' | 'clocked-out';
+  label: string;
+  timestampLabel: string | null;
+};
+
 interface EmployeeRowProps {
   employee: Employee;
   assignments: Assignment[];
@@ -45,6 +51,7 @@ interface EmployeeRowProps {
   orderIndex?: number;
   isDragging?: boolean;
   isDropTarget?: boolean;
+  clockStatus?: EmployeeClockStatus | null;
   onAddTask?: (employeeId: string) => void;
   onEditAssignment?: (assignment: Assignment) => void;
   onRemoveAssignment?: (assignmentId: string) => void;
@@ -104,6 +111,18 @@ function laneHoursTone(coveragePercent: number | undefined) {
   return 'border-status-hold/20 bg-status-hold/10 text-status-hold';
 }
 
+function clockStatusTone(state: EmployeeClockStatus['state'] | 'no-punch') {
+  if (state === 'clocked-in') return 'border-status-active/30 bg-status-active/10 text-status-active';
+  if (state === 'on-break') return 'border-status-pending/30 bg-status-pending/10 text-status-pending';
+  return 'border-status-hold/30 bg-status-hold/10 text-status-hold';
+}
+
+function clockStatusDotTone(state: EmployeeClockStatus['state'] | 'no-punch') {
+  if (state === 'clocked-in') return 'bg-status-active';
+  if (state === 'on-break') return 'bg-status-pending';
+  return 'bg-status-hold';
+}
+
 export function EmployeeRow({
   employee,
   assignments: employeeAssignments,
@@ -126,6 +145,7 @@ export function EmployeeRow({
   orderIndex,
   isDragging,
   isDropTarget,
+  clockStatus,
   onAddTask,
   onEditAssignment,
   onRemoveAssignment,
@@ -247,6 +267,10 @@ export function EmployeeRow({
     typeof laneAssignedMinutes === 'number' && typeof laneShiftMinutes === 'number' && laneShiftMinutes > 0
       ? `${formatHoursFromMinutes(laneAssignedMinutes)} / ${formatHoursFromMinutes(laneShiftMinutes)}`
       : laneSummary ?? `${sortedAssignments.length} task${sortedAssignments.length === 1 ? '' : 's'}`;
+  const rowClockStatus = clockStatus ?? { state: 'no-punch' as const, label: 'No punch', timestampLabel: null };
+  const clockStatusTitle = rowClockStatus.timestampLabel
+    ? `${rowClockStatus.label} at ${rowClockStatus.timestampLabel}`
+    : rowClockStatus.label;
 
   const toggleBreakForm = () => {
     setBreakFormOpen((current) => {
@@ -299,6 +323,14 @@ export function EmployeeRow({
               <span className="truncate text-2xs text-text-muted">{employee.role}</span>
             </div>
           </div>
+          <Badge
+            variant="outline"
+            className={`gap-1 rounded-full ${clockStatusTone(rowClockStatus.state)}`}
+            title={clockStatusTitle}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${clockStatusDotTone(rowClockStatus.state)}`} aria-hidden="true" />
+            {rowClockStatus.label}
+          </Badge>
           {typeof orderIndex === 'number' ? <Badge variant="secondary" className="text-3xs">Lane {orderIndex + 1}</Badge> : null}
           <Badge variant="outline" className="rounded-full border-surface-border bg-surface-card text-text-secondary">{shiftLabel || 'No shift'}</Badge>
           <Badge variant="outline" className={`rounded-full ${coverageBadgeClass(coveragePercent)}`}>

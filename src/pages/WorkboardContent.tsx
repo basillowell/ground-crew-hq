@@ -332,6 +332,12 @@ type WorkboardClockEventRow = {
   timestamp: string;
 };
 
+type WorkboardCrewClockStatus = {
+  state: 'clocked-in' | 'on-break' | 'clocked-out';
+  label: string;
+  timestampLabel: string | null;
+};
+
 type WorkboardBreakChip = {
   id: string;
   employeeId: string;
@@ -1898,6 +1904,59 @@ export default function WorkboardContent() {
     () => getOperationalTimezone(activeProperty),
     [activeProperty],
   );
+
+  const crewClockEventsQuery = useQuery({
+    queryKey: ['workboard-crew-clock-status-events', orgId ?? 'all-orgs', boardDate, operationalTimezone],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as WorkboardClockEventRow[];
+      const startIso = wallClockToStoredIso(boardDate, '00:00', operationalTimezone);
+      const endIso = wallClockToStoredIso(addDaysToDateKey(boardDate, 1), '00:00', operationalTimezone);
+      if (!startIso || !endIso) return [] as WorkboardClockEventRow[];
+      const { data, error } = await withRequestTimeout(
+        supabase
+          .from('clock_events')
+          .select('id, employee_id, property_id, event_type, timestamp, org_id')
+          .eq('org_id', orgId)
+          .in('event_type', ['clock_in', 'clock_out', 'in', 'out', 'break'])
+          .gte('timestamp', startIso)
+          .lt('timestamp', endIso)
+          .order('timestamp', { ascending: false }),
+        'Workboard request timed out after 15 seconds.',
+      );
+      if (error) throw error;
+      return (data ?? []).map((row) => normalizeClockEvent(row as Record<string, unknown>));
+    },
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 30,
+  });
+  const crewClockEvents = crewClockEventsQuery.data ?? [];
+  const crewClockStatusByEmployee = useMemo<Record<string, WorkboardCrewClockStatus>>(() => {
+    const latestByEmployee = new Map<string, WorkboardClockEventRow>();
+    for (const event of crewClockEvents) {
+      if (!event.employeeId || !event.timestamp) continue;
+      const current = latestByEmployee.get(event.employeeId);
+      const eventMs = getIsoTimestampMs(event.timestamp) ?? 0;
+      const currentMs = getIsoTimestampMs(current?.timestamp) ?? 0;
+      if (!current || eventMs > currentMs) {
+        latestByEmployee.set(event.employeeId, event);
+      }
+    }
+
+    const result: Record<string, WorkboardCrewClockStatus> = {};
+    for (const [employeeId, event] of latestByEmployee.entries()) {
+      const eventType = event.eventType.toLowerCase().trim();
+      const timestampLabel = event.timestamp ? storedIsoToWallClockLabel(event.timestamp, operationalTimezone) : null;
+      if (eventType === 'clock_in' || eventType === 'in') {
+        result[employeeId] = { state: 'clocked-in', label: 'Clocked in', timestampLabel };
+      } else if (eventType === 'break') {
+        result[employeeId] = { state: 'on-break', label: 'On break', timestampLabel };
+      } else {
+        result[employeeId] = { state: 'clocked-out', label: 'Clocked out', timestampLabel };
+      }
+    }
+    return result;
+  }, [crewClockEvents, operationalTimezone]);
 
   const breakClockEventsQuery = useQuery({
     queryKey: ['workboard-break-clock-events', orgId ?? 'all-orgs', boardDate, effectivePropertyId ?? 'all', operationalTimezone],
@@ -5994,6 +6053,7 @@ export default function WorkboardContent() {
                           : undefined
                       }
                       coveragePercent={lane.coveragePercent}
+                      clockStatus={crewClockStatusByEmployee[lane.employee.id] ?? null}
                       onAddTask={openAssignmentDialog}
                       onEditAssignment={openEditAssignmentDialog}
                       onRemoveAssignment={removeAssignment}

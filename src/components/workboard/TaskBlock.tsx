@@ -217,6 +217,7 @@ export function TaskBlock({
   const elapsedLabel = elapsedState?.label ?? null;
   const isElapsedCappedAtShiftEnd = Boolean(elapsedState?.cappedAtShiftEnd);
   const statusBadgeVariant = status === 'in-progress' ? 'complete' : status === 'done' ? 'active' : 'hold';
+  const showActualVsEstimated = status === 'done' && actualHours != null;
 
   const doneLabel = useMemo(() => {
     if (status !== 'done' || !actualCompletedAt) return null;
@@ -284,11 +285,17 @@ export function TaskBlock({
       </div>
 
       <div className="flex min-w-[72px] flex-col items-end justify-center">
-        <span className="text-3xs font-semibold uppercase tracking-wide text-text-muted">Duration</span>
-        <span className="font-mono text-sm font-semibold text-text-primary">
-          {estimatedHours > 0 ? `${estimatedHours.toFixed(1)}h` : '—'}
+        <span className="text-3xs font-semibold uppercase tracking-wide text-text-muted">
+          {showActualVsEstimated ? 'Actual' : 'Duration'}
         </span>
-        {actualHours != null ? <span className={`text-3xs ${actualHoursTone}`}>{actualHours.toFixed(1)}h actual</span> : null}
+        <span className="font-mono text-sm font-semibold text-text-primary">
+          {showActualVsEstimated ? `${actualHours.toFixed(1)}h` : estimatedHours > 0 ? `${estimatedHours.toFixed(1)}h` : '—'}
+        </span>
+        {showActualVsEstimated ? (
+          <span className={`text-3xs ${actualHoursTone}`}>Est {estimatedHours.toFixed(1)}h</span>
+        ) : actualHours != null ? (
+          <span className={`text-3xs ${actualHoursTone}`}>{actualHours.toFixed(1)}h actual</span>
+        ) : null}
       </div>
 
       <div className="flex min-w-[150px] flex-col items-end justify-center gap-1 text-2xs text-text-muted">
