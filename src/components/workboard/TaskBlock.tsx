@@ -4,21 +4,37 @@ import { CSS } from '@dnd-kit/utilities';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Task, Assignment, Property } from '@/data/seedData';
-import { AlertTriangle, CircleAlert, Pencil, Wrench, X } from 'lucide-react';
-import { useEquipmentUnits } from '@/lib/supabase-queries';
-import { useOrgProfile } from '@/hooks/useOrgProfile';
+import { AlertTriangle, CircleAlert, Loader2, Pencil, Wrench, X } from 'lucide-react';
 import { getAssignmentApprovedAt } from '@/lib/assignments';
 import { wallClockToStoredIso } from '@/lib/timeWorkflow';
+
+export type TaskEquipmentOption = {
+  id: string;
+  name?: string | null;
+  unitNumber?: string | null;
+  type?: string | null;
+  typeId?: string | null;
+  status?: string | null;
+  active?: boolean | null;
+  estimatedHours?: number | null;
+  hours?: number | null;
+  lastService?: string | null;
+  propertyId?: string | null;
+};
 
 interface TaskBlockProps {
   task: Task;
   assignment: Assignment;
   properties: Property[];
   shiftEndTime: string | null;
+  equipmentUnits?: TaskEquipmentOption[];
+  favoriteEquipmentTypeIds?: ReadonlySet<string>;
   equipmentOverdueThresholdDays?: number;
   doubleBookedAssignmentIds?: ReadonlySet<string>;
   selectedAssignmentIds?: ReadonlySet<string>;
   onToggleSelect?: (assignmentId: string) => void;
+  onAssignEquipment?: (assignment: Assignment, equipmentId: string) => void;
+  savingEquipmentAssignmentId?: string | null;
   operationalTimezone?: string;
   priorityIndex?: number;
   onEdit?: () => void;
@@ -47,6 +63,13 @@ function statusDotClass(status: string) {
   return 'bg-status-hold';
 }
 
+function formatEquipmentLabel(unit: TaskEquipmentOption) {
+  const label = unit.unitNumber || unit.name || 'Equipment';
+  const meter = Number(unit.estimatedHours ?? unit.hours ?? 0);
+  const meterLabel = Number.isFinite(meter) ? `${meter.toFixed(1)}h` : '0.0h';
+  return `${label} - ${meterLabel}`;
+}
+
 function parseShiftEndToTimestamp(
   shiftEndTime: string | null | undefined,
   assignmentDate: string,
@@ -67,10 +90,14 @@ export function TaskBlock({
   assignment,
   properties,
   shiftEndTime,
+  equipmentUnits = [],
+  favoriteEquipmentTypeIds,
   equipmentOverdueThresholdDays = 90,
   doubleBookedAssignmentIds,
   selectedAssignmentIds,
   onToggleSelect,
+  onAssignEquipment,
+  savingEquipmentAssignmentId,
   operationalTimezone = 'America/New_York',
   priorityIndex,
   onEdit,
@@ -79,11 +106,24 @@ export function TaskBlock({
   sortableId,
   sortableData,
 }: TaskBlockProps) {
-  const { currentUser } = useOrgProfile();
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const propertyScope = assignment.propertyId || (currentUser?.role === 'employee' || currentUser?.role === 'viewer' ? currentUser?.propertyId : undefined) || 'all';
-  const equipmentUnits = useEquipmentUnits(propertyScope, currentUser?.orgId).data ?? [];
+  const [equipmentMode, setEquipmentMode] = useState<'favorites' | 'all'>('favorites');
   const equipment = assignment.equipmentId ? equipmentUnits.find((unit) => unit.id === assignment.equipmentId) : null;
+  const selectableEquipmentUnits = useMemo(
+    () =>
+      equipmentUnits.filter(
+        (unit) => unit.active !== false && String(unit.status ?? '').toLowerCase() === 'available',
+      ),
+    [equipmentUnits],
+  );
+  const favoriteEquipmentUnits = useMemo(
+    () => selectableEquipmentUnits.filter((unit) => unit.typeId && favoriteEquipmentTypeIds?.has(unit.typeId)),
+    [favoriteEquipmentTypeIds, selectableEquipmentUnits],
+  );
+  const visibleEquipmentUnits =
+    equipmentMode === 'favorites' && favoriteEquipmentUnits.length > 0 ? favoriteEquipmentUnits : selectableEquipmentUnits;
+  const currentEquipmentInVisibleList =
+    !assignment.equipmentId || visibleEquipmentUnits.some((unit) => unit.id === assignment.equipmentId);
   const isEquipmentOverdue = useMemo(() => {
     if (!equipment?.lastService) return false;
     const overdueThresholdDays = Math.max(1, equipmentOverdueThresholdDays);
@@ -100,6 +140,8 @@ export function TaskBlock({
   const isEquipmentDoubleBooked = assignment.id ? Boolean(doubleBookedAssignmentIds?.has(assignment.id)) : false;
   const isSelected = assignment.id ? Boolean(selectedAssignmentIds?.has(assignment.id)) : false;
   const isSubmittedToPayroll = Boolean(getAssignmentApprovedAt(assignment));
+  const isSavingEquipment = savingEquipmentAssignmentId === assignment.id;
+  const canAssignEquipment = Boolean(assignment.id && onAssignEquipment && !isSubmittedToPayroll);
   const dndDisabled = !draggable || isSubmittedToPayroll || !sortableId;
   const {
     attributes,
@@ -249,11 +291,56 @@ export function TaskBlock({
         {actualHours != null ? <span className={`text-3xs ${actualHoursTone}`}>{actualHours.toFixed(1)}h actual</span> : null}
       </div>
 
-      <div className="flex min-w-[92px] items-center justify-end gap-1.5 text-2xs text-text-muted">
+      <div className="flex min-w-[150px] flex-col items-end justify-center gap-1 text-2xs text-text-muted">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={favoriteEquipmentUnits.length === 0 || !canAssignEquipment}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setEquipmentMode('favorites');
+            }}
+            className={`rounded-full border px-1.5 py-0.5 text-4xs font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${equipmentMode === 'favorites' && favoriteEquipmentUnits.length > 0 ? 'border-status-pending/30 bg-status-pending/10 text-status-pending' : 'border-surface-border bg-surface-card text-text-muted'}`}
+          >
+            Favorites
+          </button>
+          <button
+            type="button"
+            disabled={!canAssignEquipment}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setEquipmentMode('all');
+            }}
+            className={`rounded-full border px-1.5 py-0.5 text-4xs font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${equipmentMode === 'all' || favoriteEquipmentUnits.length === 0 ? 'border-status-active/30 bg-status-active/10 text-status-active' : 'border-surface-border bg-surface-card text-text-muted'}`}
+          >
+            All
+          </button>
+        </div>
+        <div className="flex w-full items-center justify-end gap-1.5">
         <Wrench className={`h-3.5 w-3.5 shrink-0 ${equipment ? 'text-text-secondary' : 'text-text-muted/70'}`} aria-hidden="true" />
-        <span className="truncate" title={equipment ? String(equipment.unitNumber ?? 'Equipment') : 'No equipment assigned'}>
-          {equipment ? equipment.unitNumber : 'None'}
-        </span>
+        <select
+          value={assignment.equipmentId ?? ''}
+          disabled={!canAssignEquipment || isSavingEquipment}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => onAssignEquipment?.(assignment, event.target.value)}
+          className="h-8 max-w-[132px] rounded-md border border-surface-border bg-surface-elevated px-2 text-2xs text-text-primary shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label={`Assign equipment to ${task.name}`}
+          title={equipment ? `${formatEquipmentLabel(equipment)} meter` : 'No equipment assigned'}
+        >
+          <option value="">No equipment</option>
+          {!currentEquipmentInVisibleList && equipment ? (
+            <option value={equipment.id}>{formatEquipmentLabel(equipment)}</option>
+          ) : null}
+          {visibleEquipmentUnits.map((unit) => (
+            <option key={unit.id} value={unit.id}>
+              {formatEquipmentLabel(unit)}
+            </option>
+          ))}
+        </select>
+        {isSavingEquipment ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-text-muted" aria-label="Saving equipment assignment" /> : null}
         {isEquipmentOverdue ? (
           <AlertTriangle
             className="h-3.5 w-3.5 shrink-0 text-status-pending"
@@ -266,6 +353,7 @@ export function TaskBlock({
             aria-label="Equipment time-window conflict"
           />
         ) : null}
+        </div>
       </div>
 
       <div className="flex items-start gap-1 pt-0.5">

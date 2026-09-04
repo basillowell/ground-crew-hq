@@ -624,12 +624,23 @@ type TaskLibraryItem = {
 
 type AvailableEquipmentItem = {
   id: string;
+  property_id: string | null;
   name: string | null;
   unit_name: string | null;
   type: string | null;
+  equipment_type_id: string | null;
   status: string | null;
   active: boolean | null;
+  estimated_hours: number | string | null;
+  last_serviced: string | null;
   org_id: NullableOrgId;
+};
+
+type EquipmentFavoriteRow = {
+  id: string;
+  employee_id: string;
+  equipment_type_id: string;
+  sort_order: number | null;
 };
 
 type RecurringTaskRuleRow = {
@@ -784,6 +795,7 @@ export default function WorkboardContent() {
   const [actualHoursCustomInputByAssignment, setActualHoursCustomInputByAssignment] = useState<Record<string, string>>({});
   const [savingTimelineAssignmentId, setSavingTimelineAssignmentId] = useState<string | null>(null);
   const [savingBreakEmployeeId, setSavingBreakEmployeeId] = useState<string | null>(null);
+  const [savingEquipmentAssignmentId, setSavingEquipmentAssignmentId] = useState<string | null>(null);
   const [timelineEditAssignmentId, setTimelineEditAssignmentId] = useState<string | null>(null);
   const [timelineEditStart, setTimelineEditStart] = useState('');
   const [timelineEditEnd, setTimelineEditEnd] = useState('');
@@ -1070,7 +1082,7 @@ export default function WorkboardContent() {
       const { data, error } = await withRequestTimeout(
         supabase
           .from('equipment_units')
-          .select('id, name, unit_name, type, status, active, org_id')
+          .select('id, property_id, name, unit_name, type, equipment_type_id, status, active, estimated_hours, last_serviced, org_id')
           .eq('org_id', orgId)
           .eq('active', true)
           .eq('status', 'available')
@@ -1081,6 +1093,27 @@ export default function WorkboardContent() {
       return (data ?? []) as AvailableEquipmentItem[];
     },
     staleTime: 1000 * 60 * 2,
+  });
+
+  const equipmentFavoritesQuery = useQuery({
+    queryKey: ['equipment-favorites', orgId ?? 'all-orgs'],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      if (!supabase || !orgId) return [] as EquipmentFavoriteRow[];
+      const { data, error } = await withRequestTimeout(
+        supabase
+          .from('equipment_favorites')
+          .select('id, employee_id, equipment_type_id, sort_order')
+          .eq('org_id', orgId)
+          .order('sort_order', { ascending: true }),
+        'Workboard request timed out after 15 seconds.',
+      );
+      if (error) throw error;
+      return (data ?? []) as EquipmentFavoriteRow[];
+    },
+    staleTime: 1000 * 60 * 5,
+    retry: 3,
+    retryDelay: 1000,
   });
 
   const taskRequestsQueryKey = useMemo(
@@ -1300,6 +1333,73 @@ export default function WorkboardContent() {
   );
   const equipmentList = equipmentQuery.data ?? [];
   const availableEquipmentList = availableEquipmentQuery.data ?? [];
+  const equipmentPickerOptions = useMemo(
+    () => {
+      const options = new Map<string, {
+        id: string;
+        name: string | null | undefined;
+        unitNumber: string | null | undefined;
+        type: string | null | undefined;
+        typeId: string | null | undefined;
+        status: string | null | undefined;
+        active: boolean | null | undefined;
+        estimatedHours: number;
+        hours: number;
+        lastService: string | null | undefined;
+        propertyId: string | null | undefined;
+      }>();
+
+      for (const unit of equipmentList) {
+        options.set(unit.id, {
+          id: unit.id,
+          name: unit.name,
+          unitNumber: unit.unitNumber || unit.name,
+          type: unit.type,
+          typeId: unit.typeId,
+          status: unit.status,
+          active: true,
+          estimatedHours: Number(unit.estimatedHours ?? unit.hours ?? 0),
+          hours: Number(unit.estimatedHours ?? unit.hours ?? 0),
+          lastService: unit.lastService,
+          propertyId: unit.propertyId ?? null,
+        });
+      }
+
+      for (const unit of availableEquipmentList) {
+        const detail = equipmentList.find((item) => item.id === unit.id);
+        options.set(unit.id, {
+          id: unit.id,
+          name: unit.name,
+          unitNumber: unit.unit_name || unit.name || detail?.unitNumber,
+          type: unit.type ?? detail?.type,
+          typeId: unit.equipment_type_id ?? detail?.typeId,
+          status: unit.status ?? detail?.status,
+          active: unit.active ?? true,
+          estimatedHours: Number(unit.estimated_hours ?? detail?.estimatedHours ?? detail?.hours ?? 0),
+          hours: Number(unit.estimated_hours ?? detail?.estimatedHours ?? detail?.hours ?? 0),
+          lastService: detail?.lastService ?? unit.last_serviced ?? null,
+          propertyId: unit.property_id ?? detail?.propertyId ?? null,
+        });
+      }
+
+      return Array.from(options.values());
+    },
+    [availableEquipmentList, equipmentList],
+  );
+  const availableEquipmentIds = useMemo(
+    () => new Set(availableEquipmentList.map((unit) => unit.id)),
+    [availableEquipmentList],
+  );
+  const favoriteEquipmentTypeIdsByEmployee = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const favorite of equipmentFavoritesQuery.data ?? []) {
+      if (!favorite.employee_id || !favorite.equipment_type_id) continue;
+      const existing = map.get(favorite.employee_id) ?? new Set<string>();
+      existing.add(favorite.equipment_type_id);
+      map.set(favorite.employee_id, existing);
+    }
+    return map;
+  }, [equipmentFavoritesQuery.data]);
   const dayAssignments = useMemo(() => {
     return assignmentList.filter((assignment) => assignment.date === boardDate);
   }, [assignmentList, boardDate]);
@@ -2197,6 +2297,74 @@ export default function WorkboardContent() {
       queryClient.setQueryData<Assignment[]>(dateAssignmentsKey, (current) => [...(current ?? []), nextAssignment]);
     },
     [assignmentsQueryKey, boardDate, currentUser?.orgId, effectivePropertyId, queryClient],
+  );
+
+  const saveAssignmentEquipment = useCallback(
+    async (assignment: Assignment, equipmentId: string) => {
+      if (isReadOnly) {
+        toast.info('Demo mode is read-only.');
+        return;
+      }
+      if (!supabase) return;
+      const assignmentId = assignment.id ?? '';
+      const resolvedOrgId = authOrgId ?? currentUser?.orgId;
+      if (!assignmentId) {
+        toast.error('Assignment is still loading. Please try again in a moment.');
+        return;
+      }
+      if (!resolvedOrgId) {
+        toast.error('Session is reconnecting - please try again in a moment.');
+        return;
+      }
+      if (isAssignmentSubmittedToPayroll(assignment)) {
+        toast.info(PAYROLL_SUBMITTED_LOCK_MESSAGE);
+        return;
+      }
+
+      const nextEquipmentId = String(equipmentId ?? '').trim();
+      if (nextEquipmentId === 'all') {
+        toast.error('Select a specific equipment unit.');
+        return;
+      }
+      const selectedEquipment = nextEquipmentId
+        ? equipmentPickerOptions.find((unit) => unit.id === nextEquipmentId) ?? null
+        : null;
+      if (nextEquipmentId && (!isValidUuid(nextEquipmentId) || !selectedEquipment || !availableEquipmentIds.has(nextEquipmentId))) {
+        toast.error('Selected equipment is not available. Please choose another unit.');
+        return;
+      }
+
+      const previousEquipmentId = assignment.equipmentId;
+      setSavingEquipmentAssignmentId(assignmentId);
+      upsertAssignmentInCache({ ...assignment, equipmentId: nextEquipmentId || undefined });
+      try {
+        const { error } = await withWorkboardMutationTimeout(supabase
+          .from('assignments')
+          .update({ equipment_unit_id: nextEquipmentId || null })
+          .eq('id', assignmentId)
+          .eq('org_id', resolvedOrgId));
+
+        if (error) {
+          upsertAssignmentInCache({ ...assignment, equipmentId: previousEquipmentId });
+          toast.error(`Equipment assignment failed: ${error.message}`);
+          return;
+        }
+
+        toast.success(nextEquipmentId ? `Assigned ${selectedEquipment?.unitNumber || selectedEquipment?.name || 'equipment'}` : 'Equipment cleared');
+        window.setTimeout(() => {
+          void Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['assignments'] }),
+            queryClient.invalidateQueries({ queryKey: ['employee-equipment-history'] }),
+          ]);
+        }, 0);
+      } catch (error) {
+        upsertAssignmentInCache({ ...assignment, equipmentId: previousEquipmentId });
+        toast.error(error instanceof Error ? error.message : 'Equipment assignment failed.');
+      } finally {
+        setSavingEquipmentAssignmentId(null);
+      }
+    },
+    [authOrgId, availableEquipmentIds, currentUser?.orgId, equipmentPickerOptions, isReadOnly, queryClient, upsertAssignmentInCache],
   );
 
   const setAssignmentActualHours = useCallback(
@@ -4988,12 +5156,16 @@ export default function WorkboardContent() {
     propertiesLoading ||
     employeesLoading ||
     equipmentQuery.isLoading ||
+    availableEquipmentQuery.isLoading ||
+    equipmentFavoritesQuery.isLoading ||
     notesQuery.isLoading;
   const boardErrorMessage =
     (assignmentsQuery.error as { message?: string } | null)?.message ||
     (scheduleQuery.error as { message?: string } | null)?.message ||
     taskLibraryError ||
     (equipmentQuery.error as { message?: string } | null)?.message ||
+    (availableEquipmentQuery.error as { message?: string } | null)?.message ||
+    (equipmentFavoritesQuery.error as { message?: string } | null)?.message ||
     (notesQuery.error as { message?: string } | null)?.message ||
     (taskRequestsQuery.error as { message?: string } | null)?.message ||
     '';
@@ -5792,6 +5964,8 @@ export default function WorkboardContent() {
                       assignments={lane.employeeAssignments}
                       tasks={taskList}
                       properties={properties}
+                      equipmentUnits={equipmentPickerOptions}
+                      favoriteEquipmentTypeIds={favoriteEquipmentTypeIdsByEmployee.get(lane.employee.id)}
                       orderIndex={index}
                       isDragging={draggingEmployeeId === lane.employee.id}
                       isDropTarget={dropTargetEmployeeId === lane.employee.id}
@@ -5801,6 +5975,8 @@ export default function WorkboardContent() {
                       doubleBookedAssignmentIds={doubleBookedAssignmentIds}
                       selectedAssignmentIds={!isReadOnly ? selectedAssignmentIds : undefined}
                       onToggleSelect={!isReadOnly ? toggleAssignmentSelection : undefined}
+                      onAssignEquipment={!isReadOnly ? saveAssignmentEquipment : undefined}
+                      savingEquipmentAssignmentId={savingEquipmentAssignmentId}
                       laneAssignedMinutes={lane.assignedMinutes}
                       laneShiftMinutes={lane.shiftMinutes}
                       laneSummary={(() => {
@@ -6351,6 +6527,8 @@ export default function WorkboardContent() {
           void scheduleQuery.refetch();
           void refetchTasks();
           void equipmentQuery.refetch();
+          void availableEquipmentQuery.refetch();
+          void equipmentFavoritesQuery.refetch();
           void notesQuery.refetch();
           void taskRequestsQuery.refetch();
           void pendingTaskRequestsQuery.refetch();

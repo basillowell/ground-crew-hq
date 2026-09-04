@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TimeSelect } from '@/components/TimeSelect';
-import { TaskBlock } from './TaskBlock';
+import { TaskBlock, type TaskEquipmentOption } from './TaskBlock';
 import { CheckCircle2, Clock3, GripVertical, Loader2, Pencil, Play, Plus } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
@@ -30,10 +30,14 @@ interface EmployeeRowProps {
   properties: Property[];
   shiftLabel?: string;
   shiftEndTime: string | null;
+  equipmentUnits?: TaskEquipmentOption[];
+  favoriteEquipmentTypeIds?: ReadonlySet<string>;
   equipmentOverdueThresholdDays?: number;
   doubleBookedAssignmentIds?: ReadonlySet<string>;
   selectedAssignmentIds?: ReadonlySet<string>;
   onToggleSelect?: (assignmentId: string) => void;
+  onAssignEquipment?: (assignment: Assignment, equipmentId: string) => void;
+  savingEquipmentAssignmentId?: string | null;
   laneSummary?: string;
   laneAssignedMinutes?: number;
   laneShiftMinutes?: number;
@@ -107,10 +111,14 @@ export function EmployeeRow({
   properties,
   shiftLabel,
   shiftEndTime,
+  equipmentUnits = [],
+  favoriteEquipmentTypeIds,
   equipmentOverdueThresholdDays,
   doubleBookedAssignmentIds,
   selectedAssignmentIds,
   onToggleSelect,
+  onAssignEquipment,
+  savingEquipmentAssignmentId,
   laneSummary,
   laneAssignedMinutes,
   laneShiftMinutes,
@@ -395,10 +403,14 @@ export function EmployeeRow({
                       assignment={assignment}
                       properties={properties}
                       shiftEndTime={shiftEndTime}
+                      equipmentUnits={equipmentUnits}
+                      favoriteEquipmentTypeIds={favoriteEquipmentTypeIds}
                       equipmentOverdueThresholdDays={equipmentOverdueThresholdDays}
                       doubleBookedAssignmentIds={doubleBookedAssignmentIds}
                       selectedAssignmentIds={selectedAssignmentIds}
                       onToggleSelect={onToggleSelect}
+                      onAssignEquipment={onAssignEquipment}
+                      savingEquipmentAssignmentId={savingEquipmentAssignmentId}
                       operationalTimezone={operationalTimezone}
                       priorityIndex={sortedAssignments.findIndex((item) => item.id === assignment.id)}
                       draggable={!isSubmittedToPayroll}
