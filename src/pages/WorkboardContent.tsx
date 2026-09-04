@@ -29,6 +29,7 @@ import { TimeSelect } from '@/components/TimeSelect';
 import { DayCloseOut, type DayCloseOutLane, type DayCloseOutSaveOptions, getChainedAssignmentStartTime } from '@/components/workboard/DayCloseOut';
 import { TaskGroupedBoard } from '@/components/workboard/TaskGroupedBoard';
 import { TurfPanel } from '@/components/workboard/TurfPanel';
+import { WorkboardWeatherSafetyStrip, type WorkboardWeatherSnapshot } from '@/components/workboard/WorkboardWeatherSafetyStrip';
 import { toast } from '@/components/ui/sonner';
 import {
   type ApplicationArea,
@@ -569,6 +570,20 @@ function normalizeClockEvent(row: Record<string, unknown>): WorkboardClockEventR
   };
 }
 
+function normalizeWeatherText(value: unknown) {
+  const text = String(value ?? '').trim();
+  return text.length > 0 ? text : null;
+}
+
+function normalizeWeatherNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeWeatherMatch(value: string | null | undefined) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
 const PRIORITY_LABEL: Record<string, string> = { high: 'High', medium: 'Med', low: 'Low' };
 const PRIORITY_COLOR: Record<string, string> = {
   high: 'border-status-warning/20 bg-status-warning/10',
@@ -619,6 +634,31 @@ type WorkboardScopedNote = Note & {
   employeeId: string | null;
   assignmentId: string | null;
   createdAt: string;
+};
+
+type WorkboardWeatherLocationRow = {
+  id: string;
+  name: string | null;
+  property: string | null;
+  area: string | null;
+  is_active: boolean | null;
+  is_default: boolean | null;
+  forecast_provider: string | null;
+};
+
+type WorkboardWeatherDisplayPrefRow = {
+  user_id: string | null;
+  location_id: string | null;
+};
+
+type WorkboardWeatherDailyLogRow = {
+  location_id: string | null;
+  current_conditions: string | null;
+  forecast: string | null;
+  rainfall_total: number | string | null;
+  temperature: number | string | null;
+  wind: number | string | null;
+  source: string | null;
 };
 
 type TaskLibraryItem = {
@@ -1904,6 +1944,101 @@ export default function WorkboardContent() {
     () => getOperationalTimezone(activeProperty),
     [activeProperty],
   );
+
+  const weatherStripQuery = useQuery({
+    queryKey: [
+      'workboard-weather-strip',
+      orgId ?? 'all-orgs',
+      boardDate,
+      effectivePropertyId ?? 'all',
+      activeProperty?.name ?? 'all-properties',
+      currentUser?.id ?? 'anonymous',
+    ],
+    enabled: Boolean(orgId),
+    queryFn: async (): Promise<WorkboardWeatherSnapshot | null> => {
+      if (!supabase || !orgId) return null;
+
+      const [locationsResult, prefsResult] = await Promise.all([
+        withRequestTimeout(
+          supabase
+            .from('weather_locations')
+            .select('id, name, property, area, is_active, is_default, forecast_provider')
+            .eq('org_id', orgId)
+            .eq('is_active', true)
+            .order('is_default', { ascending: false })
+            .order('name', { ascending: true }),
+          'Workboard request timed out after 15 seconds.',
+        ),
+        withRequestTimeout(
+          supabase
+            .from('weather_display_prefs')
+            .select('user_id, location_id')
+            .eq('org_id', orgId)
+            .order('updated_at', { ascending: false }),
+          'Workboard request timed out after 15 seconds.',
+        ),
+      ]);
+
+      if (locationsResult.error) throw locationsResult.error;
+      if (prefsResult.error) throw prefsResult.error;
+
+      const locations = ((locationsResult.data ?? []) as WorkboardWeatherLocationRow[]).filter((location) => location.id);
+      if (locations.length === 0) return null;
+
+      const prefs = (prefsResult.data ?? []) as WorkboardWeatherDisplayPrefRow[];
+      const propertyName = normalizeWeatherMatch(activeProperty?.name);
+      const propertyLocation = propertyName
+        ? locations.find(
+            (location) =>
+              normalizeWeatherMatch(location.property) === propertyName ||
+              normalizeWeatherMatch(location.name) === propertyName,
+          )
+        : null;
+      const preferredLocationId =
+        prefs.find((pref) => pref.user_id === currentUser?.id && pref.location_id)?.location_id ??
+        prefs.find((pref) => !pref.user_id && pref.location_id)?.location_id ??
+        prefs.find((pref) => pref.location_id)?.location_id ??
+        null;
+      const preferredLocation = preferredLocationId
+        ? locations.find((location) => location.id === preferredLocationId)
+        : null;
+      const defaultLocation = locations.find((location) => location.is_default) ?? locations[0];
+      const selectedLocation = propertyLocation ?? preferredLocation ?? defaultLocation;
+
+      if (!selectedLocation?.id) return null;
+
+      const { data: logs, error: logsError } = await withRequestTimeout(
+        supabase
+          .from('weather_daily_logs')
+          .select('location_id, current_conditions, forecast, rainfall_total, temperature, wind, source')
+          .eq('org_id', orgId)
+          .eq('location_id', selectedLocation.id)
+          .eq('date', boardDate)
+          .limit(1),
+        'Workboard request timed out after 15 seconds.',
+      );
+      if (logsError) throw logsError;
+
+      const dailyLog = ((logs ?? []) as WorkboardWeatherDailyLogRow[])[0] ?? null;
+      return {
+        locationName:
+          normalizeWeatherText(selectedLocation.name) ??
+          normalizeWeatherText(selectedLocation.property) ??
+          'Weather location',
+        propertyName: normalizeWeatherText(selectedLocation.property),
+        area: normalizeWeatherText(selectedLocation.area),
+        currentConditions: normalizeWeatherText(dailyLog?.current_conditions),
+        forecast: normalizeWeatherText(dailyLog?.forecast),
+        temperatureF: normalizeWeatherNumber(dailyLog?.temperature),
+        windMph: normalizeWeatherNumber(dailyLog?.wind),
+        rainfallIn: normalizeWeatherNumber(dailyLog?.rainfall_total),
+        source:
+          normalizeWeatherText(dailyLog?.source) ??
+          normalizeWeatherText(selectedLocation.forecast_provider),
+      };
+    },
+    staleTime: 1000 * 60 * 10,
+  });
 
   const crewClockEventsQuery = useQuery({
     queryKey: ['workboard-crew-clock-status-events', orgId ?? 'all-orgs', boardDate, operationalTimezone],
@@ -5310,6 +5445,13 @@ export default function WorkboardContent() {
             </div>
           </div>
         </div>
+
+        <WorkboardWeatherSafetyStrip
+          weather={weatherStripQuery.data ?? null}
+          isWeatherLoading={weatherStripQuery.isLoading}
+          weatherErrorMessage={(weatherStripQuery.error as { message?: string } | null)?.message ?? null}
+          propertyLabel={activeProperty?.name ?? 'All Properties'}
+        />
 
         {/* Header bar */}
         <div className="border-b border-surface-border bg-surface-card px-3 py-3 md:px-5">
