@@ -1,14 +1,25 @@
-import { CalendarDays, Camera, CheckCircle2, FileCheck2, PenLine, UserRound } from 'lucide-react';
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarDays, CheckCircle2, FileCheck2, Image as ImageIcon, Loader2, MapPin, PenLine, UploadCloud } from 'lucide-react';
 import type { Assignment, Employee, Property } from '@/data/seedData';
 import {
   type AssignmentSignature,
+  PROJECT_PHOTO_ALLOWED_TYPES,
+  PROJECT_PHOTO_MAX_BYTES,
   type TaskWorkOrder,
+  useAssignmentGeoNotes,
   useAssignmentSignaturesForAssignments,
+  useProjects,
+  useTaskWorkOrderPhotos,
   useTaskWorkOrderAssignments,
+  useUploadProjectPhoto,
 } from '@/lib/supabase-queries';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from '@/components/ui/sonner';
+import { useOrgProfile } from '@/hooks/useOrgProfile';
 
 type BadgeVariant = 'active' | 'pending' | 'warning' | 'complete' | 'hold';
 
@@ -85,6 +96,22 @@ function groupSignaturesByAssignment(signatures: AssignmentSignature[]) {
   }, {});
 }
 
+function formatGeoPoint(locationGeojson: { type: 'Point'; coordinates: [number, number] } | null | undefined) {
+  if (!locationGeojson) return 'Location pinned';
+  const [lng, lat] = locationGeojson.coordinates;
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+function validatePhoto(file: File) {
+  if (!PROJECT_PHOTO_ALLOWED_TYPES.includes(file.type as typeof PROJECT_PHOTO_ALLOWED_TYPES[number])) {
+    return 'Choose a JPEG, PNG, WebP, HEIC, or HEIF image.';
+  }
+  if (file.size > PROJECT_PHOTO_MAX_BYTES) {
+    return 'Photos must be 10 MB or smaller.';
+  }
+  return null;
+}
+
 export function TaskWorkOrderProofDialog({
   open,
   onOpenChange,
@@ -93,12 +120,25 @@ export function TaskWorkOrderProofDialog({
   properties,
   employees,
 }: TaskWorkOrderProofDialogProps) {
+  const { currentUser } = useOrgProfile();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [photoCaption, setPhotoCaption] = useState('');
   const workOrderId = workOrder?.id ? [workOrder.id] : [];
+  const proofPhotoWorkOrderId = workOrder?.id ?? null;
+  const workOrderPropertyId = workOrder?.propertyId && workOrder.propertyId !== 'all' ? workOrder.propertyId : undefined;
   const assignmentsQuery = useTaskWorkOrderAssignments(orgId ?? undefined, workOrderId);
   const assignments = assignmentsQuery.data ?? [];
-  const assignmentIds = assignments.map((assignment) => assignment.id).filter((id): id is string => Boolean(id));
+  const assignmentIds = useMemo(() => assignments.map((assignment) => assignment.id).filter((id): id is string => Boolean(id)), [assignments]);
   const signaturesQuery = useAssignmentSignaturesForAssignments(orgId ?? undefined, assignmentIds);
+  const geoNotesQuery = useAssignmentGeoNotes(orgId ?? undefined, assignmentIds);
+  const proofPhotosQuery = useTaskWorkOrderPhotos(orgId ?? undefined, proofPhotoWorkOrderId);
+  const projectsQuery = useProjects(workOrderPropertyId, orgId ?? undefined);
+  const uploadPhotoMutation = useUploadProjectPhoto(orgId ?? undefined);
   const signatures = signaturesQuery.data ?? [];
+  const geoNotes = geoNotesQuery.data ?? [];
+  const proofPhotos = proofPhotosQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
   const property = properties.find((item) => item.id === workOrder?.propertyId);
   const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
   const signaturesByAssignment = groupSignaturesByAssignment(signatures);
@@ -107,6 +147,74 @@ export function TaskWorkOrderProofDialog({
   const error = assignmentsQuery.error ?? signaturesQuery.error;
   const fieldCompletedAt = latestAssignmentCompletion(assignments);
   const totalHours = assignments.reduce((sum, assignment) => sum + Number(assignment.actualHours ?? assignment.actual_hours ?? 0), 0);
+  const isUploadingPhoto = uploadPhotoMutation.isPending;
+
+  useEffect(() => {
+    setPhotoCaption('');
+    setSelectedProjectId('');
+  }, [workOrder?.id]);
+
+  useEffect(() => {
+    if (!workOrderPropertyId || projects.length === 0) {
+      setSelectedProjectId('');
+      return;
+    }
+    if (!projects.some((project) => project.id === selectedProjectId)) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId, workOrderPropertyId]);
+
+  const handleChoosePhoto = () => {
+    if (!workOrder || !workOrderPropertyId) {
+      toast.error('This work order needs a property before attaching proof photos.');
+      return;
+    }
+    if (!selectedProjectId) {
+      toast.error('Choose a project before attaching a proof photo.');
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
+  const handlePhotoSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!workOrder || !workOrderPropertyId) {
+      toast.error('This work order needs a property before attaching proof photos.');
+      event.target.value = '';
+      return;
+    }
+    if (!selectedProjectId || selectedProjectId === 'all') {
+      toast.error('Choose a project before attaching a proof photo.');
+      event.target.value = '';
+      return;
+    }
+    const validationError = validatePhoto(file);
+    if (validationError) {
+      toast.error(validationError);
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      await uploadPhotoMutation.mutateAsync({
+        file,
+        propertyId: workOrderPropertyId,
+        projectId: selectedProjectId,
+        timelineEventId: null,
+        taskWorkOrderId: workOrder.id,
+        uploadedBy: currentUser?.employeeId || null,
+        caption: photoCaption,
+      });
+      setPhotoCaption('');
+      toast.success('Proof photo attached.');
+    } catch (uploadError) {
+      console.error('Proof photo upload failed:', uploadError);
+      toast.error('Proof photo could not be attached.');
+    } finally {
+      event.target.value = '';
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -176,6 +284,111 @@ export function TaskWorkOrderProofDialog({
                 <p className="mt-2 text-xl font-semibold text-text-primary">{signatures.length}</p>
               </div>
             </div>
+
+            <section className="rounded-lg border border-surface-border bg-surface-elevated p-4">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-text-primary">Proof photos</h4>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    Only photos explicitly linked to this work order appear here.
+                  </p>
+                </div>
+                {proofPhotosQuery.isLoading && !proofPhotosQuery.data ? <Badge variant="pending">Loading</Badge> : null}
+              </div>
+
+              <div className="mb-4 rounded-lg border border-surface-border bg-surface-card p-3">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] md:items-end">
+                  <label className="block text-xs font-medium uppercase tracking-widest text-text-muted">
+                    Project
+                    <select
+                      value={selectedProjectId}
+                      onChange={(event) => setSelectedProjectId(event.target.value)}
+                      disabled={!workOrderPropertyId || projectsQuery.isLoading || projects.length === 0 || isUploadingPhoto}
+                      className="mt-1 min-h-10 w-full rounded-lg border border-surface-border bg-surface-base px-3 text-sm normal-case tracking-normal text-text-primary"
+                    >
+                      {projects.length === 0 ? (
+                        <option value="">No projects available</option>
+                      ) : (
+                        projects.map((project) => (
+                          <option key={project.id} value={project.id}>
+                            {project.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium uppercase tracking-widest text-text-muted">
+                    Caption
+                    <Textarea
+                      rows={1}
+                      value={photoCaption}
+                      onChange={(event) => setPhotoCaption(event.target.value)}
+                      placeholder="Optional proof note"
+                      disabled={isUploadingPhoto}
+                      className="mt-1 min-h-10 normal-case tracking-normal"
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleChoosePhoto}
+                    disabled={!workOrderPropertyId || projects.length === 0 || isUploadingPhoto}
+                  >
+                    {isUploadingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                    Attach proof photo
+                  </Button>
+                </div>
+                {!workOrderPropertyId ? (
+                  <p className="mt-3 text-xs text-status-warning">Set a work order property before attaching proof photos.</p>
+                ) : projectsQuery.isError ? (
+                  <p className="mt-3 text-xs text-status-warning">Projects could not load for this property.</p>
+                ) : projects.length === 0 && !projectsQuery.isLoading ? (
+                  <p className="mt-3 text-xs text-text-muted">Create a project for this property before attaching proof photos.</p>
+                ) : null}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => void handlePhotoSelected(event)}
+                  disabled={isUploadingPhoto}
+                />
+              </div>
+
+              {proofPhotosQuery.isError ? (
+                <p className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
+                  Proof photos could not load.
+                </p>
+              ) : proofPhotosQuery.isLoading && !proofPhotosQuery.data ? (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Skeleton className="h-32 rounded-lg bg-surface-card" />
+                  <Skeleton className="h-32 rounded-lg bg-surface-card" />
+                  <Skeleton className="h-32 rounded-lg bg-surface-card" />
+                </div>
+              ) : proofPhotos.length === 0 ? (
+                <div className="flex items-center gap-2 rounded-lg border border-dashed border-surface-border bg-surface-card/60 p-4 text-sm text-text-secondary">
+                  <ImageIcon className="h-4 w-4 shrink-0 text-text-muted" />
+                  No proof photos are attached to this work order yet.
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {proofPhotos.map((photo) => (
+                    <figure key={photo.id} className="overflow-hidden rounded-lg border border-surface-border bg-surface-card">
+                      <img
+                        src={photo.signedUrl}
+                        alt={photo.caption || 'Proof photo'}
+                        className="h-36 w-full object-cover"
+                        loading="lazy"
+                      />
+                      <figcaption className="space-y-1 p-3 text-xs text-text-secondary">
+                        <p className="font-medium text-text-primary">{photo.caption || 'Proof photo'}</p>
+                        <p>{formatDateTime(photo.createdAt)}</p>
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
+              )}
+            </section>
 
             {workOrder.punchList ? (
               <section className="rounded-lg border border-status-warning/25 bg-status-warning/10 p-3 text-sm text-text-secondary">
@@ -253,15 +466,44 @@ export function TaskWorkOrderProofDialog({
             <section className="rounded-lg border border-surface-border bg-surface-elevated p-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-card">
-                  <Camera className="h-5 w-5 text-text-muted" />
+                  <MapPin className="h-5 w-5 text-text-muted" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-text-primary">Photos</h4>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    Photos are project-level today and are not linked to this work order.
-                  </p>
+                  <h4 className="text-sm font-semibold text-text-primary">Geo notes</h4>
+                  <p className="mt-1 text-sm text-text-secondary">Assignment-scoped location notes linked to this work order.</p>
                 </div>
               </div>
+              {geoNotesQuery.isError ? (
+                <p className="mt-3 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
+                  Geo notes could not load.
+                </p>
+              ) : geoNotesQuery.isLoading && !geoNotesQuery.data ? (
+                <div className="mt-3 space-y-2">
+                  <Skeleton className="h-14 w-full bg-surface-card" />
+                  <Skeleton className="h-14 w-full bg-surface-card" />
+                </div>
+              ) : geoNotes.length === 0 ? (
+                <p className="mt-3 rounded-lg border border-dashed border-surface-border bg-surface-card/60 p-4 text-sm text-text-secondary">
+                  No assignment geo notes are linked to this work order yet.
+                </p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {geoNotes.map((note) => (
+                    <div key={note.id} className="rounded-lg border border-surface-border bg-surface-card p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-text-primary">{note.title}</p>
+                          <p className="mt-1 text-xs text-text-secondary">{formatGeoPoint(note.locationGeojson)} · {formatDateTime(note.createdAt)}</p>
+                        </div>
+                        <Badge variant={note.showOnDisplayBoard ? 'active' : 'hold'}>
+                          {note.showOnDisplayBoard ? 'Display board' : 'Internal'}
+                        </Badge>
+                      </div>
+                      {note.content ? <p className="mt-2 text-sm text-text-secondary">{note.content}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
 
             {signaturesLoading ? (

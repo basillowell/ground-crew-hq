@@ -114,6 +114,7 @@ export type ProjectPhoto = {
   propertyId: string;
   projectId: string;
   timelineEventId: string | null;
+  taskWorkOrderId: string | null;
   storagePath: string;
   caption: string;
   contentType: string | null;
@@ -412,6 +413,7 @@ type DbProjectPhoto = {
   property_id: string;
   project_id: string;
   timeline_event_id: string | null;
+  task_work_order_id: string | null;
   storage_path: string;
   caption: string | null;
   content_type: string | null;
@@ -1111,6 +1113,7 @@ function toProjectPhoto(row: DbProjectPhoto, signedUrl: string): ProjectPhoto {
     propertyId: row.property_id,
     projectId: row.project_id,
     timelineEventId: row.timeline_event_id,
+    taskWorkOrderId: row.task_work_order_id ?? null,
     storagePath: row.storage_path,
     caption: row.caption ?? '',
     contentType: row.content_type,
@@ -2847,6 +2850,36 @@ async function fetchAssignmentSignaturesForAssignments(orgId: string, assignment
       .order('created_at', { ascending: false });
     if (error) throw error;
     return ((data ?? []) as DbSignature[]).map(toAssignmentSignature);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchAssignmentGeoNotes(orgId: string, assignmentIds: string[]): Promise<Note[]> {
+  const ids = Array.from(new Set(assignmentIds.filter((id) => id && id !== 'all')));
+  if (ids.length === 0) return [];
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Assignment geo notes request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('notes')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('type', 'geo')
+      .in('assignment_id', ids)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    const rows = (data ?? []) as DbNote[];
+    return Promise.all(
+      rows.map(async (row) => {
+        const photoSignedUrl = row.photo_storage_path
+          ? await createProjectPhotoSignedUrl(client, row.photo_storage_path).catch(() => null)
+          : null;
+        return toNote({ ...row, photoSignedUrl });
+      }),
+    );
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -4698,12 +4731,13 @@ export const PROJECT_PHOTO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/we
 export const PROJECT_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const PROJECT_PHOTOS_BUCKET = 'project-photos';
 const PROJECT_SELECT_COLUMNS = 'id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson, area_geojson';
-const PROJECT_PHOTO_SELECT_COLUMNS = 'id, org_id, property_id, project_id, timeline_event_id, storage_path, caption, content_type, size_bytes, uploaded_by, sort_order, created_at, location_geojson';
+const PROJECT_PHOTO_SELECT_COLUMNS = 'id, org_id, property_id, project_id, timeline_event_id, task_work_order_id, storage_path, caption, content_type, size_bytes, uploaded_by, sort_order, created_at, location_geojson';
 const SIGNATURE_SELECT_COLUMNS = 'id, org_id, property_id, assignment_id, signer_name, signature_data, signed_at, captured_by, created_at';
 
 export type ProjectPhotosScope = {
   timelineEventId?: string;
   projectId?: string;
+  taskWorkOrderId?: string;
   /** Fetch only the project's general "progress" photos — those not attached to any timeline event. */
   projectLevelOnly?: boolean;
 };
@@ -4713,6 +4747,7 @@ export type UploadProjectPhotoPayload = {
   propertyId: string;
   projectId: string;
   timelineEventId?: string | null;
+  taskWorkOrderId?: string | null;
   uploadedBy?: string | null;
   caption?: string | null;
 };
@@ -4859,6 +4894,8 @@ async function fetchProjectPhotos(scope: ProjectPhotosScope, orgId: string): Pro
 
     if (scope.timelineEventId) {
       query = query.eq('timeline_event_id', scope.timelineEventId);
+    } else if (scope.taskWorkOrderId) {
+      query = query.eq('task_work_order_id', scope.taskWorkOrderId);
     } else if (scope.projectId) {
       query = query.eq('project_id', scope.projectId);
       // Project-level "progress" photos are the ones not tied to any timeline event.
@@ -5025,6 +5062,7 @@ async function uploadProjectPhoto(orgId: string, payload: UploadProjectPhotoPayl
         property_id: payload.propertyId,
         project_id: payload.projectId,
         timeline_event_id: payload.timelineEventId ?? null,
+        task_work_order_id: payload.taskWorkOrderId ?? null,
         storage_path: storagePath,
         caption: payload.caption?.trim() || null,
         content_type: payload.file.type,
@@ -5293,13 +5331,15 @@ export function useDeleteProject(orgId?: string) {
 export function useProjectPhotos(scope: ProjectPhotosScope | string | undefined, orgId?: string) {
   const rawTimelineEventId = typeof scope === 'string' ? scope : scope?.timelineEventId;
   const rawProjectId = typeof scope === 'string' ? undefined : scope?.projectId;
+  const rawTaskWorkOrderId = typeof scope === 'string' ? undefined : scope?.taskWorkOrderId;
   const projectLevelOnly = typeof scope === 'string' ? false : Boolean(scope?.projectLevelOnly);
   const timelineEventId = rawTimelineEventId && rawTimelineEventId !== 'all' ? rawTimelineEventId : undefined;
   const projectId = rawProjectId && rawProjectId !== 'all' ? rawProjectId : undefined;
+  const taskWorkOrderId = rawTaskWorkOrderId && rawTaskWorkOrderId !== 'all' ? rawTaskWorkOrderId : undefined;
   return useQuery({
-    queryKey: ['project-photos', orgId ?? 'all-orgs', timelineEventId ?? 'no-event', projectId ?? 'no-project', projectLevelOnly ? 'project-level' : 'all'],
-    queryFn: () => fetchProjectPhotos({ timelineEventId, projectId, projectLevelOnly }, orgId!),
-    enabled: Boolean(orgId && (timelineEventId || projectId)),
+    queryKey: ['project-photos', orgId ?? 'all-orgs', timelineEventId ?? 'no-event', projectId ?? 'no-project', taskWorkOrderId ?? 'no-task-work-order', projectLevelOnly ? 'project-level' : 'all'],
+    queryFn: () => fetchProjectPhotos({ timelineEventId, projectId, taskWorkOrderId, projectLevelOnly }, orgId!),
+    enabled: Boolean(orgId && (timelineEventId || projectId || taskWorkOrderId)),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
     retry: 2,
@@ -5309,6 +5349,10 @@ export function useProjectPhotos(scope: ProjectPhotosScope | string | undefined,
 
 export function useProjectPhotosByProject(projectId?: string | null, orgId?: string) {
   return useProjectPhotos(projectId && projectId !== 'all' ? { projectId } : undefined, orgId);
+}
+
+export function useTaskWorkOrderPhotos(orgId?: string | null, taskWorkOrderId?: string | null) {
+  return useProjectPhotos(taskWorkOrderId && taskWorkOrderId !== 'all' ? { taskWorkOrderId } : undefined, orgId ?? undefined);
 }
 
 export function useLocatedProjectPhotos(orgId?: string | null, propertyId?: string | null) {
@@ -5336,6 +5380,19 @@ export function useAssignmentSignature(assignmentId?: string | null, orgId?: str
   });
 }
 
+export function useAssignmentGeoNotes(orgId?: string | null, assignmentIds?: string[]) {
+  const ids = Array.from(new Set((assignmentIds ?? []).filter((id) => id && id !== 'all'))).sort();
+  return useQuery({
+    queryKey: ['assignment-geo-notes', orgId ?? 'all-orgs', ids],
+    queryFn: () => fetchAssignmentGeoNotes(orgId!, ids),
+    enabled: Boolean(orgId && ids.length > 0),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
 export function useUploadProjectPhoto(orgId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -5345,9 +5402,12 @@ export function useUploadProjectPhoto(orgId?: string) {
     },
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
-        queryKey: ['project-photos', orgId ?? 'all-orgs', variables.timelineEventId ?? 'no-event', variables.projectId],
+        queryKey: ['project-photos', orgId ?? 'all-orgs', variables.timelineEventId ?? 'no-event', variables.projectId, variables.taskWorkOrderId ?? 'no-task-work-order'],
       });
       await queryClient.invalidateQueries({ queryKey: ['project-photos'] });
+      if (variables.taskWorkOrderId) {
+        await queryClient.invalidateQueries({ queryKey: ['project-photos', orgId ?? 'all-orgs', 'no-event', 'no-project', variables.taskWorkOrderId] });
+      }
     },
   });
 }

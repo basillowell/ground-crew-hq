@@ -774,6 +774,7 @@ via can_manage_property(property_id).
 | sort_order        | integer     | NO       | 0                 |
 | created_at        | timestamptz | NO       | now()             |
 | location_geojson  | jsonb       | YES      |                   |
+| task_work_order_id | uuid       | YES      |                   |
 
 > Progress photos. A photo may attach to a TIMELINE EVENT (desktop: each dated
 > entry carries its own before/during/after images) OR, as of Phase C-1
@@ -793,6 +794,13 @@ via can_manage_property(property_id).
 > property map. NULL = unplaced. Mirrors projects.location_geojson. Set via a
 > manual place-on-map action (UPDATE is manager-gated, matching the admin/manager
 > Properties map). Photos with a location render as camera markers on PropertyMap.
+>
+> task_work_order_id (migration accountability_2_proof_photos, 2026-09-05):
+> nullable FK -> task_work_orders.id (ON DELETE SET NULL). Links selected project
+> photos to a completed/pending-verification task work order proof package.
+> Unlinked project photos remain project-level progress records and are not
+> included in work-order proof views. Indexed by project_photos_task_work_order_id_idx
+> where non-null.
 
 RLS (relaxed for field capture, migration phase_c_field_photo_capture 2026-07-25):
 - SELECT: can_read_property(property_id) — unchanged.
