@@ -93,7 +93,12 @@ export type PropertyProject = {
   createdAt: string;
   locationGeojson: ProjectLocationGeoJson | null;
   areaGeojson: PropertyBoundaryGeoJson | null;
+  areaType: ProjectAreaType;
+  calculatedAreaAcres: number | null;
 };
+
+export const PROJECT_AREA_TYPES = ['green', 'tee', 'fairway', 'rough', 'lake', 'practice', 'other'] as const;
+export type ProjectAreaType = typeof PROJECT_AREA_TYPES[number];
 
 export type ProjectTimelineEvent = {
   id: string;
@@ -394,6 +399,8 @@ type DbProject = {
   created_at: string;
   location_geojson: unknown;
   area_geojson: unknown;
+  area_type: string | null;
+  calculated_area_acres: number | string | null;
 };
 
 type DbProjectTimelineEvent = {
@@ -1079,6 +1086,9 @@ function toPropertyBoundary(row: DbPropertyBoundary, projects: PropertyProject[]
   };
 }
 function toProject(row: DbProject): PropertyProject {
+  const areaType = PROJECT_AREA_TYPES.includes(row.area_type as ProjectAreaType)
+    ? (row.area_type as ProjectAreaType)
+    : 'other';
   return {
     id: row.id,
     orgId: row.org_id,
@@ -1092,6 +1102,8 @@ function toProject(row: DbProject): PropertyProject {
     createdAt: row.created_at,
     locationGeojson: isProjectLocationGeoJson(row.location_geojson) ? row.location_geojson : null,
     areaGeojson: isPropertyBoundaryGeoJson(row.area_geojson) ? row.area_geojson : null,
+    areaType,
+    calculatedAreaAcres: row.calculated_area_acres === null ? null : Number(row.calculated_area_acres),
   };
 }
 
@@ -4736,7 +4748,7 @@ type TimelineEventMutationPayload = {
 export const PROJECT_PHOTO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const;
 export const PROJECT_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const PROJECT_PHOTOS_BUCKET = 'project-photos';
-const PROJECT_SELECT_COLUMNS = 'id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson, area_geojson';
+const PROJECT_SELECT_COLUMNS = 'id, org_id, property_id, name, status, description, start_date, target_end_date, color, created_at, location_geojson, area_geojson, area_type, calculated_area_acres';
 const PROJECT_PHOTO_SELECT_COLUMNS = 'id, org_id, property_id, project_id, timeline_event_id, task_work_order_id, storage_path, caption, content_type, size_bytes, uploaded_by, sort_order, created_at, location_geojson';
 const SIGNATURE_SELECT_COLUMNS = 'id, org_id, property_id, assignment_id, signer_name, signature_data, signed_at, captured_by, created_at';
 
@@ -4789,6 +4801,12 @@ export type SetProjectAreaPayload = {
   propertyId: string;
   projectId: string;
   areaGeojson: PropertyBoundaryGeoJson | null;
+};
+
+export type SetProjectAreaTypePayload = {
+  propertyId: string;
+  projectId: string;
+  areaType: ProjectAreaType;
 };
 
 async function fetchProjects(propertyId: string, orgId?: string): Promise<PropertyProject[]> {
@@ -5211,6 +5229,31 @@ async function setProjectArea(orgId: string, payload: SetProjectAreaPayload): Pr
   return Promise.race([savePromise, timeoutPromise]);
 }
 
+async function setProjectAreaType(orgId: string, payload: SetProjectAreaTypePayload): Promise<PropertyProject> {
+  if (!payload.propertyId || payload.propertyId === 'all') throw new Error('Select a property before setting an area type.');
+  if (!payload.projectId || payload.projectId === 'all') throw new Error('Choose a project before setting an area type.');
+  if (!PROJECT_AREA_TYPES.includes(payload.areaType)) throw new Error('Choose a valid area type.');
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Project area type request timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('projects')
+      .update({ area_type: payload.areaType })
+      .eq('id', payload.projectId)
+      .eq('property_id', payload.propertyId)
+      .eq('org_id', orgId)
+      .select(PROJECT_SELECT_COLUMNS)
+      .single();
+    if (error) throw error;
+    return toProject(data as DbProject);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
 async function createTimelineEvent(orgId: string, payload: TimelineEventMutationPayload): Promise<ProjectTimelineEvent> {
   const client = ensureSupabase();
   const { data, error } = await client
@@ -5487,6 +5530,21 @@ export function useSetProjectArea(orgId?: string) {
     mutationFn: (payload: SetProjectAreaPayload) => {
       if (!orgId) throw new Error('Organization is required to save a project area.');
       return setProjectArea(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useSetProjectAreaType(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SetProjectAreaTypePayload) => {
+      if (!orgId) throw new Error('Organization is required to save a project area type.');
+      return setProjectAreaType(orgId, payload);
     },
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });

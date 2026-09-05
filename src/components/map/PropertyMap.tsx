@@ -6,10 +6,10 @@ import { divIcon, type Layer, type PathOptions } from 'leaflet';
 import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
-import type { ProjectPhoto, PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
+import type { ProjectAreaType, ProjectPhoto, PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
 import type { Note } from '@/data/seedData';
 import { PROJECT_STATUS_LEGEND, normalizeProjectStatus, projectStatusColor, statusKeyColor, type ProjectStatusKey } from '@/lib/project-status';
-import { formatAcres, geojsonPolygonAcres } from '@/lib/geo';
+import { acresToSquareFeet, formatAcres, formatSquareFeet, geojsonPolygonAcres } from '@/lib/geo';
 import { cn } from '@/lib/utils';
 
 type LatLngTuple = [number, number];
@@ -90,6 +90,23 @@ type ProjectArea = PropertyProject & {
   areaColor: string;
   areaAcres: number | null;
 };
+
+type ProjectAreaTypeMeta = {
+  label: string;
+  color: string;
+};
+
+const PROJECT_AREA_TYPE_META: Record<ProjectAreaType, ProjectAreaTypeMeta> = {
+  green: { label: 'Green', color: 'oklch(var(--status-active))' },
+  tee: { label: 'Tee', color: 'oklch(var(--status-pending))' },
+  fairway: { label: 'Fairway', color: 'oklch(var(--brand-default))' },
+  rough: { label: 'Rough', color: 'oklch(var(--status-hold))' },
+  lake: { label: 'Lake', color: 'oklch(var(--status-complete))' },
+  practice: { label: 'Practice', color: 'oklch(var(--brand-bright))' },
+  other: { label: 'Other', color: 'oklch(var(--text-muted))' },
+};
+
+const PROJECT_AREA_TYPE_ORDER: ProjectAreaType[] = ['green', 'tee', 'fairway', 'rough', 'lake', 'practice', 'other'];
 
 type GeoNotePin = Note & {
   propertyName: string;
@@ -244,11 +261,28 @@ export function PropertyMap({
           .map((project) => ({
             ...project,
             propertyName: property.name,
-            areaColor: projectStatusColor(project.status),
-            areaAcres: geojsonPolygonAcres(project.areaGeojson),
+            areaColor: PROJECT_AREA_TYPE_META[project.areaType].color,
+            areaAcres: project.calculatedAreaAcres ?? geojsonPolygonAcres(project.areaGeojson),
           })),
       ),
     [visibleProperties],
+  );
+  const projectAreaLegend = useMemo(
+    () => {
+      const totals = new Map<ProjectAreaType, { acres: number; count: number }>();
+      projectAreas.forEach((project) => {
+        if (project.areaAcres === null) return;
+        const current = totals.get(project.areaType) ?? { acres: 0, count: 0 };
+        current.acres += project.areaAcres;
+        current.count += 1;
+        totals.set(project.areaType, current);
+      });
+      return PROJECT_AREA_TYPE_ORDER.flatMap((areaType) => {
+        const total = totals.get(areaType);
+        return total ? [{ areaType, ...total }] : [];
+      });
+    },
+    [projectAreas],
   );
   const geoNotePins = useMemo<GeoNotePin[]>(
     () => {
@@ -434,6 +468,8 @@ export function PropertyMap({
         {projectAreas.map((project: ProjectArea) => {
           const isSelected = selectedProjectId === project.id;
           const isEditingThisArea = isAreaEditActive && areaEditProjectId === project.id;
+          const areaSqFt = acresToSquareFeet(project.areaAcres);
+          const areaType = PROJECT_AREA_TYPE_META[project.areaType];
           return (
             <Polygon
               key={`${project.id}-area-${isEditingThisArea ? 'edit' : 'view'}-${isSelected ? 'selected' : 'normal'}`}
@@ -466,15 +502,20 @@ export function PropertyMap({
               {showProjectLabels ? (
                 <Tooltip permanent direction="center" className="gc-map-label">
                   {project.name}
-                  {project.areaAcres !== null ? (
-                    <span className="gc-map-label-sub"> · {formatAcres(project.areaAcres)}</span>
+                  {areaSqFt !== null ? (
+                    <span className="gc-map-label-sub"> · {formatSquareFeet(areaSqFt)}</span>
                   ) : null}
                 </Tooltip>
               ) : (
                 <Tooltip sticky>
                   <div className="space-y-1">
                     <div className="font-semibold">{project.name}</div>
-                    <div>{project.areaAcres !== null ? `${formatAcres(project.areaAcres)} · ` : ''}{project.propertyName}</div>
+                    <div>{areaType.label}</div>
+                    <div>
+                      {areaSqFt !== null ? `${formatSquareFeet(areaSqFt)} · ` : ''}
+                      {project.areaAcres !== null ? `${formatAcres(project.areaAcres)} · ` : ''}
+                      {project.propertyName}
+                    </div>
                   </div>
                 </Tooltip>
               )}
@@ -623,7 +664,7 @@ export function PropertyMap({
             {PROJECT_STATUS_LEGEND.filter((entry) => workSummary.counts[entry.key] > 0).map((entry) => (
               <div key={entry.key} className="flex items-center gap-1.5 text-xs text-text-secondary">
                 <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-white/40"
+                  className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-text-inverse/40"
                   style={{ backgroundColor: statusKeyColor(entry.key) }}
                 />
                 <span className="font-semibold text-text-primary">{workSummary.counts[entry.key]}</span>
@@ -634,20 +675,48 @@ export function PropertyMap({
         </div>
       ) : null}
       {(projectAreas.length > 0 || projectPins.length > 0) && !isMapInteractionActive ? (
-        <div className="pointer-events-none absolute bottom-4 right-4 z-[500] rounded-lg border border-surface-border bg-surface-card/95 px-3 py-2.5 shadow-md backdrop-blur-sm">
-          <div className="mb-1.5 text-3xs font-semibold uppercase tracking-[0.16em] text-text-muted">
-            Project status
-          </div>
-          <div className="flex flex-col gap-1">
-            {PROJECT_STATUS_LEGEND.map((entry) => (
-              <div key={entry.key} className="flex items-center gap-2 text-xs text-text-secondary">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-[3px] ring-1 ring-inset ring-white/40"
-                  style={{ backgroundColor: statusKeyColor(entry.key) }}
-                />
-                {entry.label}
+        <div className="pointer-events-none absolute bottom-4 right-4 z-[500] max-w-[min(22rem,calc(100%-2rem))] rounded-lg border border-surface-border bg-surface-card/95 px-3 py-2.5 shadow-md backdrop-blur-sm">
+          {projectAreaLegend.length > 0 ? (
+            <div className="border-b border-surface-border pb-2">
+              <div className="mb-1.5 text-3xs font-semibold uppercase tracking-[0.16em] text-text-muted">
+                Areas
               </div>
-            ))}
+              <div className="flex flex-col gap-1">
+                {projectAreaLegend.map((entry) => {
+                  const meta = PROJECT_AREA_TYPE_META[entry.areaType];
+                  const sqFt = acresToSquareFeet(entry.acres);
+                  return (
+                    <div key={entry.areaType} className="grid grid-cols-[auto_1fr_auto] items-center gap-2 text-xs text-text-secondary">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-[3px] ring-1 ring-inset ring-text-inverse/40"
+                        style={{ backgroundColor: meta.color }}
+                      />
+                      <span>{meta.label}</span>
+                      <span className="font-medium text-text-primary">
+                        {formatAcres(entry.acres)}
+                        {sqFt !== null ? <span className="ml-1 text-text-muted">({formatSquareFeet(sqFt)})</span> : null}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <div className={projectAreaLegend.length > 0 ? 'pt-2' : ''}>
+            <div className="mb-1.5 text-3xs font-semibold uppercase tracking-[0.16em] text-text-muted">
+              Project status
+            </div>
+            <div className="flex flex-col gap-1">
+              {PROJECT_STATUS_LEGEND.map((entry) => (
+                <div key={entry.key} className="flex items-center gap-2 text-xs text-text-secondary">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-[3px] ring-1 ring-inset ring-text-inverse/40"
+                    style={{ backgroundColor: statusKeyColor(entry.key) }}
+                  />
+                  {entry.label}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}

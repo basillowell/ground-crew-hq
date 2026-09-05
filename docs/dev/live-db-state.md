@@ -792,6 +792,7 @@ RLS:
 | created_at      | timestamptz | NO       | now()             |
 | location_geojson| jsonb       | YES      |                   |
 | area_geojson    | jsonb       | YES      |                   |
+| area_type        | text        | NO       | 'other'           |
 | calculated_area_acres | numeric | YES     |                   |
 
 > FK: property_id -> properties.id. property_id is required (NOT NULL) — a project
@@ -799,9 +800,11 @@ RLS:
 
 > Map placement (migration project_map_pins_and_area, 2026-07-24). Same hybrid
 > pattern as properties.boundary_geojson:
-> - location_geojson / area_geojson are the ONLY columns application code writes.
+> - location_geojson / area_geojson / area_type are the ONLY map-placement columns application code writes.
 >   Plain PostgREST jsonb. location_geojson is a GeoJSON Point (the map pin);
 >   area_geojson is an optional GeoJSON Polygon for a per-project sub-area.
+> - area_type classifies a project sub-area for map display and acreage rollups:
+>   green, tee, fairway, rough, lake, practice, or other. Default: other.
 > - calculated_area_acres is GENERATED ALWAYS STORED and read-only to the client —
 >   writes are rejected. Derived from area_geojson via extensions.ST_Area (PostGIS in
 >   the `extensions` schema as of 2026-07-30). The `location`/`area` geometry columns

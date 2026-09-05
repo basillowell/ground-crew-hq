@@ -5,6 +5,7 @@ import { CalendarDays, Edit3, FolderKanban, MapPin, Plus, RefreshCw, Shapes, Tra
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { ProjectPhotoStrip } from '@/components/map/ProjectPhotoStrip';
@@ -14,8 +15,11 @@ import { TimelineEventForm } from '@/components/map/TimelineEventForm';
 import {
   useDeleteProject,
   useDeleteTimelineEvent,
+  useSetProjectAreaType,
   useProjects,
   useTimelineEvents,
+  PROJECT_AREA_TYPES,
+  type ProjectAreaType,
   type ProjectPhoto,
   type ProjectTimelineEvent,
   type PropertyBoundary,
@@ -61,6 +65,16 @@ function statusVariant(status: string) {
   if (normalized === 'planned') return 'pending';
   return 'active';
 }
+
+const AREA_TYPE_LABELS: Record<ProjectAreaType, string> = {
+  green: 'Green',
+  tee: 'Tee',
+  fairway: 'Fairway',
+  rough: 'Rough',
+  lake: 'Lake',
+  practice: 'Practice',
+  other: 'Other',
+};
 
 function ProjectTimeline({
   project,
@@ -231,6 +245,7 @@ export function PropertyDetailPanel({
 }: PropertyDetailPanelProps) {
   const projectsQuery = useProjects(property.id, orgId ?? undefined);
   const deleteProjectMutation = useDeleteProject(orgId ?? undefined);
+  const setProjectAreaTypeMutation = useSetProjectAreaType(orgId ?? undefined);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<PropertyProject | null>(null);
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
@@ -283,6 +298,21 @@ export function PropertyDetailPanel({
     } catch (error) {
       console.error('Project delete failed:', error);
       toast.error(error instanceof Error ? error.message : 'Project could not be deleted.');
+    }
+  };
+
+  const handleAreaTypeChange = async (project: PropertyProject, areaType: ProjectAreaType) => {
+    if (!canManage || setProjectAreaTypeMutation.isPending || project.areaType === areaType) return;
+    try {
+      await setProjectAreaTypeMutation.mutateAsync({
+        propertyId: property.id,
+        projectId: project.id,
+        areaType,
+      });
+      toast.success('Area type updated.');
+    } catch (error) {
+      console.error('Project area type update failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Area type could not be updated.');
     }
   };
 
@@ -411,6 +441,25 @@ export function PropertyDetailPanel({
                           <Trash2 className="mr-2 h-3.5 w-3.5" />
                           Delete
                         </Button>
+                      </div>
+                      <div className="mt-3 max-w-[12rem]">
+                        <div className="mb-1 text-3xs font-semibold uppercase tracking-[0.16em] text-text-muted">Area type</div>
+                        <Select
+                          value={project.areaType}
+                          onValueChange={(value) => void handleAreaTypeChange(project, value as ProjectAreaType)}
+                          disabled={!canManage || setProjectAreaTypeMutation.isPending}
+                        >
+                          <SelectTrigger className="h-8 border-surface-border bg-surface-elevated text-xs text-text-primary">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PROJECT_AREA_TYPES.map((areaType) => (
+                              <SelectItem key={areaType} value={areaType}>
+                                {AREA_TYPE_LABELS[areaType]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </Card>
                   );

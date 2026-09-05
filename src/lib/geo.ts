@@ -5,6 +5,7 @@ import type { PropertyBoundaryGeoJson } from '@/lib/supabase-queries';
 // L.GeometryUtil.geodesicArea. Ring coordinates are [lng, lat].
 const EARTH_RADIUS_M = 6378137;
 const SQ_METERS_PER_ACRE = 4046.8564224;
+const SQ_FEET_PER_ACRE = 43560;
 
 export function geojsonPolygonAcres(geojson: PropertyBoundaryGeoJson | null | undefined): number | null {
   const rings = geojson?.coordinates;
@@ -27,4 +28,12 @@ export function geojsonPolygonAcres(geojson: PropertyBoundaryGeoJson | null | un
 
 export function formatAcres(value: number | null | undefined): string {
   return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)} ac` : '—';
+}
+
+export function acresToSquareFeet(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value * SQ_FEET_PER_ACRE : null;
+}
+
+export function formatSquareFeet(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value).toLocaleString()} sq ft` : '—';
 }
