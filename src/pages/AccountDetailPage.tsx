@@ -73,6 +73,8 @@ const invoiceStatusVariants: Record<RevenueInvoice['status'], 'hold' | 'pending'
   void: 'warning',
 };
 
+const ALL_ACCOUNT_PROPERTIES_KEY = 'all-account-properties';
+
 function getRouteParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -226,6 +228,22 @@ export default function AccountDetailPage() {
     () => accountContracts.filter((contract) => contract.status === 'active'),
     [accountContracts],
   );
+  const activeScopeGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; contracts: ServiceContract[] }>();
+    activeContracts.forEach((contract) => {
+      const key = contract.propertyId ?? ALL_ACCOUNT_PROPERTIES_KEY;
+      const label = contract.propertyId ? propertiesById.get(contract.propertyId)?.name ?? 'Property not found' : 'All account properties';
+      const current = groups.get(key) ?? { key, label, contracts: [] };
+      current.contracts.push(contract);
+      groups.set(key, current);
+    });
+
+    return Array.from(groups.values()).sort((first, second) => {
+      if (first.key === ALL_ACCOUNT_PROPERTIES_KEY) return -1;
+      if (second.key === ALL_ACCOUNT_PROPERTIES_KEY) return 1;
+      return first.label.localeCompare(second.label);
+    });
+  }, [activeContracts, propertiesById]);
   const accountWorkOrders = useMemo(
     () => taskWorkOrders.filter((workOrder) => workOrder.clientId === clientId),
     [clientId, taskWorkOrders],
@@ -463,26 +481,76 @@ export default function AccountDetailPage() {
             )}
           </Section>
 
-          <Section title="Active Service Scope" icon={<Briefcase className="h-4 w-4 text-status-active" />}>
+          <Section title="Scope Baseline" icon={<Briefcase className="h-4 w-4 text-status-active" />}>
             {activeContracts.length === 0 ? (
-              <EmptySection message="No active service scope is linked to this account." />
+              <EmptySection message="No active contracted scope is linked to this account." />
             ) : (
-              <div className="space-y-3">
-                {activeContracts.map((contract) => (
-                  <div key={contract.id} className="rounded-lg border border-surface-border bg-surface-elevated p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-4">
+                <p className="text-sm text-text-secondary">
+                  Contracted scope and cadence for this account. Use this as the yardstick for delivered work; automatic scope matching is not inferred yet.
+                </p>
+                {activeScopeGroups.map((group) => (
+                  <div key={group.key} className="rounded-lg border border-surface-border bg-surface-elevated">
+                    <div className="flex items-center justify-between gap-3 border-b border-surface-border px-3 py-2">
                       <div>
-                        <div className="font-medium text-text-primary">{contract.name}</div>
-                        <div className="mt-1 text-xs text-text-secondary">
-                          {propertiesById.get(contract.propertyId ?? '')?.name ?? 'All account properties'} · {titleCase(contract.frequency)}
+                        <div className="text-sm font-semibold text-text-primary">{group.label}</div>
+                        <div className="text-xs text-text-secondary">
+                          {group.contracts.length} active scope{group.contracts.length === 1 ? '' : 's'}
                         </div>
                       </div>
-                      <Badge variant="active">Active</Badge>
+                      <Badge variant="active">Scope baseline</Badge>
                     </div>
-                    <div className="mt-3 grid gap-2 text-xs text-text-secondary sm:grid-cols-3">
-                      <div>Starts {formatDate(contract.startDate)}</div>
-                      <div>Ends {formatDate(contract.endDate)}</div>
-                      {billingEnabled ? <div>{formatCurrency(contractTotal(contract, serviceContractLineItems))}</div> : null}
+                    <div className="space-y-3 p-3">
+                      {group.contracts.map((contract) => {
+                        const contractItems = serviceContractLineItems
+                          .filter((item) => item.parentId === contract.id)
+                          .sort((first, second) => first.sortOrder - second.sortOrder);
+                        return (
+                          <details key={contract.id} className="rounded-lg border border-surface-border bg-surface-card p-3" open>
+                            <summary className="cursor-pointer list-none">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                  <div className="font-medium text-text-primary">{contract.name}</div>
+                                  <div className="mt-1 text-xs text-text-secondary">
+                                    Cadence: {titleCase(contract.frequency)} · Starts {formatDate(contract.startDate)} · Ends {formatDate(contract.endDate)}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="pending">{titleCase(contract.frequency)}</Badge>
+                                  <Badge variant="active">Active</Badge>
+                                </div>
+                              </div>
+                            </summary>
+                            {contractItems.length === 0 ? (
+                              <div className="mt-3 rounded-lg border border-dashed border-surface-border bg-surface-elevated/60 p-3 text-xs text-text-secondary">
+                                No scope checklist items yet.
+                              </div>
+                            ) : (
+                              <ul className="mt-3 space-y-2">
+                                {contractItems.map((item) => (
+                                  <li key={item.id} className="flex items-start gap-2 rounded-lg border border-surface-border bg-surface-elevated px-3 py-2 text-sm text-text-secondary">
+                                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-status-complete" />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-medium text-text-primary">{item.description}</div>
+                                      <div className="mt-1 text-xs text-text-muted">Quantity {item.quantity}</div>
+                                    </div>
+                                    {billingEnabled ? (
+                                      <div className="text-right text-xs text-text-secondary">
+                                        <div>{formatCurrency(item.lineTotal)}</div>
+                                      </div>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {billingEnabled ? (
+                              <div className="mt-3 text-right text-xs text-text-secondary">
+                                Billing value {formatCurrency(contractTotal(contract, serviceContractLineItems))}
+                              </div>
+                            ) : null}
+                          </details>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -504,7 +572,7 @@ export default function AccountDetailPage() {
         </div>
 
         <div className="space-y-6">
-          <Section title="Delivered Results" icon={<CheckCircle2 className="h-4 w-4 text-status-complete" />}>
+          <Section title="Delivered Against This Account" icon={<CheckCircle2 className="h-4 w-4 text-status-complete" />}>
             {deliveredAssignmentsQuery.isError || deliveredSignaturesQuery.isError ? (
               <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
                 Delivered proof details could not load.
