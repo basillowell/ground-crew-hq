@@ -130,7 +130,7 @@ Exception: `useTasks()` must use `orgId` directly and must not be gated by `isOr
 **Supabase project:** `fjqeekwisnbpxgebrnpl`
 **RLS:** Enabled on all production tables
 **Schema doc:** `docs/dev/live-db-state.md` is authoritative for column names
-**Table count:** authoritative in `docs/dev/live-db-state.md` — **66 tables**. Count corrected 2026-09-03 after live-schema drift audit — 13 tables added since the July sync: `client_properties`, `contract_invoice_runs`, `estimate_line_items`, `estimates`, `invoice_line_items`, `payments`, `project_photos`, `service_catalog`, `service_contract_line_items`, `service_contracts`, `signatures`, `task_work_orders`; all 66 tables already have documented sections in `docs/dev/live-db-state.md`. Treat the Domain Map below as a grouping guide, not a count; do not report a table count from counting this map.
+**Table count:** authoritative in `docs/dev/live-db-state.md` — **69 tables**. Count corrected 2026-09-03 after live-schema drift audit — 13 tables added since the July sync: `client_properties`, `contract_invoice_runs`, `estimate_line_items`, `estimates`, `invoice_line_items`, `payments`, `project_photos`, `service_catalog`, `service_contract_line_items`, `service_contracts`, `signatures`, `task_work_orders`; all 66 tables already had documented sections in `docs/dev/live-db-state.md`. Job Board 9/10 sync now includes `employee_notification_preferences`, `crew_broadcasts`, `crew_broadcast_recipients`, and the notes geo/display-board/photo columns. Treat the Domain Map below as a grouping guide, not a count; do not report a table count from counting this map.
 
 ### Query Rules
 - All queries must include `.eq('org_id', orgId)` on tables with `org_id`.
