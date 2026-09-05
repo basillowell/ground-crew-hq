@@ -20,6 +20,7 @@ import { acresToSquareFeet, formatSquareFeet, geojsonPolygonAcres } from '@/lib/
 import {
   PROJECT_AREA_TYPES,
   useCreateAreaScopedAssignment,
+  useCompleteNote,
   useEmployees,
   useEquipmentUnits,
   usePropertyBoundaries,
@@ -129,6 +130,7 @@ export default function PropertiesMapPage() {
   const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
   const hasPendingAreaChange = pendingAreaGeojson !== undefined;
   const geoNotesQuery = useNotes(selectedPropertyId, orgId ?? undefined);
+  const completeNoteMutation = useCompleteNote(orgId ?? undefined);
   const editingAreaProject = areaEditProject
     ? selectedProperty?.projects.find((project) => project.id === areaEditProject.projectId) ?? null
     : null;
@@ -149,7 +151,10 @@ export default function PropertiesMapPage() {
     [locatedPhotosQuery.data, properties],
   );
   const geoNotePins = useMemo(
-    () => (geoNotesQuery.data ?? []).filter((note) => note.type === 'geo' && note.locationGeojson),
+    () =>
+      (geoNotesQuery.data ?? []).filter(
+        (note) => (note.type === 'geo' || (note.type === 'todo' && !note.completedAt)) && note.locationGeojson,
+      ),
     [geoNotesQuery.data],
   );
   const mappedAreasForSelectedProperty = useMemo(
@@ -165,6 +170,27 @@ export default function PropertiesMapPage() {
     () => selectedAreas.reduce((sum, project) => sum + (project.calculatedAreaAcres ?? geojsonPolygonAcres(project.areaGeojson) ?? 0), 0),
     [selectedAreas],
   );
+  const handleCompleteNote = async (note: (typeof geoNotePins)[number]) => {
+    if (note.type !== 'todo' || note.completedAt) return;
+    if (!note.propertyId) {
+      toast.error('To-do notes need a property before they can be completed.');
+      return;
+    }
+    if (!currentUser?.employeeId) {
+      toast.error('Employee profile is required to complete a to-do.');
+      return;
+    }
+    try {
+      await completeNoteMutation.mutateAsync({
+        noteId: note.id,
+        propertyId: note.propertyId,
+        completedBy: currentUser.employeeId,
+      });
+      toast.success('To-do completed.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to complete to-do.');
+    }
+  };
   const selectedAreaBreakdown = useMemo(
     () => PROJECT_AREA_TYPES.flatMap((areaType) => {
       const matching = selectedAreas.filter((project) => project.areaType === areaType);
@@ -692,6 +718,7 @@ export default function PropertiesMapPage() {
           pinPlacementDisabled={Boolean(pinSavingProjectId)}
           photoPins={photoPins}
           geoNotes={geoNotePins}
+          completingNoteId={completeNoteMutation.isPending ? completeNoteMutation.variables?.noteId ?? null : null}
           photoPlacementActive={Boolean(photoPlacement)}
           photoPlacementDisabled={Boolean(photoSavingId)}
           areaEditProjectId={areaEditProject?.projectId ?? null}
@@ -714,6 +741,7 @@ export default function PropertiesMapPage() {
             setSelectedProjectId(photo.projectId);
             if (photo.propertyId && photo.propertyId !== selectedPropertyId) setSelectedPropertyId(photo.propertyId);
           }}
+          onCompleteNote={(note) => void handleCompleteNote(note)}
           onCancelPinPlacement={handleCancelPinPlacement}
           onCancelPhotoPlacement={handleCancelPhotoPlacement}
         />

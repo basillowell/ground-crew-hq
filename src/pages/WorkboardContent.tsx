@@ -564,6 +564,8 @@ function normalizeWorkboardNote(row: Record<string, unknown>): WorkboardScopedNo
     photoContentType: row.photo_content_type ? String(row.photo_content_type) : null,
     photoSizeBytes: row.photo_size_bytes === null || row.photo_size_bytes === undefined ? null : Number(row.photo_size_bytes),
     photoSignedUrl: row.photo_signed_url ? String(row.photo_signed_url) : null,
+    completedAt: row.completed_at ? String(row.completed_at) : null,
+    completedBy: row.completed_by ? String(row.completed_by) : null,
     createdAt,
   };
 }
@@ -587,6 +589,15 @@ function pointFromNoteDraft(draft: NoteDraftState): Note['locationGeojson'] {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
   return { type: 'Point', coordinates: [longitude, latitude] };
+}
+
+function isMapNoteType(type: Note['type']) {
+  return type === 'geo' || type === 'todo';
+}
+
+function formatNoteTypeLabel(type: Note['type']) {
+  if (type === 'todo') return 'To-do';
+  return `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
 }
 
 function notePhotoExtension(file: File) {
@@ -894,7 +905,7 @@ export default function WorkboardContent() {
   const [turfPanelOpen, setTurfPanelOpen] = useState(false);
   const [dayCloseOutOpen, setDayCloseOutOpen] = useState(false);
   const [noteScope, setNoteScope] = useState<NoteScope>('org');
-  const [noteTypeFilter, setNoteTypeFilter] = useState<'all' | 'daily' | 'general' | 'geo' | 'alert'>('all');
+  const [noteTypeFilter, setNoteTypeFilter] = useState<'all' | Note['type']>('all');
   const [selectedNotePropertyId, setSelectedNotePropertyId] = useState('');
   const [selectedNoteEmployeeId, setSelectedNoteEmployeeId] = useState('');
   const [selectedNoteAssignmentId, setSelectedNoteAssignmentId] = useState('');
@@ -2569,6 +2580,7 @@ export default function WorkboardContent() {
     { id: 'daily', label: 'Daily', emptyLabel: 'daily notes' },
     { id: 'general', label: 'General', emptyLabel: 'general notes' },
     { id: 'geo', label: 'Geo', emptyLabel: 'geo notes' },
+    { id: 'todo', label: 'To-do', emptyLabel: 'to-do notes' },
     { id: 'alert', label: 'Alerts', emptyLabel: 'alert notes' },
   ];
   const noteTypeEmptyLabel = noteTypeFilterTabs.find((tab) => tab.id === noteTypeFilter)?.emptyLabel ?? 'notes';
@@ -5523,18 +5535,23 @@ export default function WorkboardContent() {
       };
     }
 
-    const locationGeojson = noteDraft.type === 'geo' ? pointFromNoteDraft(noteDraft) : null;
-    if (noteDraft.type === 'geo' && !scopePayload.property_id) {
-      toast.error('Geo notes need a property scope.');
+    const isMapNote = isMapNoteType(noteDraft.type);
+    const noteLabel = formatNoteTypeLabel(noteDraft.type);
+    const locationGeojson = isMapNote ? pointFromNoteDraft(noteDraft) : null;
+    if (isMapNote && !scopePayload.property_id) {
+      toast.error(`${noteLabel} notes need a property scope.`);
+      return;
+    }
+    if (isMapNote && !locationGeojson) {
+      toast.error(`${noteLabel} notes need a map point.`);
       return;
     }
     if (noteDraft.showOnDisplayBoard && (!locationGeojson || !scopePayload.property_id)) {
-      toast.error('Display board geo notes need a property and map point.');
+      toast.error('Display board notes need a property and map point.');
       return;
     }
 
     setSavingNote(true);
-    const noteLabel = noteDraft.type === 'alert' ? 'Alert' : `${noteDraft.type.charAt(0).toUpperCase()}${noteDraft.type.slice(1)}`;
     const noteTitle = noteDraft.title.trim() || `${noteLabel} note - ${boardDate}`;
     let uploadedStoragePath: string | null = null;
     try {
@@ -5551,7 +5568,7 @@ export default function WorkboardContent() {
         created_by: currentUser?.employeeId ?? null,
         location: noteDraft.location.trim() || null,
         location_geojson: locationGeojson,
-        show_on_display_board: noteDraft.type === 'geo' ? noteDraft.showOnDisplayBoard : false,
+        show_on_display_board: isMapNote ? noteDraft.showOnDisplayBoard : false,
         ...(photoPayload ?? {}),
       };
       const { error } = editingNoteId
@@ -8382,12 +8399,20 @@ export default function WorkboardContent() {
                 <label className="text-xs text-muted-foreground">Type</label>
                 <select
                   value={noteDraft.type}
-                  onChange={(e) => setNoteDraft({ ...noteDraft, type: e.target.value as Note['type'], showOnDisplayBoard: e.target.value === 'geo' ? noteDraft.showOnDisplayBoard : false })}
+                  onChange={(e) => {
+                    const nextType = e.target.value as Note['type'];
+                    setNoteDraft({
+                      ...noteDraft,
+                      type: nextType,
+                      showOnDisplayBoard: nextType === 'todo' ? true : nextType === 'geo' ? noteDraft.showOnDisplayBoard : false,
+                    });
+                  }}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="daily">Daily</option>
                   <option value="general">General</option>
                   <option value="geo">Geo</option>
+                  <option value="todo">To-do</option>
                   <option value="alert">Alert</option>
                 </select>
               </div>
@@ -8412,12 +8437,16 @@ export default function WorkboardContent() {
                   <Input value={noteDraft.location} onChange={(e) => setNoteDraft({ ...noteDraft, location: e.target.value })} className="mt-1" />
                 )}
               </div>
-              {noteDraft.type === 'geo' ? (
+              {isMapNoteType(noteDraft.type) ? (
                 <div className="col-span-2 rounded-lg border border-status-pending/20 bg-status-pending/10 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-xs font-semibold text-status-pending">Geo note map point</p>
-                      <p className="text-3xs text-text-muted">Use latitude/longitude for the internal map pin and optional display board note.</p>
+                      <p className="text-xs font-semibold text-status-pending">{formatNoteTypeLabel(noteDraft.type)} map point</p>
+                      <p className="text-3xs text-text-muted">
+                        {noteDraft.type === 'todo'
+                          ? 'Use latitude/longitude for the internal to-do pin.'
+                          : 'Use latitude/longitude for the internal map pin and optional display board note.'}
+                      </p>
                     </div>
                     {selectedNoteScopeProperty?.latitude && selectedNoteScopeProperty?.longitude ? (
                       <Button
@@ -8469,7 +8498,7 @@ export default function WorkboardContent() {
                       checked={noteDraft.showOnDisplayBoard}
                       onChange={(e) => setNoteDraft({ ...noteDraft, showOnDisplayBoard: e.target.checked })}
                     />
-                    Show this geo note on the public display board
+                    {noteDraft.type === 'todo' ? 'Show this to-do on internal board views' : 'Show this geo note on the public display board'}
                   </label>
                 </div>
               ) : null}

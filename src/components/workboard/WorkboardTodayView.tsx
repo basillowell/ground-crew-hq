@@ -2,7 +2,9 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, CheckCircle2, Clock3, ImageIcon, MapPin, StickyNote, Users, Wrench } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { toast } from '@/components/ui/sonner';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { WorkboardWeatherSafetyStrip, type WorkboardWeatherSnapshot } from '@/components/workboard/WorkboardWeatherSafetyStrip';
 import { CardSkeleton } from '@/components/CardSkeleton';
@@ -16,6 +18,7 @@ import {
   useEmployees,
   useEquipmentUnits,
   useLocatedProjectPhotos,
+  useCompleteNote,
   useNotes,
   useProgramSettings,
   useProperties,
@@ -143,8 +146,9 @@ function equipmentLabel(equipment?: EquipmentUnit) {
   return equipment.unitNumber || equipment.unit_name || equipment.name || 'Equipment';
 }
 
-function noteTone(note: Note): 'pending' | 'warning' | 'complete' {
+function noteTone(note: Note): 'pending' | 'warning' | 'complete' | 'active' {
   if (note.type === 'alert') return 'warning';
+  if (note.type === 'todo') return 'active';
   if (note.type === 'geo') return 'complete';
   return 'pending';
 }
@@ -176,6 +180,7 @@ export function WorkboardTodayView() {
   const tasksQuery = useTasks(undefined, orgId);
   const equipmentQuery = useEquipmentUnits(scopedPropertyId, orgId);
   const notesQuery = useNotes(scopedPropertyId, orgId);
+  const completeNoteMutation = useCompleteNote(orgId);
   const photosQuery = useLocatedProjectPhotos(orgId, scopedPropertyId);
 
   const weatherQuery = useQuery({
@@ -358,10 +363,38 @@ export function WorkboardTodayView() {
   const activeNotes = useMemo(
     () =>
       notes
-        .filter((note) => note.type === 'daily' || note.type === 'alert' || (note.type === 'geo' && note.showOnDisplayBoard === true))
+        .filter(
+          (note) =>
+            !note.completedAt &&
+            (note.type === 'daily' ||
+              note.type === 'alert' ||
+              (note.type === 'geo' && note.showOnDisplayBoard === true) ||
+              (note.type === 'todo' && note.showOnDisplayBoard === true)),
+        )
         .slice(0, 6),
     [notes],
   );
+  const handleCompleteTodo = async (note: Note) => {
+    if (note.type !== 'todo' || note.completedAt) return;
+    if (!note.propertyId) {
+      toast.error('To-do notes need a property before they can be completed.');
+      return;
+    }
+    if (!currentUser?.employeeId) {
+      toast.error('Employee profile is required to complete a to-do.');
+      return;
+    }
+    try {
+      await completeNoteMutation.mutateAsync({
+        noteId: note.id,
+        propertyId: note.propertyId,
+        completedBy: currentUser.employeeId,
+      });
+      toast.success('To-do completed.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to complete to-do.');
+    }
+  };
   const heroPhoto = photos[0] ?? null;
   const totalEstimatedHours = assignments.reduce((sum, assignment) => sum + assignmentEstimatedHours(assignment, taskById.get(assignment.taskId)), 0);
   const totalActualHours = assignments.reduce((sum, assignment) => sum + assignmentActualHours(assignment), 0);
@@ -608,7 +641,7 @@ export function WorkboardTodayView() {
               </div>
               {activeNotes.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-surface-border bg-surface-elevated p-4 text-center text-xs text-text-muted">
-                  No daily, alert, or geo notes for this view.
+                  No daily, alert, geo, or to-do notes for this view.
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -627,11 +660,24 @@ export function WorkboardTodayView() {
                       </div>
                       <p className="line-clamp-3 text-xs text-text-secondary">{note.content}</p>
                       {note.location ? <p className="mt-2 text-3xs text-text-muted">{note.location}</p> : null}
-                      {note.type === 'geo' && note.locationGeojson ? (
+                      {(note.type === 'geo' || note.type === 'todo') && note.locationGeojson ? (
                         <p className="mt-2 flex items-center gap-1 text-3xs text-status-pending">
                           <MapPin className="h-3 w-3" />
-                          Map note
+                          {note.type === 'todo' ? 'To-do pin' : 'Map note'}
                         </p>
+                      ) : null}
+                      {note.type === 'todo' ? (
+                        <div className="mt-3 flex justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 px-3 text-3xs"
+                            disabled={completeNoteMutation.isPending}
+                            onClick={() => void handleCompleteTodo(note)}
+                          >
+                            Mark complete
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
                   ))}

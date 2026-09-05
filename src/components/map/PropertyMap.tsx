@@ -30,6 +30,7 @@ type PropertyMapProps = {
   areaEditProjectId: string | null;
   areaSelectionActive?: boolean;
   selectedAreaIds?: string[];
+  completingNoteId?: string | null;
   onBoundaryChange: (geojson: PropertyBoundaryGeoJson | null) => void;
   onAreaChange: (geojson: PropertyBoundaryGeoJson | null) => void;
   onAreaCreate: (geojson: PropertyBoundaryGeoJson) => void | Promise<void>;
@@ -41,6 +42,7 @@ type PropertyMapProps = {
   onPlaceProjectPin: (latitude: number, longitude: number) => void;
   onPlacePhotoPin: (latitude: number, longitude: number) => void;
   onSelectPhoto?: (photo: ProjectPhoto & { projectName?: string }) => void;
+  onCompleteNote?: (note: Note) => void;
   onCancelPinPlacement: () => void;
   onCancelPhotoPlacement: () => void;
 };
@@ -226,6 +228,7 @@ export function PropertyMap({
   areaEditProjectId,
   areaSelectionActive = false,
   selectedAreaIds = [],
+  completingNoteId = null,
   onBoundaryChange,
   onAreaChange,
   onAreaCreate,
@@ -237,6 +240,7 @@ export function PropertyMap({
   onPlaceProjectPin,
   onPlacePhotoPin,
   onSelectPhoto,
+  onCompleteNote,
   onCancelPinPlacement,
   onCancelPhotoPlacement,
 }: PropertyMapProps) {
@@ -313,7 +317,13 @@ export function PropertyMap({
     () => {
       const propertyNameById = new Map(visibleProperties.map((property) => [property.id, property.name]));
       return geoNotes
-        .filter((note) => note.type === 'geo' && note.locationGeojson?.type === 'Point' && note.propertyId && propertyNameById.has(note.propertyId))
+        .filter(
+          (note) =>
+            (note.type === 'geo' || (note.type === 'todo' && !note.completedAt)) &&
+            note.locationGeojson?.type === 'Point' &&
+            note.propertyId &&
+            propertyNameById.has(note.propertyId),
+        )
         .map((note) => ({
           ...note,
           propertyName: propertyNameById.get(note.propertyId ?? '') ?? 'Property',
@@ -645,7 +655,19 @@ export function PropertyMap({
                     <div className="text-xs">{note.propertyName}</div>
                   </div>
                   <div className="text-sm">{note.content}</div>
+                  {note.type === 'todo' ? <div className="text-xs">To-do pin</div> : null}
                   {note.showOnDisplayBoard ? <div className="text-xs">Visible on display board</div> : null}
+                  {note.type === 'todo' && onCompleteNote ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full"
+                      disabled={completingNoteId === note.id}
+                      onClick={() => onCompleteNote(note)}
+                    >
+                      {completingNoteId === note.id ? 'Completing...' : 'Mark complete'}
+                    </Button>
+                  ) : null}
                 </div>
               </Popup>
             </Marker>

@@ -501,6 +501,8 @@ RLS. Row snapshot (including color) preserved in the migration comment.
 | photo_storage_path    | text        | YES      |           |
 | photo_content_type    | text        | YES      |           |
 | photo_size_bytes      | bigint      | YES      |           |
+| completed_at          | timestamptz | YES      |           |
+| completed_by          | uuid        | YES      |           |
 
 Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> property-scoped (property_id set) -> employee-scoped (+ employee_id) -> task-scoped (+ assignment_id). A CHECK constraint (notes_scope_chain_check) enforces that employee_id/assignment_id can only be set when property_id is also set. RLS was updated so org-wide notes (property_id IS NULL) are usable by org admin/manager for writes and any org member for reads — property-scoped notes continue using the existing can_manage_property/can_read_property functions unchanged.
 
@@ -512,6 +514,12 @@ public broadcast board; only `type='geo'` rows with this flag true, a non-null
 location_geojson, and the board property's property_id are returned publicly. Photo
 columns are internal-app-only metadata for private note photos; public board RPCs do
 not expose photo_storage_path/content_type/size_bytes.
+
+To-do notes (migration map_3_todo_completion, 2026-09-05): `type='todo'`
+is used for internal location-pinned action items. `completed_at` marks the
+to-do complete; NULL means open. `completed_by` is a nullable FK to employees.id
+(ON DELETE SET NULL) for supervisor completion audit. Public board RPCs do not
+expose todo notes in this pass.
 
 Realtime: notes is included in supabase_realtime publication as of
 job_board_12_realtime_push (2026-09-04), so internal Workboard/Today views can

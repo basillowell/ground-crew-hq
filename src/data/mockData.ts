@@ -118,7 +118,7 @@ export interface Note {
   id: string;
   clubId?: string;
   propertyId?: string | null;
-  type: 'daily' | 'general' | 'geo' | 'alert';
+  type: 'daily' | 'general' | 'geo' | 'alert' | 'todo';
   title: string;
   content: string;
   author: string;
@@ -134,6 +134,8 @@ export interface Note {
   photoContentType?: string | null;
   photoSizeBytes?: number | null;
   photoSignedUrl?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
 }
 
 export interface Assignment {

@@ -830,6 +830,8 @@ type DbNote = {
   photo_storage_path?: string | null;
   photo_content_type?: string | null;
   photo_size_bytes?: number | string | null;
+  completed_at?: string | null;
+  completed_by?: string | null;
   photoSignedUrl?: string | null;
   author?: string | null;
   date?: string | null;
@@ -1702,6 +1704,8 @@ function toNote(row: DbNote): Note {
     photoContentType: row.photo_content_type ?? null,
     photoSizeBytes: row.photo_size_bytes === null || row.photo_size_bytes === undefined ? null : Number(row.photo_size_bytes),
     photoSignedUrl: row.photoSignedUrl ?? null,
+    completedAt: row.completed_at ?? null,
+    completedBy: row.completed_by ?? null,
   };
 }
 
@@ -2017,6 +2021,43 @@ async function fetchNotes(propertyId?: string, orgId?: string): Promise<Note[]> 
       return toNote({ ...row, photoSignedUrl });
     }),
   );
+}
+
+type CompleteNotePayload = {
+  noteId: string;
+  propertyId: string;
+  completedBy: string;
+};
+
+async function completeNote(orgId: string, payload: CompleteNotePayload): Promise<Note> {
+  const scopedOrgId = requiredUuid(orgId, 'Organization');
+  const noteId = requiredUuid(payload.noteId, 'Note');
+  const propertyId = requiredUuid(payload.propertyId, 'Property');
+  const completedBy = requiredUuid(payload.completedBy, 'Completing employee');
+  const client = ensureSupabase();
+  let timeoutId: number | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error('Note completion request timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('notes')
+      .update({
+        completed_at: new Date().toISOString(),
+        completed_by: completedBy,
+      })
+      .eq('id', noteId)
+      .eq('org_id', scopedOrgId)
+      .eq('property_id', propertyId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return toNote(data as DbNote);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]).finally(() => {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  });
 }
 
 
@@ -5839,6 +5880,20 @@ export function useNotes(propertyId?: string, orgId?: string) {
     staleTime: 1000 * 60 * 5,
     retry: 3,
     retryDelay: 1000,
+  });
+}
+
+export function useCompleteNote(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CompleteNotePayload) => {
+      if (!orgId) throw new Error('Organization is required to complete a note.');
+      return completeNote(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['notes'] });
+      await queryClient.invalidateQueries({ queryKey: ['notes', variables.propertyId, orgId ?? 'all-orgs'] });
+    },
   });
 }
 
