@@ -28,11 +28,16 @@ type PropertyMapProps = {
   photoPlacementActive: boolean;
   photoPlacementDisabled: boolean;
   areaEditProjectId: string | null;
+  areaSelectionActive?: boolean;
+  selectedAreaIds?: string[];
   onBoundaryChange: (geojson: PropertyBoundaryGeoJson | null) => void;
   onAreaChange: (geojson: PropertyBoundaryGeoJson | null) => void;
   onAreaCreate: (geojson: PropertyBoundaryGeoJson) => void | Promise<void>;
   onSelectProperty: (propertyId: string) => void;
   onSelectProject: (propertyId: string, projectId: string) => void;
+  onToggleAreaSelection?: (project: PropertyProject) => void;
+  onAssignSelectedAreas?: () => void;
+  onCancelAreaSelection?: () => void;
   onPlaceProjectPin: (latitude: number, longitude: number) => void;
   onPlacePhotoPin: (latitude: number, longitude: number) => void;
   onSelectPhoto?: (photo: ProjectPhoto & { projectName?: string }) => void;
@@ -219,11 +224,16 @@ export function PropertyMap({
   photoPlacementActive,
   photoPlacementDisabled,
   areaEditProjectId,
+  areaSelectionActive = false,
+  selectedAreaIds = [],
   onBoundaryChange,
   onAreaChange,
   onAreaCreate,
   onSelectProperty,
   onSelectProject,
+  onToggleAreaSelection,
+  onAssignSelectedAreas,
+  onCancelAreaSelection,
   onPlaceProjectPin,
   onPlacePhotoPin,
   onSelectPhoto,
@@ -284,6 +294,21 @@ export function PropertyMap({
     },
     [projectAreas],
   );
+  const selectedAreaIdSet = useMemo(() => new Set(selectedAreaIds), [selectedAreaIds]);
+  const selectedAreaSummary = useMemo(
+    () => {
+      const selected = projectAreas.filter((project) => selectedAreaIdSet.has(project.id));
+      const totalAcres = selected.reduce((sum, project) => sum + (project.areaAcres ?? 0), 0);
+      const breakdown = PROJECT_AREA_TYPE_ORDER.flatMap((areaType) => {
+        const matching = selected.filter((project) => project.areaType === areaType);
+        if (matching.length === 0) return [];
+        const acres = matching.reduce((sum, project) => sum + (project.areaAcres ?? 0), 0);
+        return [{ areaType, count: matching.length, acres }];
+      });
+      return { selected, totalAcres, breakdown };
+    },
+    [projectAreas, selectedAreaIdSet],
+  );
   const geoNotePins = useMemo<GeoNotePin[]>(
     () => {
       const propertyNameById = new Map(visibleProperties.map((property) => [property.id, property.name]));
@@ -320,7 +345,7 @@ export function PropertyMap({
   const isAreaEditActive = Boolean(areaEditProjectId) && !editMode && !isPlacingProjectPin && !isPlacingPhotoPin;
   const isSingleProperty = currentPropertyId !== 'all';
   const canEditSelectedBoundary = editMode && !isPlacingProjectPin && !isPlacingPhotoPin && !areaEditProjectId && canEditBoundary && currentPropertyId !== 'all' && Boolean(selectedProperty);
-  const isMapInteractionActive = editMode || isAreaEditActive || isPlacingProjectPin || isPlacingPhotoPin;
+  const isMapInteractionActive = editMode || isAreaEditActive || isPlacingProjectPin || isPlacingPhotoPin || areaSelectionActive;
   // Always-on project labels only when zoomed into one property and not mid-edit;
   // in the All view we label properties (name + count) instead, to avoid clutter.
   const showProjectLabels = isSingleProperty && !isMapInteractionActive;
@@ -433,6 +458,7 @@ export function PropertyMap({
             pathOptions={polygonOptionsById.get(property.id)}
             eventHandlers={{
               click: () => {
+                if (areaSelectionActive) return;
                 if (!isPlacingProjectPin && !isAreaEditActive) onSelectProperty(property.id);
               },
               // Geoman fires edit events on the LAYER, not the map, so these must be
@@ -466,7 +492,8 @@ export function PropertyMap({
           </Polygon>
         ))}
         {projectAreas.map((project: ProjectArea) => {
-          const isSelected = selectedProjectId === project.id;
+          const isAreaSelected = selectedAreaIdSet.has(project.id);
+          const isSelected = selectedProjectId === project.id || isAreaSelected;
           const isEditingThisArea = isAreaEditActive && areaEditProjectId === project.id;
           const areaSqFt = acresToSquareFeet(project.areaAcres);
           const areaType = PROJECT_AREA_TYPE_META[project.areaType];
@@ -475,16 +502,21 @@ export function PropertyMap({
               key={`${project.id}-area-${isEditingThisArea ? 'edit' : 'view'}-${isSelected ? 'selected' : 'normal'}`}
               positions={geoJsonToPolygonPositions(project.areaGeojson)}
               pathOptions={{
-                color: isSelected ? 'oklch(var(--text-inverse))' : project.areaColor,
+                color: isAreaSelected ? 'oklch(var(--brand-bright))' : isSelected ? 'oklch(var(--text-inverse))' : project.areaColor,
                 fillColor: project.areaColor,
-                fillOpacity: isSelected ? 0.52 : 0.2,
+                fillOpacity: isAreaSelected ? 0.48 : isSelected ? 0.52 : 0.2,
                 opacity: isSelected ? 1 : 0.85,
                 pmIgnore: isAreaEditActive ? !isEditingThisArea : true,
+                dashArray: isAreaSelected ? '8 4' : undefined,
                 weight: isSelected ? 4 : 2,
               }}
               eventHandlers={{
                 click: (event) => {
                   event.originalEvent.stopPropagation();
+                  if (areaSelectionActive) {
+                    onToggleAreaSelection?.(project);
+                    return;
+                  }
                   if (!isPlacingProjectPin && !isAreaEditActive) onSelectProject(project.propertyId, project.id);
                 },
                 'pm:update': (event) => {
@@ -672,6 +704,57 @@ export function PropertyMap({
               </div>
             ))}
           </div>
+        </div>
+      ) : null}
+      {areaSelectionActive ? (
+        <div className="absolute left-4 top-4 z-[500] max-w-[min(24rem,calc(100%-2rem))] rounded-lg border border-brand-default/40 bg-surface-card/95 px-3 py-3 shadow-md backdrop-blur-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-text-primary">Select areas</div>
+              <div className="mt-0.5 text-2xs text-text-muted">
+                Click mapped zones to build one scoped board job.
+              </div>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="h-8 px-2" onClick={onCancelAreaSelection}>
+              Close
+            </Button>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+            <div className="rounded-md border border-surface-border bg-surface-elevated px-2 py-1.5">
+              <div className="text-3xs font-semibold uppercase tracking-wide text-text-muted">Count</div>
+              <div className="mt-0.5 font-semibold text-text-primary">{selectedAreaSummary.selected.length}</div>
+            </div>
+            <div className="rounded-md border border-surface-border bg-surface-elevated px-2 py-1.5">
+              <div className="text-3xs font-semibold uppercase tracking-wide text-text-muted">Sq ft</div>
+              <div className="mt-0.5 font-semibold text-text-primary">{formatSquareFeet(acresToSquareFeet(selectedAreaSummary.totalAcres))}</div>
+            </div>
+            <div className="rounded-md border border-surface-border bg-surface-elevated px-2 py-1.5">
+              <div className="text-3xs font-semibold uppercase tracking-wide text-text-muted">Acres</div>
+              <div className="mt-0.5 font-semibold text-text-primary">{formatAcres(selectedAreaSummary.totalAcres)}</div>
+            </div>
+          </div>
+          {selectedAreaSummary.breakdown.length > 0 ? (
+            <div className="mt-3 flex flex-col gap-1">
+              {selectedAreaSummary.breakdown.map((entry) => {
+                const meta = PROJECT_AREA_TYPE_META[entry.areaType];
+                return (
+                  <div key={entry.areaType} className="grid grid-cols-[auto_1fr_auto] items-center gap-2 text-xs text-text-secondary">
+                    <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: meta.color }} />
+                    <span>{meta.label} · {entry.count}</span>
+                    <span className="font-medium text-text-primary">{formatAcres(entry.acres)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          <Button
+            type="button"
+            className="mt-3 w-full"
+            disabled={selectedAreaSummary.selected.length === 0}
+            onClick={onAssignSelectedAreas}
+          >
+            Assign to crew
+          </Button>
         </div>
       ) : null}
       {(projectAreas.length > 0 || projectPins.length > 0) && !isMapInteractionActive ? (

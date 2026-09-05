@@ -932,6 +932,28 @@ can_manage_property(property_id).
 
 ---
 
+## assignment_project_areas
+| column        | type        | nullable | default           |
+|---------------|-------------|----------|-------------------|
+| id            | uuid        | NO       | gen_random_uuid() |
+| org_id        | uuid        | NO       |                   |
+| assignment_id | uuid        | NO       |                   |
+| project_id    | uuid        | NO       |                   |
+| property_id   | uuid        | NO       |                   |
+| created_at    | timestamptz | NO       | now()             |
+
+> Links a board assignment to one or more mapped project areas (`projects.area_geojson`)
+> selected from the property map. FKs: assignment_id -> assignments.id (ON DELETE
+> CASCADE), project_id -> projects.id (ON DELETE CASCADE), property_id ->
+> properties.id. org_id/property_id are denormalised for property-scoped RLS and
+> lookup efficiency. Unique per assignment/project pair. Indexed by assignment_id,
+> project_id, and org_id/property_id.
+
+RLS: SELECT via can_read_property(property_id). INSERT/UPDATE/DELETE via
+can_manage_property(property_id).
+
+---
+
 ## property_class_options
 | column     | type        | nullable |
 |------------|-------------|----------|
@@ -1965,9 +1987,10 @@ The app calls these via the ANON supabase client from the public /view routes
 
 ---
 
-## Table count: 69
+## Table count: 70
 Count corrected 2026-09-03 after live-schema drift audit — 13 tables added since the July sync: `client_properties`, `contract_invoice_runs`, `estimate_line_items`, `estimates`, `invoice_line_items`, `payments`, `project_photos`, `service_catalog`, `service_contract_line_items`, `service_contracts`, `signatures`, `task_work_orders`; all 66 tables already have documented sections in this file.
 Job Board 10 emergency broadcast consent tables added 2026-09-05: `employee_notification_preferences`, `crew_broadcasts`, `crew_broadcast_recipients`.
+Map 2 area-scoped board jobs added 2026-09-05: `assignment_project_areas`.
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl
 Map/visual-record migrations applied 2026-08-14:
 - project_photo_map_location — project_photos.location_geojson (nullable jsonb Point) for progress-photo map pins

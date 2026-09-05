@@ -4809,6 +4809,19 @@ export type SetProjectAreaTypePayload = {
   areaType: ProjectAreaType;
 };
 
+export type CreateAreaScopedAssignmentPayload = {
+  propertyId: string;
+  employeeId: string;
+  taskId: string;
+  taskTitle: string;
+  projectIds: string[];
+  date: string;
+  startTime?: string | null;
+  estimatedHours: number;
+  notes?: string | null;
+  equipmentUnitId?: string | null;
+};
+
 async function fetchProjects(propertyId: string, orgId?: string): Promise<PropertyProject[]> {
   const client = ensureSupabase();
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -5254,6 +5267,75 @@ async function setProjectAreaType(orgId: string, payload: SetProjectAreaTypePayl
   return Promise.race([savePromise, timeoutPromise]);
 }
 
+async function createAreaScopedAssignment(orgId: string, payload: CreateAreaScopedAssignmentPayload): Promise<{ assignmentId: string }> {
+  const scopedOrgId = requiredUuid(orgId, 'Organization');
+  const propertyId = requiredUuid(payload.propertyId, 'Property');
+  const employeeId = requiredUuid(payload.employeeId, 'Employee');
+  const taskId = requiredUuid(payload.taskId, 'Task');
+  const projectIds = Array.from(new Set(payload.projectIds.map((id) => requiredUuid(id, 'Project area'))));
+  const title = payload.taskTitle.trim();
+  if (!title) throw new Error('Task title is required.');
+  if (!payload.date) throw new Error('Date is required.');
+  if (projectIds.length === 0) throw new Error('Select at least one area.');
+  if (!Number.isFinite(payload.estimatedHours) || payload.estimatedHours < 0) {
+    throw new Error('Estimated hours must be zero or greater.');
+  }
+
+  const client = ensureSupabase();
+  let timeoutId: number | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error('Area assignment request timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data: projects, error: projectError } = await client
+      .from('projects')
+      .select('id')
+      .eq('org_id', scopedOrgId)
+      .eq('property_id', propertyId)
+      .in('id', projectIds)
+      .not('area_geojson', 'is', null);
+    if (projectError) throw projectError;
+    if ((projects ?? []).length !== projectIds.length) {
+      throw new Error('Selected areas must belong to the chosen property.');
+    }
+
+    const { data: assignment, error: assignmentError } = await client
+      .from('assignments')
+      .insert({
+        org_id: scopedOrgId,
+        property_id: propertyId,
+        employee_id: employeeId,
+        task_id: taskId,
+        title,
+        date: payload.date,
+        status: 'planned',
+        estimated_hours: payload.estimatedHours,
+        start_time: payload.startTime || null,
+        notes: payload.notes?.trim() || null,
+        equipment_unit_id: payload.equipmentUnitId || null,
+      })
+      .select('id')
+      .single();
+    if (assignmentError) throw assignmentError;
+
+    const assignmentId = String(assignment.id);
+    const { error: areaError } = await client
+      .from('assignment_project_areas')
+      .insert(projectIds.map((projectId) => ({
+        org_id: scopedOrgId,
+        property_id: propertyId,
+        assignment_id: assignmentId,
+        project_id: projectId,
+      })));
+    if (areaError) throw areaError;
+    return { assignmentId };
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
 async function createTimelineEvent(orgId: string, payload: TimelineEventMutationPayload): Promise<ProjectTimelineEvent> {
   const client = ensureSupabase();
   const { data, error } = await client
@@ -5550,6 +5632,23 @@ export function useSetProjectAreaType(orgId?: string) {
       await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
       await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
       await queryClient.invalidateQueries({ queryKey: ['properties', orgId ?? 'all-orgs'] });
+    },
+  });
+}
+
+export function useCreateAreaScopedAssignment(orgId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateAreaScopedAssignmentPayload) => {
+      if (!orgId) throw new Error('Organization is required to assign selected areas.');
+      return createAreaScopedAssignment(orgId, payload);
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      await queryClient.invalidateQueries({ queryKey: ['assignments-range'] });
+      await queryClient.invalidateQueries({ queryKey: ['open-assignments-backlog'] });
+      await queryClient.invalidateQueries({ queryKey: ['property-boundaries', orgId ?? 'all-orgs'] });
+      await queryClient.invalidateQueries({ queryKey: ['projects', variables.propertyId, orgId ?? 'all-orgs'] });
     },
   });
 }

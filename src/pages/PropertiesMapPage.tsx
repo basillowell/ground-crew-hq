@@ -2,17 +2,26 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { AlertTriangle, Edit3, Map as MapIcon, RefreshCw, Save } from 'lucide-react';
+import { AlertTriangle, Edit3, Map as MapIcon, MousePointer2, RefreshCw, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
+import { Textarea } from '@/components/ui/textarea';
 import { PropertyDetailPanel } from '@/components/map/PropertyDetailPanel';
 import { PropertySelector } from '@/components/shared/PropertySelector';
+import type { EquipmentUnit, Task } from '@/data/seedData';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
-import { geojsonPolygonAcres } from '@/lib/geo';
+import { acresToSquareFeet, formatSquareFeet, geojsonPolygonAcres } from '@/lib/geo';
 import {
+  PROJECT_AREA_TYPES,
+  useCreateAreaScopedAssignment,
+  useEmployees,
+  useEquipmentUnits,
   usePropertyBoundaries,
   useLocatedProjectPhotos,
   useNotes,
@@ -20,6 +29,8 @@ import {
   useSetPhotoLocation,
   useSetProjectArea,
   useSetProjectLocation,
+  useTasks,
+  type ProjectAreaType,
   type ProjectPhoto,
   type PropertyBoundaryGeoJson,
   type PropertyProject,
@@ -41,6 +52,33 @@ function formatAcres(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)} ac` : 'not set';
 }
 
+const NO_EQUIPMENT_VALUE = 'no-equipment';
+
+const PROJECT_AREA_TYPE_LABELS: Record<ProjectAreaType, string> = {
+  green: 'Green',
+  tee: 'Tee',
+  fairway: 'Fairway',
+  rough: 'Rough',
+  lake: 'Lake',
+  practice: 'Practice',
+  other: 'Other',
+};
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getTaskEstimatedHours(task: Task | null | undefined) {
+  return Number(task?.estimated_hours ?? task?.estimatedHours ?? 0);
+}
+
+function getEquipmentLabel(unit: EquipmentUnit) {
+  return unit.unit_name || unit.name || unit.unitNumber || 'Equipment';
+}
+
 export default function PropertiesMapPage() {
   const { currentRole, currentUser, isOrgReady, orgId } = useOrgProfile();
   const boundariesQuery = usePropertyBoundaries(orgId ?? undefined);
@@ -48,6 +86,7 @@ export default function PropertiesMapPage() {
   const setProjectLocationMutation = useSetProjectLocation(orgId ?? undefined);
   const setPhotoLocationMutation = useSetPhotoLocation(orgId ?? undefined);
   const setProjectAreaMutation = useSetProjectArea(orgId ?? undefined);
+  const createAreaScopedAssignmentMutation = useCreateAreaScopedAssignment(orgId ?? undefined);
   const pinSaveInFlightRef = useRef(false);
   const photoSaveInFlightRef = useRef(false);
   const [editMode, setEditMode] = useState(false);
@@ -60,6 +99,18 @@ export default function PropertiesMapPage() {
   const [areaEditProject, setAreaEditProject] = useState<{ propertyId: string; projectId: string; projectName: string } | null>(null);
   const [pendingAreaGeojson, setPendingAreaGeojson] = useState<PropertyBoundaryGeoJson | null | undefined>(undefined);
   const [areaSavingProjectId, setAreaSavingProjectId] = useState<string | null>(null);
+  const [areaSelectionActive, setAreaSelectionActive] = useState(false);
+  const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
+  const [areaAssignmentOpen, setAreaAssignmentOpen] = useState(false);
+  const [areaAssignmentDraft, setAreaAssignmentDraft] = useState({
+    employeeId: '',
+    taskId: '',
+    date: localDateKey(),
+    startTime: '07:00',
+    estimatedHours: '',
+    notes: '',
+    equipmentId: NO_EQUIPMENT_VALUE,
+  });
   const properties = boundariesQuery.data ?? [];
   const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
     currentUser,
@@ -72,6 +123,9 @@ export default function PropertiesMapPage() {
     : properties.find((property) => property.id === selectedPropertyId) ?? null;
   const canViewMap = currentRole === 'admin' || currentRole === 'manager';
   const hasConcretePropertySelected = selectedPropertyId !== 'all' && Boolean(selectedProperty);
+  const assignmentEmployeesQuery = useEmployees(undefined, orgId ?? undefined, 'active');
+  const tasksQuery = useTasks(undefined, orgId ?? undefined);
+  const equipmentQuery = useEquipmentUnits(hasConcretePropertySelected ? selectedPropertyId : undefined, orgId ?? undefined);
   const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
   const hasPendingAreaChange = pendingAreaGeojson !== undefined;
   const geoNotesQuery = useNotes(selectedPropertyId, orgId ?? undefined);
@@ -98,9 +152,37 @@ export default function PropertiesMapPage() {
     () => (geoNotesQuery.data ?? []).filter((note) => note.type === 'geo' && note.locationGeojson),
     [geoNotesQuery.data],
   );
+  const mappedAreasForSelectedProperty = useMemo(
+    () => (selectedProperty?.projects ?? []).filter((project) => project.areaGeojson),
+    [selectedProperty],
+  );
+  const selectedAreaSet = useMemo(() => new Set(selectedAreaIds), [selectedAreaIds]);
+  const selectedAreas = useMemo(
+    () => mappedAreasForSelectedProperty.filter((project) => selectedAreaSet.has(project.id)),
+    [mappedAreasForSelectedProperty, selectedAreaSet],
+  );
+  const selectedAreaTotalAcres = useMemo(
+    () => selectedAreas.reduce((sum, project) => sum + (project.calculatedAreaAcres ?? geojsonPolygonAcres(project.areaGeojson) ?? 0), 0),
+    [selectedAreas],
+  );
+  const selectedAreaBreakdown = useMemo(
+    () => PROJECT_AREA_TYPES.flatMap((areaType) => {
+      const matching = selectedAreas.filter((project) => project.areaType === areaType);
+      if (matching.length === 0) return [];
+      const acres = matching.reduce((sum, project) => sum + (project.calculatedAreaAcres ?? geojsonPolygonAcres(project.areaGeojson) ?? 0), 0);
+      return [{ areaType, count: matching.length, acres }];
+    }),
+    [selectedAreas],
+  );
+  const selectedAssignmentTask = useMemo(
+    () => (tasksQuery.data ?? []).find((task) => task.id === areaAssignmentDraft.taskId) ?? null,
+    [areaAssignmentDraft.taskId, tasksQuery.data],
+  );
 
   const handleSelectProperty = (propertyId: string) => {
     if (propertyId !== selectedPropertyId) setSelectedProjectId(null);
+    setAreaSelectionActive(false);
+    setSelectedAreaIds([]);
     setSelectedPropertyId(propertyId);
   };
 
@@ -110,6 +192,8 @@ export default function PropertiesMapPage() {
     setPhotoPlacement(null);
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
+    setAreaSelectionActive(false);
+    setSelectedAreaIds([]);
     setSelectedProjectId(projectId);
   };
 
@@ -120,6 +204,8 @@ export default function PropertiesMapPage() {
     setPhotoPlacement(null);
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
+    setAreaSelectionActive(false);
+    setSelectedAreaIds([]);
   }, [selectedPropertyId]);
 
   const handleSaveBoundary = async () => {
@@ -148,6 +234,8 @@ export default function PropertiesMapPage() {
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
     setPhotoPlacement(null);
+    setAreaSelectionActive(false);
+    setSelectedAreaIds([]);
     setSelectedProjectId(project.id);
     setSelectedPropertyId(project.propertyId);
     setPinPlacementProject({ propertyId: project.propertyId, projectId: project.id, projectName: project.name });
@@ -159,6 +247,8 @@ export default function PropertiesMapPage() {
     setPhotoPlacement(null);
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
+    setAreaSelectionActive(false);
+    setSelectedAreaIds([]);
     setSelectedProjectId(projectId);
     if (propertyId && propertyId !== selectedPropertyId) setSelectedPropertyId(propertyId);
   };
@@ -181,6 +271,8 @@ export default function PropertiesMapPage() {
     setSelectedProjectId(project.id);
     setSelectedPropertyId(project.propertyId);
     setAreaEditProject({ propertyId: project.propertyId, projectId: project.id, projectName: project.name });
+    setAreaSelectionActive(false);
+    setSelectedAreaIds([]);
     setPendingAreaGeojson(undefined);
   };
 
@@ -205,6 +297,8 @@ export default function PropertiesMapPage() {
     setPinPlacementProject(null);
     setAreaEditProject(null);
     setPendingAreaGeojson(undefined);
+    setAreaSelectionActive(false);
+    setSelectedAreaIds([]);
     setSelectedProjectId(photo.projectId);
     setSelectedPropertyId(photo.propertyId);
     setPhotoPlacement({
@@ -347,6 +441,91 @@ export default function PropertiesMapPage() {
     }
   };
 
+  const handleToggleAreaSelectionMode = () => {
+    if (!hasConcretePropertySelected) {
+      toast.error('Select one property before selecting areas.');
+      return;
+    }
+    if (editMode || pinPlacementProject || photoPlacement || areaEditProject) {
+      toast.error('Finish the current map edit before selecting areas.');
+      return;
+    }
+    setAreaSelectionActive((current) => !current);
+  };
+
+  const handleToggleSelectedArea = (project: PropertyProject) => {
+    if (!hasConcretePropertySelected || project.propertyId !== selectedPropertyId) {
+      toast.error('Area selection is limited to one property at a time.');
+      return;
+    }
+    setSelectedAreaIds((current) =>
+      current.includes(project.id)
+        ? current.filter((id) => id !== project.id)
+        : [...current, project.id],
+    );
+  };
+
+  const handleOpenAreaAssignment = () => {
+    if (selectedAreas.length === 0) {
+      toast.error('Select at least one area before assigning crew.');
+      return;
+    }
+    setAreaAssignmentDraft((current) => ({
+      ...current,
+      date: current.date || localDateKey(),
+      estimatedHours: current.estimatedHours || (selectedAssignmentTask ? String(getTaskEstimatedHours(selectedAssignmentTask)) : ''),
+    }));
+    setAreaAssignmentOpen(true);
+  };
+
+  const handleSaveAreaAssignment = async () => {
+    if (!orgId || !selectedProperty || selectedPropertyId === 'all') return;
+    if (selectedAreas.length === 0) {
+      toast.error('Select at least one area before assigning crew.');
+      return;
+    }
+    const task = (tasksQuery.data ?? []).find((candidate) => candidate.id === areaAssignmentDraft.taskId);
+    if (!task) {
+      toast.error('Choose a task.');
+      return;
+    }
+    const estimatedHours = Number(areaAssignmentDraft.estimatedHours);
+    if (!Number.isFinite(estimatedHours) || estimatedHours < 0) {
+      toast.error('Enter valid estimated hours.');
+      return;
+    }
+    try {
+      await createAreaScopedAssignmentMutation.mutateAsync({
+        propertyId: selectedProperty.id,
+        employeeId: areaAssignmentDraft.employeeId,
+        taskId: task.id,
+        taskTitle: task.name,
+        projectIds: selectedAreas.map((project) => project.id),
+        date: areaAssignmentDraft.date,
+        startTime: areaAssignmentDraft.startTime,
+        estimatedHours,
+        notes: areaAssignmentDraft.notes,
+        equipmentUnitId: areaAssignmentDraft.equipmentId === NO_EQUIPMENT_VALUE ? null : areaAssignmentDraft.equipmentId,
+      });
+      toast.success(`Assigned ${selectedAreas.length} area${selectedAreas.length === 1 ? '' : 's'} to crew.`);
+      setAreaAssignmentOpen(false);
+      setAreaSelectionActive(false);
+      setSelectedAreaIds([]);
+      setAreaAssignmentDraft({
+        employeeId: '',
+        taskId: '',
+        date: localDateKey(),
+        startTime: '07:00',
+        estimatedHours: '',
+        notes: '',
+        equipmentId: NO_EQUIPMENT_VALUE,
+      });
+    } catch (error) {
+      console.error('Area assignment save failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Selected areas could not be assigned.');
+    }
+  };
+
   if (!isOrgReady) {
     return (
       <section className="flex flex-1 flex-col gap-4 p-4 md:p-6">
@@ -421,9 +600,11 @@ export default function PropertiesMapPage() {
               setPhotoPlacement(null);
               setAreaEditProject(null);
               setPendingAreaGeojson(undefined);
+              setAreaSelectionActive(false);
+              setSelectedAreaIds([]);
               setEditMode((current) => !current);
             }}
-            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinSavingProjectId) || Boolean(photoSavingId) || Boolean(areaSavingProjectId)}
+            disabled={!hasConcretePropertySelected || saveBoundaryMutation.isPending || Boolean(pinSavingProjectId) || Boolean(photoSavingId) || Boolean(areaSavingProjectId) || areaSelectionActive}
           >
             <Edit3 className="mr-2 h-4 w-4" />
             {editMode ? 'Editing' : 'Edit boundary'}
@@ -436,6 +617,16 @@ export default function PropertiesMapPage() {
           >
             <Save className="mr-2 h-4 w-4" />
             {saveBoundaryMutation.isPending ? 'Saving...' : 'Save boundary'}
+          </Button>
+          <Button
+            type="button"
+            variant={areaSelectionActive ? 'default' : 'outline'}
+            className="h-10 rounded-xl border-surface-border bg-surface-card/80"
+            onClick={handleToggleAreaSelectionMode}
+            disabled={!hasConcretePropertySelected || editMode || Boolean(pinPlacementProject) || Boolean(photoPlacement) || Boolean(areaEditProject)}
+          >
+            <MousePointer2 className="mr-2 h-4 w-4" />
+            {areaSelectionActive ? 'Selecting areas' : 'Select areas'}
           </Button>
           {areaEditProject ? (
             <>
@@ -504,11 +695,19 @@ export default function PropertiesMapPage() {
           photoPlacementActive={Boolean(photoPlacement)}
           photoPlacementDisabled={Boolean(photoSavingId)}
           areaEditProjectId={areaEditProject?.projectId ?? null}
+          areaSelectionActive={areaSelectionActive}
+          selectedAreaIds={selectedAreaIds}
           onBoundaryChange={setPendingBoundaryGeojson}
           onAreaChange={setPendingAreaGeojson}
           onAreaCreate={handleFinishArea}
           onSelectProperty={handleSelectProperty}
           onSelectProject={handleSelectProject}
+          onToggleAreaSelection={handleToggleSelectedArea}
+          onAssignSelectedAreas={handleOpenAreaAssignment}
+          onCancelAreaSelection={() => {
+            setAreaSelectionActive(false);
+            setSelectedAreaIds([]);
+          }}
           onPlaceProjectPin={handlePlaceProjectPin}
           onPlacePhotoPin={handlePlacePhotoPin}
           onSelectPhoto={(photo) => {
@@ -519,6 +718,148 @@ export default function PropertiesMapPage() {
           onCancelPhotoPlacement={handleCancelPhotoPlacement}
         />
       )}
+      <Dialog open={areaAssignmentOpen} onOpenChange={setAreaAssignmentOpen}>
+        <DialogContent className="max-w-xl border-surface-border bg-surface-card">
+          <DialogHeader>
+            <DialogTitle>Assign selected areas</DialogTitle>
+            <DialogDescription>
+              Create one planned board assignment and scope it to the selected mapped zones.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-surface-border bg-surface-elevated p-3">
+              <div className="text-3xs font-semibold uppercase tracking-wide text-text-muted">Selection</div>
+              <div className="mt-1 text-sm font-semibold text-text-primary">
+                {selectedAreas.length} area{selectedAreas.length === 1 ? '' : 's'} · {formatSquareFeet(acresToSquareFeet(selectedAreaTotalAcres))} · {formatAcres(selectedAreaTotalAcres)}
+              </div>
+              {selectedAreaBreakdown.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-secondary">
+                  {selectedAreaBreakdown.map((entry) => (
+                    <span key={entry.areaType} className="rounded-full border border-surface-border bg-surface-card px-2 py-1">
+                      {PROJECT_AREA_TYPE_LABELS[entry.areaType]}: {entry.count}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1.5 text-sm font-medium text-text-secondary">
+                Crew member
+                <Select
+                  value={areaAssignmentDraft.employeeId}
+                  onValueChange={(employeeId) => setAreaAssignmentDraft((current) => ({ ...current, employeeId }))}
+                >
+                  <SelectTrigger className="border-surface-border bg-surface-elevated text-text-primary">
+                    <SelectValue placeholder={assignmentEmployeesQuery.isLoading ? 'Loading crew...' : 'Choose crew'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(assignmentEmployeesQuery.data ?? []).map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.firstName} {employee.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="space-y-1.5 text-sm font-medium text-text-secondary">
+                Task
+                <Select
+                  value={areaAssignmentDraft.taskId}
+                  onValueChange={(taskId) => {
+                    const nextTask = (tasksQuery.data ?? []).find((task) => task.id === taskId) ?? null;
+                    setAreaAssignmentDraft((current) => ({
+                      ...current,
+                      taskId,
+                      estimatedHours: current.estimatedHours || String(getTaskEstimatedHours(nextTask)),
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="border-surface-border bg-surface-elevated text-text-primary">
+                    <SelectValue placeholder={tasksQuery.isLoading ? 'Loading tasks...' : 'Choose task'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(tasksQuery.data ?? []).map((task) => (
+                      <SelectItem key={task.id} value={task.id}>
+                        {task.category} · {task.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="space-y-1.5 text-sm font-medium text-text-secondary">
+                Date
+                <Input
+                  type="date"
+                  value={areaAssignmentDraft.date}
+                  onChange={(event) => setAreaAssignmentDraft((current) => ({ ...current, date: event.target.value }))}
+                  className="border-surface-border bg-surface-elevated text-text-primary"
+                />
+              </label>
+              <label className="space-y-1.5 text-sm font-medium text-text-secondary">
+                Start time
+                <Input
+                  type="time"
+                  value={areaAssignmentDraft.startTime}
+                  onChange={(event) => setAreaAssignmentDraft((current) => ({ ...current, startTime: event.target.value }))}
+                  className="border-surface-border bg-surface-elevated text-text-primary"
+                />
+              </label>
+              <label className="space-y-1.5 text-sm font-medium text-text-secondary">
+                Estimated hours
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={areaAssignmentDraft.estimatedHours}
+                  placeholder={selectedAssignmentTask ? String(getTaskEstimatedHours(selectedAssignmentTask)) : '0'}
+                  onChange={(event) => setAreaAssignmentDraft((current) => ({ ...current, estimatedHours: event.target.value }))}
+                  className="border-surface-border bg-surface-elevated text-text-primary"
+                />
+              </label>
+              <label className="space-y-1.5 text-sm font-medium text-text-secondary">
+                Equipment
+                <Select
+                  value={areaAssignmentDraft.equipmentId}
+                  onValueChange={(equipmentId) => setAreaAssignmentDraft((current) => ({ ...current, equipmentId }))}
+                >
+                  <SelectTrigger className="border-surface-border bg-surface-elevated text-text-primary">
+                    <SelectValue placeholder={equipmentQuery.isLoading ? 'Loading equipment...' : 'Optional'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_EQUIPMENT_VALUE}>No equipment</SelectItem>
+                    {(equipmentQuery.data ?? []).map((unit) => (
+                      <SelectItem key={unit.id} value={unit.id}>
+                        {getEquipmentLabel(unit)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
+            <label className="space-y-1.5 text-sm font-medium text-text-secondary">
+              Notes
+              <Textarea
+                value={areaAssignmentDraft.notes}
+                onChange={(event) => setAreaAssignmentDraft((current) => ({ ...current, notes: event.target.value }))}
+                placeholder="Optional assignment notes"
+                className="border-surface-border bg-surface-elevated text-text-primary"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAreaAssignmentOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleSaveAreaAssignment()}
+              disabled={createAreaScopedAssignmentMutation.isPending || !areaAssignmentDraft.employeeId || !areaAssignmentDraft.taskId || !areaAssignmentDraft.date}
+            >
+              {createAreaScopedAssignmentMutation.isPending ? 'Assigning...' : 'Create board job'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {hasConcretePropertySelected && selectedProperty ? (
         <PropertyDetailPanel
           property={selectedProperty}
