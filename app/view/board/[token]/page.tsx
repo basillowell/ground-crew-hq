@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Clock, MonitorSmartphone, Wrench } from 'lucide-react';
+import { Clock, MapPin, MonitorSmartphone, Wrench } from 'lucide-react';
 import { Badge, type BadgeProps } from '@/src/components/ui/badge';
 import { getContrastText } from '@/src/lib/colorContrast';
 import { createClient } from '@/src/lib/supabase';
@@ -18,6 +18,12 @@ type PublicBoardAssignment = {
   status: string;
 };
 
+type PublicGeoNote = {
+  title: string;
+  content: string;
+  locationGeojson: { type: 'Point'; coordinates: [number, number] } | null;
+};
+
 type PublicDisplayBoard = {
   businessName: string;
   logoUrl: string | null;
@@ -30,6 +36,7 @@ type PublicDisplayBoard = {
   boardDate: string;
   generatedAt: string | null;
   assignments: PublicBoardAssignment[];
+  geoNotes: PublicGeoNote[];
 };
 
 type LoadState = 'loading' | 'ready' | 'missing' | 'error';
@@ -75,6 +82,22 @@ function normalizeAssignment(payload: unknown): PublicBoardAssignment {
   };
 }
 
+function normalizeGeoNote(payload: unknown): PublicGeoNote {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  const locationGeojson = getField(row, 'location_geojson', 'locationGeojson');
+  const point = (locationGeojson ?? {}) as Record<string, unknown>;
+  const coordinates = point.type === 'Point' && Array.isArray(point.coordinates)
+    ? point.coordinates
+    : null;
+  return {
+    title: stringFrom(getField(row, 'title'), 'Map note'),
+    content: stringFrom(getField(row, 'content'), ''),
+    locationGeojson: coordinates && coordinates.length >= 2
+      ? { type: 'Point', coordinates: [numberFrom(coordinates[0]), numberFrom(coordinates[1])] }
+      : null,
+  };
+}
+
 function normalizeBoard(payload: unknown): PublicDisplayBoard | null {
   const row = (payload ?? {}) as Record<string, unknown>;
   const propertyRow = (getField(row, 'property') ?? {}) as Record<string, unknown>;
@@ -84,6 +107,8 @@ function normalizeBoard(payload: unknown): PublicDisplayBoard | null {
 
   const assignmentPayload = getField(row, 'assignments');
   const assignments = Array.isArray(assignmentPayload) ? assignmentPayload.map(normalizeAssignment) : [];
+  const geoNotePayload = getField(row, 'geo_notes', 'geoNotes');
+  const geoNotes = Array.isArray(geoNotePayload) ? geoNotePayload.map(normalizeGeoNote) : [];
 
   return {
     businessName: businessName || 'Ground Crew HQ',
@@ -97,6 +122,7 @@ function normalizeBoard(payload: unknown): PublicDisplayBoard | null {
     boardDate: stringFrom(getField(row, 'board_date', 'boardDate'), new Date().toLocaleDateString('en-CA')),
     generatedAt: stringFrom(getField(row, 'generated_at', 'generatedAt'), '') || null,
     assignments,
+    geoNotes,
   };
 }
 
@@ -356,6 +382,32 @@ export default function PublicDisplayBoardPage() {
             ))}
           </section>
         )}
+
+        {board.geoNotes.length > 0 ? (
+          <section className="rounded-2xl border border-surface-border bg-surface-card p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-status-pending" />
+                <h2 className="text-lg font-semibold text-text-primary">Map notes</h2>
+              </div>
+              <Badge variant="pending">{board.geoNotes.length}</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {board.geoNotes.map((note, index) => (
+                <article key={`${note.title}-${index}`} className="rounded-xl border border-status-pending/20 bg-status-pending/10 p-3">
+                  <p className="text-sm font-semibold text-text-primary">{note.title}</p>
+                  {note.content ? <p className="mt-1 text-sm text-text-secondary">{note.content}</p> : null}
+                  {note.locationGeojson ? (
+                    <p className="mt-2 flex items-center gap-1 text-3xs text-status-pending">
+                      <MapPin className="h-3 w-3" />
+                      {note.locationGeojson.coordinates[1].toFixed(5)}, {note.locationGeojson.coordinates[0].toFixed(5)}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </section>
     </main>
   );

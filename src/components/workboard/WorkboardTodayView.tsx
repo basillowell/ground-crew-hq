@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, CheckCircle2, Clock3, ImageIcon, StickyNote, Users, Wrench } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Clock3, ImageIcon, MapPin, StickyNote, Users, Wrench } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { PropertySelector } from '@/components/shared/PropertySelector';
@@ -358,7 +358,7 @@ export function WorkboardTodayView() {
   const activeNotes = useMemo(
     () =>
       notes
-        .filter((note) => ['daily', 'alert', 'geo'].includes(note.type))
+        .filter((note) => note.type === 'daily' || note.type === 'alert' || (note.type === 'geo' && note.showOnDisplayBoard === true))
         .slice(0, 6),
     [notes],
   );
@@ -616,12 +616,23 @@ export function WorkboardTodayView() {
                     <div key={note.id} className="rounded-lg border border-surface-border bg-surface-elevated p-3">
                       <div className="mb-1 flex items-start justify-between gap-2">
                         <p className="min-w-0 truncate text-xs font-semibold text-text-primary">{note.title}</p>
-                        <Badge variant={noteTone(note)} className="shrink-0 text-4xs capitalize">
-                          {note.type}
-                        </Badge>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {note.type === 'geo' && note.showOnDisplayBoard ? (
+                            <Badge variant="pending" className="text-4xs">Board</Badge>
+                          ) : null}
+                          <Badge variant={noteTone(note)} className="text-4xs capitalize">
+                            {note.type}
+                          </Badge>
+                        </div>
                       </div>
                       <p className="line-clamp-3 text-xs text-text-secondary">{note.content}</p>
                       {note.location ? <p className="mt-2 text-3xs text-text-muted">{note.location}</p> : null}
+                      {note.type === 'geo' && note.locationGeojson ? (
+                        <p className="mt-2 flex items-center gap-1 text-3xs text-status-pending">
+                          <MapPin className="h-3 w-3" />
+                          Map note
+                        </p>
+                      ) : null}
                     </div>
                   ))}
                 </div>

@@ -483,21 +483,35 @@ RLS. Row snapshot (including color) preserved in the migration comment.
 ---
 
 ## notes
-| column      | type        | nullable | default   |
-|-------------|-------------|----------|-----------|
-| id          | uuid        | NO       | gen_random_uuid() |
-| property_id | uuid        | YES      |           |
-| type        | text        | NO       | 'general' |
-| title       | text        | NO       |           |
-| content     | text        | NO       | ''        |
-| location    | text        | YES      |           |
-| created_by  | uuid        | YES      |           |
-| created_at  | timestamptz | NO       | now()     |
-| org_id      | uuid        | YES      |           |
-| employee_id | uuid        | YES      |           |
-| assignment_id | uuid        | YES      |           |
+| column                | type        | nullable | default   |
+|-----------------------|-------------|----------|-----------|
+| id                    | uuid        | NO       | gen_random_uuid() |
+| property_id           | uuid        | YES      |           |
+| type                  | text        | NO       | 'general' |
+| title                 | text        | NO       |           |
+| content               | text        | NO       | ''        |
+| location              | text        | YES      |           |
+| created_by            | uuid        | YES      |           |
+| created_at            | timestamptz | NO       | now()     |
+| org_id                | uuid        | YES      |           |
+| employee_id           | uuid        | YES      |           |
+| assignment_id         | uuid        | YES      |           |
+| location_geojson      | jsonb       | YES      |           |
+| show_on_display_board | boolean     | NO       | false     |
+| photo_storage_path    | text        | YES      |           |
+| photo_content_type    | text        | YES      |           |
+| photo_size_bytes      | bigint      | YES      |           |
 
 Scope chain: org-wide (property_id, employee_id, assignment_id all NULL) -> property-scoped (property_id set) -> employee-scoped (+ employee_id) -> task-scoped (+ assignment_id). A CHECK constraint (notes_scope_chain_check) enforces that employee_id/assignment_id can only be set when property_id is also set. RLS was updated so org-wide notes (property_id IS NULL) are usable by org admin/manager for writes and any org member for reads — property-scoped notes continue using the existing can_manage_property/can_read_property functions unchanged.
+
+Geo notes (migration job_board_9_geo_notes, 2026-09-05): location_geojson is an
+optional GeoJSON Point `{type:'Point', coordinates:[lng, lat]}`. A CHECK
+constraint (notes_location_geojson_point_check) keeps non-null values point-shaped.
+show_on_display_board controls whether an internal geo note is included on the
+public broadcast board; only `type='geo'` rows with this flag true, a non-null
+location_geojson, and the board property's property_id are returned publicly. Photo
+columns are internal-app-only metadata for private note photos; public board RPCs do
+not expose photo_storage_path/content_type/size_bytes.
 
 Realtime: notes is included in supabase_realtime publication as of
 job_board_12_realtime_push (2026-09-04), so internal Workboard/Today views can
@@ -649,7 +663,11 @@ RLS:
 > property. Assignment rows include task name/category, crew display name as
 > first name + last initial only, equipment label, start_time, estimated_hours,
 > and status. Explicitly excludes employee ids, email, phone, wage/rate data,
-> assignment notes, and every other property's data.
+> assignment notes, and every other property's data. As of job_board_9_geo_notes
+> (2026-09-05), the envelope also includes `geo_notes`: redacted board-visible
+> geo notes for that property only, limited to title, content, and location_geojson.
+> It still excludes created_by, employee ids, assignment ids, scope metadata, and
+> all note photo storage metadata.
 
 ---
 
@@ -694,8 +712,10 @@ RLS:
 > migration job_board_12_realtime_push (2026-09-04). Trigger:
 > public_display_board_geo_notes_refresh on notes, AFTER INSERT OR UPDATE OR
 > DELETE FOR EACH ROW. Broadcasts a public display-board refresh signal for
-> properties whose geo notes changed. Current public board output does not expose
-> note rows; this is a refresh signal only for future geo-note display.
+> properties whose board-visible geo notes changed. Tightened in job_board_9_geo_notes
+> (2026-09-05) to only broadcast for rows where type='geo',
+> show_on_display_board=true, and location_geojson IS NOT NULL; public board output
+> exposes only the redacted title/content/location_geojson payload described above.
 
 ---
 
@@ -763,9 +783,10 @@ via can_manage_property(property_id).
 > project_timeline_events.id CASCADE (nullable), uploaded_by -> employees.id.
 > org_id and property_id are denormalised so RLS needs no join. storage_path UNIQUE.
 >
-> storage_path holds the object key inside the `project-photos` bucket and MUST
-> follow `{org_id}/{project_id}/{uuid}.{ext}` — the storage policies match on the
-> first path segment, so any other shape is rejected on upload.
+> storage_path holds the object key inside the `project-photos` bucket. Project
+> progress photos follow `{org_id}/{project_id}/{uuid}.{ext}`. Geo note photos
+> stored via notes.photo_storage_path follow `{org_id}/notes/{uuid}.{ext}`. Storage
+> policies match on the first path segment, so the leading org_id is required.
 >
 > location_geojson (migration project_photo_map_location 2026-08-14): optional
 > GeoJSON Point `{type:'Point', coordinates:[lng, lat]}` placing the photo on the

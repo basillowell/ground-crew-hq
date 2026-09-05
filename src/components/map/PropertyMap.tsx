@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FitBounds } from '@/components/map/FitBounds';
 import { GeomanControl, layerToBoundaryGeoJson } from '@/components/map/GeomanControl';
 import type { ProjectPhoto, PropertyBoundary, PropertyBoundaryGeoJson, PropertyProject } from '@/lib/supabase-queries';
+import type { Note } from '@/data/seedData';
 import { PROJECT_STATUS_LEGEND, normalizeProjectStatus, projectStatusColor, statusKeyColor, type ProjectStatusKey } from '@/lib/project-status';
 import { formatAcres, geojsonPolygonAcres } from '@/lib/geo';
 import { cn } from '@/lib/utils';
@@ -23,6 +24,7 @@ type PropertyMapProps = {
   pinPlacementProject: { projectId: string; projectName: string } | null;
   pinPlacementDisabled: boolean;
   photoPins: Array<ProjectPhoto & { projectName?: string }>;
+  geoNotes?: Note[];
   photoPlacementActive: boolean;
   photoPlacementDisabled: boolean;
   areaEditProjectId: string | null;
@@ -87,6 +89,10 @@ type ProjectArea = PropertyProject & {
   propertyName: string;
   areaColor: string;
   areaAcres: number | null;
+};
+
+type GeoNotePin = Note & {
+  propertyName: string;
 };
 
 function PlacementClickHandler({
@@ -192,6 +198,7 @@ export function PropertyMap({
   pinPlacementProject,
   pinPlacementDisabled,
   photoPins,
+  geoNotes = [],
   photoPlacementActive,
   photoPlacementDisabled,
   areaEditProjectId,
@@ -242,6 +249,18 @@ export function PropertyMap({
           })),
       ),
     [visibleProperties],
+  );
+  const geoNotePins = useMemo<GeoNotePin[]>(
+    () => {
+      const propertyNameById = new Map(visibleProperties.map((property) => [property.id, property.name]));
+      return geoNotes
+        .filter((note) => note.type === 'geo' && note.locationGeojson?.type === 'Point' && note.propertyId && propertyNameById.has(note.propertyId))
+        .map((note) => ({
+          ...note,
+          propertyName: propertyNameById.get(note.propertyId ?? '') ?? 'Property',
+        }));
+    },
+    [geoNotes, visibleProperties],
   );
   const selectedProperty = useMemo(
     () => currentPropertyId === 'all'
@@ -302,6 +321,21 @@ export function PropertyMap({
         html: [
           '<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid oklch(var(--brand-default));background:oklch(var(--surface-card));color:oklch(var(--brand-bright));box-shadow:0 10px 24px oklch(var(--surface-base) / 0.38);">',
           '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>',
+          '</div>',
+        ].join(''),
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        popupAnchor: [0, -14],
+      }),
+    [],
+  );
+  const geoNoteMarkerIcon = useMemo(
+    () =>
+      divIcon({
+        className: '',
+        html: [
+          '<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9999px;border:1px solid oklch(var(--status-pending) / 0.65);background:oklch(var(--surface-card));color:oklch(var(--status-pending));box-shadow:0 10px 24px oklch(var(--surface-base) / 0.38);">',
+          '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
           '</div>',
         ].join(''),
         iconSize: [30, 30],
@@ -516,6 +550,29 @@ export function PropertyMap({
                   />
                   {photo.caption ? <div className="text-sm font-medium">{photo.caption}</div> : null}
                   {photo.projectName ? <div className="text-xs">{photo.projectName}</div> : null}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        }) : null}
+        {!isMapInteractionActive ? geoNotePins.map((note) => {
+          const coordinates = note.locationGeojson?.coordinates;
+          if (!coordinates) return null;
+          const markerCenter: LatLngTuple = [coordinates[1], coordinates[0]];
+          return (
+            <Marker
+              key={`${note.id}-geo-note-pin`}
+              position={markerCenter}
+              icon={geoNoteMarkerIcon}
+            >
+              <Popup>
+                <div className="w-[210px] space-y-2">
+                  <div>
+                    <div className="text-sm font-semibold">{note.title}</div>
+                    <div className="text-xs">{note.propertyName}</div>
+                  </div>
+                  <div className="text-sm">{note.content}</div>
+                  {note.showOnDisplayBoard ? <div className="text-xs">Visible on display board</div> : null}
                 </div>
               </Popup>
             </Marker>

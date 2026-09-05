@@ -15,6 +15,7 @@ import { geojsonPolygonAcres } from '@/lib/geo';
 import {
   usePropertyBoundaries,
   useLocatedProjectPhotos,
+  useNotes,
   useSavePropertyBoundary,
   useSetPhotoLocation,
   useSetProjectArea,
@@ -73,6 +74,7 @@ export default function PropertiesMapPage() {
   const hasConcretePropertySelected = selectedPropertyId !== 'all' && Boolean(selectedProperty);
   const hasPendingBoundaryChange = pendingBoundaryGeojson !== undefined;
   const hasPendingAreaChange = pendingAreaGeojson !== undefined;
+  const geoNotesQuery = useNotes(selectedPropertyId, orgId ?? undefined);
   const editingAreaProject = areaEditProject
     ? selectedProperty?.projects.find((project) => project.id === areaEditProject.projectId) ?? null
     : null;
@@ -91,6 +93,10 @@ export default function PropertiesMapPage() {
       }));
     },
     [locatedPhotosQuery.data, properties],
+  );
+  const geoNotePins = useMemo(
+    () => (geoNotesQuery.data ?? []).filter((note) => note.type === 'geo' && note.locationGeojson),
+    [geoNotesQuery.data],
   );
 
   const handleSelectProperty = (propertyId: string) => {
@@ -494,6 +500,7 @@ export default function PropertiesMapPage() {
           pinPlacementProject={pinPlacementProject}
           pinPlacementDisabled={Boolean(pinSavingProjectId)}
           photoPins={photoPins}
+          geoNotes={geoNotePins}
           photoPlacementActive={Boolean(photoPlacement)}
           photoPlacementDisabled={Boolean(photoSavingId)}
           areaEditProjectId={areaEditProject?.projectId ?? null}

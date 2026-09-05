@@ -57,6 +57,7 @@ import {
   LayoutList,
   ListChecks,
   Mail,
+  MapPin,
   MessageCircle,
   MonitorSmartphone,
   Pencil,
@@ -72,7 +73,7 @@ import {
 import { createClient } from '@/lib/supabase';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
-import { useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProgramSettings, useProperties, useRevenueWorkOrders, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
+import { PROJECT_PHOTO_ALLOWED_TYPES, PROJECT_PHOTO_MAX_BYTES, useAssignments, useDepartmentOptions, useEmployeeEquipmentHistory, useEmployees, useEquipmentUnits, useProgramSettings, useProperties, useRevenueWorkOrders, useScheduleEntries, useTasks } from '@/lib/supabase-queries';
 import { PAYROLL_SUBMITTED_LOCK_MESSAGE, getAssignmentApprovedAt } from '@/lib/assignments';
 import {
   getOperationalTimezone,
@@ -545,6 +546,7 @@ function normalizeWorkLocation(row: Record<string, unknown>): WorkLocation {
 
 function normalizeWorkboardNote(row: Record<string, unknown>): WorkboardScopedNote {
   const createdAt = String(row.created_at ?? '');
+  const rawLocationGeojson = row.location_geojson as Note['locationGeojson'] | undefined;
   return {
     id: String(row.id ?? ''),
     type: (row.type ?? 'general') as Note['type'],
@@ -556,8 +558,45 @@ function normalizeWorkboardNote(row: Record<string, unknown>): WorkboardScopedNo
     propertyId: row.property_id ? String(row.property_id) : null,
     employeeId: row.employee_id ? String(row.employee_id) : null,
     assignmentId: row.assignment_id ? String(row.assignment_id) : null,
+    locationGeojson: rawLocationGeojson?.type === 'Point' && Array.isArray(rawLocationGeojson.coordinates) ? rawLocationGeojson : null,
+    showOnDisplayBoard: row.show_on_display_board === true,
+    photoStoragePath: row.photo_storage_path ? String(row.photo_storage_path) : null,
+    photoContentType: row.photo_content_type ? String(row.photo_content_type) : null,
+    photoSizeBytes: row.photo_size_bytes === null || row.photo_size_bytes === undefined ? null : Number(row.photo_size_bytes),
+    photoSignedUrl: row.photo_signed_url ? String(row.photo_signed_url) : null,
     createdAt,
   };
+}
+
+const NOTE_PHOTO_BUCKET = 'project-photos';
+const emptyNoteDraft = (): NoteDraftState => ({
+  type: 'daily',
+  title: '',
+  content: '',
+  author: 'Operations Admin',
+  location: '',
+  latitude: '',
+  longitude: '',
+  showOnDisplayBoard: false,
+  photoFile: null,
+});
+
+function pointFromNoteDraft(draft: NoteDraftState): Note['locationGeojson'] {
+  const latitude = Number(draft.latitude);
+  const longitude = Number(draft.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return { type: 'Point', coordinates: [longitude, latitude] };
+}
+
+function notePhotoExtension(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (extension) return extension;
+  if (file.type === 'image/png') return 'png';
+  if (file.type === 'image/webp') return 'webp';
+  if (file.type === 'image/heic') return 'heic';
+  if (file.type === 'image/heif') return 'heif';
+  return 'jpg';
 }
 
 function normalizeDisplayBoardShareContext(payload: unknown): DisplayBoardShareContext | null {
@@ -655,6 +694,18 @@ type WorkboardScopedNote = Note & {
   employeeId: string | null;
   assignmentId: string | null;
   createdAt: string;
+};
+
+type NoteDraftState = {
+  type: Note['type'];
+  title: string;
+  content: string;
+  author: string;
+  location: string;
+  latitude: string;
+  longitude: string;
+  showOnDisplayBoard: boolean;
+  photoFile: File | null;
 };
 
 type WorkboardWeatherLocationRow = {
@@ -1025,13 +1076,8 @@ export default function WorkboardContent() {
     notes: '',
   });
 
-  const [noteDraft, setNoteDraft] = useState({
-    type: 'daily' as Note['type'],
-    title: '',
-    content: '',
-    author: 'Operations Admin',
-    location: '',
-  });
+  const [noteDraft, setNoteDraft] = useState<NoteDraftState>(() => emptyNoteDraft());
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [savingNote, setSavingNote] = useState(false);
   const workflowParams = useMemo(() => new URLSearchParams(searchParams?.toString() ?? ''), [searchParams]);
   const focusedPropertyId = workflowParams.get('property') || '';
@@ -1048,6 +1094,8 @@ export default function WorkboardContent() {
   const effectivePropertyId = selectedPagePropertyId || (currentUser?.role === 'employee' ? currentUser.propertyId : 'all');
 
   const openNoteDialog = () => {
+    setEditingNoteId(null);
+    setNoteDraft(emptyNoteDraft());
     setSelectedNotePropertyId((current) =>
       current || (effectivePropertyId && effectivePropertyId !== 'all' ? effectivePropertyId : (properties[0]?.id ?? '')),
     );
@@ -1153,7 +1201,24 @@ export default function WorkboardContent() {
         'Workboard request timed out after 15 seconds.',
       );
       if (error) throw error;
-      return (data ?? []).map((row) => normalizeWorkboardNote(row as Record<string, unknown>));
+      let timeoutId = 0;
+      const signedRowsPromise = Promise.all(
+        (data ?? []).map(async (row) => {
+          const record = row as Record<string, unknown>;
+          const storagePath = record.photo_storage_path ? String(record.photo_storage_path) : '';
+          if (!storagePath) return record;
+          const { data: signedData, error: signedError } = await supabase.storage
+            .from(NOTE_PHOTO_BUCKET)
+            .createSignedUrl(storagePath, 60 * 10);
+          if (signedError) return record;
+          return { ...record, photo_signed_url: signedData.signedUrl };
+        }),
+      );
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error('Workboard request timed out after 15 seconds.')), 15_000);
+      });
+      const signedRows = await Promise.race([signedRowsPromise, timeoutPromise]).finally(() => window.clearTimeout(timeoutId));
+      return signedRows.map((row) => normalizeWorkboardNote(row));
     },
     staleTime: 1000 * 60 * 5,
     retry: 3,
@@ -2507,6 +2572,45 @@ export default function WorkboardContent() {
     { id: 'alert', label: 'Alerts', emptyLabel: 'alert notes' },
   ];
   const noteTypeEmptyLabel = noteTypeFilterTabs.find((tab) => tab.id === noteTypeFilter)?.emptyLabel ?? 'notes';
+  const selectedNoteScopePropertyId = noteScope === 'property'
+    ? selectedPropertyNoteId
+    : noteScope === 'employee'
+      ? selectedEmployeeNotePropertyId
+      : noteScope === 'task'
+        ? selectedAssignmentNotePropertyId
+        : null;
+  const selectedNoteScopeProperty = selectedNoteScopePropertyId
+    ? properties.find((property) => property.id === selectedNoteScopePropertyId) ?? null
+    : null;
+
+  const startEditNote = useCallback((note: WorkboardScopedNote) => {
+    setEditingNoteId(note.id);
+    if (note.assignmentId) {
+      setNoteScope('task');
+      setSelectedNoteAssignmentId(note.assignmentId);
+    } else if (note.employeeId) {
+      setNoteScope('employee');
+      setSelectedNoteEmployeeId(note.employeeId);
+    } else if (note.propertyId) {
+      setNoteScope('property');
+      setSelectedNotePropertyId(note.propertyId);
+    } else {
+      setNoteScope('org');
+    }
+    const coordinates = note.locationGeojson?.coordinates;
+    setNoteDraft({
+      type: note.type,
+      title: note.title,
+      content: note.content,
+      author: note.author,
+      location: note.location ?? '',
+      latitude: coordinates ? String(coordinates[1]) : '',
+      longitude: coordinates ? String(coordinates[0]) : '',
+      showOnDisplayBoard: note.showOnDisplayBoard === true,
+      photoFile: null,
+    });
+    setNoteDialogOpen(true);
+  }, []);
 
   const upsertAssignmentInCache = useCallback(
     (nextAssignment: Assignment) => {
@@ -5342,6 +5446,33 @@ export default function WorkboardContent() {
     toast.success('Request approved and assigned');
   }
 
+  async function uploadNotePhoto(file: File) {
+    if (!supabase || !orgId) throw new Error('Photo upload is not available.');
+    if (!PROJECT_PHOTO_ALLOWED_TYPES.includes(file.type as typeof PROJECT_PHOTO_ALLOWED_TYPES[number])) {
+      throw new Error('Choose a JPEG, PNG, WebP, HEIC, or HEIF image.');
+    }
+    if (file.size > PROJECT_PHOTO_MAX_BYTES) {
+      throw new Error('Photos must be 10 MB or smaller.');
+    }
+
+    const storagePath = `${orgId}/notes/${makeId()}.${notePhotoExtension(file)}`;
+    let timeoutId = 0;
+    const uploadPromise = supabase.storage.from(NOTE_PHOTO_BUCKET).upload(storagePath, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = window.setTimeout(() => reject(new Error('Photo upload timed out.')), 15_000);
+    });
+    const { error } = await Promise.race([uploadPromise, timeoutPromise]).finally(() => window.clearTimeout(timeoutId));
+    if (error) throw error;
+    return {
+      photo_storage_path: storagePath,
+      photo_content_type: file.type,
+      photo_size_bytes: file.size,
+    };
+  }
+
   async function saveNote() {
     if (isReadOnly) {
       toast.info('Demo mode is read-only.');
@@ -5392,11 +5523,24 @@ export default function WorkboardContent() {
       };
     }
 
+    const locationGeojson = noteDraft.type === 'geo' ? pointFromNoteDraft(noteDraft) : null;
+    if (noteDraft.type === 'geo' && !scopePayload.property_id) {
+      toast.error('Geo notes need a property scope.');
+      return;
+    }
+    if (noteDraft.showOnDisplayBoard && (!locationGeojson || !scopePayload.property_id)) {
+      toast.error('Display board geo notes need a property and map point.');
+      return;
+    }
+
     setSavingNote(true);
     const noteLabel = noteDraft.type === 'alert' ? 'Alert' : `${noteDraft.type.charAt(0).toUpperCase()}${noteDraft.type.slice(1)}`;
     const noteTitle = noteDraft.title.trim() || `${noteLabel} note - ${boardDate}`;
+    let uploadedStoragePath: string | null = null;
     try {
-      const { error } = await withWorkboardMutationTimeout(supabase.from('notes').insert({
+      const photoPayload = noteDraft.photoFile ? await uploadNotePhoto(noteDraft.photoFile) : null;
+      uploadedStoragePath = photoPayload?.photo_storage_path ?? null;
+      const notePayload = {
         type: noteDraft.type,
         title: noteTitle,
         content: noteDraft.content.trim(),
@@ -5406,16 +5550,37 @@ export default function WorkboardContent() {
         org_id: orgId,
         created_by: currentUser?.employeeId ?? null,
         location: noteDraft.location.trim() || null,
-      }));
+        location_geojson: locationGeojson,
+        show_on_display_board: noteDraft.type === 'geo' ? noteDraft.showOnDisplayBoard : false,
+        ...(photoPayload ?? {}),
+      };
+      const { error } = editingNoteId
+        ? await withWorkboardMutationTimeout(
+            supabase
+              .from('notes')
+              .update(notePayload)
+              .eq('id', editingNoteId)
+              .eq('org_id', orgId),
+          )
+        : await withWorkboardMutationTimeout(supabase.from('notes').insert(notePayload));
       if (error) {
         toast.error(`Failed to save note: ${error.message}`);
+        if (uploadedStoragePath) {
+          void supabase.storage.from(NOTE_PHOTO_BUCKET).remove([uploadedStoragePath]);
+        }
         return;
       }
-      setNoteDraft({ type: 'daily', title: '', content: '', author: 'Operations Admin', location: '' });
-      toast.success('Note saved');
+      setEditingNoteId(null);
+      setNoteDraft(emptyNoteDraft());
+      toast.success(editingNoteId ? 'Note updated' : 'Note saved');
       window.setTimeout(() => {
         void queryClient.invalidateQueries({ queryKey: ['notes'] });
       }, 0);
+    } catch (error) {
+      if (uploadedStoragePath) {
+        void supabase.storage.from(NOTE_PHOTO_BUCKET).remove([uploadedStoragePath]);
+      }
+      toast.error(error instanceof Error ? error.message : 'Failed to save note.');
     } finally {
       setSavingNote(false);
     }
@@ -8158,12 +8323,35 @@ export default function WorkboardContent() {
                           <p className="truncate text-sm font-semibold">{note.title}</p>
                           <p className="mt-1 text-xs text-muted-foreground">{note.date}</p>
                         </div>
-                        <Badge variant={note.type === 'alert' ? 'destructive' : 'secondary'} className="shrink-0 text-3xs capitalize">
-                          {note.type}
-                        </Badge>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {note.showOnDisplayBoard ? (
+                            <Badge variant="pending" className="text-4xs">Board</Badge>
+                          ) : null}
+                          <Badge variant={note.type === 'alert' ? 'destructive' : note.type === 'geo' ? 'pending' : 'secondary'} className="text-3xs capitalize">
+                            {note.type}
+                          </Badge>
+                          <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-3xs" onClick={() => startEditNote(note)}>
+                            Edit
+                          </Button>
+                        </div>
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">{note.content}</p>
                       {note.location ? <p className="mt-2 text-xs text-muted-foreground">Location: {note.location}</p> : null}
+                      {note.locationGeojson ? (
+                        <p className="mt-2 flex items-center gap-1 text-xs text-status-pending">
+                          <MapPin className="h-3 w-3" />
+                          Map point {note.locationGeojson.coordinates[1].toFixed(5)}, {note.locationGeojson.coordinates[0].toFixed(5)}
+                        </p>
+                      ) : null}
+                      {note.photoStoragePath ? (
+                        <div className="mt-2 rounded-md border border-surface-border bg-surface-elevated p-2">
+                          {note.photoSignedUrl ? (
+                            <img src={note.photoSignedUrl} alt={note.title} className="max-h-32 w-full rounded object-cover" loading="lazy" />
+                          ) : (
+                            <p className="text-xs text-text-muted">Private photo attached.</p>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   ))
                 )}
@@ -8171,11 +8359,30 @@ export default function WorkboardContent() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 border-t pt-4">
+              <div className="col-span-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  {editingNoteId ? 'Edit note' : 'Add note'}
+                </p>
+                {editingNoteId ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-3xs"
+                    onClick={() => {
+                      setEditingNoteId(null);
+                      setNoteDraft(emptyNoteDraft());
+                    }}
+                  >
+                    New note
+                  </Button>
+                ) : null}
+              </div>
               <div>
                 <label className="text-xs text-muted-foreground">Type</label>
                 <select
                   value={noteDraft.type}
-                  onChange={(e) => setNoteDraft({ ...noteDraft, type: e.target.value as Note['type'] })}
+                  onChange={(e) => setNoteDraft({ ...noteDraft, type: e.target.value as Note['type'], showOnDisplayBoard: e.target.value === 'geo' ? noteDraft.showOnDisplayBoard : false })}
                   className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
                   <option value="daily">Daily</option>
@@ -8205,6 +8412,79 @@ export default function WorkboardContent() {
                   <Input value={noteDraft.location} onChange={(e) => setNoteDraft({ ...noteDraft, location: e.target.value })} className="mt-1" />
                 )}
               </div>
+              {noteDraft.type === 'geo' ? (
+                <div className="col-span-2 rounded-lg border border-status-pending/20 bg-status-pending/10 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-status-pending">Geo note map point</p>
+                      <p className="text-3xs text-text-muted">Use latitude/longitude for the internal map pin and optional display board note.</p>
+                    </div>
+                    {selectedNoteScopeProperty?.latitude && selectedNoteScopeProperty?.longitude ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2 text-3xs"
+                        onClick={() => setNoteDraft({
+                          ...noteDraft,
+                          latitude: String(selectedNoteScopeProperty.latitude),
+                          longitude: String(selectedNoteScopeProperty.longitude),
+                        })}
+                      >
+                        Use property point
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs text-text-secondary">Latitude</label>
+                      <Input
+                        type="number"
+                        step="0.000001"
+                        min="-90"
+                        max="90"
+                        value={noteDraft.latitude}
+                        onChange={(e) => setNoteDraft({ ...noteDraft, latitude: e.target.value })}
+                        className="mt-1"
+                        placeholder="27.336400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-text-secondary">Longitude</label>
+                      <Input
+                        type="number"
+                        step="0.000001"
+                        min="-180"
+                        max="180"
+                        value={noteDraft.longitude}
+                        onChange={(e) => setNoteDraft({ ...noteDraft, longitude: e.target.value })}
+                        className="mt-1"
+                        placeholder="-82.530700"
+                      />
+                    </div>
+                  </div>
+                  <label className="mt-3 flex items-center gap-2 text-xs text-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={noteDraft.showOnDisplayBoard}
+                      onChange={(e) => setNoteDraft({ ...noteDraft, showOnDisplayBoard: e.target.checked })}
+                    />
+                    Show this geo note on the public display board
+                  </label>
+                </div>
+              ) : null}
+              <div className="col-span-2">
+                <label className="text-xs text-muted-foreground">Photo (optional, internal only)</label>
+                <Input
+                  type="file"
+                  accept={PROJECT_PHOTO_ALLOWED_TYPES.join(',')}
+                  onChange={(e) => setNoteDraft({ ...noteDraft, photoFile: e.target.files?.[0] ?? null })}
+                  className="mt-1"
+                />
+                {noteDraft.photoFile ? (
+                  <p className="mt-1 text-3xs text-text-muted">{noteDraft.photoFile.name}</p>
+                ) : null}
+              </div>
               <div className="col-span-2">
                 <label className="text-xs text-muted-foreground">Content</label>
                 <textarea
@@ -8218,7 +8498,7 @@ export default function WorkboardContent() {
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setNoteDialogOpen(false)} disabled={savingNote}>Close</Button>
               <Button onClick={saveNote} disabled={savingNote || !noteDraft.content.trim()}>
-                {savingNote ? 'Saving...' : 'Add Note'}
+                {savingNote ? 'Saving...' : editingNoteId ? 'Save Note' : 'Add Note'}
               </Button>
             </div>
           </div>

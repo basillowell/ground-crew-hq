@@ -699,13 +699,21 @@ type DbEquipmentUnit = {
 type DbNote = {
   id: string;
   org_id?: string | null;
-  property_id: string;
+  property_id: string | null;
   propertyId?: string;
   type: string;
   title: string;
   content: string;
   location: string | null;
   created_by: string | null;
+  employee_id?: string | null;
+  assignment_id?: string | null;
+  location_geojson?: unknown;
+  show_on_display_board?: boolean | null;
+  photo_storage_path?: string | null;
+  photo_content_type?: string | null;
+  photo_size_bytes?: number | string | null;
+  photoSignedUrl?: string | null;
   author?: string | null;
   date?: string | null;
   created_at: string;
@@ -1504,13 +1512,23 @@ function toEquipmentUnit(row: DbEquipmentUnit): EquipmentUnit {
 function toNote(row: DbNote): Note {
   return {
     id: row.id,
-    propertyId: row.property_id ?? row.propertyId ?? undefined,
+    propertyId: row.property_id ?? row.propertyId ?? null,
     type: row.type as Note['type'],
     title: row.title,
     content: row.content,
     author: row.author ?? row.created_by ?? 'System',
+    createdBy: row.created_by ?? undefined,
     date: row.date ?? row.created_at.slice(0, 10),
+    createdAt: row.created_at,
     location: row.location ?? undefined,
+    employeeId: row.employee_id ?? null,
+    assignmentId: row.assignment_id ?? null,
+    locationGeojson: isProjectLocationGeoJson(row.location_geojson) ? row.location_geojson : null,
+    showOnDisplayBoard: row.show_on_display_board === true,
+    photoStoragePath: row.photo_storage_path ?? null,
+    photoContentType: row.photo_content_type ?? null,
+    photoSizeBytes: row.photo_size_bytes === null || row.photo_size_bytes === undefined ? null : Number(row.photo_size_bytes),
+    photoSignedUrl: row.photoSignedUrl ?? null,
   };
 }
 
@@ -1817,7 +1835,15 @@ async function fetchNotes(propertyId?: string, orgId?: string): Promise<Note[]> 
   if (scopedPropertyId) query = query.eq('property_id', scopedPropertyId);
   const { data, error } = await query;
   if (error) throw error;
-  return (data as DbNote[]).map(toNote);
+  const rows = (data ?? []) as DbNote[];
+  return Promise.all(
+    rows.map(async (row) => {
+      const photoSignedUrl = row.photo_storage_path
+        ? await createProjectPhotoSignedUrl(client, row.photo_storage_path).catch(() => null)
+        : null;
+      return toNote({ ...row, photoSignedUrl });
+    }),
+  );
 }
 
 

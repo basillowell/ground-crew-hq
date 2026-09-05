@@ -117,7 +117,7 @@ export interface ScheduleEntry {
 export interface Note {
   id: string;
   clubId?: string;
-  propertyId?: string;
+  propertyId?: string | null;
   type: 'daily' | 'general' | 'geo' | 'alert';
   title: string;
   content: string;
@@ -126,6 +126,14 @@ export interface Note {
   date: string;
   createdAt?: string;
   location?: string;
+  employeeId?: string | null;
+  assignmentId?: string | null;
+  locationGeojson?: { type: 'Point'; coordinates: [number, number] } | null;
+  showOnDisplayBoard?: boolean;
+  photoStoragePath?: string | null;
+  photoContentType?: string | null;
+  photoSizeBytes?: number | null;
+  photoSignedUrl?: string | null;
 }
 
 export interface Assignment {
