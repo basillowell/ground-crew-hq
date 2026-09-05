@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Briefcase,
@@ -20,9 +21,12 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { TaskWorkOrderProofDialog } from '@/components/work-orders/TaskWorkOrderProofDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/sonner';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import type { Assignment, Employee, Property } from '@/data/seedData';
+import { createClient } from '@/lib/supabase';
+import { withRequestTimeout } from '@/lib/requestTimeout';
 import {
   type BillingClient,
   type EstimateStatus,
@@ -75,6 +79,13 @@ const invoiceStatusVariants: Record<RevenueInvoice['status'], 'hold' | 'pending'
 
 const ALL_ACCOUNT_PROPERTIES_KEY = 'all-account-properties';
 
+type ResultsBoardShareContext = {
+  clientId: string;
+  clientName: string;
+  resultsBoardToken: string;
+  resultsBoardEnabled: boolean;
+};
+
 function getRouteParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -122,6 +133,20 @@ function contractTotal(contract: ServiceContract, lineItems: RevenueLineItem[]) 
     .filter((item) => item.parentId === contract.id)
     .reduce((sum, item) => sum + item.lineTotal, 0);
   return subtotal + subtotal * (Math.max(0, contract.taxRate) / 100);
+}
+
+function normalizeResultsBoardShareContext(payload: unknown): ResultsBoardShareContext | null {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  const clientId = typeof row.client_id === 'string' ? row.client_id : '';
+  const clientName = typeof row.client_name === 'string' ? row.client_name : '';
+  const resultsBoardToken = typeof row.results_board_token === 'string' ? row.results_board_token : '';
+  if (!clientId || !resultsBoardToken) return null;
+  return {
+    clientId,
+    clientName,
+    resultsBoardToken,
+    resultsBoardEnabled: row.results_board_enabled === true,
+  };
 }
 
 function Section({
@@ -176,7 +201,14 @@ export default function AccountDetailPage() {
   const clientId = getRouteParam(params?.id);
   const validClientId = Boolean(clientId && uuidPattern.test(clientId));
   const [proofWorkOrder, setProofWorkOrder] = useState<TaskWorkOrder | null>(null);
-  const { orgId } = useOrgProfile();
+  const [resultsBoardDialogOpen, setResultsBoardDialogOpen] = useState(false);
+  const [resultsBoardLoading, setResultsBoardLoading] = useState(false);
+  const [resultsBoardSaving, setResultsBoardSaving] = useState(false);
+  const [resultsBoardCopying, setResultsBoardCopying] = useState(false);
+  const [resultsBoardError, setResultsBoardError] = useState<string | null>(null);
+  const [resultsBoardContext, setResultsBoardContext] = useState<ResultsBoardShareContext | null>(null);
+  const { orgId, currentRole } = useOrgProfile();
+  const queryClient = useQueryClient();
   const clientsQuery = useClients(orgId ?? undefined);
   const propertiesQuery = useProperties(orgId ?? undefined);
   const employeesQuery = useEmployees(undefined, orgId ?? undefined);
@@ -209,6 +241,12 @@ export default function AccountDetailPage() {
     () => clients.find((client) => client.id === clientId),
     [clientId, clients],
   );
+  const canManageResultsBoard = currentRole === 'admin' || currentRole === 'manager';
+  const resultsBoardUrl = useMemo(() => {
+    if (!resultsBoardContext?.resultsBoardToken) return '';
+    if (typeof window === 'undefined') return `/view/account/${resultsBoardContext.resultsBoardToken}`;
+    return `${window.location.origin}/view/account/${resultsBoardContext.resultsBoardToken}`;
+  }, [resultsBoardContext?.resultsBoardToken]);
 
   const propertiesById = useMemo(() => new Map(properties.map((property) => [property.id, property])), [properties]);
   const accountProperties = useMemo(
@@ -368,6 +406,84 @@ export default function AccountDetailPage() {
     }
   };
 
+  const openResultsBoardDialog = useCallback(async () => {
+    if (!canManageResultsBoard) {
+      toast.error('Only supervisors can share the results board.');
+      return;
+    }
+    if (!clientId || !validClientId) {
+      toast.error('Choose a valid account before sharing its results board.');
+      return;
+    }
+
+    setResultsBoardDialogOpen(true);
+    setResultsBoardLoading(true);
+    setResultsBoardError(null);
+    setResultsBoardContext(null);
+    try {
+      const supabase = createClient();
+      const { data, error } = await withRequestTimeout(
+        supabase.rpc('get_account_results_board_share_context', { p_client_id: clientId }),
+        'Results board link request timed out after 15 seconds.',
+      );
+      if (error) throw error;
+      const normalized = normalizeResultsBoardShareContext(data);
+      if (!normalized) throw new Error('Results board link is not available for this account.');
+      setResultsBoardContext(normalized);
+    } catch (error) {
+      setResultsBoardError(error instanceof Error ? error.message : 'Unable to load results board link.');
+    } finally {
+      setResultsBoardLoading(false);
+    }
+  }, [canManageResultsBoard, clientId, validClientId]);
+
+  const toggleResultsBoardEnabled = useCallback(async (nextEnabled: boolean) => {
+    if (!canManageResultsBoard || !orgId || !resultsBoardContext) {
+      toast.error('Only supervisors can update results board sharing.');
+      return;
+    }
+    setResultsBoardSaving(true);
+    try {
+      const supabase = createClient();
+      const { error } = await withRequestTimeout(
+        supabase
+          .from('clients')
+          .update({ results_board_enabled: nextEnabled })
+          .eq('id', resultsBoardContext.clientId)
+          .eq('org_id', orgId),
+        'Results board sharing update timed out after 15 seconds.',
+      );
+      if (error) {
+        toast.error(`Could not ${nextEnabled ? 'enable' : 'disable'} results board: ${error.message}`);
+        return;
+      }
+      setResultsBoardContext((current) => current ? { ...current, resultsBoardEnabled: nextEnabled } : current);
+      await queryClient.invalidateQueries({ queryKey: ['clients', orgId] });
+      toast.success(nextEnabled ? 'Results board enabled' : 'Results board disabled');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update results board sharing.');
+    } finally {
+      setResultsBoardSaving(false);
+    }
+  }, [canManageResultsBoard, orgId, queryClient, resultsBoardContext]);
+
+  const copyResultsBoardLink = useCallback(async () => {
+    if (!resultsBoardContext || !resultsBoardUrl) return;
+    if (!resultsBoardContext.resultsBoardEnabled) {
+      toast.info('Enable the results board before sharing the link.');
+      return;
+    }
+    setResultsBoardCopying(true);
+    try {
+      await navigator.clipboard.writeText(resultsBoardUrl);
+      toast.success('Results board link copied');
+    } catch {
+      toast.error('Unable to copy results board link');
+    } finally {
+      setResultsBoardCopying(false);
+    }
+  }, [resultsBoardContext, resultsBoardUrl]);
+
   const handleRetry = () => {
     void clientsQuery.refetch();
     void propertiesQuery.refetch();
@@ -413,6 +529,12 @@ export default function AccountDetailPage() {
           <Clipboard className="h-4 w-4" />
           Copy request link
         </Button>
+        {canManageResultsBoard ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => void openResultsBoardDialog()}>
+            <Clipboard className="h-4 w-4" />
+            Share results board
+          </Button>
+        ) : null}
       </PageHeader>
 
       <section className="rounded-lg border border-surface-border bg-surface-card p-4">
@@ -661,6 +783,86 @@ export default function AccountDetailPage() {
         properties={properties}
         employees={employees}
       />
+
+      <Dialog
+        open={resultsBoardDialogOpen}
+        onOpenChange={(open) => {
+          setResultsBoardDialogOpen(open);
+          if (!open) {
+            setResultsBoardError(null);
+          }
+        }}
+      >
+        <DialogContent role="dialog" aria-modal="true" className="max-w-lg">
+          <DialogDescription className="sr-only">
+            Enable or disable the public results board for this account and copy its share link.
+          </DialogDescription>
+          <DialogHeader>
+            <DialogTitle>Results Board</DialogTitle>
+          </DialogHeader>
+          {resultsBoardLoading ? (
+            <div className="space-y-3 py-3">
+              <div className="h-4 w-48 animate-pulse rounded bg-surface-elevated" />
+              <div className="h-10 animate-pulse rounded bg-surface-elevated" />
+              <div className="h-10 w-36 animate-pulse rounded bg-surface-elevated" />
+            </div>
+          ) : resultsBoardError ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
+                {resultsBoardError}
+              </div>
+              <Button type="button" variant="outline" onClick={() => void openResultsBoardDialog()}>
+                Retry
+              </Button>
+            </div>
+          ) : resultsBoardContext ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-surface-border bg-surface-elevated p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">{resultsBoardContext.clientName || account.name}</p>
+                    <p className="mt-1 text-xs text-text-secondary">
+                      Public owner/HOA results board for delivered work and scope baseline.
+                    </p>
+                  </div>
+                  <Badge variant={resultsBoardContext.resultsBoardEnabled ? 'active' : 'hold'}>
+                    {resultsBoardContext.resultsBoardEnabled ? 'Enabled' : 'Disabled'}
+                  </Badge>
+                </div>
+              </div>
+              <div className="rounded-lg border border-surface-border bg-surface-elevated p-3">
+                <p className="text-xs font-medium uppercase tracking-widest text-text-muted">Share link</p>
+                <p className="mt-2 break-all rounded-md border border-surface-border bg-surface-card px-3 py-2 text-sm text-text-secondary">
+                  {resultsBoardUrl}
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void toggleResultsBoardEnabled(!resultsBoardContext.resultsBoardEnabled)}
+                  disabled={resultsBoardSaving}
+                >
+                  {resultsBoardSaving
+                    ? 'Saving...'
+                    : resultsBoardContext.resultsBoardEnabled
+                      ? 'Disable results board'
+                      : 'Enable results board'}
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-brand text-text-inverse hover:bg-brand/90"
+                  onClick={() => void copyResultsBoardLink()}
+                  disabled={resultsBoardCopying || !resultsBoardContext.resultsBoardEnabled}
+                >
+                  <Clipboard className="h-4 w-4" />
+                  {resultsBoardCopying ? 'Copying...' : 'Copy results board link'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

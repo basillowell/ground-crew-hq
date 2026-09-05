@@ -148,6 +148,8 @@ export type BillingClient = {
   notes: string;
   active: boolean;
   clientToken: string;
+  resultsBoardToken: string;
+  resultsBoardEnabled: boolean;
   createdAt: string;
 };
 
@@ -446,6 +448,8 @@ type DbBillingClient = {
   notes: string | null;
   active: boolean;
   client_token: string;
+  results_board_token: string;
+  results_board_enabled: boolean;
   created_at: string;
 };
 
@@ -1151,6 +1155,8 @@ function toBillingClient(row: DbBillingClient): BillingClient {
     notes: row.notes ?? '',
     active: row.active,
     clientToken: row.client_token,
+    resultsBoardToken: row.results_board_token,
+    resultsBoardEnabled: row.results_board_enabled,
     createdAt: row.created_at,
   };
 }
@@ -2661,7 +2667,7 @@ const employeeNotificationPreferenceSelectColumns = 'id, org_id, employee_id, sm
 const crewBroadcastSelectColumns = 'id, org_id, sender_id, subject, body, source_surface, selected_channels, is_emergency, created_at';
 const crewBroadcastRecipientSelectColumns = 'id, broadcast_id, org_id, employee_id, channel, destination_snapshot, status, provider_message_id, error_message, sent_at, delivered_at, created_at';
 const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
-const clientSelectColumns = 'id, org_id, name, email, phone, address, notes, active, client_token, created_at';
+const clientSelectColumns = 'id, org_id, name, email, phone, address, notes, active, client_token, results_board_token, results_board_enabled, created_at';
 const clientPropertySelectColumns = 'id, org_id, client_id, property_id, created_at';
 
 function optionalUuid(value: string | null | undefined): string | null {

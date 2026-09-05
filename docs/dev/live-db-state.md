@@ -719,6 +719,64 @@ RLS:
 
 ---
 
+## DB function: get_public_account_results_board(p_token uuid, p_month date) -> jsonb
+> migration accountability_3_results_board (2026-09-05). SECURITY DEFINER,
+> search_path pinned to public. EXECUTE granted to anon and authenticated. The
+> public owner/HOA account results board endpoint for /view/account/[token].
+> Returns null for a missing token or when the matching client has
+> results_board_enabled=false or active=false. Returns a narrow JSON envelope
+> only: business display name/logo, account name, requested month period,
+> account-linked property display fields, active/paused service scope baseline
+> with cadence and line-item descriptions/quantities, completed and
+> pending_verification task_work_orders for the month, linked assignment delivery
+> summaries, signature metadata, proof photo count/captions, visible
+> assignment-scoped geo notes, month rollup, and 12-month trend. Explicitly
+> excludes client email/phone/address/notes, employee ids, wage/rate/cost data,
+> raw signature images, project photo storage paths/signed URLs, and any direct
+> table access from the anon route. Proof photos are Phase A metadata only.
+
+---
+
+## DB function: get_account_results_board_share_context(p_client_id uuid) -> jsonb
+> migration accountability_3_results_board (2026-09-05). SECURITY INVOKER,
+> search_path pinned to public. EXECUTE granted to authenticated only. Internal
+> admin/manager share helper for the Account hub; checks the caller's org via
+> current_org_id() and role via current_user_role(), then returns client_id,
+> client_name, results_board_token, and results_board_enabled for the requested
+> active client. Used to build/copy the public /view/account/[token] link without
+> exposing results_board_token through an anon table read.
+
+---
+
+## DB function: broadcast_public_account_results_board_refresh(p_client_id uuid) -> void
+> migration accountability_3_results_board (2026-09-05). SECURITY DEFINER,
+> search_path pinned to public. Internal trigger helper only; no EXECUTE granted
+> to anon/authenticated. If the client exists and results_board_enabled=true,
+> sends a minimal Realtime broadcast event named refresh to
+> public-account-board:{results_board_token}. Payload is an empty JSON object and
+> is_private=false so anonymous token holders can receive refresh signals.
+> Clients must re-read through get_public_account_results_board(p_token, p_month)
+> and never subscribe to raw table rows.
+
+---
+
+## DB trigger functions: public account results board refresh
+> migration accountability_3_results_board (2026-09-05). Seven scoped AFTER
+> INSERT/UPDATE/DELETE row triggers refresh only the affected account board by
+> resolving client_id from the changed row: task_work_orders uses its direct
+> client_id; assignments resolves assignment.task_work_order_id ->
+> task_work_orders.client_id; signatures resolves signature.assignment_id ->
+> assignments.task_work_order_id -> task_work_orders.client_id; project_photos
+> resolves project_photos.task_work_order_id -> task_work_orders.client_id; notes
+> broadcasts only visible geo rows (type='geo', show_on_display_board=true,
+> location_geojson IS NOT NULL) and resolves notes.assignment_id ->
+> assignments.task_work_order_id -> task_work_orders.client_id; service_contracts
+> uses direct client_id; service_contract_line_items resolves contract_id ->
+> service_contracts.client_id. No trigger broadcasts one account's changes to
+> every account board.
+
+---
+
 ## projects
 | column          | type        | nullable | default           |
 |-----------------|-------------|----------|-------------------|
@@ -1661,6 +1719,8 @@ the client) and role admin or manager, else raises 'Not authorized.'
 | phone         | text        | YES      |                   |
 | address       | text        | YES      |                   |
 | client_token  | uuid        | NO       | gen_random_uuid() |
+| results_board_token | uuid  | NO       | gen_random_uuid() |
+| results_board_enabled | boolean | NO   | false             |
 | notes         | text        | YES      |                   |
 | active        | boolean     | NO       | true              |
 | created_at    | timestamptz | NO       | now()             |
@@ -1680,6 +1740,13 @@ the client) and role admin or manager, else raises 'Not authorized.'
 > built, it MUST read through a SECURITY DEFINER RPC that takes the token and
 > returns a single row — never a blanket read policy. RLS has no clean way to
 > compare against a caller-supplied value.
+>
+> results_board_token / results_board_enabled (migration accountability_3_results_board,
+> 2026-09-05): token-scoped public account/owner results-board sharing.
+> results_board_enabled must be true before the anon RPC returns data; rotating
+> results_board_token invalidates the old link. Internal app code reads this token
+> through get_account_results_board_share_context(client_id), not through direct
+> anon table reads.
 
 ---
 
