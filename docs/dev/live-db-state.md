@@ -1576,6 +1576,73 @@ the client) and role admin or manager, else raises 'Not authorized.'
 
 ---
 
+## employee_notification_preferences
+| column           | type        | nullable | default           |
+|------------------|-------------|----------|-------------------|
+| id               | uuid        | NO       | gen_random_uuid() |
+| org_id           | uuid        | NO       |                   |
+| employee_id      | uuid        | NO       |                   |
+| sms_opted_in     | boolean     | NO       | false             |
+| sms_opted_in_at  | timestamptz | YES      |                   |
+| sms_opted_out_at | timestamptz | YES      |                   |
+| email_opted_in   | boolean     | NO       | false             |
+| email_opted_in_at| timestamptz | YES      |                   |
+| email_opted_out_at | timestamptz | YES    |                   |
+| preferred_channel| text        | NO       | 'in_app'          |
+| updated_by       | uuid        | YES      |                   |
+| updated_at       | timestamptz | NO       | now()             |
+
+> Consent capture for emergency SMS/email broadcasts. Default opt-in values are
+> false; consent must be explicitly captured. Unique on (org_id, employee_id).
+> RLS: employees can read/update their own preferences; admin/manager can
+> create/update preferences for employees in their org for hire/onboarding
+> consent capture.
+
+---
+
+## crew_broadcasts
+| column            | type        | nullable | default              |
+|-------------------|-------------|----------|----------------------|
+| id                | uuid        | NO       | gen_random_uuid()    |
+| org_id            | uuid        | NO       |                      |
+| sender_id         | uuid        | NO       |                      |
+| subject           | text        | YES      |                      |
+| body              | text        | NO       |                      |
+| source_surface    | text        | NO       | 'crew_comms'         |
+| selected_channels | text[]      | NO       | ARRAY['in_app']      |
+| is_emergency      | boolean     | NO       | false                |
+| created_at        | timestamptz | NO       | now()                |
+
+> Broadcast audit header for crew-wide sends. Routine broadcasts are constrained
+> to in-app delivery only. SMS/email channels are permitted only when
+> is_emergency = true. RLS: org members read; admin/manager create/update.
+
+---
+
+## crew_broadcast_recipients
+| column              | type        | nullable | default                  |
+|---------------------|-------------|----------|--------------------------|
+| id                  | uuid        | NO       | gen_random_uuid()        |
+| broadcast_id        | uuid        | NO       |                          |
+| org_id              | uuid        | NO       |                          |
+| employee_id         | uuid        | NO       |                          |
+| channel             | text        | NO       |                          |
+| destination_snapshot| text        | YES      |                          |
+| status              | text        | NO       | 'pending_provider_setup' |
+| provider_message_id | text        | YES      |                          |
+| error_message       | text        | YES      |                          |
+| sent_at             | timestamptz | YES      |                          |
+| delivered_at        | timestamptz | YES      |                          |
+| created_at          | timestamptz | NO       | now()                    |
+
+> Per-recipient delivery audit. In-app rows are created alongside the messages
+> table post. Emergency SMS/email rows stay as pending_provider_setup until an
+> external provider is configured; skipped_no_consent records make consent gaps
+> explicit. RLS: admin/manager can read/manage org recipients; employees can
+> read their own recipient rows.
+
+---
+
 ## clients
 | column        | type        | nullable | default           |
 |---------------|-------------|----------|-------------------|
@@ -1820,8 +1887,9 @@ The app calls these via the ANON supabase client from the public /view routes
 
 ---
 
-## Table count: 66
+## Table count: 69
 Count corrected 2026-09-03 after live-schema drift audit — 13 tables added since the July sync: `client_properties`, `contract_invoice_runs`, `estimate_line_items`, `estimates`, `invoice_line_items`, `payments`, `project_photos`, `service_catalog`, `service_contract_line_items`, `service_contracts`, `signatures`, `task_work_orders`; all 66 tables already have documented sections in this file.
+Job Board 10 emergency broadcast consent tables added 2026-09-05: `employee_notification_preferences`, `crew_broadcasts`, `crew_broadcast_recipients`.
 ## Last synced from: Supabase project fjqeekwisnbpxgebrnpl
 Map/visual-record migrations applied 2026-08-14:
 - project_photo_map_location — project_photos.location_geojson (nullable jsonb Point) for progress-photo map pins

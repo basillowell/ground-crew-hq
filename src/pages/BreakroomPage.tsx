@@ -3,17 +3,44 @@ import { useSearchParams } from 'next/navigation';
 import { useOrgProfile } from '@/hooks/useOrgProfile';
 import { usePagePropertySelection } from '@/hooks/usePagePropertySelection';
 import { createClient } from '@/lib/supabase';
-import { useAssignments, useEmployees, useNotes, useProperties, useTasks } from '@/lib/supabase-queries';
+import type { CrewBroadcastChannel, EmployeeNotificationPreference } from '@/lib/supabase-queries';
+import {
+  useAssignments,
+  useCreateCrewBroadcast,
+  useEmployeeNotificationPreferences,
+  useEmployees,
+  useNotes,
+  useProperties,
+  useTasks,
+  useUpdateEmployeeNotificationPreference,
+} from '@/lib/supabase-queries';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { PropertySelector } from '@/components/shared/PropertySelector';
 import { ErrorRetry } from '@/components/ErrorRetry';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
-import { Bell, Check, ClipboardList, Hash, MessageSquare, Search, Send, StickyNote, Users, X } from 'lucide-react';
+import {
+  Bell,
+  Check,
+  ClipboardList,
+  Hash,
+  Loader2,
+  Mail,
+  MessageSquare,
+  Phone,
+  Search,
+  Send,
+  Settings2,
+  ShieldAlert,
+  StickyNote,
+  Users,
+  X,
+} from 'lucide-react';
 
 const supabase = createClient();
 
@@ -61,9 +88,10 @@ function validTab(value: string | null): CommsTab {
 export default function BreakroomPage() {
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab') ?? null;
-  const { orgId, currentUser } = useOrgProfile();
+  const { orgId, currentRole, currentUser } = useOrgProfile();
   const authUserId = currentUser?.authUser?.id;
   const myEmployeeId = currentUser?.employeeId ?? null;
+  const canManageBroadcasts = currentRole === 'admin' || currentRole === 'manager';
   const todayKey = new Date().toLocaleDateString('en-CA');
   const { data: properties = [], isLoading: propertiesLoading } = useProperties(orgId ?? undefined);
   const [selectedPropertyId, setSelectedPropertyId] = usePagePropertySelection({
@@ -85,6 +113,10 @@ export default function BreakroomPage() {
     orgId ?? undefined,
   );
   const { data: tasks = [] } = useTasks(undefined, orgId ?? undefined);
+  const { data: notificationPreferences = [], isLoading: preferencesLoading } =
+    useEmployeeNotificationPreferences(orgId ?? undefined);
+  const createBroadcastMutation = useCreateCrewBroadcast();
+  const updatePreferenceMutation = useUpdateEmployeeNotificationPreference();
 
   const [activeTab, setActiveTab] = useState<CommsTab>(() => validTab(tabParam));
   const [activeChannel, setActiveChannel] = useState(COMPANY_CHANNEL);
@@ -98,6 +130,8 @@ export default function BreakroomPage() {
   const [sendSubject, setSendSubject] = useState('');
   const [sendBody, setSendBody] = useState('');
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
+  const [isEmergency, setIsEmergency] = useState(false);
+  const [emergencyChannels, setEmergencyChannels] = useState<CrewBroadcastChannel[]>(['sms', 'email']);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -161,6 +195,20 @@ export default function BreakroomPage() {
     () => activeEmployees.filter((employee) => selectedRecipientIds.includes(employee.id)),
     [activeEmployees, selectedRecipientIds],
   );
+
+  const broadcastRecipients = selectedRecipients.length > 0 ? selectedRecipients : activeEmployees;
+
+  const preferenceByEmployeeId = useMemo(
+    () => new Map(notificationPreferences.map((preference) => [preference.employeeId, preference])),
+    [notificationPreferences],
+  );
+
+  const toggleEmergencyChannel = (channel: CrewBroadcastChannel) => {
+    if (channel === 'in_app') return;
+    setEmergencyChannels((prev) =>
+      prev.includes(channel) ? prev.filter((value) => value !== channel) : [...prev, channel],
+    );
+  };
 
   const fetchMessages = useCallback(async (channel: string) => {
     if (!orgId) return;
@@ -267,21 +315,54 @@ export default function BreakroomPage() {
   };
 
   const handleSendToCrew = async () => {
-    const recipientNames = selectedRecipients.length > 0
-      ? selectedRecipients.map((employee) => `${employee.firstName} ${employee.lastName}`.trim()).join(', ')
-      : 'All active crew in this property scope';
-    const parts = [
-      `To: ${recipientNames}`,
-      sendSubject.trim() ? `Subject: ${sendSubject.trim()}` : '',
-      sendBody.trim(),
-    ].filter(Boolean);
-    const sent = await postMessageToChannel(sendChannel, parts.join('\n\n'), 'Posted to Crew Comms');
-    if (sent) {
+    if (!orgId || !myEmployeeId) {
+      toast.error('Cannot identify your employee record to send messages.');
+      return;
+    }
+    if (!canManageBroadcasts) {
+      toast.error('Crew broadcasts are available to admins and managers.');
+      return;
+    }
+    if (broadcastRecipients.length === 0) {
+      toast.error('Select at least one recipient.');
+      return;
+    }
+    try {
+      const result = await createBroadcastMutation.mutateAsync({
+        orgId,
+        senderId: myEmployeeId,
+        channel: sendChannel,
+        subject: sendSubject,
+        body: sendBody,
+        recipients: broadcastRecipients.map((employee) => ({
+          employeeId: employee.id,
+          name: `${employee.firstName} ${employee.lastName}`.trim(),
+          phone: employee.phone,
+          email: employee.email,
+        })),
+        preferences: notificationPreferences,
+        isEmergency,
+        externalChannels: isEmergency ? emergencyChannels : [],
+      });
+      const externalParts = [
+        result.smsQueued > 0 ? `${result.smsQueued} queued for SMS` : '',
+        result.emailQueued > 0 ? `${result.emailQueued} queued for email` : '',
+        result.skippedNoConsent > 0 ? `${result.skippedNoConsent} skipped - not opted in` : '',
+        result.skippedMissingDestination > 0 ? `${result.skippedMissingDestination} skipped - missing destination` : '',
+      ].filter(Boolean);
+      toast.success(
+        externalParts.length > 0
+          ? `${result.inAppSent} sent in-app, ${externalParts.join(', ')}. SMS/Email not yet configured - contact Basil.`
+          : `${result.inAppSent} sent in-app.`,
+      );
       setSelectedRecipientIds([]);
       setSendSubject('');
       setSendBody('');
+      setIsEmergency(false);
       setActiveChannel(sendChannel);
       setActiveTab('channels');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to post to Crew Comms.');
     }
   };
 
@@ -294,6 +375,30 @@ export default function BreakroomPage() {
 
   const toggleRecipient = (id: string) => {
     setSelectedRecipientIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]));
+  };
+
+  const updatePreference = (employeeId: string, patch: Partial<Pick<EmployeeNotificationPreference, 'smsOptedIn' | 'emailOptedIn' | 'preferredChannel'>>) => {
+    if (!orgId || !myEmployeeId) {
+      toast.error('Cannot identify your employee record to save preferences.');
+      return;
+    }
+    const existingPreference = preferenceByEmployeeId.get(employeeId) ?? null;
+    updatePreferenceMutation.mutate(
+      {
+        orgId,
+        employeeId,
+        updatedBy: myEmployeeId,
+        smsOptedIn: patch.smsOptedIn ?? existingPreference?.smsOptedIn ?? false,
+        emailOptedIn: patch.emailOptedIn ?? existingPreference?.emailOptedIn ?? false,
+        preferredChannel: patch.preferredChannel ?? existingPreference?.preferredChannel ?? 'in_app',
+        existingPreference,
+      },
+      {
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : 'Failed to save notification preference.');
+        },
+      },
+    );
   };
 
   const getSenderName = (senderId: string) => {
@@ -544,6 +649,15 @@ export default function BreakroomPage() {
             </TabsContent>
 
             <TabsContent value="send" className="m-0 min-h-0 flex-1 overflow-y-auto p-4">
+              {!canManageBroadcasts ? (
+                <div className="flex min-h-96 flex-col items-center justify-center rounded-xl border border-surface-border bg-surface-elevated p-8 text-center">
+                  <Users className="mb-4 h-10 w-10 text-text-muted" />
+                  <p className="text-sm font-semibold text-text-primary">Supervisors only</p>
+                  <p className="mt-2 max-w-md text-sm text-text-secondary">
+                    Crew broadcasts and emergency contact preferences are available to admins and managers.
+                  </p>
+                </div>
+              ) : (
               <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
                 <section className="rounded-xl border border-surface-border bg-surface-elevated p-3">
                   <div className="mb-3 flex items-center gap-2">
@@ -598,7 +712,7 @@ export default function BreakroomPage() {
                     <div>
                       <h2 className="text-sm font-semibold text-text-primary">Post to Crew Comms</h2>
                       <p className="mt-1 text-xs text-text-secondary">
-                        Posts to a shared channel. Recipient names are included in the message for clarity.
+                        Posts to a shared channel. Emergency broadcasts can also queue SMS/email once providers are configured.
                       </p>
                     </div>
                     <select
@@ -611,6 +725,48 @@ export default function BreakroomPage() {
                       ))}
                     </select>
                   </div>
+
+                  {canManageBroadcasts ? (
+                    <div className="mb-4 rounded-xl border border-surface-border bg-surface-card p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-2">
+                          <ShieldAlert className="mt-0.5 h-4 w-4 text-status-warning" />
+                          <div>
+                            <p className="text-sm font-semibold text-text-primary">Emergency broadcast</p>
+                            <p className="mt-1 text-xs text-text-secondary">
+                              Routine sends stay in-app. Emergency SMS/email rows are queued as pending provider setup.
+                            </p>
+                          </div>
+                        </div>
+                        <Switch checked={isEmergency} onCheckedChange={setIsEmergency} aria-label="Mark as emergency broadcast" />
+                      </div>
+                      {isEmergency ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(['sms', 'email'] as CrewBroadcastChannel[]).map((channel) => {
+                            const selected = emergencyChannels.includes(channel);
+                            return (
+                              <button
+                                key={channel}
+                                type="button"
+                                onClick={() => toggleEmergencyChannel(channel)}
+                                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                                  selected
+                                    ? 'border-status-warning/40 bg-status-warning/10 text-status-warning'
+                                    : 'border-surface-border bg-surface-elevated text-text-secondary hover:bg-surface-hover'
+                                }`}
+                              >
+                                {channel === 'sms' ? <Phone className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+                                {channel === 'sms' ? 'Queue SMS' : 'Queue Email'}
+                              </button>
+                            );
+                          })}
+                          <span className="inline-flex items-center rounded-lg border border-status-pending/30 bg-status-pending/10 px-3 py-2 text-xs text-status-pending">
+                            SMS/Email not yet configured - contact Basil
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   {selectedRecipients.length > 0 ? (
                     <div className="mb-3 flex flex-wrap gap-1.5">
@@ -637,19 +793,104 @@ export default function BreakroomPage() {
                     onChange={(event) => setSendBody(event.target.value)}
                     className="min-h-[220px] resize-none border-surface-border bg-surface-card text-text-primary"
                   />
+                  <p className="mt-2 text-xs text-text-muted">
+                    {selectedRecipients.length > 0
+                      ? `${selectedRecipients.length} selected recipient${selectedRecipients.length === 1 ? '' : 's'}`
+                      : `No recipients selected - sends to all ${activeEmployees.length} active crew in this property scope.`}
+                  </p>
                   <div className="mt-4 flex justify-end">
                     <Button
                       type="button"
                       onClick={() => void handleSendToCrew()}
-                      disabled={!sendBody.trim() || sending}
+                      disabled={!sendBody.trim() || sending || createBroadcastMutation.isPending}
                       className="bg-brand text-text-inverse hover:bg-brand/90"
                     >
-                      <Send className="h-4 w-4" />
+                      {createBroadcastMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       Post to Crew Comms
                     </Button>
                   </div>
                 </section>
+
+                {canManageBroadcasts ? (
+                  <section className="rounded-xl border border-surface-border bg-surface-elevated p-4 lg:col-span-2">
+                    <div className="mb-4 flex items-start gap-2">
+                      <Settings2 className="mt-0.5 h-4 w-4 text-brand" />
+                      <div>
+                        <h2 className="text-sm font-semibold text-text-primary">Emergency contact preferences</h2>
+                        <p className="mt-1 text-xs text-text-secondary">
+                          Capture consent for emergency SMS/email at onboarding. External providers are not configured yet.
+                        </p>
+                      </div>
+                    </div>
+                    {preferencesLoading ? (
+                      <div className="space-y-2">
+                        {[1, 2, 3].map((item) => (
+                          <div key={item} className="h-12 animate-pulse rounded-lg bg-surface-hover" />
+                        ))}
+                      </div>
+                    ) : activeEmployees.length === 0 ? (
+                      <p className="rounded-lg border border-surface-border bg-surface-card p-3 text-sm text-text-muted">
+                        No active crew members are available in this property scope.
+                      </p>
+                    ) : (
+                      <div className="overflow-hidden rounded-xl border border-surface-border">
+                        <div className="grid grid-cols-[minmax(0,1.4fr)_auto_auto_auto] gap-3 border-b border-surface-border bg-surface-card px-3 py-2 text-2xs font-semibold uppercase tracking-wide text-text-muted">
+                          <span>Crew member</span>
+                          <span>SMS</span>
+                          <span>Email</span>
+                          <span>Preferred</span>
+                        </div>
+                        <div className="max-h-72 overflow-y-auto">
+                          {activeEmployees.map((employee) => {
+                            const preference = preferenceByEmployeeId.get(employee.id);
+                            const fullName = `${employee.firstName} ${employee.lastName}`.trim();
+                            const saving = updatePreferenceMutation.isPending;
+                            return (
+                              <div
+                                key={employee.id}
+                                className="grid grid-cols-[minmax(0,1.4fr)_auto_auto_auto] items-center gap-3 border-b border-surface-border px-3 py-2 last:border-b-0"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-text-primary">{fullName}</p>
+                                  <p className="truncate text-xs text-text-muted">
+                                    {[employee.phone || 'No phone', employee.email || 'No email'].join(' · ')}
+                                  </p>
+                                </div>
+                                <Switch
+                                  checked={preference?.smsOptedIn ?? false}
+                                  disabled={saving}
+                                  onCheckedChange={(checked) => updatePreference(employee.id, { smsOptedIn: checked })}
+                                  aria-label={`SMS emergency consent for ${fullName}`}
+                                />
+                                <Switch
+                                  checked={preference?.emailOptedIn ?? false}
+                                  disabled={saving}
+                                  onCheckedChange={(checked) => updatePreference(employee.id, { emailOptedIn: checked })}
+                                  aria-label={`Email emergency consent for ${fullName}`}
+                                />
+                                <select
+                                  value={preference?.preferredChannel ?? 'in_app'}
+                                  disabled={saving}
+                                  onChange={(event) =>
+                                    updatePreference(employee.id, { preferredChannel: event.target.value as CrewBroadcastChannel })
+                                  }
+                                  className="h-8 rounded-lg border border-surface-border bg-surface-card px-2 text-xs text-text-primary"
+                                  aria-label={`Preferred emergency channel for ${fullName}`}
+                                >
+                                  <option value="in_app">In-app</option>
+                                  <option value="sms">SMS</option>
+                                  <option value="email">Email</option>
+                                </select>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                ) : null}
               </div>
+              )}
             </TabsContent>
           </Tabs>
         </main>

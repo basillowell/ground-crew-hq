@@ -230,6 +230,68 @@ export type TaskWorkOrder = {
   completedAt: string | null;
 };
 
+export type CrewBroadcastChannel = 'in_app' | 'sms' | 'email';
+export type CrewBroadcastRecipientStatus =
+  | 'pending_provider_setup'
+  | 'queued'
+  | 'sent'
+  | 'delivered'
+  | 'failed'
+  | 'skipped_no_consent'
+  | 'skipped_missing_destination';
+
+export type EmployeeNotificationPreference = {
+  id: string;
+  orgId: string;
+  employeeId: string;
+  smsOptedIn: boolean;
+  smsOptedInAt: string | null;
+  smsOptedOutAt: string | null;
+  emailOptedIn: boolean;
+  emailOptedInAt: string | null;
+  emailOptedOutAt: string | null;
+  preferredChannel: CrewBroadcastChannel;
+  updatedBy: string | null;
+  updatedAt: string;
+};
+
+export type CrewBroadcast = {
+  id: string;
+  orgId: string;
+  senderId: string;
+  subject: string | null;
+  body: string;
+  sourceSurface: string;
+  selectedChannels: CrewBroadcastChannel[];
+  isEmergency: boolean;
+  createdAt: string;
+};
+
+export type CrewBroadcastRecipient = {
+  id: string;
+  broadcastId: string;
+  orgId: string;
+  employeeId: string;
+  channel: CrewBroadcastChannel;
+  destinationSnapshot: string | null;
+  status: CrewBroadcastRecipientStatus;
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+};
+
+export type CrewBroadcastResult = {
+  broadcast: CrewBroadcast;
+  recipients: CrewBroadcastRecipient[];
+  inAppSent: number;
+  smsQueued: number;
+  emailQueued: number;
+  skippedNoConsent: number;
+  skippedMissingDestination: number;
+};
+
 export type JobCostingAssignment = {
   id: string;
   employeeId: string;
@@ -459,6 +521,48 @@ type DbTaskWorkOrder = {
   due_date: string | null;
   created_at: string;
   completed_at: string | null;
+};
+
+type DbEmployeeNotificationPreference = {
+  id: string;
+  org_id: string;
+  employee_id: string;
+  sms_opted_in: boolean;
+  sms_opted_in_at: string | null;
+  sms_opted_out_at: string | null;
+  email_opted_in: boolean;
+  email_opted_in_at: string | null;
+  email_opted_out_at: string | null;
+  preferred_channel: CrewBroadcastChannel;
+  updated_by: string | null;
+  updated_at: string;
+};
+
+type DbCrewBroadcast = {
+  id: string;
+  org_id: string;
+  sender_id: string;
+  subject: string | null;
+  body: string;
+  source_surface: string;
+  selected_channels: CrewBroadcastChannel[] | null;
+  is_emergency: boolean;
+  created_at: string;
+};
+
+type DbCrewBroadcastRecipient = {
+  id: string;
+  broadcast_id: string;
+  org_id: string;
+  employee_id: string;
+  channel: CrewBroadcastChannel;
+  destination_snapshot: string | null;
+  status: CrewBroadcastRecipientStatus;
+  provider_message_id: string | null;
+  error_message: string | null;
+  sent_at: string | null;
+  delivered_at: string | null;
+  created_at: string;
 };
 
 type DbJobCostingAssignment = {
@@ -1131,6 +1235,54 @@ function toTaskWorkOrder(row: DbTaskWorkOrder): TaskWorkOrder {
     dueDate: row.due_date,
     createdAt: row.created_at,
     completedAt: row.completed_at,
+  };
+}
+
+function toEmployeeNotificationPreference(row: DbEmployeeNotificationPreference): EmployeeNotificationPreference {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    employeeId: row.employee_id,
+    smsOptedIn: row.sms_opted_in,
+    smsOptedInAt: row.sms_opted_in_at,
+    smsOptedOutAt: row.sms_opted_out_at,
+    emailOptedIn: row.email_opted_in,
+    emailOptedInAt: row.email_opted_in_at,
+    emailOptedOutAt: row.email_opted_out_at,
+    preferredChannel: row.preferred_channel,
+    updatedBy: row.updated_by,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toCrewBroadcast(row: DbCrewBroadcast): CrewBroadcast {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    senderId: row.sender_id,
+    subject: row.subject,
+    body: row.body,
+    sourceSurface: row.source_surface,
+    selectedChannels: row.selected_channels ?? ['in_app'],
+    isEmergency: row.is_emergency,
+    createdAt: row.created_at,
+  };
+}
+
+function toCrewBroadcastRecipient(row: DbCrewBroadcastRecipient): CrewBroadcastRecipient {
+  return {
+    id: row.id,
+    broadcastId: row.broadcast_id,
+    orgId: row.org_id,
+    employeeId: row.employee_id,
+    channel: row.channel,
+    destinationSnapshot: row.destination_snapshot,
+    status: row.status,
+    providerMessageId: row.provider_message_id,
+    errorMessage: row.error_message,
+    sentAt: row.sent_at,
+    deliveredAt: row.delivered_at,
+    createdAt: row.created_at,
   };
 }
 
@@ -2462,6 +2614,35 @@ export type ReturnTaskWorkOrderPayload = {
   punchList: string;
 };
 
+export type UpdateEmployeeNotificationPreferencePayload = {
+  orgId: string;
+  employeeId: string;
+  updatedBy: string;
+  smsOptedIn: boolean;
+  emailOptedIn: boolean;
+  preferredChannel: CrewBroadcastChannel;
+  existingPreference?: EmployeeNotificationPreference | null;
+};
+
+export type CrewBroadcastRecipientInput = {
+  employeeId: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+};
+
+export type CreateCrewBroadcastPayload = {
+  orgId: string;
+  senderId: string;
+  channel: string;
+  subject?: string | null;
+  body: string;
+  recipients: CrewBroadcastRecipientInput[];
+  preferences: EmployeeNotificationPreference[];
+  isEmergency: boolean;
+  externalChannels?: CrewBroadcastChannel[];
+};
+
 const invoiceSelectColumns = 'id, org_id, property_id, employee_id, client_id, contract_id, period_start, period_end, invoice_number, status, subtotal, tax_rate, total, notes, created_at, sent_at, paid_at, share_token';
 const estimateSelectColumns = 'id, org_id, client_id, property_id, estimate_number, status, subtotal, tax_rate, total, notes, valid_until, converted_invoice_id, created_at, sent_at, accepted_at, share_token';
 const estimateLineItemSelectColumns = 'id, org_id, estimate_id, catalog_id, description, quantity, unit_price, line_total, sort_order, created_at';
@@ -2473,6 +2654,9 @@ const contractInvoiceRunSelectColumns = 'id, org_id, run_at, as_of, triggered_by
 const paymentSelectColumns = 'id, org_id, invoice_id, amount, method, reference, paid_at, recorded_by, notes, created_at';
 const revenueWorkOrderSelectColumns = 'id, org_id, property_id, title, status, priority, cost, created_at, completed_at, wo_number';
 const taskWorkOrderSelectColumns = 'id, org_id, property_id, equipment_unit_id, client_id, title, description, priority, source, funnel_stage, submitted_by, reviewed_by, accepted_at, rejected_reason, punch_list, due_date, created_at, completed_at';
+const employeeNotificationPreferenceSelectColumns = 'id, org_id, employee_id, sms_opted_in, sms_opted_in_at, sms_opted_out_at, email_opted_in, email_opted_in_at, email_opted_out_at, preferred_channel, updated_by, updated_at';
+const crewBroadcastSelectColumns = 'id, org_id, sender_id, subject, body, source_surface, selected_channels, is_emergency, created_at';
+const crewBroadcastRecipientSelectColumns = 'id, broadcast_id, org_id, employee_id, channel, destination_snapshot, status, provider_message_id, error_message, sent_at, delivered_at, created_at';
 const jobCostingAssignmentSelectColumns = 'id, employee_id, property_id, task_id, work_order_id, actual_hours, estimated_hours, date';
 const clientSelectColumns = 'id, org_id, name, email, phone, address, notes, active, client_token, created_at';
 const clientPropertySelectColumns = 'id, org_id, client_id, property_id, created_at';
@@ -2600,6 +2784,24 @@ async function fetchTaskWorkOrders(orgId: string, funnelStage?: TaskWorkOrderFun
     const { data, error } = await query;
     if (error) throw error;
     return ((data ?? []) as DbTaskWorkOrder[]).map(toTaskWorkOrder);
+  })();
+
+  return Promise.race([fetchPromise, timeoutPromise]);
+}
+
+async function fetchEmployeeNotificationPreferences(orgId: string): Promise<EmployeeNotificationPreference[]> {
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Employee notification preferences request timed out.')), 15_000);
+  });
+  const fetchPromise = (async () => {
+    const { data, error } = await client
+      .from('employee_notification_preferences')
+      .select(employeeNotificationPreferenceSelectColumns)
+      .eq('org_id', orgId)
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as DbEmployeeNotificationPreference[]).map(toEmployeeNotificationPreference);
   })();
 
   return Promise.race([fetchPromise, timeoutPromise]);
@@ -2973,6 +3175,168 @@ export async function generateDueEquipmentWorkOrders(): Promise<number> {
   })();
 
   return Promise.race([generatePromise, timeoutPromise]);
+}
+
+export async function updateEmployeeNotificationPreference(
+  payload: UpdateEmployeeNotificationPreferencePayload,
+): Promise<EmployeeNotificationPreference> {
+  const orgId = requiredUuid(payload.orgId, 'Organization');
+  const employeeId = requiredUuid(payload.employeeId, 'Employee');
+  const updatedBy = requiredUuid(payload.updatedBy, 'Updater');
+  const now = new Date().toISOString();
+  const existing = payload.existingPreference ?? null;
+  const preferredChannel = payload.preferredChannel === 'sms' || payload.preferredChannel === 'email'
+    ? payload.preferredChannel
+    : 'in_app';
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Employee notification preference save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data, error } = await client
+      .from('employee_notification_preferences')
+      .upsert(
+        {
+          org_id: orgId,
+          employee_id: employeeId,
+          sms_opted_in: payload.smsOptedIn,
+          sms_opted_in_at: payload.smsOptedIn ? existing?.smsOptedInAt ?? now : null,
+          sms_opted_out_at: payload.smsOptedIn ? null : existing?.smsOptedIn ? now : existing?.smsOptedOutAt ?? null,
+          email_opted_in: payload.emailOptedIn,
+          email_opted_in_at: payload.emailOptedIn ? existing?.emailOptedInAt ?? now : null,
+          email_opted_out_at: payload.emailOptedIn ? null : existing?.emailOptedIn ? now : existing?.emailOptedOutAt ?? null,
+          preferred_channel: preferredChannel,
+          updated_by: updatedBy,
+          updated_at: now,
+        },
+        { onConflict: 'org_id,employee_id' },
+      )
+      .select(employeeNotificationPreferenceSelectColumns)
+      .single();
+    if (error) throw error;
+    return toEmployeeNotificationPreference(data as DbEmployeeNotificationPreference);
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
+}
+
+export async function createCrewBroadcast(payload: CreateCrewBroadcastPayload): Promise<CrewBroadcastResult> {
+  const orgId = requiredUuid(payload.orgId, 'Organization');
+  const senderId = requiredUuid(payload.senderId, 'Sender');
+  const messageBody = payload.body.trim();
+  if (!messageBody) throw new Error('Message body is required.');
+
+  const recipientMap = new Map<string, CrewBroadcastRecipientInput>();
+  payload.recipients.forEach((recipient) => {
+    if (recipient.employeeId && recipient.employeeId !== 'all') {
+      recipientMap.set(recipient.employeeId, recipient);
+    }
+  });
+  const recipients = Array.from(recipientMap.values());
+  if (recipients.length === 0) throw new Error('Select at least one recipient.');
+
+  const preferenceByEmployee = new Map(payload.preferences.map((preference) => [preference.employeeId, preference]));
+  const requestedExternalChannels = payload.isEmergency
+    ? Array.from(new Set((payload.externalChannels ?? []).filter((channel) => channel === 'sms' || channel === 'email')))
+    : [];
+  const selectedChannels: CrewBroadcastChannel[] = ['in_app', ...requestedExternalChannels];
+  const subject = payload.subject?.trim() || null;
+  const channel = payload.channel.trim() || 'general';
+
+  const client = ensureSupabase();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('Crew broadcast save timed out.')), 15_000);
+  });
+  const savePromise = (async () => {
+    const { data: broadcastData, error: broadcastError } = await client
+      .from('crew_broadcasts')
+      .insert({
+        org_id: orgId,
+        sender_id: senderId,
+        subject,
+        body: messageBody,
+        source_surface: 'crew_comms',
+        selected_channels: selectedChannels,
+        is_emergency: payload.isEmergency,
+      })
+      .select(crewBroadcastSelectColumns)
+      .single();
+    if (broadcastError) throw broadcastError;
+    const broadcast = toCrewBroadcast(broadcastData as DbCrewBroadcast);
+
+    const messageParts = [
+      `To: ${recipients.map((recipient) => recipient.name).join(', ')}`,
+      subject ? `Subject: ${subject}` : '',
+      messageBody,
+    ].filter(Boolean);
+    const { error: messageError } = await client.from('messages').insert({
+      org_id: orgId,
+      channel,
+      sender_id: senderId,
+      body: messageParts.join('\n\n'),
+    });
+    if (messageError) throw messageError;
+
+    const recipientRows = recipients.flatMap((recipient) => {
+      const preference = preferenceByEmployee.get(recipient.employeeId);
+      const rows: Array<{
+        broadcast_id: string;
+        org_id: string;
+        employee_id: string;
+        channel: CrewBroadcastChannel;
+        destination_snapshot: string | null;
+        status: CrewBroadcastRecipientStatus;
+      }> = [
+        {
+          broadcast_id: broadcast.id,
+          org_id: orgId,
+          employee_id: recipient.employeeId,
+          channel: 'in_app',
+          destination_snapshot: null,
+          status: 'sent',
+        },
+      ];
+
+      requestedExternalChannels.forEach((externalChannel) => {
+        const optedIn = externalChannel === 'sms' ? preference?.smsOptedIn : preference?.emailOptedIn;
+        const destination = externalChannel === 'sms' ? recipient.phone?.trim() : recipient.email?.trim();
+        rows.push({
+          broadcast_id: broadcast.id,
+          org_id: orgId,
+          employee_id: recipient.employeeId,
+          channel: externalChannel,
+          destination_snapshot: destination || null,
+          status: optedIn
+            ? destination
+              ? 'pending_provider_setup'
+              : 'skipped_missing_destination'
+            : 'skipped_no_consent',
+        });
+      });
+
+      return rows;
+    });
+
+    const { data: recipientData, error: recipientError } = await client
+      .from('crew_broadcast_recipients')
+      .insert(recipientRows)
+      .select(crewBroadcastRecipientSelectColumns);
+    if (recipientError) throw recipientError;
+
+    const persistedRecipients = ((recipientData ?? []) as DbCrewBroadcastRecipient[]).map(toCrewBroadcastRecipient);
+    return {
+      broadcast,
+      recipients: persistedRecipients,
+      inAppSent: persistedRecipients.filter((recipient) => recipient.channel === 'in_app' && recipient.status === 'sent').length,
+      smsQueued: persistedRecipients.filter((recipient) => recipient.channel === 'sms' && recipient.status === 'pending_provider_setup').length,
+      emailQueued: persistedRecipients.filter((recipient) => recipient.channel === 'email' && recipient.status === 'pending_provider_setup').length,
+      skippedNoConsent: persistedRecipients.filter((recipient) => recipient.status === 'skipped_no_consent').length,
+      skippedMissingDestination: persistedRecipients.filter((recipient) => recipient.status === 'skipped_missing_destination').length,
+    };
+  })();
+
+  return Promise.race([savePromise, timeoutPromise]);
 }
 
 async function createBillingClient(orgId: string, payload: ClientMutationPayload): Promise<BillingClient> {
@@ -3675,6 +4039,18 @@ export function useTaskWorkOrders(orgId?: string, funnelStage?: TaskWorkOrderFun
   });
 }
 
+export function useEmployeeNotificationPreferences(orgId?: string) {
+  return useQuery({
+    queryKey: ['employee-notification-preferences', orgId ?? 'all-orgs'],
+    queryFn: () => fetchEmployeeNotificationPreferences(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: 1000 * 60 * 5,
+    placeholderData: (prev) => prev,
+    retry: 2,
+    retryDelay: 1000,
+  });
+}
+
 export function useTaskWorkOrderAssignments(orgId?: string, workOrderIds?: string[]) {
   const ids = useMemo(() => Array.from(new Set((workOrderIds ?? []).filter(Boolean))).sort(), [workOrderIds]);
   return useQuery({
@@ -3869,6 +4245,27 @@ export function useGenerateDueEquipmentWorkOrders() {
     mutationFn: generateDueEquipmentWorkOrders,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['task-work-orders'] });
+    },
+  });
+}
+
+export function useUpdateEmployeeNotificationPreference() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateEmployeeNotificationPreference,
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['employee-notification-preferences', variables.orgId] });
+    },
+  });
+}
+
+export function useCreateCrewBroadcast() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createCrewBroadcast,
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['crew-broadcasts', variables.orgId] });
+      await queryClient.invalidateQueries({ queryKey: ['employee-notification-preferences', variables.orgId] });
     },
   });
 }
